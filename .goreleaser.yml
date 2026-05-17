@@ -1,0 +1,95 @@
+# GoReleaser config for the relaya CLI.
+#
+# Triggered by `.github/workflows/cli-release.yml` on every `v*` tag.
+# Cross-compiles one binary (`relaya`) per platform — the MCP server
+# lives in the same binary as the `relaya mcp` subcommand, so there
+# is exactly one artifact to ship per OS/arch combo.
+#
+# RELAYA_VERSION env var: bare semver (no `v` prefix) for ldflag
+# interpolation and brew formula version field. The workflow exports
+# it from `${TAG#v}` once.
+
+version: 2
+project_name: relaya
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: relaya
+    main: ./
+    binary: relaya
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    # 5-platform matrix to match the original; no windows/arm64.
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/relaya-ai/relaya/clients/cli/internal/version.Version={{ .Env.RELAYA_VERSION }}
+      - -X github.com/relaya-ai/relaya/clients/cli/internal/version.Commit={{ .ShortCommit }}
+
+archives:
+  - id: relaya
+    ids: [relaya]
+    name_template: "relaya_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: SHA256SUMS
+
+snapshot:
+  version_template: "{{ .Env.RELAYA_VERSION }}-snapshot-{{ .ShortCommit }}"
+
+release:
+  github:
+    # The monorepo (relaya-ai/relaya) is private — a Release there
+    # 404s for anyone without org access. Publish to the public
+    # mirror so `brew install` / direct `curl` download URLs work.
+    # The mirror step (in cli-release.yml) must run BEFORE goreleaser
+    # so the v* tag exists on this repo when the Release is created;
+    # otherwise goreleaser creates the tag itself pointing at the
+    # mirror's stale HEAD.
+    owner: relaya-ai
+    name: relaya-ai
+  name_template: "{{ .Tag }}"
+  mode: append
+
+brews:
+  - name: relaya
+    ids: [relaya]
+    repository:
+      owner: relaya-ai
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: https://relaya.pro
+    description: "Relaya CLI — Claude Code / Codex / Gemini CLI integration + MCP server"
+    license: MIT
+    install: |
+      bin.install "relaya"
+    # Two-pronged smoke test: the `version` subcommand verifies the
+    # CLI surface, and an `mcp` initialize handshake verifies the
+    # built-in MCP server speaks the protocol. Both run without
+    # credentials or network — safe in `brew test`'s sandbox.
+    test: |
+      assert_match "relaya", shell_output("#{bin}/relaya version")
+      output = pipe_output("#{bin}/relaya mcp",
+        %({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n),
+        0)
+      assert_match "2024-11-05", output
+    commit_author:
+      name: relaya-ai
+      email: noreply@relaya.pro
+    commit_msg_template: "Release relaya v{{ .Env.RELAYA_VERSION }}"
