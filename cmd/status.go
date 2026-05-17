@@ -25,7 +25,7 @@ func Status(args []string) error {
 	if err != nil {
 		return err
 	}
-	client := api.New(creds.APIBase, creds.AccessToken)
+	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
 	ctx := withCtx()
 
 	status, err := client.GetStatus(ctx)

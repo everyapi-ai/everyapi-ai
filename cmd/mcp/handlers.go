@@ -86,7 +86,7 @@ func handleStatus(ctx context.Context, _ json.RawMessage) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	client := api.New(creds.APIBase, creds.AccessToken)
+	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
 	status, err := client.GetStatus(ctx)
 	if err != nil {
 		return "", classifyAPIErr(err)
@@ -154,7 +154,7 @@ func handleSellerList(ctx context.Context, _ json.RawMessage) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	client := api.New(creds.APIBase, creds.AccessToken)
+	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
 	channels, err := client.ListSellerChannels(ctx)
 	if err != nil {
 		return "", classifyAPIErr(err)
@@ -234,7 +234,7 @@ func handleSellerWithdraw(ctx context.Context, raw json.RawMessage) (string, err
 			return "", fmt.Errorf("invalid arguments: %w", err)
 		}
 	}
-	client := api.New(creds.APIBase, creds.AccessToken)
+	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
 
 	// "Full balance" path: query /self for the pending seller_quota,
 	// then transfer that. Two round-trips, but it's the only way

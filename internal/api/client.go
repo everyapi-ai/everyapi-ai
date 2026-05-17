@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -23,9 +24,10 @@ import (
 // token (when present). Construct one per command — the CLI is a
 // short-lived process, no connection pooling concerns.
 type Client struct {
-	base  string
-	token string
-	hc    *http.Client
+	base   string
+	token  string
+	userID int
+	hc     *http.Client
 }
 
 func New(base, token string) *Client {
@@ -34,6 +36,23 @@ func New(base, token string) *Client {
 		token: token,
 		hc:    &http.Client{Timeout: 30 * time.Second},
 	}
+}
+
+// WithUserID associates the caller's numeric user_id with the client
+// so authenticated requests can populate the `Relaya-User-Id` header.
+// The backend's UserAuth middleware checks BOTH a valid access token
+// AND that this header is present + a positive integer (see
+// backend/internal/middleware/auth.go ~ line 107). The header was
+// originally part of the dashboard's CORS/cache fingerprint and got
+// promoted to a hard requirement; missing it returns
+// "user ID not provided" with HTTP 401.
+//
+// Set during credentials load — pass the cached value from
+// credentials.json so we don't have to call /api/user/self before
+// every other call just to discover our own id.
+func (c *Client) WithUserID(id int) *Client {
+	c.userID = id
+	return c
 }
 
 // APIError surfaces a non-2xx server response. Code == 401 is the
@@ -74,6 +93,14 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	}
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	// UserAuth requires a positive Relaya-User-Id alongside the
+	// bearer (see WithUserID's doc for rationale). Skip the header
+	// when userID isn't set so unauthenticated endpoints
+	// (/api/cli/device-auth-start, /api/status) don't ship a bogus
+	// "0".
+	if c.userID > 0 {
+		req.Header.Set("Relaya-User-Id", strconv.Itoa(c.userID))
 	}
 	resp, err := c.hc.Do(req)
 	if err != nil {
