@@ -24,13 +24,20 @@ COMMANDS
   logout          Remove this device's credentials
   status          Show current quota, usage, and balance
   use <tool>      Launch a third-party CLI (claude / codex / gemini) routed through Relaya
-  mcp             Run the Model Context Protocol server on stdio
+  mcp             Run the MCP server on stdio (spawned by Claude Code / Cursor)
+  mcp install     Auto-register relaya as an MCP server in Claude Code
   version         Print the build version
   help            Show this message
 
 Run 'relaya <command> --help' for command-specific flags.
 
-MCP server: configure your MCP client (Claude Code, Cursor, …) with
+MCP server: quickest path on macOS / Linux with Claude Code installed:
+  relaya mcp install
+That runs "claude mcp add relaya relaya mcp" under the hood. After it,
+Claude Code spawns "relaya mcp" on demand — ask the AI "what's my
+Relaya balance?" and it'll invoke the relaya_status tool.
+
+Manual config (other MCP clients, or to opt out of the helper):
   { "command": "relaya", "args": ["mcp"] }
 The server reads JSON-RPC from stdin, writes to stdout, logs to stderr.
 Auth is read from ~/.config/relaya/credentials.json — run 'relaya login' first.
@@ -55,9 +62,23 @@ func main() {
 	case "use":
 		err = cmd.Use(args)
 	case "mcp":
-		// MCP takes no flags; any args are ignored. The server is
-		// driven entirely by the JSON-RPC stream on stdin.
-		err = mcp.Run(os.Stdin, os.Stdout, os.Stderr)
+		// `relaya mcp` (no subcommand) → run the JSON-RPC server on
+		// stdio for an MCP client to drive.
+		// `relaya mcp install` → register us with Claude Code via
+		// `claude mcp add`, so the user doesn't have to hand-edit
+		// settings.json. Future sub-subcommands (uninstall, list)
+		// dispatch from the same switch.
+		if len(args) > 0 {
+			switch args[0] {
+			case "install":
+				err = mcp.Install(args[1:])
+			default:
+				fmt.Fprintf(os.Stderr, "unknown 'mcp' subcommand %q. Try 'relaya mcp install' to register, or 'relaya mcp' (no args) to run the server.\n", args[0])
+				os.Exit(2)
+			}
+		} else {
+			err = mcp.Run(os.Stdin, os.Stdout, os.Stderr)
+		}
 	case "version", "--version", "-v":
 		err = cmd.Version(args)
 	case "help", "--help", "-h":
