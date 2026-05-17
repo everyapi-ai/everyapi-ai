@@ -78,7 +78,9 @@ func Status(args []string) error {
 	// transient lookup/probe failures — so the output shape is
 	// consistent. A blank section is ambiguous (still loading? not
 	// implemented?); "unknown — transient API error" is honest.
-	relayKey, rkErr := resolveRelayKey(creds)
+	// status reports account-level relay health, not a per-group
+	// override — always the default key path (group "").
+	relayKey, rkErr := resolveRelayKey(creds, "")
 	switch {
 	case errors.Is(rkErr, errNoRelayKey):
 		printf("  relay:     NOT CONFIGURED — no relay API key on the account\n")

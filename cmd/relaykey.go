@@ -14,6 +14,11 @@ import (
 // message instead of conflating it with a transport failure.
 var errNoRelayKey = errors.New("no enabled relay API key on the account")
 
+// errNoRelayKeyForGroup: --group/--channel was given but the account
+// has no ENABLED token bound to that group. Distinct from
+// errNoRelayKey so the caller can name the group in the hint.
+var errNoRelayKeyForGroup = errors.New("no enabled relay API key in the requested group")
+
 // resolveRelayKey returns a relay API key (sk-relaya-…) for the relay
 // path. The device-auth access token is a MANAGEMENT credential
 // (UserAuth), not a relay key (TokenAuth → ValidateUserToken looks up
@@ -34,10 +39,23 @@ var errNoRelayKey = errors.New("no enabled relay API key on the account")
 // would let users with multiple keys (prod vs dev, model-limited vs
 // unrestricted) pick deliberately. Not in this PR.
 //
-// Mutates *creds and rewrites credentials.json so the lookup is
-// one-time, not per-invocation.
-func resolveRelayKey(creds *config.Credentials) (string, error) {
-	if creds.RelayKey != "" {
+// group selects which routing group to relay through. Empty = the
+// default behaviour above (cached / newest enabled key). Non-empty
+// (from `relaya use --group`/`--channel`) deliberately routes to the
+// channels bound to that group:
+//
+//   - the credentials.json cache is BYPASSED on read AND write — the
+//     cache holds the default-group key; reading it would ignore the
+//     filter, writing a group-specific key there would poison every
+//     later default-path run. A group run therefore always re-resolves
+//     (one extra management call; acceptable for a deliberate override).
+//   - picks the newest ENABLED token whose Group == group; if none,
+//     errNoRelayKeyForGroup so the caller can name the group.
+//
+// Mutates *creds and rewrites credentials.json ONLY on the default
+// (group == "") path so that lookup stays one-time.
+func resolveRelayKey(creds *config.Credentials, group string) (string, error) {
+	if group == "" && creds.RelayKey != "" {
 		return creds.RelayKey, nil
 	}
 
@@ -50,17 +68,30 @@ func resolveRelayKey(creds *config.Credentials) (string, error) {
 	}
 	var pick *api.TokenSummary
 	for i := range tokens {
-		if tokens[i].Status == api.TokenStatusEnabled {
-			pick = &tokens[i]
-			break
+		if tokens[i].Status != api.TokenStatusEnabled {
+			continue
 		}
+		if group != "" && tokens[i].Group != group {
+			continue
+		}
+		pick = &tokens[i]
+		break
 	}
 	if pick == nil {
+		if group != "" {
+			return "", errNoRelayKeyForGroup
+		}
 		return "", errNoRelayKey
 	}
 	key, err := client.TokenKey(ctx, pick.ID)
 	if err != nil {
 		return "", fmt.Errorf("fetch relay API key %q: %w", pick.Name, err)
+	}
+
+	if group != "" {
+		// Deliberate per-run override — never cache; the default path
+		// must keep resolving the default-group key.
+		return key, nil
 	}
 
 	creds.RelayKey = key

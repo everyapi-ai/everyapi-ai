@@ -13,12 +13,16 @@ import (
 // parent until the tool exits; the gain is signal handling Just
 // Works (the child catches Ctrl+C; we wait for it; we exit with its
 // code).
-func Exec(t *Tool, env map[string]string) error {
+//
+// extraArgs are passed through as command-line args to the tool, so
+// callers can forward user-supplied flags (e.g.
+// `--dangerously-skip-permissions` for claude). nil is fine.
+func Exec(t *Tool, env map[string]string, extraArgs []string) error {
 	path, err := exec.LookPath(t.ExecName)
 	if err != nil {
 		return &ErrToolNotFound{Tool: t}
 	}
-	cmd := exec.Command(path)
+	cmd := exec.Command(path, extraArgs...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

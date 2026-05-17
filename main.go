@@ -24,6 +24,8 @@ COMMANDS
   logout          Remove this device's credentials
   status          Show current quota, usage, and balance
   use <tool>      Launch a third-party CLI (claude / codex / gemini) routed through Relaya
+                  (--group/--channel <name>: route via the key bound to that group;
+                   bare --group/--channel: pick the group interactively)
   mcp                    Run the MCP server on stdio (spawned by Claude Code / Codex / Gemini)
   mcp install [client]   Auto-register relaya as an MCP server (client: claude|codex|gemini; default claude)
   mcp uninstall [client] Remove the MCP registration created by 'mcp install' (default claude)

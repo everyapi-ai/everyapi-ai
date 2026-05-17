@@ -18,6 +18,13 @@ type TokenSummary struct {
 	ID     int    `json:"id"`
 	Name   string `json:"name"`
 	Status int    `json:"status"`
+	// Group is the token's routing group. /api/token/ returns it on
+	// every row (controller buildMaskedTokenResponse → model.Token,
+	// which carries `json:"group"`). `relaya use --group` filters on
+	// it so a buyer can deliberately route to the channels bound to a
+	// given group (e.g. a BytePlus-only group) instead of the newest
+	// enabled key.
+	Group string `json:"group"`
 }
 
 // ListTokens returns the user's relay API tokens (management API,

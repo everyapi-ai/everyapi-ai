@@ -96,7 +96,7 @@ func Login(args []string) error {
 	// flow, a noisy "warning: ..." line on stderr would make the user
 	// doubt the login itself, and the next `relaya use` / `relaya
 	// status` will retry the resolution anyway.
-	if _, err := resolveRelayKey(creds); err != nil && errors.Is(err, errNoRelayKey) {
+	if _, err := resolveRelayKey(creds, ""); err != nil && errors.Is(err, errNoRelayKey) {
 		println("")
 		println("Note: your account has no relay API key yet. `relaya use` needs one")
 		println("(it's separate from this login token). Create an API key in the")
