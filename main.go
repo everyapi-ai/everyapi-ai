@@ -24,17 +24,20 @@ COMMANDS
   logout          Remove this device's credentials
   status          Show current quota, usage, and balance
   use <tool>      Launch a third-party CLI (claude / codex / gemini) routed through Relaya
-  mcp             Run the MCP server on stdio (spawned by Claude Code / Cursor)
-  mcp install     Auto-register relaya as an MCP server in Claude Code
+  mcp                    Run the MCP server on stdio (spawned by Claude Code / Codex / Gemini)
+  mcp install [client]   Auto-register relaya as an MCP server (client: claude|codex|gemini; default claude)
+  mcp uninstall [client] Remove the MCP registration created by 'mcp install' (default claude)
   version         Print the build version
   help            Show this message
 
 Run 'relaya <command> --help' for command-specific flags.
 
-MCP server: quickest path on macOS / Linux with Claude Code installed:
-  relaya mcp install
-That runs "claude mcp add relaya relaya mcp" under the hood. After it,
-Claude Code spawns "relaya mcp" on demand — ask the AI "what's my
+MCP server: quickest path on macOS / Linux with one of the AI CLIs installed:
+  relaya mcp install            # default: claude
+  relaya mcp install codex
+  relaya mcp install gemini
+That runs "<client> mcp add relaya relaya mcp" under the hood. After it,
+the client spawns "relaya mcp" on demand — ask the AI "what's my
 Relaya balance?" and it'll invoke the relaya_status tool.
 
 Manual config (other MCP clients, or to opt out of the helper):
@@ -66,14 +69,16 @@ func main() {
 		// stdio for an MCP client to drive.
 		// `relaya mcp install` → register us with Claude Code via
 		// `claude mcp add`, so the user doesn't have to hand-edit
-		// settings.json. Future sub-subcommands (uninstall, list)
-		// dispatch from the same switch.
+		// settings.json.
+		// `relaya mcp uninstall` → inverse via `claude mcp remove`.
 		if len(args) > 0 {
 			switch args[0] {
 			case "install":
 				err = mcp.Install(args[1:])
+			case "uninstall":
+				err = mcp.Uninstall(args[1:])
 			default:
-				fmt.Fprintf(os.Stderr, "unknown 'mcp' subcommand %q. Try 'relaya mcp install' to register, or 'relaya mcp' (no args) to run the server.\n", args[0])
+				fmt.Fprintf(os.Stderr, "unknown 'mcp' subcommand %q. Try 'relaya mcp install' to register, 'relaya mcp uninstall' to remove, or 'relaya mcp' (no args) to run the server.\n", args[0])
 				os.Exit(2)
 			}
 		} else {

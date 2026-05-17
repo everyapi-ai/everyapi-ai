@@ -8,65 +8,71 @@ import (
 )
 
 // Install wires `relaya mcp` into a supported MCP client's config so
-// the user doesn't have to hand-edit JSON. v1 supports Claude Code
-// only (the only client whose CLI ships a config-mutation
-// subcommand we can shell out to); other clients land here when
-// they expose a similar interface.
+// the user doesn't have to hand-edit JSON.
 //
-// Why shell out instead of editing `~/.claude/settings.json`
-// ourselves: Claude Code knows its own config layout (path, schema,
-// project-vs-user precedence) better than we do, and that surface
-// changes across Claude Code versions. `claude mcp add` is the
-// stable API.
+// Usage:
+//
+//	relaya mcp install              # default: claude (back-compat)
+//	relaya mcp install claude
+//	relaya mcp install codex
+//	relaya mcp install gemini
+//
+// Why shell out instead of editing the client's settings.json
+// ourselves: each client owns its own config layout (path, schema,
+// scope precedence) and that surface changes across versions. The
+// `<client> mcp add` subcommand is the stable API.
 func Install(args []string) error {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
 		fmt.Fprintln(os.Stdout, installUsage)
 		return nil
 	}
 
-	// Claude Code's `mcp add` syntax:
-	//   claude mcp add <name> <command> [args...]
-	// We register the server under the name "relaya", with command =
-	// the relaya binary (located via PATH so brew / go-install / etc.
-	// all work) and arg = "mcp". After this the user's MCP client
-	// can spawn us by name.
-	if _, err := exec.LookPath("claude"); err != nil {
-		return fmt.Errorf("`claude` CLI not found on PATH. Install Claude Code from https://docs.claude.com/en/docs/claude-code/setup, or hand-edit ~/.claude/settings.json with:\n\n%s", manualSnippet)
+	clientName := "claude"
+	if len(args) > 0 {
+		clientName = args[0]
 	}
 
-	cmd := exec.Command("claude", "mcp", "add", "relaya", "relaya", "mcp")
+	c, err := lookupClient(clientName)
+	if err != nil {
+		return err
+	}
+
+	if _, err := exec.LookPath(c.Name); err != nil {
+		return fmt.Errorf("`%s` CLI not found on PATH. %s\n\nAlternatively, paste the following into %s:\n\n%s", c.Name, c.InstallHint, c.ConfigPath, c.ManualSnippet)
+	}
+
+	argv := c.AddArgv("relaya", "relaya", []string{"mcp"})
+	cmd := exec.Command(c.Name, argv...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		// `claude mcp add` prints its own error to stderr — we just
-		// need to propagate exit code semantics. Wrap so the top-
-		// level main.go's "Error: %s" line carries useful context.
-		return fmt.Errorf("claude mcp add failed: %w", err)
+		// The client CLI prints its own error to stderr — we just need
+		// to propagate exit-code semantics. Wrap so the top-level
+		// main.go's "Error: %s" line carries useful context.
+		return fmt.Errorf("%s mcp add failed: %w", c.Name, err)
 	}
 
 	fmt.Fprintln(os.Stdout, strings.TrimSpace(`
-Registered as `+"`relaya`"+` in Claude Code. Restart Claude Code (or run
-`+"`claude mcp list`"+` to verify). Then try asking it
+Registered as `+"`relaya`"+` in `+c.Name+`. Restart `+c.Name+` (or run
+`+"`"+c.Name+` mcp list`+"`"+` to verify). Then try asking it
 "what's my Relaya balance?" — the AI will invoke relaya_status.
 `))
 	return nil
 }
 
-const installUsage = `relaya mcp install — register relaya as an MCP server with Claude Code
+const installUsage = `relaya mcp install — register relaya as an MCP server with an AI CLI
 
 USAGE
-  relaya mcp install
+  relaya mcp install [client]
 
-Runs ` + "`claude mcp add relaya relaya mcp`" + ` under the hood. After this
-your Claude Code spawns ` + "`relaya mcp`" + ` on demand, exposing the four
-relaya_* tools (status, topup, seller_list, seller_withdraw).
+ARGUMENTS
+  client    One of: claude, codex, gemini. Defaults to claude.
 
-Requires the ` + "`claude`" + ` CLI on PATH. If Claude Code isn't installed,
-hand-edit ~/.claude/settings.json with the snippet printed in the
-error message.`
+Runs ` + "`<client> mcp add relaya relaya mcp`" + ` under the hood (with the
+syntax each client expects). After this your AI CLI spawns ` + "`relaya mcp`" + `
+on demand, exposing the four relaya_* tools (status, topup, seller_list,
+seller_withdraw).
 
-const manualSnippet = `  {
-    "mcpServers": {
-      "relaya": { "command": "relaya", "args": ["mcp"] }
-    }
-  }`
+Requires the chosen client's CLI on PATH. If it isn't installed, the
+error message includes the install link and a config snippet you can
+paste into the client's settings by hand.`
