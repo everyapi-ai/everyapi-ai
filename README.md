@@ -75,7 +75,7 @@ $ relaya status
   alice (alice@example.com)
   quota:     $12.34 remaining   $5.67 used
   requests:  1,234
-  topup:     https://relaya.pro/wallet
+  topup:     https://app.relaya.pro/wallet
 ```
 
 ## 配置文件

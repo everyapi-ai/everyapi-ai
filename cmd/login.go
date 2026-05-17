@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -81,6 +82,27 @@ func Login(args []string) error {
 
 	dir, _ := config.ConfigDir()
 	printf("\nLogged in as %s. Credentials saved to %s/credentials.json\n", res.Username, dir)
+
+	// Resolve the relay API key now (and cache it) so `relaya use`
+	// works on first try. The access token alone can't relay — it's
+	// a management credential — so without this step `use` would
+	// 401.
+	//
+	// A failure here is non-fatal: login itself already succeeded and
+	// credentials are saved. We only surface the errNoRelayKey
+	// sentinel (account has zero enabled keys — an actionable state
+	// the user must fix in the dashboard). Other failures (transient
+	// 5xx, network blip) are SWALLOWED: after a successful device-auth
+	// flow, a noisy "warning: ..." line on stderr would make the user
+	// doubt the login itself, and the next `relaya use` / `relaya
+	// status` will retry the resolution anyway.
+	if _, err := resolveRelayKey(creds); err != nil && errors.Is(err, errNoRelayKey) {
+		println("")
+		println("Note: your account has no relay API key yet. `relaya use` needs one")
+		println("(it's separate from this login token). Create an API key in the")
+		println("Relaya dashboard, then run 'relaya login' again.")
+	}
+
 	println("Next: try 'relaya status' or 'relaya use claude'.")
 	return nil
 }

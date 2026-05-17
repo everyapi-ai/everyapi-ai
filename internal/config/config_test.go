@@ -19,6 +19,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	want := &Credentials{
 		APIBase:     "http://localhost:3000",
 		AccessToken: "rl_abcdef1234567890abcdef1234567890",
+		RelayKey:    "sk-relaya-abcdef1234567890",
 		UserID:      4242,
 		Username:    "test-user",
 	}

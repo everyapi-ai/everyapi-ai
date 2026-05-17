@@ -59,3 +59,18 @@ func (c *Client) GetStatus(ctx context.Context) (*StatusData, error) {
 	}
 	return &env.Data, nil
 }
+
+// ProbeRelayToken exercises the relay auth path so the CLI can tell,
+// BEFORE handing the token to a tool, whether it will actually relay.
+// GET /v1/models runs the same middleware.TokenAuth /
+// ValidateUserToken as /v1/messages, so an exhausted / expired /
+// disabled token returns the same 401 here. This matters because
+// /api/user/self uses UserAuth and skips ValidateUserToken's
+// quota/expiry gates — a healthy `relaya status` does NOT imply the
+// token can relay. The endpoint is a free, non-billable model list;
+// only the auth gate is significant. Sends just the bearer (no
+// Relaya-User-Id), mirroring exactly what a relayed tool sends.
+// Returns nil on 2xx; *APIError (use IsUnauthorized) otherwise.
+func (c *Client) ProbeRelayToken(ctx context.Context) error {
+	return c.do(ctx, "GET", "/v1/models", nil, nil)
+}

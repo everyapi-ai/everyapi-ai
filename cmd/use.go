@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/relaya-ai/relaya-ai/internal/api"
 	"github.com/relaya-ai/relaya-ai/internal/config"
 	"github.com/relaya-ai/relaya-ai/internal/tools"
 )
@@ -60,7 +61,42 @@ func Use(args []string) error {
 		return err
 	}
 
-	env := t.Env(creds.APIBase, creds.AccessToken)
+	// The device-auth access token can't relay (it's a management
+	// credential); resolve the account's relay API key instead.
+	relayKey, err := resolveRelayKey(creds)
+	if err != nil {
+		if errors.Is(err, errNoRelayKey) {
+			return fmt.Errorf(
+				"no usable relay API key on your account — `relaya use` needs one,\n"+
+					"and it's separate from your login token. Create an API key in the\n"+
+					"Relaya dashboard (%s), then run 'relaya login' again.",
+				trimAPIBaseToWebOrigin(creds.APIBase))
+		}
+		return err
+	}
+
+	// Confirm the relay key actually works before exec'ing the tool.
+	// /v1/models runs the same TokenAuth/ValidateUserToken as the
+	// real traffic, so a 401 here means the tool would just loop on
+	// "401 Invalid token" (invalid / expired / disabled / out of
+	// quota key) with no hint why. Bail with an actionable message.
+	// Only a definitive 401 is fatal: non-401 probe errors (network,
+	// 5xx, the transient SystemPerformanceCheck gate) are left to the
+	// tool's own retry — false-blocking a working setup on a flaky
+	// probe is worse than letting it through.
+	if perr := api.New(creds.APIBase, relayKey).
+		ProbeRelayToken(withCtx()); perr != nil && api.IsUnauthorized(perr) {
+		wallet := trimAPIBaseToWebOrigin(creds.APIBase) + "/wallet"
+		return fmt.Errorf(
+			"Relaya rejected the relay API key — not launching %s, it would just\n"+
+				"loop on 401. The key is invalid, expired, disabled, or out of quota.\n"+
+				"  check:    relaya status\n"+
+				"  top up:   %s\n"+
+				"  refresh:  relaya login",
+			t.ExecName, wallet)
+	}
+
+	env := t.Env(creds.APIBase, relayKey)
 	// Surface the resolved base URL so an aspiring debugger knows
 	// where the requests are heading. One line, before the exec
 	// disappears the parent process.

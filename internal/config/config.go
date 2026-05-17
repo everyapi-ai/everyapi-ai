@@ -23,10 +23,21 @@ const DefaultAPIBase = "https://api.relaya.pro"
 // Credentials is the on-disk credentials payload. JSON tags match the
 // file format. Stored mode 0600.
 type Credentials struct {
-	APIBase     string `json:"api_base"`
+	APIBase string `json:"api_base"`
+	// AccessToken is the user-level token from device-auth. It
+	// authenticates the management API (UserAuth: /api/user/self,
+	// /api/token/*) — NOT the relay. The relay (/v1/messages,
+	// TokenAuth → ValidateUserToken) needs a relay API key, a
+	// separate credential type: that's RelayKey.
 	AccessToken string `json:"access_token"`
-	UserID      int    `json:"user_id,omitempty"`
-	Username    string `json:"username,omitempty"`
+	// RelayKey is a relay API key (sk-relaya-…, a row in the Token
+	// table) used as the upstream auth for `relaya use`. Resolved
+	// from the account's tokens via the management API and cached
+	// here. Empty in files written before this field existed —
+	// resolved lazily on the next use/status/login.
+	RelayKey string `json:"relay_key,omitempty"`
+	UserID   int    `json:"user_id,omitempty"`
+	Username string `json:"username,omitempty"`
 }
 
 // ErrNoCredentials is returned by Load when the file is missing. The

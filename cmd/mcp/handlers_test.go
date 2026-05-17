@@ -114,8 +114,8 @@ func TestHandleTopup_TrimsAPIPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "https://relaya.pro/wallet") {
-		t.Errorf("topup URL not trimmed correctly: %q", out)
+	if !strings.Contains(out, "https://app.relaya.pro/wallet") {
+		t.Errorf("topup URL should point at the dashboard host: %q", out)
 	}
 	if strings.Contains(out, "api.relaya.pro") {
 		t.Errorf("topup URL still points at API host: %q", out)

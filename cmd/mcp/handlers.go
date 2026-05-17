@@ -53,19 +53,22 @@ func classifyAPIErr(err error) error {
 	return err
 }
 
-// trimAPIBaseToWebOrigin maps `https://api.relaya.pro` →
-// `https://relaya.pro` so the topup / wallet URL points at the
-// dashboard. Identical heuristic to the CLI status command; kept
-// duplicated here because the production routing (api/dashboard
-// split) is a permanent decision and the helper is two lines.
+// trimAPIBaseToWebOrigin maps the API host to the dashboard host:
+// `https://api.relaya.pro` → `https://app.relaya.pro` so the topup /
+// wallet / seller URLs point at the dashboard (app.*) where those
+// pages live — NOT the API host and NOT the marketing apex
+// (relaya.pro is the landing page). Identical heuristic to the CLI
+// status command; kept duplicated here because the production
+// routing (api/dashboard split) is a permanent decision and the
+// helper is two lines.
 func trimAPIBaseToWebOrigin(base string) string {
 	const apiPrefix = "https://api."
 	if strings.HasPrefix(base, apiPrefix) {
-		return "https://" + base[len(apiPrefix):]
+		return "https://app." + base[len(apiPrefix):]
 	}
 	const httpAPIPrefix = "http://api."
 	if strings.HasPrefix(base, httpAPIPrefix) {
-		return "http://" + base[len(httpAPIPrefix):]
+		return "http://app." + base[len(httpAPIPrefix):]
 	}
 	return base
 }

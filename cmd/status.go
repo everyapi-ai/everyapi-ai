@@ -13,6 +13,13 @@ import (
 // quota_per_unit from /api/status (unauthenticated) so a stale token
 // produces a clean 401 from /api/user/self rather than a confusing
 // "got JSON but no quota_per_unit" path.
+//
+// SIDE EFFECT: on first run after upgrade (when credentials.json has
+// no relay_key), resolveRelayKey resolves and caches the relay API
+// key, rewriting credentials.json. Subsequent runs are read-only.
+// We accept the asymmetry because the alternative — making the user
+// run `relaya login` after upgrade — is worse UX, and the rewrite is
+// a one-time migration.
 func Status(args []string) error {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
@@ -59,19 +66,60 @@ func Status(args []string) error {
 	printf("  quota:     $%.2f remaining   $%.2f used\n", quotaUSD, usedUSD)
 	printf("  requests:  %d\n", self.RequestCount)
 	printf("  topup:     %s/wallet\n", trimAPIBaseToWebOrigin(creds.APIBase))
+
+	// The quota line above comes from /api/user/self (UserAuth) and
+	// says nothing about whether the RELAY works: the access token
+	// can't relay at all (different auth path), and a relay key can
+	// be dead while the account quota is fine. Resolve the relay key
+	// and probe the relay path so this distinction is visible — it's
+	// the exact confusion that sent us down a long debug rabbit hole.
+	//
+	// Always emit a `relay:` line — including a `unknown` line on
+	// transient lookup/probe failures — so the output shape is
+	// consistent. A blank section is ambiguous (still loading? not
+	// implemented?); "unknown — transient API error" is honest.
+	relayKey, rkErr := resolveRelayKey(creds)
+	switch {
+	case errors.Is(rkErr, errNoRelayKey):
+		printf("  relay:     NOT CONFIGURED — no relay API key on the account\n")
+		printf("             create an API key in the dashboard, then 'relaya login'\n")
+	case rkErr != nil:
+		// Token lookup itself failed (transport, 5xx, etc.). Not a
+		// verdict on the key — just say we couldn't check.
+		printf("  relay:     unknown — could not resolve relay key (%v)\n", rkErr)
+	default:
+		perr := api.New(creds.APIBase, relayKey).ProbeRelayToken(ctx)
+		switch {
+		case perr == nil:
+			printf("  relay:     ok\n")
+		case api.IsUnauthorized(perr):
+			printf("  relay:     UNAVAILABLE — relay key invalid / expired / disabled / out of quota\n")
+			printf("             (account quota above is separate; top up %s/wallet or run 'relaya login')\n",
+				trimAPIBaseToWebOrigin(creds.APIBase))
+		default:
+			// Non-401 probe failure (5xx, network). The key may be
+			// fine — we just couldn't get a verdict. Same shape as
+			// the lookup-failure branch.
+			printf("  relay:     unknown — probe failed (%v)\n", perr)
+		}
+	}
+
 	println("")
 	return nil
 }
 
-// trimAPIBaseToWebOrigin maps `https://api.relaya.pro` →
-// `https://relaya.pro` so the printed topup URL points at the
-// dashboard rather than the API host. Cheap heuristic — only the
-// "api." subdomain is rewritten; non-matching bases (localhost,
-// custom self-host hosts) are left unchanged so they still resolve.
+// trimAPIBaseToWebOrigin maps the API host to the dashboard host:
+// `https://api.relaya.pro` → `https://app.relaya.pro`, so the printed
+// wallet URL points at the dashboard (app.*) where the wallet UI
+// lives — NOT the API host and NOT the marketing site (relaya.pro,
+// the bare apex, is the landing page and has no /wallet). Cheap
+// heuristic — only the "api." subdomain is rewritten; non-matching
+// bases (localhost, custom self-host hosts) are left unchanged so
+// they still resolve.
 func trimAPIBaseToWebOrigin(base string) string {
 	const apiPrefix = "https://api."
 	if len(base) > len(apiPrefix) && base[:len(apiPrefix)] == apiPrefix {
-		return "https://" + base[len(apiPrefix):]
+		return "https://app." + base[len(apiPrefix):]
 	}
 	return base
 }
