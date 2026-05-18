@@ -28,6 +28,7 @@ relaya login              当前设备登录 Relaya
 relaya logout             清除本设备凭证
 relaya status             查看余额、使用量、配额
 relaya use <tool>         配好 env 并 exec 进第三方 CLI（指向 Relaya）
+relaya mcp                以 MCP server 形态运行（详见下方 "MCP server" 节）
 relaya version            显示构建版本
 relaya help               帮助
 ```
