@@ -1,19 +1,18 @@
 # Thin wrapper that mirrors the README's `make cli` / `make cli-release`
-# examples. We keep one here (instead of asking users to remember
-# `go build -o bin/relaya .`) so the same commands work in both the
-# upstream monorepo and the public mirror — the mirror's source tree
-# is rooted at the CLI module, so paths inside this file stay valid
-# in either context.
+# examples (instead of asking users to remember
+# `go build -o bin/relaya .`). All paths are relative to this
+# Makefile's directory, so it stays valid whether the source tree
+# is checked out standalone or vendored under a larger workspace.
 
 CLI_VERSION ?= dev
 CLI_COMMIT  ?= $$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
-# Resolve the current module path at make-time so the same Makefile
-# works in both the monorepo (path is
-# github.com/relaya-ai/relaya/clients/cli) and the public mirror
-# (path is github.com/relaya-ai/relaya-ai after the cli-release.yml
-# rewrite). Without this, the -X ldflag target wouldn't match and
-# `relaya version` would always show the "dev" placeholder.
+# Resolve the current module path at make-time so the -X ldflag
+# target tracks whatever go.mod actually declares. Hardcoding the
+# path would silently break the build whenever the module is moved
+# or vendored under a different prefix: the ldflag symbol wouldn't
+# match, and `relaya version` would fall back to the "dev"
+# placeholder without raising an error.
 #
 # Recursive assignment (=, not :=) so the shell-out fires lazily —
 # `make help` / `make clean` don't pay the cost (or fail loudly)
@@ -45,7 +44,7 @@ help:
 _require-module:
 	@if [ -z "$(MODULE)" ]; then \
 	  echo "error: could not resolve module path via 'go list -m'." >&2; \
-	  echo "       Run this target from inside clients/cli/ with go installed." >&2; \
+	  echo "       Run this target from the module root (the directory containing go.mod) with go installed." >&2; \
 	  exit 1; \
 	fi
 

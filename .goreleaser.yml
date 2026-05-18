@@ -30,8 +30,8 @@ builds:
         goarch: arm64
     ldflags:
       - -s -w
-      - -X github.com/relaya-ai/relaya/clients/cli/internal/version.Version={{ .Env.RELAYA_VERSION }}
-      - -X github.com/relaya-ai/relaya/clients/cli/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/relaya-ai/relaya-ai/internal/version.Version={{ .Env.RELAYA_VERSION }}
+      - -X github.com/relaya-ai/relaya-ai/internal/version.Commit={{ .ShortCommit }}
 
 archives:
   - id: relaya
@@ -90,11 +90,10 @@ snapshot:
 
 release:
   github:
-    # The monorepo (relaya-ai/relaya) is private — a Release there
-    # 404s for anyone without org access. Publish to the public
-    # mirror so `brew install` / direct `curl` download URLs work.
-    # The mirror step (in cli-release.yml) must run BEFORE goreleaser
-    # so the v* tag exists on this repo when the Release is created;
+    # Pin the Release target to the public CLI repo so `brew install`
+    # / direct `curl` download URLs work without org access. The
+    # mirror step (in cli-release.yml) must run BEFORE goreleaser so
+    # the v* tag exists on this repo when the Release is created;
     # otherwise goreleaser creates the tag itself pointing at the
     # mirror's stale HEAD.
     owner: relaya-ai

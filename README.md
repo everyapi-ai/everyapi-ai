@@ -224,8 +224,9 @@ Flag：
 
 ## 开发
 
+在 CLI 源码目录（含本 README、`go.mod`、`Makefile` 的目录）下执行：
+
 ```bash
-cd clients/cli
 go test ./...
 go run . status            # 对生产
 go run . login --api-base http://localhost:3000   # 对本地后端
@@ -234,7 +235,7 @@ go run . login --api-base http://localhost:3000   # 对本地后端
 本地全平台交叉编译（跟 CI 用同一份配方）：
 
 ```bash
-make cli-release           # 产物在 clients/cli/dist/（5 平台 × 1 二进制 = 5 个文件）
+make cli-release           # 产物在 dist/（5 平台 × 1 二进制 = 5 个文件）
 ```
 
 ## MCP server (`relaya mcp` 子命令)

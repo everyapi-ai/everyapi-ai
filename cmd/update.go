@@ -247,8 +247,9 @@ func guessBinaryPath() string {
 // ---- latest version lookup -----------------------------------------
 
 // latestReleasePollURL is the GitHub Releases API endpoint for the
-// public mirror. Pinned to the mirror (not the monorepo) because
-// the monorepo is private and would 404 for token-less callers.
+// public CLI repo. Token-less GETs against this endpoint are
+// rate-limited but don't require auth, which is what `relaya update`
+// relies on for the unauthenticated version check.
 const latestReleasePollURL = "https://api.github.com/repos/relaya-ai/relaya-ai/releases/latest"
 
 // errNoReleaseYet surfaces when the mirror's Releases endpoint is
