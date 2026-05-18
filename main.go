@@ -91,6 +91,15 @@ func main() {
 				err = mcp.Install(args[1:])
 			case "uninstall":
 				err = mcp.Uninstall(args[1:])
+			case "help", "--help", "-h":
+				// Match the top-level `help` / `--help` / `-h` and
+				// the `relaya seller help` flag handling. Before this
+				// case, `relaya mcp --help` fell into the default
+				// branch and exited 2 with "unknown 'mcp' subcommand
+				// "--help"" — confusing for a flag every other
+				// command accepts.
+				fmt.Print(usage)
+				return
 			default:
 				fmt.Fprintf(os.Stderr, "unknown 'mcp' subcommand %q. Try 'relaya mcp install' to register, 'relaya mcp uninstall' to remove, or 'relaya mcp' (no args) to run the server.\n", args[0])
 				os.Exit(2)
