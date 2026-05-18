@@ -35,8 +35,10 @@ COMMANDS
   mcp                    Run the MCP server on stdio (spawned by Claude Code / Codex / Gemini)
   mcp install [client]   Auto-register relaya as an MCP server (client: claude|codex|gemini; default claude)
   mcp uninstall [client] Remove the MCP registration created by 'mcp install' (default claude)
-  update          Check for a newer release and print the upgrade command
-                  (--check: silent check, exits 1 if outdated)
+  update          Check for a newer release and run the matching upgrade
+                  (brew / go install — auto-detected from binary path)
+                  (--check: silent compare, exits 1 if outdated;
+                   --dry-run: print the command instead of running it)
   version         Print the build version
   help            Show this message
 
