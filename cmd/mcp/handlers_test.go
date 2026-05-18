@@ -182,6 +182,41 @@ func TestHandleSellerList_Empty(t *testing.T) {
 }
 
 // ---- relaya_seller_withdraw ----------------------------------------
+//
+// Every test in this block passes `confirm: "yes"` because the
+// handler now refuses requests without it. The first test below
+// — TestHandleSellerWithdraw_RejectsMissingConfirm — proves the
+// guard's negative case so a regression that silently disables
+// the friction step gets caught.
+
+func TestHandleSellerWithdraw_RejectsMissingConfirm(t *testing.T) {
+	// No HTTP server: the guard must short-circuit before any
+	// network call. If the test fails with "connection refused"
+	// rather than the expected sentinel, the guard regressed.
+	withCredentials(t, "http://no-server.invalid", "tok")
+
+	cases := []struct {
+		name string
+		raw  json.RawMessage
+	}{
+		{"nil args", nil},
+		{"empty object", json.RawMessage(`{}`)},
+		{"explicit-amount, no confirm", json.RawMessage(`{"quota":500000}`)},
+		{"wrong confirm value", json.RawMessage(`{"confirm":"YES"}`)},
+		{"empty confirm string", json.RawMessage(`{"confirm":""}`)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := handleSellerWithdraw(context.Background(), tc.raw)
+			if err == nil {
+				t.Fatal("expected confirm-guard error, got nil")
+			}
+			if !strings.Contains(err.Error(), `confirm: "yes"`) {
+				t.Errorf("error should mention the required confirm value, got: %q", err.Error())
+			}
+		})
+	}
+}
 
 func TestHandleSellerWithdraw_DefaultAll(t *testing.T) {
 	var transferred atomic.Int64
@@ -205,7 +240,7 @@ func TestHandleSellerWithdraw_DefaultAll(t *testing.T) {
 	defer srv.Close()
 	withCredentials(t, srv.URL, "tok")
 
-	out, err := handleSellerWithdraw(context.Background(), nil)
+	out, err := handleSellerWithdraw(context.Background(), json.RawMessage(`{"confirm":"yes"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +274,7 @@ func TestHandleSellerWithdraw_ExplicitAmount(t *testing.T) {
 	defer srv.Close()
 	withCredentials(t, srv.URL, "tok")
 
-	_, err := handleSellerWithdraw(context.Background(), json.RawMessage(`{"quota":500000}`))
+	_, err := handleSellerWithdraw(context.Background(), json.RawMessage(`{"confirm":"yes","quota":500000}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +294,7 @@ func TestHandleSellerWithdraw_NothingToWithdraw(t *testing.T) {
 	defer srv.Close()
 	withCredentials(t, srv.URL, "tok")
 
-	out, err := handleSellerWithdraw(context.Background(), nil)
+	out, err := handleSellerWithdraw(context.Background(), json.RawMessage(`{"confirm":"yes"}`))
 	if err != nil {
 		t.Fatal(err)
 	}

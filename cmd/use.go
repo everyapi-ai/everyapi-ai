@@ -11,8 +11,7 @@ import (
 )
 
 // Use is the buyer onboarding bridge: verify credentials, configure
-// the tool's env vars to point at Relaya, exec into the tool. See
-// docs/cli/channel-marketplace.md §7-1 "Onboarding bridge".
+// the tool's env vars to point at Relaya, exec into the tool.
 //
 // Usage:
 //

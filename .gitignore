@@ -1,0 +1,5 @@
+# Build outputs from `make cli` / `make cli-release`. Kept local to
+# clients/cli/ so the mirror inherits this rule when cli-release.yml
+# subtree-copies the directory.
+/bin/
+/dist/

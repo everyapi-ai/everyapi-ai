@@ -177,8 +177,8 @@ func handleSellerList(ctx context.Context, _ json.RawMessage) (string, error) {
 }
 
 // statusLabel maps the integer Channel.status to a human string.
-// Aligned with backend/internal/common.ChannelStatus* constants
-// (1=enabled, 2=manually-disabled, 3=auto-disabled). Unknown values
+// Aligned with the server's ChannelStatus enum:
+// 1=enabled, 2=manually-disabled, 3=auto-disabled. Unknown values
 // pass through as the raw integer so a future status doesn't render
 // as a misleading label.
 func statusLabel(s int) string {
@@ -196,37 +196,81 @@ func statusLabel(s int) string {
 
 // ---- relaya_seller_withdraw ----------------------------------------
 
-// sellerWithdrawArgs allows the caller to specify a quota amount;
-// omitted = transfer the full pending balance.
+// sellerWithdrawArgs is the JSON schema's mirror.
+//
+// `confirm` is a deliberate friction step on a money-moving tool.
+// Any process on the user's machine that can read
+// ~/.config/relaya/credentials.json (a debug-enabled AI agent, a
+// stowaway MCP client, malware that's reached the home dir) can
+// otherwise invoke this transfer silently — the access token alone
+// authorises the backend. Requiring an explicit "yes" string in the
+// request body forces the calling AI to surface the action to the
+// human first; a credential-stealing process can't fabricate
+// intent. The token still needs to be guarded by the OS, but at
+// least this tool stops being a one-step silent drain.
+//
+// Quota is in DB units. Optional — omitted = transfer the full
+// pending balance.
 type sellerWithdrawArgs struct {
-	// Quota is in DB units. We expose it directly so an AI agent
-	// scripted by a developer can do partial transfers; humans will
-	// usually leave it empty for "all".
-	Quota *int `json:"quota,omitempty"`
+	Confirm string `json:"confirm"`
+	Quota   *int   `json:"quota,omitempty"`
 }
+
+// sellerWithdrawConfirmToken is the literal a caller must echo back
+// in the `confirm` field to authorise a transfer. A constant string
+// rather than a server-issued nonce so the tool stays stateless
+// across the stdin/stdout MCP transport.
+const sellerWithdrawConfirmToken = "yes"
 
 var sellerWithdrawSchema = json.RawMessage(`{
   "type": "object",
   "properties": {
+    "confirm": {
+      "type": "string",
+      "description": "Required confirmation token. Must be the literal string \"yes\". Acts as a friction step so a credential-stealing process can't silently drain a seller balance through this tool.",
+      "const": "yes"
+    },
     "quota": {
       "type": "integer",
       "description": "Optional: specific quota (in DB units) to transfer. Omit for full pending balance.",
       "minimum": 1
     }
   },
+  "required": ["confirm"],
   "additionalProperties": false
 }`)
 
 func toolSellerWithdraw() Tool {
 	return Tool{
-		Name:        "relaya_seller_withdraw",
-		Description: "Transfer the user's pending seller earnings to their main Relaya balance. Without arguments, transfers the entire pending amount. Use when the user asks to 'withdraw' or 'cash out' marketplace earnings.",
+		Name: "relaya_seller_withdraw",
+		Description: "Transfer the user's pending seller earnings to their main Relaya balance. " +
+			"REQUIRED: the caller MUST pass `confirm: \"yes\"` — this is a friction step on a money-" +
+			"moving action so it can't be invoked silently by a credential-stealing process. " +
+			"Without arguments other than confirm, transfers the entire pending amount. " +
+			"Use when the user asks to 'withdraw' or 'cash out' marketplace earnings.",
 		InputSchema: sellerWithdrawSchema,
 		Handler:     handleSellerWithdraw,
 	}
 }
 
+// errSellerWithdrawNeedsConfirm is the user-facing message when the
+// confirm guard rejects a request. Kept as a sentinel so tests can
+// assert on the exact contract surface.
+var errSellerWithdrawNeedsConfirm = fmt.Errorf(
+	`relaya_seller_withdraw requires confirm: %q. ` +
+		`This is a money-moving tool — surface the transfer to the user before retrying with the confirm field set.`,
+	sellerWithdrawConfirmToken,
+)
+
 func handleSellerWithdraw(ctx context.Context, raw json.RawMessage) (string, error) {
+	// Order matters: loadCreds first → unmarshal → confirm gate.
+	//
+	// An unauthenticated caller hits errNotLoggedIn before they see
+	// the friction step, so the suggested fix-action is the right
+	// one ("run relaya login") rather than the misleading "missing
+	// confirm". The friction gate's threat model assumes the caller
+	// already has credentials; protecting against unauthenticated
+	// callers is loadCreds's job, not the gate's.
 	creds, err := loadCreds()
 	if err != nil {
 		return "", err
@@ -237,6 +281,12 @@ func handleSellerWithdraw(ctx context.Context, raw json.RawMessage) (string, err
 			return "", fmt.Errorf("invalid arguments: %w", err)
 		}
 	}
+	// Friction gate. Constant-string check by design — see
+	// sellerWithdrawArgs godoc for the threat model.
+	if args.Confirm != sellerWithdrawConfirmToken {
+		return "", errSellerWithdrawNeedsConfirm
+	}
+
 	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
 
 	// "Full balance" path: query /self for the pending seller_quota,

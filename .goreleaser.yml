@@ -44,9 +44,46 @@ archives:
     files:
       - LICENSE
       - README.md
+      - SECURITY.md
 
 checksum:
   name_template: SHA256SUMS
+
+# Sigstore cosign keyless signing of the SHA256SUMS file. Pairs the
+# SHA-checksum trust with a cryptographic identity (the GitHub Actions
+# OIDC token of the workflow run that built the release), so a user
+# verifying a binary can answer not just "did this match the
+# checksum" but "was the checksum produced by the legitimate release
+# pipeline".
+#
+# Outputs alongside the existing release artefacts:
+#   - SHA256SUMS.sig    — cosign signature of the checksum file
+#   - SHA256SUMS.pem    — short-lived signing certificate (Fulcio)
+#
+# Verification (no cosign config needed; the issuer + workflow are
+# pinned in the cosign verify-blob command itself):
+#
+#   cosign verify-blob \
+#     --certificate-identity-regexp '^https://github.com/relaya-ai/relaya/\.github/workflows/cli-release\.yml@refs/heads/main$' \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+#     --cert SHA256SUMS.pem \
+#     --signature SHA256SUMS.sig \
+#     SHA256SUMS
+#
+# Requires `id-token: write` on the workflow job — set in
+# .github/workflows/cli-release.yml.
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--yes"
+      - "--output-certificate=${certificate}"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+    artifacts: checksum
+    output: true
 
 snapshot:
   version_template: "{{ .Env.RELAYA_VERSION }}-snapshot-{{ .ShortCommit }}"

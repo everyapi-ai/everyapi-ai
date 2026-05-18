@@ -40,11 +40,10 @@ func New(base, token string) *Client {
 
 // WithUserID associates the caller's numeric user_id with the client
 // so authenticated requests can populate the `Relaya-User-Id` header.
-// The backend's UserAuth middleware checks BOTH a valid access token
-// AND that this header is present + a positive integer (see
-// backend/internal/middleware/auth.go ~ line 107). The header was
-// originally part of the dashboard's CORS/cache fingerprint and got
-// promoted to a hard requirement; missing it returns
+// The server's UserAuth middleware checks BOTH a valid access token
+// AND that this header is present + a positive integer. The header
+// was originally part of the dashboard's CORS/cache fingerprint and
+// got promoted to a hard requirement; missing it returns
 // "user ID not provided" with HTTP 401.
 //
 // Set during credentials load — pass the cached value from

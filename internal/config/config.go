@@ -14,10 +14,14 @@ import (
 	"path/filepath"
 )
 
-// DefaultAPIBase is the production gateway. Hardcoded per
-// docs/cli/channel-marketplace.md §7-3 (URL hardcode, no env override). The
+// DefaultAPIBase is the production gateway. Hardcoded — no env-var
+// fast path (so a typo in the shell environment, or a stowaway
+// `export RELAYA_API_BASE=...` line in someone's rc file, can't
+// silently re-route the CLI at a different server). The
 // credentials file's api_base field overrides this at runtime for
-// local development and self-hosters.
+// self-hosters / local development, but landing it requires an
+// explicit `--api-base` flag on `relaya login` — opt-in, not
+// ambient.
 const DefaultAPIBase = "https://api.relaya.pro"
 
 // Credentials is the on-disk credentials payload. JSON tags match the

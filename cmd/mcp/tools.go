@@ -11,9 +11,9 @@ package mcp
 //   - relaya_seller_list    — mounted seller channels
 //   - relaya_seller_withdraw — transfer seller_quota to main balance
 //
-// Spec §7-6 lists 9 tools total; the other 5 (sanitizer / seller
-// setup / add-key / add-oauth) await their underlying feature in a
-// follow-up PR — see docs/mcp/channel-marketplace.md §7-6 status block.
+// The full design lists 9 tools total; the other 5 (sanitizer /
+// seller setup / add-key / add-oauth) await their underlying
+// feature in a follow-up release.
 func registerTools() []Tool {
 	return []Tool{
 		toolStatus(),

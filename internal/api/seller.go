@@ -14,11 +14,11 @@ import (
 // larger — we only decode what we render, so a future backend field
 // addition doesn't break this client.
 //
-// Status meanings (aligned with backend/internal/common.ChannelStatus*):
+// Status meanings (aligned with the server's ChannelStatus enum):
 //
 //	1 = enabled
 //	2 = manually disabled by the seller
-//	3 = auto-disabled by the health-check worker (marketplace §4.5)
+//	3 = auto-disabled by the health-check worker
 type SellerChannel struct {
 	ID     int    `json:"id"`
 	Name   string `json:"name"`
@@ -81,4 +81,91 @@ func (c *Client) TransferSellerQuota(ctx context.Context, quota int) error {
 		return fmt.Errorf("transfer seller quota: %s", env.Message)
 	}
 	return nil
+}
+
+// SellerEligibility mirrors backend controller.SellerEligibilityResponse —
+// the subset the CLI surfaces in `relaya seller setup` to tell the user
+// up-front which mount gate they're failing (account age, email
+// verification, consume log, channel cap). The backend re-checks every
+// gate at submit, so this is a soft hint, not a security boundary.
+type SellerEligibility struct {
+	Eligible           bool `json:"eligible"`
+	MarketplaceEnabled bool `json:"marketplace_enabled"`
+	AccountActive      bool `json:"account_active"`
+	EmailVerified      bool `json:"email_verified"`
+	AccountAgeOK       bool `json:"account_age_ok"`
+	MinAgeDays         int  `json:"min_age_days"`
+	HasConsumeLog      bool `json:"has_consume_log"`
+	ChannelCount       int  `json:"channel_count"`
+	ChannelCap         int  `json:"channel_cap"`
+	UnderCap           bool `json:"under_cap"`
+}
+
+// GetSellerEligibility hits GET /api/seller/eligibility. Used by the
+// `seller setup` wizard to render a checklist BEFORE the user types a
+// key — failing gates server-side after they've typed credentials would
+// be a frustrating UX.
+func (c *Client) GetSellerEligibility(ctx context.Context) (*SellerEligibility, error) {
+	var env struct {
+		Success bool              `json:"success"`
+		Message string            `json:"message"`
+		Data    SellerEligibility `json:"data"`
+	}
+	if err := c.do(ctx, "GET", "/api/seller/eligibility", nil, &env); err != nil {
+		return nil, err
+	}
+	if !env.Success {
+		return nil, fmt.Errorf("get seller eligibility: %s", env.Message)
+	}
+	return &env.Data, nil
+}
+
+// SellerChannelCreate matches backend controller.SellerChannelCreate.
+// Whitelisted fields only — the backend strips anything else (group,
+// owner_user_id, priority/weight, base_url) per PRODUCT §4.1 / §4.4a.
+// Name / Type / Keys / Models are the practical minimum.
+//
+// Keys is the multi-key backup pool (B2, PRODUCT §4.5): one channel,
+// N equivalent credentials, per-key failover. KeyRemarks is
+// index-aligned with Keys; the backend rejects multi-key sets that
+// contain an OAuth/JSON-blob credential (those must be their own
+// single-key channel). A single-element Keys is the ordinary
+// single-key channel; the backend's normaliseLegacyKey shim accepts
+// the older single `key` field too, but new code should send Keys.
+type SellerChannelCreate struct {
+	Name           string   `json:"name"`
+	Type           int      `json:"type"`
+	Keys           []string `json:"keys"`
+	KeyRemarks     []string `json:"key_remarks,omitempty"`
+	Models         string   `json:"models"`
+	ModelMapping   string   `json:"model_mapping,omitempty"`
+	StatusCodeMap  string   `json:"status_code_mapping,omitempty"`
+	TestModel      string   `json:"test_model,omitempty"`
+	Other          string   `json:"other,omitempty"`
+	OtherSettings  string   `json:"settings,omitempty"`
+	ParamOverride  string   `json:"param_override,omitempty"`
+	HeaderOverride string   `json:"header_override,omitempty"`
+	Remark         string   `json:"remark,omitempty"`
+}
+
+// CreateSellerChannel POSTs to /api/seller/channel and returns the new
+// channel's id on success. Surfaces the backend's specific error
+// messages (eligibility 403, type-not-allowed 422, cap-reached 403)
+// via the standard *APIError envelope so the caller can render them
+// verbatim — they're already user-facing.
+func (c *Client) CreateSellerChannel(ctx context.Context, req SellerChannelCreate) (int, error) {
+	var env struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+		Data    struct {
+			ID int `json:"id"`
+		} `json:"data"`
+	}
+	if err := c.do(ctx, "POST", "/api/seller/channel", req, &env); err != nil {
+		return 0, err
+	}
+	if !env.Success {
+		return 0, fmt.Errorf("create seller channel: %s", env.Message)
+	}
+	return env.Data.ID, nil
 }

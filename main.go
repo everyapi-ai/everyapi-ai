@@ -1,9 +1,9 @@
 // relaya — CLI for the Relaya AI API gateway.
 //
-// See docs/cli/channel-marketplace.md for the design. This binary
-// covers the V1 buyer onboarding flow (login, logout, status, use)
+// Covers the V1 buyer onboarding flow (login, logout, status, use)
 // AND hosts the MCP server as the `mcp` subcommand — same Go
-// module, single binary, one install.
+// module, single binary, one install. See README.md for the full
+// command surface and the design rationale.
 package main
 
 import (
@@ -26,9 +26,17 @@ COMMANDS
   use <tool>      Launch a third-party CLI (claude / codex / gemini) routed through Relaya
                   (--group/--channel <name>: route via the key bound to that group;
                    bare --group/--channel: pick the group interactively)
+  seller <sub>    Channel-marketplace seller commands:
+                    seller list                      List your mounted channels
+                    seller withdraw [--quota N]      Move pending earnings to main balance
+                    seller add-key  --type/--name/--key/--models …
+                                                     Mount a plain-API-key channel
+                    seller setup                     Interactive mount wizard
   mcp                    Run the MCP server on stdio (spawned by Claude Code / Codex / Gemini)
   mcp install [client]   Auto-register relaya as an MCP server (client: claude|codex|gemini; default claude)
   mcp uninstall [client] Remove the MCP registration created by 'mcp install' (default claude)
+  update          Check for a newer release and print the upgrade command
+                  (--check: silent check, exits 1 if outdated)
   version         Print the build version
   help            Show this message
 
@@ -66,6 +74,8 @@ func main() {
 		err = cmd.Status(args)
 	case "use":
 		err = cmd.Use(args)
+	case "seller":
+		err = cmd.Seller(args)
 	case "mcp":
 		// `relaya mcp` (no subcommand) → run the JSON-RPC server on
 		// stdio for an MCP client to drive.
@@ -86,6 +96,8 @@ func main() {
 		} else {
 			err = mcp.Run(os.Stdin, os.Stdout, os.Stderr)
 		}
+	case "update":
+		err = cmd.Update(args)
 	case "version", "--version", "-v":
 		err = cmd.Version(args)
 	case "help", "--help", "-h":

@@ -30,9 +30,8 @@ var errNoRelayKeyForGroup = errors.New("no enabled relay API key in the requeste
 //     and the caller's relay precheck already catches a dead key.
 //   - otherwise → list the account's tokens via the management API
 //     (UserAuth, hence WithUserID), pick the most-recently-created
-//     ENABLED token (backend orders `id desc`, see
-//     backend/internal/model/token.go GetAllUserTokens), fetch its
-//     full key, cache it back into credentials.json, return it.
+//     ENABLED token (the API orders `id desc`), fetch its full
+//     key, cache it back into credentials.json, return it.
 //
 // Multi-token accounts have no override yet: the user gets the newest
 // enabled key, full stop. A `--token=<name>` flag on `relaya use`
