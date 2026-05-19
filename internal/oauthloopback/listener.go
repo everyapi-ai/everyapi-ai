@@ -47,9 +47,10 @@ type Listener struct {
 	addr   string
 	port   int
 
-	mu       sync.Mutex
-	resultCh chan Result
-	closed   bool
+	mu        sync.Mutex
+	resultCh  chan Result
+	closed    bool
+	delivered bool // sticky: stays true once the first callback delivered
 }
 
 // Listen starts a loopback HTTP listener on a random ephemeral port.
@@ -144,19 +145,34 @@ func (l *Listener) handleCallback(w http.ResponseWriter, r *http.Request) {
 		ErrorDesc: q.Get("error_description"),
 	}
 
-	// Deliver to the waiting goroutine. Buffered channel + non-block
-	// so a duplicate callback (browser retry, user double-click) is
-	// dropped silently instead of leaking a goroutine.
+	// Sticky one-shot delivery: a `delivered` flag (under l.mu) stays
+	// true once the first callback fired, independent of whether
+	// Wait() has drained the channel buffer yet. Without the sticky
+	// flag, a duplicate callback arriving AFTER Wait() returns (but
+	// BEFORE Close() shuts down the HTTP server — a several-second
+	// window in real flows) would successfully re-push to the empty
+	// buffer and render the success template, mimicking a finished
+	// flow to whoever fired the duplicate hit (browser retry, double-
+	// click, or hostile local process scanning loopback ports).
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	l.mu.Lock()
+	if l.delivered {
+		l.mu.Unlock()
+		w.WriteHeader(http.StatusConflict)
+		fmt.Fprint(w, duplicateHTML)
+		return
+	}
+	l.delivered = true
+	l.mu.Unlock()
+
+	// Non-blocking send: the buffer is sized 1 and we've just claimed
+	// the sole delivery slot under the lock above, so this case
+	// always succeeds. The default branch survives as a belt-and-
+	// suspenders guard against a stuck channel writer.
 	select {
 	case l.resultCh <- res:
 	default:
 	}
-
-	// Render a friendly page so the user knows they can close the
-	// tab. Plain HTML — no JS, no external resources — keeps it
-	// usable on any browser AND avoids any chance of the OAuth code
-	// leaking via referer to a third-party asset.
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if res.Error != "" || res.Code == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprint(w, errorHTML(res))
@@ -164,6 +180,15 @@ func (l *Listener) handleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprint(w, successHTML)
 }
+
+const duplicateHTML = `<!doctype html>
+<html><head><meta charset="utf-8"><title>EveryAPI — callback already received</title>
+<style>body{font-family:system-ui,-apple-system,sans-serif;max-width:540px;margin:6rem auto;padding:0 1rem;color:#222}</style>
+</head><body>
+<h1>Already received</h1>
+<p>The authorization callback was already received and processed. You can close this tab.</p>
+<p>If you didn't open this page yourself, something else on your machine just hit the EveryAPI loopback listener — close the tab, return to the terminal, and re-run the command from scratch.</p>
+</body></html>`
 
 const successHTML = `<!doctype html>
 <html><head><meta charset="utf-8"><title>EveryAPI — authorization complete</title>

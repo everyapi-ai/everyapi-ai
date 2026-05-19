@@ -166,8 +166,17 @@ func (p *pinReporter) inspect(serverName string, leaf *x509.Certificate) error {
 	return nil
 }
 
+// PinMismatchHook is an optional callback that fires once per
+// host+pin per process whenever the TLS pin mismatches. Useful for
+// the menubar, which has no stderr surface a user would ever read;
+// it can register a hook that pops a desktop notification. Nil =
+// no callback (the default — preserves the CLI's stderr-only
+// behaviour). Set before the first HTTP request.
+var PinMismatchHook func(host, pin, msg string)
+
 // logOnce writes msg to p.out at most once per host+pin per process,
-// so normal repeated requests don't spam stderr.
+// so normal repeated requests don't spam stderr, and also fires
+// PinMismatchHook so GUI surfaces can render their own warning.
 func (p *pinReporter) logOnce(host, pin, msg string) {
 	key := host + "|" + pin
 	p.mu.Lock()
@@ -178,6 +187,9 @@ func (p *pinReporter) logOnce(host, pin, msg string) {
 	p.seen[key] = struct{}{}
 	p.mu.Unlock()
 	fmt.Fprintln(p.out, msg)
+	if PinMismatchHook != nil {
+		PinMismatchHook(host, pin, msg)
+	}
 }
 
 var (

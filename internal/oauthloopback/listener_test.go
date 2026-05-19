@@ -1,8 +1,10 @@
 package oauthloopback
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -94,6 +96,91 @@ func TestListener_CloseIsIdempotent(t *testing.T) {
 	// Second Close must NOT panic / error — defer pattern relies on it.
 	if err := l.Close(); err != nil {
 		t.Errorf("second Close: %v", err)
+	}
+}
+
+// TestListener_DuplicateCallbackAfterWait closes the gap caught in
+// the security re-review: relying on the buffered channel's
+// non-block-send `default` branch only suppresses duplicates while
+// the buffer is FULL. Once Wait() drains the result, the buffer
+// empties, and a second /callback could successfully re-push and
+// render the success page — exactly the spoofing scenario R7 was
+// meant to prevent. The sticky `delivered` flag closes that window.
+func TestListener_DuplicateCallbackAfterWait(t *testing.T) {
+	l, err := Listen()
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	defer l.Close()
+	time.Sleep(50 * time.Millisecond)
+
+	cb := fmt.Sprintf("http://127.0.0.1:%d/callback?code=c1&state=s1", l.Port())
+	r1, err := http.Get(cb)
+	if err != nil {
+		t.Fatalf("first Get: %v", err)
+	}
+	r1.Body.Close()
+	if r1.StatusCode != 200 {
+		t.Errorf("first call status = %d, want 200", r1.StatusCode)
+	}
+
+	// Drain the channel — this is what runGeminiOAuth does in
+	// production right after the callback fires. Pre-fix, this
+	// emptied the buffer and re-enabled the duplicate-as-success
+	// path; post-fix, the sticky flag holds.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if _, err := l.Wait(ctx); err != nil {
+		t.Fatalf("Wait: %v", err)
+	}
+
+	r2, err := http.Get(cb)
+	if err != nil {
+		t.Fatalf("second Get: %v", err)
+	}
+	defer r2.Body.Close()
+	if r2.StatusCode != 409 {
+		t.Errorf("duplicate-after-drain status = %d, want 409", r2.StatusCode)
+	}
+	body, _ := io.ReadAll(r2.Body)
+	if bytes.Contains(body, []byte("Authorization complete")) {
+		t.Error("duplicate served success template; should serve duplicate template")
+	}
+}
+
+// TestListener_DuplicateCallback: a second /callback hit after the
+// first delivery must NOT show the success page (an attacker who
+// reached the loopback port mustn't be able to mimic a finished
+// flow). Returns 409 + the "already handled" template instead.
+func TestListener_DuplicateCallback(t *testing.T) {
+	l, err := Listen()
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	defer l.Close()
+	time.Sleep(50 * time.Millisecond)
+
+	cb := fmt.Sprintf("http://127.0.0.1:%d/callback?code=c1&state=s1", l.Port())
+	r1, err := http.Get(cb)
+	if err != nil {
+		t.Fatalf("first Get: %v", err)
+	}
+	r1.Body.Close()
+	if r1.StatusCode != 200 {
+		t.Errorf("first call status = %d, want 200", r1.StatusCode)
+	}
+
+	r2, err := http.Get(cb)
+	if err != nil {
+		t.Fatalf("second Get: %v", err)
+	}
+	defer r2.Body.Close()
+	if r2.StatusCode != 409 {
+		t.Errorf("duplicate call status = %d, want 409", r2.StatusCode)
+	}
+	body, _ := io.ReadAll(r2.Body)
+	if !bytes.Contains(body, []byte("Already received")) {
+		t.Errorf("duplicate body missing 'Already received' header: %s", body)
 	}
 }
 
