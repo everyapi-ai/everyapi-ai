@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/api"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/config"
 )
 
@@ -59,7 +60,7 @@ func resolveRelayKey(creds *config.Credentials, group string) (string, error) {
 	}
 
 	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
-	ctx := withCtx()
+	ctx := cliout.WithCtx()
 
 	tokens, err := client.ListTokens(ctx)
 	if err != nil {

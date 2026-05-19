@@ -91,26 +91,6 @@ func classifyAPIErr(err error) error {
 	return err
 }
 
-// trimAPIBaseToWebOrigin maps the API host to the dashboard host:
-// `https://api.everyapi.ai` → `https://app.everyapi.ai` so the topup /
-// wallet / seller URLs point at the dashboard (app.*) where those
-// pages live — NOT the API host and NOT the marketing apex
-// (everyapi.ai is the landing page). Identical heuristic to the CLI
-// status command; kept duplicated here because the production
-// routing (api/dashboard split) is a permanent decision and the
-// helper is two lines.
-func trimAPIBaseToWebOrigin(base string) string {
-	const apiPrefix = "https://api."
-	if strings.HasPrefix(base, apiPrefix) {
-		return "https://app." + base[len(apiPrefix):]
-	}
-	const httpAPIPrefix = "http://api."
-	if strings.HasPrefix(base, httpAPIPrefix) {
-		return "http://app." + base[len(httpAPIPrefix):]
-	}
-	return base
-}
-
 // ---- everyapi_status -------------------------------------------------
 
 func toolStatus() Tool {
@@ -151,7 +131,7 @@ func handleStatus(ctx context.Context, _ json.RawMessage) (string, error) {
 	}
 	fmt.Fprintf(&b, "Quota:    $%.2f remaining   $%.2f used\n", quotaUSD, usedUSD)
 	fmt.Fprintf(&b, "Requests: %d\n", self.RequestCount)
-	fmt.Fprintf(&b, "Top-up:   %s/wallet", trimAPIBaseToWebOrigin(creds.APIBase))
+	fmt.Fprintf(&b, "Top-up:   %s/wallet", api.WebOriginFromBase(creds.APIBase))
 	return b.String(), nil
 }
 
@@ -176,7 +156,7 @@ func handleTopup(_ context.Context, _ json.RawMessage) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("Open in browser to top up: %s/wallet", trimAPIBaseToWebOrigin(creds.APIBase)), nil
+	return fmt.Sprintf("Open in browser to top up: %s/wallet", api.WebOriginFromBase(creds.APIBase)), nil
 }
 
 // ---- everyapi_seller_list --------------------------------------------
@@ -201,7 +181,7 @@ func handleSellerList(ctx context.Context, _ json.RawMessage) (string, error) {
 		return "", classifyAPIErr(err)
 	}
 	if len(channels) == 0 {
-		return "No seller channels mounted. Visit " + trimAPIBaseToWebOrigin(creds.APIBase) + "/seller/channels to add one.", nil
+		return "No seller channels mounted. Visit " + api.WebOriginFromBase(creds.APIBase) + "/seller/channels to add one.", nil
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%d seller channel(s):\n", len(channels))
@@ -295,7 +275,7 @@ func toolSellerWithdraw() Tool {
 // confirm guard rejects a request. Kept as a sentinel so tests can
 // assert on the exact contract surface.
 var errSellerWithdrawNeedsConfirm = fmt.Errorf(
-	`everyapi_seller_withdraw requires confirm: %q. ` +
+	`everyapi_seller_withdraw requires confirm: %q. `+
 		`This is a money-moving tool — surface the transfer to the user before retrying with the confirm field set.`,
 	sellerWithdrawConfirmToken,
 )

@@ -1,4 +1,4 @@
-package cmd
+package seller
 
 import (
 	"bufio"
@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/api"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/config"
 	"github.com/everyapi-ai/everyapi-ai/internal/oauthloopback"
 )
@@ -32,7 +34,7 @@ func sellerExchangeCtx(parent context.Context) (context.Context, context.CancelF
 	return context.WithTimeout(parent, sellerNetTimeout)
 }
 
-// SellerAddOAuth is the seller OAuth-based onboarding bridge: the CLI
+// sellerAddOAuth is the seller OAuth-based onboarding bridge: the CLI
 // walks the seller through OpenAI's device-auth flow and the backend
 // mounts the resulting credential as their channel — the seller
 // NEVER copies a token string by hand. docs/cli/channel-marketplace.md
@@ -53,7 +55,7 @@ func sellerExchangeCtx(parent context.Context) (context.Context, context.CancelF
 //  3. Print code + URL, open browser (unless --no-browser)
 //  4. Poll until success / expiry / deny — backend mints the channel
 //     server-side, so the CLI just reports the resulting channel id
-func SellerAddOAuth(args []string) error {
+func sellerAddOAuth(args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: everyapi seller add-oauth <provider> [flags]\nproviders: codex (claude/gemini coming in a follow-up)")
 	}
@@ -106,7 +108,7 @@ func sellerAddOAuthCodex(args []string) error {
 	// cookie set on /start. Without a jar the /poll call would land
 	// in a fresh session and the handler would 200 with code=expired.
 	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID).WithCookieJar()
-	ctx, stop := signalCtx()
+	ctx, stop := cliout.SignalCtx()
 	defer stop()
 
 	// Pre-check eligibility — same reasoning as `add-key`: failing a
@@ -120,9 +122,9 @@ func sellerAddOAuthCodex(args []string) error {
 	}
 	if !elig.Eligible {
 		renderEligibility(elig)
-		println("")
-		println("Marketplace eligibility check failed. Fix the unchecked items above, then re-run.")
-		printf("Dashboard: %s/seller/channels\n", trimAPIBaseToWebOrigin(creds.APIBase))
+		cliout.Println("")
+		cliout.Println("Marketplace eligibility check failed. Fix the unchecked items above, then re-run.")
+		cliout.Printf("Dashboard: %s/seller/channels\n", api.WebOriginFromBase(creds.APIBase))
 		return errors.New("not eligible to mount a seller channel")
 	}
 
@@ -133,23 +135,23 @@ func sellerAddOAuthCodex(args []string) error {
 		return classifySellerErr(err)
 	}
 
-	println("")
-	println("To bind your Codex / ChatGPT subscription, visit this URL and enter the code:")
-	printf("\n    URL:  %s\n", start.VerificationURI)
-	printf("    Code: %s\n\n", start.UserCode)
+	cliout.Println("")
+	cliout.Println("To bind your Codex / ChatGPT subscription, visit this URL and enter the code:")
+	cliout.Printf("\n    URL:  %s\n", start.VerificationURI)
+	cliout.Printf("    Code: %s\n\n", start.UserCode)
 
 	if !*noBrowser {
 		// Same fail-soft approach as `everyapi login`: a missing
 		// xdg-open / `open` shouldn't crash; the URL is already
 		// printed for the user to copy.
-		if berr := openBrowser(start.VerificationURI); berr == nil {
-			println("Browser opened. Approve there and come back; this will finish on its own.")
+		if berr := cliprompt.OpenBrowser(start.VerificationURI); berr == nil {
+			cliout.Println("Browser opened. Approve there and come back; this will finish on its own.")
 		} else {
 			fmt.Fprintln(os.Stderr, "Couldn't open the browser automatically — copy the URL above.")
 		}
 	}
-	println("")
-	println("Waiting for authorization...")
+	cliout.Println("")
+	cliout.Println("Waiting for authorization...")
 
 	res, err := client.PollSellerCodexUntilDone(ctx, start.FlowID, start.Interval)
 	if err != nil {
@@ -167,9 +169,9 @@ func sellerAddOAuthCodex(args []string) error {
 	if bound == "" {
 		bound = "(account email not exposed by token)"
 	}
-	printf("\nMounted channel #%d (%s, type=codex, account=%s).\n", res.ChannelID, *name, bound)
-	printf("Status: enabled. Run 'everyapi seller list' to inspect, or visit %s/seller/channels.\n",
-		trimAPIBaseToWebOrigin(creds.APIBase))
+	cliout.Printf("\nMounted channel #%d (%s, type=codex, account=%s).\n", res.ChannelID, *name, bound)
+	cliout.Printf("Status: enabled. Run 'everyapi seller list' to inspect, or visit %s/seller/channels.\n",
+		api.WebOriginFromBase(creds.APIBase))
 	return nil
 }
 
@@ -216,7 +218,7 @@ func sellerAddOAuthClaude(args []string) error {
 	// name/models under a session keyed by `everyapi_session` cookie,
 	// and the complete call has to land in the SAME session.
 	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID).WithCookieJar()
-	ctx, stop := signalCtx()
+	ctx, stop := cliout.SignalCtx()
 	defer stop()
 
 	// Eligibility pre-check — fail before we burn a round-trip to
@@ -229,9 +231,9 @@ func sellerAddOAuthClaude(args []string) error {
 	}
 	if !elig.Eligible {
 		renderEligibility(elig)
-		println("")
-		println("Marketplace eligibility check failed. Fix the unchecked items above, then re-run.")
-		printf("Dashboard: %s/seller/channels\n", trimAPIBaseToWebOrigin(creds.APIBase))
+		cliout.Println("")
+		cliout.Println("Marketplace eligibility check failed. Fix the unchecked items above, then re-run.")
+		cliout.Printf("Dashboard: %s/seller/channels\n", api.WebOriginFromBase(creds.APIBase))
 		return errors.New("not eligible to mount a seller channel")
 	}
 
@@ -242,24 +244,24 @@ func sellerAddOAuthClaude(args []string) error {
 		return classifySellerErr(err)
 	}
 
-	println("")
-	println("To bind your Anthropic Claude subscription:")
-	printf("\n  1) Open this URL in a browser (or copy if --no-browser):\n     %s\n\n", authorizeURL)
-	println("  2) Sign in and approve the connection.")
-	println("  3) Anthropic's callback page shows a string like `<code>#<state>`.")
-	println("     Copy that string and paste it below.")
-	println("")
+	cliout.Println("")
+	cliout.Println("To bind your Anthropic Claude subscription:")
+	cliout.Printf("\n  1) Open this URL in a browser (or copy if --no-browser):\n     %s\n\n", authorizeURL)
+	cliout.Println("  2) Sign in and approve the connection.")
+	cliout.Println("  3) Anthropic's callback page shows a string like `<code>#<state>`.")
+	cliout.Println("     Copy that string and paste it below.")
+	cliout.Println("")
 
 	if !*noBrowser {
-		if berr := openBrowser(authorizeURL); berr == nil {
-			println("Browser opened.")
+		if berr := cliprompt.OpenBrowser(authorizeURL); berr == nil {
+			cliout.Println("Browser opened.")
 		} else {
 			fmt.Fprintln(os.Stderr, "Couldn't open the browser automatically — copy the URL above.")
 		}
 	}
 
 	in := bufio.NewReader(os.Stdin)
-	pasted, err := promptLine(in, "Paste authorization string", "")
+	pasted, err := cliprompt.Line(in, "Paste authorization string", "")
 	if err != nil {
 		return err
 	}
@@ -271,12 +273,12 @@ func sellerAddOAuthClaude(args []string) error {
 		return classifySellerErr(err)
 	}
 
-	printf("\nMounted channel #%d (%s, type=claude).\n", res.ChannelID, *name)
+	cliout.Printf("\nMounted channel #%d (%s, type=claude).\n", res.ChannelID, *name)
 	if res.ExpiresAt != "" {
-		printf("Token expires: %s (auto-refreshes before then).\n", res.ExpiresAt)
+		cliout.Printf("Token expires: %s (auto-refreshes before then).\n", res.ExpiresAt)
 	}
-	printf("Status: enabled. Run 'everyapi seller list' to inspect, or visit %s/seller/channels.\n",
-		trimAPIBaseToWebOrigin(creds.APIBase))
+	cliout.Printf("Status: enabled. Run 'everyapi seller list' to inspect, or visit %s/seller/channels.\n",
+		api.WebOriginFromBase(creds.APIBase))
 	return nil
 }
 
@@ -341,7 +343,7 @@ func sellerAddOAuthGemini(args []string) error {
 	}
 	defer listener.Close()
 
-	ctx, stop := signalCtx()
+	ctx, stop := cliout.SignalCtx()
 	defer stop()
 
 	ecx, ecancel := sellerExchangeCtx(ctx)
@@ -352,9 +354,9 @@ func sellerAddOAuthGemini(args []string) error {
 	}
 	if !elig.Eligible {
 		renderEligibility(elig)
-		println("")
-		println("Marketplace eligibility check failed. Fix the unchecked items above, then re-run.")
-		printf("Dashboard: %s/seller/channels\n", trimAPIBaseToWebOrigin(creds.APIBase))
+		cliout.Println("")
+		cliout.Println("Marketplace eligibility check failed. Fix the unchecked items above, then re-run.")
+		cliout.Printf("Dashboard: %s/seller/channels\n", api.WebOriginFromBase(creds.APIBase))
 		return errors.New("not eligible to mount a seller channel")
 	}
 
@@ -365,17 +367,17 @@ func sellerAddOAuthGemini(args []string) error {
 		return classifySellerErr(err)
 	}
 
-	println("")
-	println("To bind your Google Gemini account, sign in at:")
-	printf("\n    %s\n\n", start.AuthorizeURL)
+	cliout.Println("")
+	cliout.Println("To bind your Google Gemini account, sign in at:")
+	cliout.Printf("\n    %s\n\n", start.AuthorizeURL)
 	if !*noBrowser {
-		if berr := openBrowser(start.AuthorizeURL); berr == nil {
-			println("Browser opened. Sign in there; this will finish on its own.")
+		if berr := cliprompt.OpenBrowser(start.AuthorizeURL); berr == nil {
+			cliout.Println("Browser opened. Sign in there; this will finish on its own.")
 		} else {
 			fmt.Fprintln(os.Stderr, "Couldn't open the browser automatically — copy the URL above.")
 		}
 	}
-	printf("Waiting for the redirect on 127.0.0.1:%d (timeout %s)...\n", listener.Port(), *timeout)
+	cliout.Printf("Waiting for the redirect on 127.0.0.1:%d (timeout %s)...\n", listener.Port(), *timeout)
 
 	waitCtx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()
@@ -409,11 +411,11 @@ func sellerAddOAuthGemini(args []string) error {
 		return classifySellerErr(err)
 	}
 
-	printf("\nMounted channel #%d (%s, type=gemini).\n", res.ChannelID, *name)
+	cliout.Printf("\nMounted channel #%d (%s, type=gemini).\n", res.ChannelID, *name)
 	if res.ExpiresAt != "" {
-		printf("Token expires: %s (auto-refreshes before then).\n", res.ExpiresAt)
+		cliout.Printf("Token expires: %s (auto-refreshes before then).\n", res.ExpiresAt)
 	}
-	printf("Status: enabled. Run 'everyapi seller list' to inspect, or visit %s/seller/channels.\n",
-		trimAPIBaseToWebOrigin(creds.APIBase))
+	cliout.Printf("Status: enabled. Run 'everyapi seller list' to inspect, or visit %s/seller/channels.\n",
+		api.WebOriginFromBase(creds.APIBase))
 	return nil
 }

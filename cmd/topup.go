@@ -9,6 +9,8 @@ import (
 	"os"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/api"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/config"
 )
 
@@ -40,7 +42,7 @@ func Topup(args []string) error {
 	}
 	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
 
-	res, err := client.CreateJumpSession(withCtx(), "topup")
+	res, err := client.CreateJumpSession(cliout.WithCtx(), "topup")
 	if err != nil {
 		if api.IsUnauthorized(err) {
 			return errors.New("your session expired — run 'everyapi login' again")
@@ -48,22 +50,22 @@ func Topup(args []string) error {
 		return fmt.Errorf("create jump session: %w", err)
 	}
 
-	println("")
-	println("Before opening the browser, verify this is the real EveryAPI dashboard.")
-	println("")
-	printf("  URL:    %s\n", res.URL)
-	printf("  Phrase: %s\n", res.VerificationPhrase)
+	cliout.Println("")
+	cliout.Println("Before opening the browser, verify this is the real EveryAPI dashboard.")
+	cliout.Println("")
+	cliout.Printf("  URL:    %s\n", res.URL)
+	cliout.Printf("  Phrase: %s\n", res.VerificationPhrase)
 	if res.ExpiresIn > 0 {
-		printf("  (this session expires in ~%d seconds)\n", res.ExpiresIn)
+		cliout.Printf("  (this session expires in ~%d seconds)\n", res.ExpiresIn)
 	}
-	println("")
-	println("Check TWO things after the browser opens:")
-	println("  1) The page URL above must be on YOUR EveryAPI origin")
-	println("     (app.everyapi.ai by default, or your self-host).")
-	println("  2) The page header must show the SAME phrase above.")
-	println("If either differs, close the tab — you may be looking at a phishing page.")
-	println("")
-	printf("Press Enter to open the browser, or Ctrl-C to abort.")
+	cliout.Println("")
+	cliout.Println("Check TWO things after the browser opens:")
+	cliout.Println("  1) The page URL above must be on YOUR EveryAPI origin")
+	cliout.Println("     (app.everyapi.ai by default, or your self-host).")
+	cliout.Println("  2) The page header must show the SAME phrase above.")
+	cliout.Println("If either differs, close the tab — you may be looking at a phishing page.")
+	cliout.Println("")
+	cliout.Printf("Press Enter to open the browser, or Ctrl-C to abort.")
 
 	// Read one line; ignore whatever the user typed — the act of
 	// pressing Enter IS the confirmation. Ctrl-C kills the process
@@ -77,13 +79,13 @@ func Topup(args []string) error {
 		return fmt.Errorf("read confirmation: %w", err)
 	}
 
-	println("")
+	cliout.Println("")
 	if *noBrowser {
-		println("Copy the URL above into your browser.")
+		cliout.Println("Copy the URL above into your browser.")
 		return nil
 	}
-	if berr := openBrowser(res.URL); berr == nil {
-		println("Browser opened. Verify the phrase on the page matches the one above.")
+	if berr := cliprompt.OpenBrowser(res.URL); berr == nil {
+		cliout.Println("Browser opened. Verify the phrase on the page matches the one above.")
 	} else {
 		fmt.Fprintln(os.Stderr, "Couldn't open the browser automatically — copy the URL above.")
 	}

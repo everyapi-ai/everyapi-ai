@@ -2,7 +2,7 @@
 
 [EveryAPI](https://everyapi.ai) AI API 网关的 buyer onboarding CLI。让任何 Claude Code / Codex / Gemini CLI **一分钟内**接到网关。
 
-状态：**v1 buyer onboarding** + **seller plain-key 子命令**已落地。Sanitizer proxy、OAuth seller 流、QR sign-in 等后续 PR 增量补齐（见文末「不在范围」段）。
+状态：**v1 已收口** —— buyer onboarding、seller 命令（plain-key + OAuth 三家）、sanitizer proxy、QR sign-in 主路径、防钓鱼分层均已落地。仍未实现的只有 OS 级 code signing 与 platform keychain backend（见文末「这个二进制还不包含什么」）。
 
 ## 安装
 
@@ -58,20 +58,20 @@ if ($expected -ne $actual) { throw "checksum mismatch" } else { "OK" }
 
 ## 命令
 
-```
-everyapi login              当前设备登录 EveryAPI
-everyapi logout             清除本设备凭证
-everyapi status             查看余额、使用量、配额
-everyapi topup              打开充值页（带反钓鱼暗号 phrase 验证）
-everyapi use <tool>         配好 env 并 exec 进第三方 CLI（指向 EveryAPI）
-everyapi seller <sub>       Marketplace 卖家端命令（list / withdraw / add-key / setup）
-everyapi mcp                作为 MCP server 跑（stdin/stdout JSON-RPC）
-everyapi update             检查是否有新版本，打印对应安装方式的升级命令
-everyapi version            显示构建版本
-everyapi help               帮助
-```
+| 命令 | 作用 |
+|---|---|
+| `everyapi login` | 当前设备登录 EveryAPI |
+| `everyapi logout` | 清除本设备凭证 |
+| `everyapi status` | 查看余额、使用量、配额 |
+| `everyapi topup` | 打开充值页（带反钓鱼暗号 phrase 验证） |
+| `everyapi use <tool>` | 配好 env 并 exec 进第三方 CLI（指向 EveryAPI） |
+| `everyapi seller <sub>` | Marketplace 卖家端命令（list / withdraw / add-key / setup） |
+| `everyapi mcp` | 作为 MCP server 跑（stdin/stdout JSON-RPC） |
+| `everyapi update` | 检查是否有新版本，打印对应安装方式的升级命令 |
+| `everyapi version` | 显示构建版本 |
+| `everyapi help` | 帮助 |
 
-### `everyapi use <tool>`
+### `everyapi use <tool>` — exec 进第三方 CLI（指向 EveryAPI 网关）
 
 装这个 CLI 的主要理由。它把目标第三方工具的环境变量按惯例配置好，然后 exec 进去——你既有的 Claude Code / OpenAI Codex CLI / Gemini CLI **不用改任何配置**就指向了 EveryAPI 网关。
 
@@ -94,7 +94,7 @@ everyapi use                # 无参 → 交互式选择已安装的工具
 
 > ⚠️ **Subprocess env 安全提示**：上面这些环境变量包含你的 relay API key。第三方 CLI 的 debug / verbose 模式可能会把 env 写进日志——`everyapi use` 之前确认你打开的 debug flag 不会泄漏 `*_TOKEN` / `*_API_KEY`；分享 debug 日志前先 `sed -i 's/sk-everyapi-[A-Za-z0-9]*/REDACTED/g'`。
 
-### `everyapi login`
+### `everyapi login` — Device Authorization Grant + QR 登录
 
 走 Device Authorization Grant（RFC 8628 形态）+ docs §7-5 Layer 1 「设备到设备 QR 登录」：
 
@@ -125,13 +125,13 @@ QR 终端渲染样例（Unicode 半块字符；约 18-20 行高）：
 - User **不需要弹浏览器到陌生页面** → web 跳转钓鱼面消失
 - 即使 CLI 是恶意 fork 生成假 QR，扫码后的确认页是真 everyapi.ai 上的 dashboard（user 已登录设备触发），user 看到不认识的代码不会 approve
 
-docs §7-5 后续 layers（cert pinning / 暗号字符串 / PKCE OAuth）跟此 PR 不重叠，独立 PR。
+docs §7-5 其余 layers（cert pinning / 暗号字符串 / PKCE OAuth）已各自独立 PR 落地（cert pinning 为 report-only，enforce 按产品决策不做）。
 
-### `everyapi seller …`
+### `everyapi seller <sub>` — marketplace 卖家端子命令
 
-卖家端子命令——把 dashboard 的 channel mount / 提现操作搬到 terminal，方便 scripted onboarding。挂渠道前 `seller setup` 会先查 eligibility（账号激活 / 邮箱验证 / 账号年龄 / 消费记录 / channel 上限），失败的 gate 在**输入 key 之前**就先列出来，避免用户填一通才发现提交侧 422。
+把 dashboard 的 channel mount / 提现操作搬到 terminal，方便 scripted onboarding。挂渠道前 `seller setup` 会先查 eligibility（账号激活 / 邮箱验证 / 账号年龄 / 消费记录 / channel 上限），失败的 gate 在**输入 key 之前**就先列出来，避免用户填一通才发现提交侧 422。
 
-```
+```bash
 everyapi seller list                          # 列出已挂载的 channel
 everyapi seller withdraw                      # 把全部 pending seller 收入转入主余额
 everyapi seller withdraw --quota 1000         # 部分转账（DB 单位）
@@ -149,7 +149,7 @@ everyapi seller add-oauth gemini --name 'my-gemini' --models 'gemini-1.5-pro'
 everyapi seller setup                         # 交互式 wizard：先查 eligibility，再引导 add-key
 ```
 
-#### `add-key` 多 key 备份池
+#### `add-key` — 多 key 备份池
 
 `--key` 可以重复，把 N 把等价凭证挂在同一个 channel 上作为 backup pool（B2，PRODUCT §4.5）；当主 key 401/403 时后端自动 failover 到下一把。`--key-remark` 同样可重复，按位置跟 `--key` 对齐（第 i 个 `--key-remark` 是第 i 个 `--key` 的标签，便于以后 dashboard 上识别）。OAuth blob 不能进 backup pool —— 仍只能作为单 key channel。
 
@@ -223,7 +223,7 @@ everyapi topup                    # 默认开浏览器
 everyapi topup --no-browser       # 只打 URL，手动复制
 ```
 
-### `everyapi status`
+### `everyapi status` — 当前余额 / 使用量 / 配额
 
 ```
 $ everyapi status
@@ -234,7 +234,7 @@ $ everyapi status
   topup:     https://app.everyapi.ai/wallet
 ```
 
-### `everyapi update`
+### `everyapi update` — 自动跑对应安装方式的升级命令
 
 查 GitHub mirror 最新 release，跟当前版本比对，**自动跑对应安装方式的升级命令**——一条命令搞定，不用复制粘贴。
 
@@ -400,14 +400,17 @@ EOF
 
 ## 这个二进制还**不**包含什么
 
-当前未实现的（按重要性排序，后续 release 增量补，不破坏上面已有的 v1 surface）：
+当前**仍未实现**的（按重要性排序，后续 release 增量补，不破坏已有 v1 surface）：
 
 - ⚠️ OS 级 code signing（macOS notarization / Windows Authenticode）——目前靠 sigstore cosign keyless + SHA256SUMS 双层校验，详见上文「从 GitHub Release 拉二进制 — 务必校验」
-- ❌ Platform keychain backend——token 仍明文存盘
-- ❌ `everyapi start` / `everyapi configure` —— 客户端敏感字段脱敏的 local sanitizer proxy
-- ✅ Seller OAuth onboarding 三家 provider 已覆盖（codex device / claude paste / gemini loopback）
-- ❌ QR sign-in 主路径 —— 当前 `login` 走 device-code
-- ❌ Cert pinning、暗号字符串等防钓鱼分层
+- ❌ Platform keychain backend——token 仍明文存盘（mode 0600）
+
+原列于此、**现已落地**的（勿再当未实现）：
+
+- ✅ Local sanitizer proxy —— 命令是 `everyapi proxy {start,stop,status,configure}`（不是 `everyapi start`/`everyapi configure`），引擎 + 6 内置 detector + 自定义 regex + 集成进 `everyapi use`
+- ✅ Seller OAuth onboarding 三家 provider（codex device / claude paste / gemini loopback）
+- ✅ QR sign-in 主路径 —— `login` 走 device-code **+ QR 主路径**，`--no-qr` 兜底
+- ✅ 防钓鱼分层 —— 暗号字符串（`everyapi topup`）、PKCE/state strict-check、cert pinning 均已落地；cert pinning 为 **report-only**（匹配静默 / mismatch 告警 / 永不拒连），enforce 按产品决策定格"只告警不做"
 
 ## 报告漏洞
 

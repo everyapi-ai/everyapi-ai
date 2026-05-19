@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/api"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/config"
 )
 
@@ -33,7 +34,7 @@ func Status(args []string) error {
 		return err
 	}
 	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
-	ctx := withCtx()
+	ctx := cliout.WithCtx()
 
 	status, err := client.GetStatus(ctx)
 	if err != nil {
@@ -57,15 +58,15 @@ func Status(args []string) error {
 	quotaUSD := float64(self.Quota) / perUnit
 	usedUSD := float64(self.UsedQuota) / perUnit
 
-	println("")
+	cliout.Println("")
 	if self.Email != "" {
-		printf("  %s (%s)\n", self.Username, self.Email)
+		cliout.Printf("  %s (%s)\n", self.Username, self.Email)
 	} else {
-		printf("  %s\n", self.Username)
+		cliout.Printf("  %s\n", self.Username)
 	}
-	printf("  quota:     $%.2f remaining   $%.2f used\n", quotaUSD, usedUSD)
-	printf("  requests:  %d\n", self.RequestCount)
-	printf("  topup:     %s/wallet\n", trimAPIBaseToWebOrigin(creds.APIBase))
+	cliout.Printf("  quota:     $%.2f remaining   $%.2f used\n", quotaUSD, usedUSD)
+	cliout.Printf("  requests:  %d\n", self.RequestCount)
+	cliout.Printf("  topup:     %s/wallet\n", api.WebOriginFromBase(creds.APIBase))
 
 	// The quota line above comes from /api/user/self (UserAuth) and
 	// says nothing about whether the RELAY works: the access token
@@ -83,45 +84,29 @@ func Status(args []string) error {
 	relayKey, rkErr := resolveRelayKey(creds, "")
 	switch {
 	case errors.Is(rkErr, errNoRelayKey):
-		printf("  relay:     NOT CONFIGURED — no relay API key on the account\n")
-		printf("             create an API key in the dashboard, then 'everyapi login'\n")
+		cliout.Printf("  relay:     NOT CONFIGURED — no relay API key on the account\n")
+		cliout.Printf("             create an API key in the dashboard, then 'everyapi login'\n")
 	case rkErr != nil:
 		// Token lookup itself failed (transport, 5xx, etc.). Not a
 		// verdict on the key — just say we couldn't check.
-		printf("  relay:     unknown — could not resolve relay key (%v)\n", rkErr)
+		cliout.Printf("  relay:     unknown — could not resolve relay key (%v)\n", rkErr)
 	default:
 		perr := api.New(creds.APIBase, relayKey).ProbeRelayToken(ctx)
 		switch {
 		case perr == nil:
-			printf("  relay:     ok\n")
+			cliout.Printf("  relay:     ok\n")
 		case api.IsUnauthorized(perr):
-			printf("  relay:     UNAVAILABLE — relay key invalid / expired / disabled / out of quota\n")
-			printf("             (account quota above is separate; top up %s/wallet or run 'everyapi login')\n",
-				trimAPIBaseToWebOrigin(creds.APIBase))
+			cliout.Printf("  relay:     UNAVAILABLE — relay key invalid / expired / disabled / out of quota\n")
+			cliout.Printf("             (account quota above is separate; top up %s/wallet or run 'everyapi login')\n",
+				api.WebOriginFromBase(creds.APIBase))
 		default:
 			// Non-401 probe failure (5xx, network). The key may be
 			// fine — we just couldn't get a verdict. Same shape as
 			// the lookup-failure branch.
-			printf("  relay:     unknown — probe failed (%v)\n", perr)
+			cliout.Printf("  relay:     unknown — probe failed (%v)\n", perr)
 		}
 	}
 
-	println("")
+	cliout.Println("")
 	return nil
-}
-
-// trimAPIBaseToWebOrigin maps the API host to the dashboard host:
-// `https://api.everyapi.ai` → `https://app.everyapi.ai`, so the printed
-// wallet URL points at the dashboard (app.*) where the wallet UI
-// lives — NOT the API host and NOT the marketing site (everyapi.ai,
-// the bare apex, is the landing page and has no /wallet). Cheap
-// heuristic — only the "api." subdomain is rewritten; non-matching
-// bases (localhost, custom self-host hosts) are left unchanged so
-// they still resolve.
-func trimAPIBaseToWebOrigin(base string) string {
-	const apiPrefix = "https://api."
-	if len(base) > len(apiPrefix) && base[:len(apiPrefix)] == apiPrefix {
-		return "https://app." + base[len(apiPrefix):]
-	}
-	return base
 }

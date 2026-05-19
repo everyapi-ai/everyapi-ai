@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/version"
 )
 
@@ -28,8 +29,8 @@ import (
 // see the actual binary path, then we match against:
 //
 //   - "/Cellar/"           → Homebrew (any platform: /opt/homebrew/
-//                            on Apple Silicon, /usr/local/Cellar/
-//                            on Intel, /home/linuxbrew/ on Linux)
+//     on Apple Silicon, /usr/local/Cellar/
+//     on Intel, /home/linuxbrew/ on Linux)
 //   - $GOBIN / $GOPATH/bin → `go install`
 //   - anything else        → unknown (curl / manual)
 //
@@ -61,7 +62,7 @@ func Update(args []string) error {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(withCtx(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(cliout.WithCtx(), 10*time.Second)
 	defer cancel()
 
 	latest, err := fetchLatestVersion(ctx)
@@ -73,28 +74,28 @@ func Update(args []string) error {
 
 	if *checkOnly {
 		if cmp >= 0 {
-			printf("up to date (%s)\n", version.Version)
+			cliout.Printf("up to date (%s)\n", version.Version)
 			return nil
 		}
-		printf("update available: %s → %s\n", version.Version, latest)
+		cliout.Printf("update available: %s → %s\n", version.Version, latest)
 		os.Exit(1)
 		return nil // unreachable
 	}
 
 	if cmp > 0 {
-		printf("\nYou're running a pre-release: %s (latest tag: %s)\n", version.Version, latest)
-		printf("Nothing to do.\n")
+		cliout.Printf("\nYou're running a pre-release: %s (latest tag: %s)\n", version.Version, latest)
+		cliout.Printf("Nothing to do.\n")
 		return nil
 	}
 	if cmp == 0 {
-		printf("\neveryapi %s — up to date.\n", version.Version)
+		cliout.Printf("\neveryapi %s — up to date.\n", version.Version)
 		return nil
 	}
 
 	// cmp < 0: outdated. Pick a method based on where the binary lives.
 	method := detectInstallMethod()
-	printf("\nUpdate available: %s → %s\n", version.Version, latest)
-	printf("Install method:   %s\n\n", method)
+	cliout.Printf("\nUpdate available: %s → %s\n", version.Version, latest)
+	cliout.Printf("Install method:   %s\n\n", method)
 
 	switch method {
 	case installMethodBrew:
@@ -182,7 +183,7 @@ func runCmd(name string, args ...string) error {
 
 func runBrewUpgrade(dryRun bool) error {
 	if dryRun {
-		printf("  brew update && brew upgrade everyapi\n")
+		cliout.Printf("  brew update && brew upgrade everyapi\n")
 		return nil
 	}
 	// `brew update` first — without it `brew upgrade everyapi`
@@ -190,48 +191,48 @@ func runBrewUpgrade(dryRun bool) error {
 	// installed at <old version>" even when a newer release is
 	// public. Two separate exec calls (not `bash -c "… && …"`)
 	// so the user can see each step's output cleanly.
-	printf("$ brew update\n")
+	cliout.Printf("$ brew update\n")
 	if err := runCmd("brew", "update"); err != nil {
 		return fmt.Errorf("brew update: %w", err)
 	}
-	printf("\n$ brew upgrade everyapi\n")
+	cliout.Printf("\n$ brew upgrade everyapi\n")
 	if err := runCmd("brew", "upgrade", "everyapi"); err != nil {
 		return fmt.Errorf("brew upgrade everyapi: %w", err)
 	}
-	printf("\nDone. Run `everyapi version` to confirm.\n")
+	cliout.Printf("\nDone. Run `everyapi version` to confirm.\n")
 	return nil
 }
 
 func runGoInstallUpgrade(dryRun bool) error {
 	const pkg = "github.com/everyapi-ai/everyapi@latest"
 	if dryRun {
-		printf("  go install %s\n", pkg)
+		cliout.Printf("  go install %s\n", pkg)
 		return nil
 	}
-	printf("$ go install %s\n", pkg)
+	cliout.Printf("$ go install %s\n", pkg)
 	if err := runCmd("go", "install", pkg); err != nil {
 		return fmt.Errorf("go install: %w", err)
 	}
-	printf("\nDone. Run `everyapi version` to confirm.\n")
+	cliout.Printf("\nDone. Run `everyapi version` to confirm.\n")
 	return nil
 }
 
 func printUnknownInstallHint(latest string) {
 	binaryPath := guessBinaryPath()
-	printf("Can't auto-upgrade — your binary isn't under a Cellar/ (brew) or\n")
-	printf("$GOBIN/$GOPATH/bin path we recognise. Pick one:\n\n")
+	cliout.Printf("Can't auto-upgrade — your binary isn't under a Cellar/ (brew) or\n")
+	cliout.Printf("$GOBIN/$GOPATH/bin path we recognise. Pick one:\n\n")
 
-	printf("  # Homebrew (after `brew tap everyapi-ai/tap`)\n")
-	printf("  brew update && brew upgrade everyapi\n\n")
-	printf("  # go install\n")
-	printf("  go install github.com/everyapi-ai/everyapi@latest\n\n")
-	printf("  # Direct binary (current platform: %s/%s)\n", runtime.GOOS, runtime.GOARCH)
-	printf("  curl -L -o %s.new \\\n", binaryPath)
-	printf("    https://github.com/everyapi-ai/everyapi/releases/download/%s/everyapi_%s_%s.tar.gz\n",
+	cliout.Printf("  # Homebrew (after `brew tap everyapi-ai/tap`)\n")
+	cliout.Printf("  brew update && brew upgrade everyapi\n\n")
+	cliout.Printf("  # go install\n")
+	cliout.Printf("  go install github.com/everyapi-ai/everyapi@latest\n\n")
+	cliout.Printf("  # Direct binary (current platform: %s/%s)\n", runtime.GOOS, runtime.GOARCH)
+	cliout.Printf("  curl -L -o %s.new \\\n", binaryPath)
+	cliout.Printf("    https://github.com/everyapi-ai/everyapi/releases/download/%s/everyapi_%s_%s.tar.gz\n",
 		latest, runtime.GOOS, runtime.GOARCH)
-	printf("  # verify SHA256 + cosign per README before replacing the binary\n")
+	cliout.Printf("  # verify SHA256 + cosign per README before replacing the binary\n")
 
-	printf("\nRelease notes: https://github.com/everyapi-ai/everyapi/releases/tag/%s\n", latest)
+	cliout.Printf("\nRelease notes: https://github.com/everyapi-ai/everyapi/releases/tag/%s\n", latest)
 }
 
 // guessBinaryPath returns the binary's full on-disk path for use in

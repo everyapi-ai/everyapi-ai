@@ -5,13 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
-	"runtime"
 	"strings"
 
 	"github.com/mdp/qrterminal/v3"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/api"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/config"
 )
 
@@ -45,7 +45,7 @@ func Login(args []string) error {
 	// signalCtx (not withCtx): the device-auth poll below blocks for
 	// minutes. The "(Ctrl+C to cancel)" line we print must be true —
 	// cancel the in-flight poll on SIGINT instead of hard-killing.
-	ctx, stop := signalCtx()
+	ctx, stop := cliout.SignalCtx()
 	defer stop()
 
 	start, err := client.DeviceAuthStart(ctx)
@@ -59,27 +59,27 @@ func Login(args []string) error {
 	// bare verification_uri printed below.
 	prefilledURL := buildVerificationURLWithCode(start.VerificationURI, start.UserCode)
 
-	println("")
+	cliout.Println("")
 	if !*noQR {
-		println("Scan this QR with your phone (or any device already signed in to EveryAPI):")
-		println("")
+		cliout.Println("Scan this QR with your phone (or any device already signed in to EveryAPI):")
+		cliout.Println("")
 		// qrterminal renders to stdout with Unicode half-blocks by
 		// default (▀▄ etc.) — about half the height of the ASCII
 		// "▓▓" form. Level L recovery is fine for short URLs and
 		// keeps the QR small enough to fit a normal terminal.
-		qrterminal.GenerateHalfBlock(prefilledURL, qrterminal.L, Out)
-		println("")
-		println("Or visit this URL manually:")
+		qrterminal.GenerateHalfBlock(prefilledURL, qrterminal.L, cliout.Out)
+		cliout.Println("")
+		cliout.Println("Or visit this URL manually:")
 	} else {
-		println("To authorize this device, visit:")
+		cliout.Println("To authorize this device, visit:")
 	}
-	printf("\n    %s\n\n", start.VerificationURI)
-	println("And enter the code:")
-	printf("\n    %s\n\n", start.UserCode)
+	cliout.Printf("\n    %s\n\n", start.VerificationURI)
+	cliout.Println("And enter the code:")
+	cliout.Printf("\n    %s\n\n", start.UserCode)
 
 	if !*noBrowser {
-		if err := openBrowser(prefilledURL); err == nil {
-			println("Browser opened. Approve there (or finish on your phone); this will finish on its own.")
+		if err := cliprompt.OpenBrowser(prefilledURL); err == nil {
+			cliout.Println("Browser opened. Approve there (or finish on your phone); this will finish on its own.")
 		} else {
 			// stderr so a user piping `everyapi login | …` gets a clean
 			// stdout (the URL + code go through the cmd.Out writer
@@ -88,8 +88,8 @@ func Login(args []string) error {
 			fmt.Fprintln(os.Stderr, "Couldn't open the browser automatically — scan the QR or copy the URL above.")
 		}
 	}
-	println("")
-	println("Waiting for authorization... (Ctrl+C to cancel)")
+	cliout.Println("")
+	cliout.Println("Waiting for authorization... (Ctrl+C to cancel)")
 
 	res, err := client.PollUntilDone(ctx, start.DeviceCode, start.Interval)
 	if err != nil {
@@ -114,7 +114,7 @@ func Login(args []string) error {
 	}
 
 	dir, _ := config.ConfigDir()
-	printf("\nLogged in as %s. Credentials saved to %s/credentials.json\n", res.Username, dir)
+	cliout.Printf("\nLogged in as %s. Credentials saved to %s/credentials.json\n", res.Username, dir)
 
 	// Resolve the relay API key now (and cache it) so `everyapi use`
 	// works on first try. The access token alone can't relay — it's
@@ -130,33 +130,12 @@ func Login(args []string) error {
 	// doubt the login itself, and the next `everyapi use` / `everyapi
 	// status` will retry the resolution anyway.
 	if _, err := resolveRelayKey(creds, ""); err != nil && errors.Is(err, errNoRelayKey) {
-		println("")
-		println("Note: your account has no relay API key yet. `everyapi use` needs one")
-		println("(it's separate from this login token). Create an API key in the")
-		println("EveryAPI dashboard, then run 'everyapi login' again.")
+		cliout.Println("")
+		cliout.Println("Note: your account has no relay API key yet. `everyapi use` needs one")
+		cliout.Println("(it's separate from this login token). Create an API key in the")
+		cliout.Println("EveryAPI dashboard, then run 'everyapi login' again.")
 	}
 
-	println("Next: try 'everyapi status' or 'everyapi use claude'.")
+	cliout.Println("Next: try 'everyapi status' or 'everyapi use claude'.")
 	return nil
-}
-
-// openBrowser tries the platform's standard "open URL" helper. We
-// intentionally use exec.Command + ignore stderr: a browser launcher
-// that fails should not look like a CLI bug — we already print the URL
-// for the user to copy.
-func openBrowser(url string) error {
-	var cmd string
-	var args []string
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = "open"
-		args = []string{url}
-	case "windows":
-		cmd = "rundll32"
-		args = []string{"url.dll,FileProtocolHandler", url}
-	default:
-		cmd = "xdg-open"
-		args = []string{url}
-	}
-	return exec.Command(cmd, args...).Start()
 }

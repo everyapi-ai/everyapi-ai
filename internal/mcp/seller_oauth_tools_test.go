@@ -58,11 +58,11 @@ func TestHandleSellerAddOAuthCodexStart_MissingFields(t *testing.T) {
 	resetSharedOAuthClient(t)
 	withCredentials(t, "http://x", "tok")
 	cases := []map[string]string{
-		{},                                   // both missing
-		{"name": "c"},                        // models missing
-		{"models": "gpt-4"},                  // name missing
-		{"name": "", "models": "gpt-4"},      // blank name
-		{"name": "c", "models": "   "},       // blank models
+		{},                              // both missing
+		{"name": "c"},                   // models missing
+		{"models": "gpt-4"},             // name missing
+		{"name": "", "models": "gpt-4"}, // blank name
+		{"name": "c", "models": "   "},  // blank models
 	}
 	for _, c := range cases {
 		args := mustMarshal(t, c)

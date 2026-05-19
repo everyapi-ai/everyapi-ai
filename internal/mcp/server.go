@@ -39,11 +39,11 @@ type jsonRPCError struct {
 
 // JSON-RPC 2.0 standard error codes (subset).
 const (
-	errParseError      = -32700
-	errInvalidRequest  = -32600
-	errMethodNotFound  = -32601
-	errInvalidParams   = -32602
-	errInternalError   = -32603
+	errParseError     = -32700
+	errInvalidRequest = -32600
+	errMethodNotFound = -32601
+	errInvalidParams  = -32602
+	errInternalError  = -32603
 )
 
 // MCP protocol constants. Pinned to the latest stable spec

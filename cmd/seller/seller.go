@@ -1,17 +1,18 @@
-package cmd
+package seller
 
 import (
 	"bufio"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/api"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/config"
 )
 
@@ -29,9 +30,9 @@ import (
 //	                                            POST /api/seller/channel with a plain API key
 //	everyapi seller setup                         Interactive wizard wrapping add-key
 //	everyapi seller help                          Print this help
-func Seller(args []string) error {
+func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		println(sellerUsage)
+		cliout.Println(sellerUsage)
 		if len(args) == 0 {
 			return errors.New("missing subcommand (try 'everyapi seller help')")
 		}
@@ -41,17 +42,17 @@ func Seller(args []string) error {
 	rest := args[1:]
 	switch sub {
 	case "list":
-		return SellerList(rest)
+		return sellerList(rest)
 	case "withdraw":
-		return SellerWithdraw(rest)
+		return sellerWithdraw(rest)
 	case "add-key":
-		return SellerAddKey(rest)
+		return sellerAddKey(rest)
 	case "add-oauth":
-		return SellerAddOAuth(rest)
+		return sellerAddOAuth(rest)
 	case "setup":
-		return SellerSetup(rest)
+		return sellerSetup(rest)
 	default:
-		printf("%s\n", sellerUsage)
+		cliout.Printf("%s\n", sellerUsage)
 		return fmt.Errorf("unknown 'seller' subcommand %q", sub)
 	}
 }
@@ -75,10 +76,10 @@ SUBCOMMANDS
 
 // ---- seller list ---------------------------------------------------
 
-// SellerList prints every channel the user owns. Mirrors the MCP
+// sellerList prints every channel the user owns. Mirrors the MCP
 // everyapi_seller_list output shape so a buyer who's been using the AI
 // surface sees consistent data on the terminal.
-func SellerList(args []string) error {
+func sellerList(args []string) error {
 	fs := flag.NewFlagSet("seller list", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -87,21 +88,21 @@ func SellerList(args []string) error {
 	if err != nil {
 		return err
 	}
-	channels, err := client.ListSellerChannels(withCtx())
+	channels, err := client.ListSellerChannels(cliout.WithCtx())
 	if err != nil {
 		return classifySellerErr(err)
 	}
 	if len(channels) == 0 {
-		println("No seller channels mounted yet.")
-		println("Use 'everyapi seller setup' (wizard) or 'everyapi seller add-key' (flags).")
+		cliout.Println("No seller channels mounted yet.")
+		cliout.Println("Use 'everyapi seller setup' (wizard) or 'everyapi seller add-key' (flags).")
 		return nil
 	}
-	printf("%d seller channel(s):\n", len(channels))
+	cliout.Printf("%d seller channel(s):\n", len(channels))
 	for _, ch := range channels {
-		printf("  [#%d] %s — type=%s status=%s\n",
+		cliout.Printf("  [#%d] %s — type=%s status=%s\n",
 			ch.ID, ch.Name, channelTypeLabel(ch.Type), channelStatusLabel(ch.Status))
 		if ch.Models != "" {
-			printf("        models: %s\n", ch.Models)
+			cliout.Printf("        models: %s\n", ch.Models)
 		}
 	}
 	return nil
@@ -125,10 +126,10 @@ func channelStatusLabel(s int) string {
 
 // ---- seller withdraw -----------------------------------------------
 
-// SellerWithdraw moves SellerQuota → Quota. Empty --quota = "everything
+// sellerWithdraw moves SellerQuota → Quota. Empty --quota = "everything
 // pending"; explicit --quota lets a power user partial-transfer in DB
 // units (the same shape as the MCP tool's `quota` arg).
-func SellerWithdraw(args []string) error {
+func sellerWithdraw(args []string) error {
 	fs := flag.NewFlagSet("seller withdraw", flag.ContinueOnError)
 	quota := fs.Int("quota", 0, "amount to transfer in DB units (omit for the full pending balance)")
 	if err := fs.Parse(args); err != nil {
@@ -141,18 +142,18 @@ func SellerWithdraw(args []string) error {
 
 	amount := *quota
 	if amount == 0 {
-		self, err := client.GetSelf(withCtx())
+		self, err := client.GetSelf(cliout.WithCtx())
 		if err != nil {
 			return classifySellerErr(err)
 		}
 		amount = self.SellerQuota
 		if amount <= 0 {
-			println("Nothing to withdraw — your seller balance is $0.")
+			cliout.Println("Nothing to withdraw — your seller balance is $0.")
 			return nil
 		}
 	}
 
-	if err := client.TransferSellerQuota(withCtx(), amount); err != nil {
+	if err := client.TransferSellerQuota(cliout.WithCtx(), amount); err != nil {
 		return classifySellerErr(err)
 	}
 
@@ -161,11 +162,11 @@ func SellerWithdraw(args []string) error {
 	// /api/status round-trip; tolerate a failure (rare) by falling back
 	// to raw DB units rather than aborting after a successful transfer.
 	perUnit := 1.0
-	if status, sErr := client.GetStatus(withCtx()); sErr == nil && status.QuotaPerUnit > 0 {
+	if status, sErr := client.GetStatus(cliout.WithCtx()); sErr == nil && status.QuotaPerUnit > 0 {
 		perUnit = status.QuotaPerUnit
 	}
-	printf("Transferred $%.2f from seller balance to main balance.\n", float64(amount)/perUnit)
-	printf("Check it: %s/wallet\n", trimAPIBaseToWebOrigin(creds.APIBase))
+	cliout.Printf("Transferred $%.2f from seller balance to main balance.\n", float64(amount)/perUnit)
+	cliout.Printf("Check it: %s/wallet\n", api.WebOriginFromBase(creds.APIBase))
 	return nil
 }
 
@@ -197,15 +198,15 @@ type addKeyArgs struct {
 // number of credentials in one invocation.
 type stringSliceFlag []string
 
-func (s *stringSliceFlag) String() string         { return strings.Join(*s, ",") }
-func (s *stringSliceFlag) Set(v string) error     { *s = append(*s, v); return nil }
+func (s *stringSliceFlag) String() string     { return strings.Join(*s, ",") }
+func (s *stringSliceFlag) Set(v string) error { *s = append(*s, v); return nil }
 
-// SellerAddKey wraps POST /api/seller/channel. The type is a human
+// sellerAddKey wraps POST /api/seller/channel. The type is a human
 // alias (openai / claude / gemini / …) resolved to the backend integer
 // id via sellerChannelTypeAliases; if the user types a number we pass
 // it through, which is the escape hatch for any future type the alias
 // map doesn't list yet.
-func SellerAddKey(args []string) error {
+func sellerAddKey(args []string) error {
 	parsed, err := parseAddKeyArgs(args)
 	if err != nil {
 		return err
@@ -225,16 +226,16 @@ func SellerAddKey(args []string) error {
 	// A failed eligibility query (not a failed gate — actual transport
 	// error) is non-fatal: fall through to the create call, which will
 	// retry the same gates server-side and produce a coherent error.
-	elig, err := client.GetSellerEligibility(withCtx())
+	elig, err := client.GetSellerEligibility(cliout.WithCtx())
 	if err == nil && !elig.Eligible {
 		renderEligibility(elig)
-		println("")
-		println("Marketplace eligibility check failed. Fix the unchecked items above, then re-run.")
-		printf("Dashboard: %s/seller/channels\n", trimAPIBaseToWebOrigin(creds.APIBase))
+		cliout.Println("")
+		cliout.Println("Marketplace eligibility check failed. Fix the unchecked items above, then re-run.")
+		cliout.Printf("Dashboard: %s/seller/channels\n", api.WebOriginFromBase(creds.APIBase))
 		return errors.New("not eligible to mount a seller channel")
 	}
 
-	id, err := client.CreateSellerChannel(withCtx(), api.SellerChannelCreate{
+	id, err := client.CreateSellerChannel(cliout.WithCtx(), api.SellerChannelCreate{
 		Name:       parsed.Name,
 		Type:       typeID,
 		Keys:       parsed.Keys,
@@ -249,8 +250,8 @@ func SellerAddKey(args []string) error {
 	if len(parsed.Keys) > 1 {
 		pool = fmt.Sprintf(" with %d-key backup pool", len(parsed.Keys))
 	}
-	printf("Mounted channel #%d (%s, type=%s)%s.\n", id, parsed.Name, channelTypeLabel(typeID), pool)
-	println("Status: enabled. Run 'everyapi seller list' to inspect, or visit the dashboard.")
+	cliout.Printf("Mounted channel #%d (%s, type=%s)%s.\n", id, parsed.Name, channelTypeLabel(typeID), pool)
+	cliout.Println("Status: enabled. Run 'everyapi seller list' to inspect, or visit the dashboard.")
 	return nil
 }
 
@@ -325,14 +326,14 @@ func parseAddKeyArgs(args []string) (*addKeyArgs, error) {
 
 // ---- seller setup --------------------------------------------------
 
-// SellerSetup is the small-talk wizard for `everyapi seller add-key`:
+// sellerSetup is the small-talk wizard for `everyapi seller add-key`:
 // query eligibility upfront (so the user finds out about a failed gate
 // BEFORE typing a key), then prompt for type / name / key / models, then
 // POST. Confirms before submit so a typo is recoverable. Reuses
 // parseAddKeyArgs to keep validation in one place — once the wizard
 // has the values it assembles an argv and routes through the same
 // non-interactive path.
-func SellerSetup(args []string) error {
+func sellerSetup(args []string) error {
 	fs := flag.NewFlagSet("seller setup", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -342,28 +343,28 @@ func SellerSetup(args []string) error {
 		return err
 	}
 
-	elig, err := client.GetSellerEligibility(withCtx())
+	elig, err := client.GetSellerEligibility(cliout.WithCtx())
 	if err != nil {
 		return classifySellerErr(err)
 	}
 	renderEligibility(elig)
 	if !elig.Eligible {
-		println("")
-		println("You don't meet the mount requirements yet. Fix the items above first, then re-run.")
-		printf("Dashboard: %s/seller/channels\n", trimAPIBaseToWebOrigin(creds.APIBase))
+		cliout.Println("")
+		cliout.Println("You don't meet the mount requirements yet. Fix the items above first, then re-run.")
+		cliout.Printf("Dashboard: %s/seller/channels\n", api.WebOriginFromBase(creds.APIBase))
 		return nil
 	}
 
 	in := bufio.NewReader(os.Stdin)
-	println("")
-	println("Mounting a new channel. Press Ctrl+C to cancel.")
-	println("")
+	cliout.Println("")
+	cliout.Println("Mounting a new channel. Press Ctrl+C to cancel.")
+	cliout.Println("")
 
-	typeAlias, err := promptChoice(in, "Upstream type", sellerTypeChoices())
+	typeAlias, err := cliprompt.Choice(in, "Upstream type", sellerTypeChoices())
 	if err != nil {
 		return err
 	}
-	name, err := promptLine(in, "Channel name", "")
+	name, err := cliprompt.Line(in, "Channel name", "")
 	if err != nil {
 		return err
 	}
@@ -371,27 +372,27 @@ func SellerSetup(args []string) error {
 	if err != nil {
 		return err
 	}
-	models, err := promptLine(in, "Models (comma-separated)", "")
+	models, err := cliprompt.Line(in, "Models (comma-separated)", "")
 	if err != nil {
 		return err
 	}
-	remark, err := promptOptional(in, "Internal remark (optional)")
+	remark, err := cliprompt.Optional(in, "Internal remark (optional)")
 	if err != nil {
 		return err
 	}
 
-	println("")
+	cliout.Println("")
 	pool := ""
 	if len(keys) > 1 {
 		pool = fmt.Sprintf(" with %d-key backup pool", len(keys))
 	}
-	printf("About to mount: %s / type=%s / models=%s%s\n", name, typeAlias, models, pool)
-	ok, err := promptYesNo(in, "Submit?", true)
+	cliout.Printf("About to mount: %s / type=%s / models=%s%s\n", name, typeAlias, models, pool)
+	ok, err := cliprompt.YesNo(in, "Submit?", true)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		println("Cancelled — nothing was submitted.")
+		cliout.Println("Cancelled — nothing was submitted.")
 		return nil
 	}
 
@@ -420,11 +421,11 @@ func SellerSetup(args []string) error {
 			forward = append(forward, "--key-remark", keyRemarks[i])
 		}
 	}
-	return SellerAddKey(forward)
+	return sellerAddKey(forward)
 }
 
 // collectSellerKeys prompts the user for one or more keys + per-key
-// remarks. Pulled out of SellerSetup so the multi-slot/OAuth-blob
+// remarks. Pulled out of sellerSetup so the multi-slot/OAuth-blob
 // interaction can be unit-tested with a mock stdin (bytes.Buffer
 // wrapped in bufio.Reader) — the rest of the wizard (eligibility
 // fetch, type/name prompts, submit) is too entangled with I/O for an
@@ -448,19 +449,19 @@ func collectSellerKeys(in *bufio.Reader) ([]string, []string, error) {
 		} else {
 			label = fmt.Sprintf("Backup key #%d", slot)
 		}
-		k, err := promptLine(in, label, "")
+		k, err := cliprompt.Line(in, label, "")
 		if err != nil {
 			return nil, nil, err
 		}
 		isBlob := strings.HasPrefix(strings.TrimSpace(k), "{")
 		if isBlob && slot > 1 {
-			println("That looks like an OAuth/JSON credential blob.")
-			println("OAuth credentials cannot be combined with other keys in a backup pool — they must be the only key on the channel.")
-			println("Re-enter a plain API key, or press Ctrl-C to abort and re-run with the OAuth blob as the only key.")
+			cliout.Println("That looks like an OAuth/JSON credential blob.")
+			cliout.Println("OAuth credentials cannot be combined with other keys in a backup pool — they must be the only key on the channel.")
+			cliout.Println("Re-enter a plain API key, or press Ctrl-C to abort and re-run with the OAuth blob as the only key.")
 			slot-- // retry this same slot number
 			continue
 		}
-		r, err := promptOptional(in, fmt.Sprintf("Remark for key #%d (optional)", slot))
+		r, err := cliprompt.Optional(in, fmt.Sprintf("Remark for key #%d (optional)", slot))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -473,7 +474,7 @@ func collectSellerKeys(in *bufio.Reader) ([]string, []string, error) {
 		if isBlob {
 			break
 		}
-		more, err := promptYesNo(in, "Add another backup key?", false)
+		more, err := cliprompt.YesNo(in, "Add another backup key?", false)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -485,13 +486,13 @@ func collectSellerKeys(in *bufio.Reader) ([]string, []string, error) {
 }
 
 func renderEligibility(e *api.SellerEligibility) {
-	println("Marketplace eligibility:")
-	printf("  %s marketplace enabled\n", checkmark(e.MarketplaceEnabled))
-	printf("  %s account active\n", checkmark(e.AccountActive))
-	printf("  %s email verified\n", checkmark(e.EmailVerified))
-	printf("  %s account ≥ %d day(s) old\n", checkmark(e.AccountAgeOK), e.MinAgeDays)
-	printf("  %s has at least one successful consumption\n", checkmark(e.HasConsumeLog))
-	printf("  %s under channel cap (%d / %d)\n", checkmark(e.UnderCap), e.ChannelCount, e.ChannelCap)
+	cliout.Println("Marketplace eligibility:")
+	cliout.Printf("  %s marketplace enabled\n", checkmark(e.MarketplaceEnabled))
+	cliout.Printf("  %s account active\n", checkmark(e.AccountActive))
+	cliout.Printf("  %s email verified\n", checkmark(e.EmailVerified))
+	cliout.Printf("  %s account ≥ %d day(s) old\n", checkmark(e.AccountAgeOK), e.MinAgeDays)
+	cliout.Printf("  %s has at least one successful consumption\n", checkmark(e.HasConsumeLog))
+	cliout.Printf("  %s under channel cap (%d / %d)\n", checkmark(e.UnderCap), e.ChannelCount, e.ChannelCap)
 }
 
 func checkmark(ok bool) string {
@@ -506,7 +507,7 @@ func checkmark(ok bool) string {
 // sellerClient is the shared "load creds, build client, hand them
 // both back" path every seller subcommand starts with. Returning creds
 // alongside the client saves the caller a second config.Load() when it
-// needs the API base for trimAPIBaseToWebOrigin.
+// needs the API base for api.WebOriginFromBase.
 func sellerClient() (*api.Client, *config.Credentials, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
@@ -621,98 +622,5 @@ func channelTypeLabel(id int) string {
 	return fmt.Sprintf("type=%d", id)
 }
 
-// ---- prompt helpers ------------------------------------------------
-//
-// Used only by SellerSetup. Kept tiny and explicit; pulling in a TUI
-// library for four prompts isn't worth the dep, and these are mostly
-// just `bufio.ReadLine + TrimSpace` with friendly redo-on-empty.
-
-// promptOptional asks for a value where empty is a legal answer (the
-// caller treats "" as "user skipped"). Distinct from promptLine, which
-// loops on empty input — kept separate so the call site states intent
-// instead of overloading the def parameter.
-func promptOptional(in *bufio.Reader, label string) (string, error) {
-	printf("%s: ", label)
-	line, err := in.ReadString('\n')
-	if err != nil && (err != io.EOF || line == "") {
-		return "", err
-	}
-	return strings.TrimSpace(line), nil
-}
-
-// promptLine asks for a single value. Empty input is rejected unless a
-// non-empty default is provided.
-func promptLine(in *bufio.Reader, label, def string) (string, error) {
-	suffix := ""
-	if def != "" {
-		suffix = fmt.Sprintf(" [%s]", def)
-	}
-	for {
-		printf("%s%s: ", label, suffix)
-		line, err := in.ReadString('\n')
-		if err != nil && (err != io.EOF || line == "") {
-			return "", err
-		}
-		line = strings.TrimSpace(line)
-		if line == "" {
-			if def != "" {
-				return def, nil
-			}
-			println("(value required)")
-			continue
-		}
-		return line, nil
-	}
-}
-
-// promptChoice asks for one of a fixed list of options (1-indexed or by
-// name). Loops until the user picks something valid.
-func promptChoice(in *bufio.Reader, label string, options []string) (string, error) {
-	printf("%s — options:\n", label)
-	for i, o := range options {
-		printf("  %d) %s\n", i+1, o)
-	}
-	for {
-		printf("Enter name or number: ")
-		line, err := in.ReadString('\n')
-		if err != nil && (err != io.EOF || line == "") {
-			return "", err
-		}
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		for i, o := range options {
-			if strings.EqualFold(line, o) || line == strconv.Itoa(i+1) {
-				return o, nil
-			}
-		}
-		printf("(unknown choice %q — try again)\n", line)
-	}
-}
-
-// promptYesNo gates destructive operations. Default applies on empty
-// input.
-func promptYesNo(in *bufio.Reader, label string, defaultYes bool) (bool, error) {
-	suffix := "[y/N]"
-	if defaultYes {
-		suffix = "[Y/n]"
-	}
-	for {
-		printf("%s %s: ", label, suffix)
-		line, err := in.ReadString('\n')
-		if err != nil && (err != io.EOF || line == "") {
-			return false, err
-		}
-		line = strings.TrimSpace(strings.ToLower(line))
-		switch line {
-		case "":
-			return defaultYes, nil
-		case "y", "yes":
-			return true, nil
-		case "n", "no":
-			return false, nil
-		}
-		println("(please answer y or n)")
-	}
-}
+// Prompt helpers (Line, Optional, Choice, YesNo) live in
+// internal/cliprompt — shared with cmd/proxy and the login flow.

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/api"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/config"
 	"github.com/everyapi-ai/everyapi-ai/internal/tools"
 )
@@ -90,14 +91,14 @@ func Use(args []string) error {
 					"API key assigned to that group in the EveryAPI dashboard (%s),\n"+
 					"then run 'everyapi login' again — or drop --group/--channel to use\n"+
 					"the default key.",
-				group, trimAPIBaseToWebOrigin(creds.APIBase))
+				group, api.WebOriginFromBase(creds.APIBase))
 		}
 		if errors.Is(err, errNoRelayKey) {
 			return fmt.Errorf(
 				"no usable relay API key on your account — `everyapi use` needs one,\n"+
 					"and it's separate from your login token. Create an API key in the\n"+
 					"EveryAPI dashboard (%s), then run 'everyapi login' again.",
-				trimAPIBaseToWebOrigin(creds.APIBase))
+				api.WebOriginFromBase(creds.APIBase))
 		}
 		return err
 	}
@@ -112,8 +113,8 @@ func Use(args []string) error {
 	// tool's own retry — false-blocking a working setup on a flaky
 	// probe is worse than letting it through.
 	if perr := api.New(creds.APIBase, relayKey).
-		ProbeRelayToken(withCtx()); perr != nil && api.IsUnauthorized(perr) {
-		wallet := trimAPIBaseToWebOrigin(creds.APIBase) + "/wallet"
+		ProbeRelayToken(cliout.WithCtx()); perr != nil && api.IsUnauthorized(perr) {
+		wallet := api.WebOriginFromBase(creds.APIBase) + "/wallet"
 		return fmt.Errorf(
 			"EveryAPI rejected the relay API key — not launching %s, it would just\n"+
 				"loop on 401. The key is invalid, expired, disabled, or out of quota.\n"+
@@ -135,9 +136,9 @@ func Use(args []string) error {
 		const proxyListen = "127.0.0.1:8888"
 		proxyAddr, perr := ensureSanitizerRunning(proxyListen, creds.APIBase)
 		if perr != nil {
-			printf("Warning: sanitizer proxy didn't start (%v).\n", perr)
-			printf("Falling back to direct mode — your traffic will reach %s without the privacy filter.\n", creds.APIBase)
-			printf("Re-run with --direct to silence this, or 'everyapi proxy start' to debug.\n\n")
+			cliout.Printf("Warning: sanitizer proxy didn't start (%v).\n", perr)
+			cliout.Printf("Falling back to direct mode — your traffic will reach %s without the privacy filter.\n", creds.APIBase)
+			cliout.Printf("Re-run with --direct to silence this, or 'everyapi proxy start' to debug.\n\n")
 		} else {
 			apiBaseForEnv = proxyAddr
 		}
@@ -148,9 +149,9 @@ func Use(args []string) error {
 	// where the requests are heading. One line, before the exec
 	// disappears the parent process.
 	if apiBaseForEnv != creds.APIBase {
-		printf("Launching %s against %s → %s\n", t.ExecName, apiBaseForEnv, creds.APIBase)
+		cliout.Printf("Launching %s against %s → %s\n", t.ExecName, apiBaseForEnv, creds.APIBase)
 	} else {
-		printf("Launching %s against %s\n", t.ExecName, creds.APIBase)
+		cliout.Printf("Launching %s against %s\n", t.ExecName, creds.APIBase)
 	}
 	return tools.Exec(t, env, extraArgs)
 }
@@ -304,7 +305,7 @@ func parseUseArgs(args []string) (toolName, group string, pickGroup, direct bool
 // -key path.
 func pickGroupInteractive(creds *config.Credentials) (string, error) {
 	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
-	tokens, err := client.ListTokens(withCtx())
+	tokens, err := client.ListTokens(cliout.WithCtx())
 	if err != nil {
 		return "", fmt.Errorf("list tokens for the group picker: %w", err)
 	}
@@ -322,15 +323,15 @@ func pickGroupInteractive(creds *config.Credentials) (string, error) {
 	if len(groups) == 0 {
 		return "", errors.New("no enabled relay API keys on your account to pick a group from — create one in the EveryAPI dashboard, then 'everyapi login'")
 	}
-	println("Pick a routing group:")
+	cliout.Println("Pick a routing group:")
 	for i, g := range groups {
 		label := g
 		if g == "" {
 			label = "(default — newest enabled key)"
 		}
-		printf("  %d) %s\n", i+1, label)
+		cliout.Printf("  %d) %s\n", i+1, label)
 	}
-	printf("Enter name or number: ")
+	cliout.Printf("Enter name or number: ")
 	var choice string
 	if _, err := fmt.Scanln(&choice); err != nil {
 		return "", fmt.Errorf("read selection: %w", err)
@@ -352,11 +353,11 @@ func pickGroupInteractive(creds *config.Credentials) (string, error) {
 // a TUI library — `everyapi use` with an arg is the primary path.
 func interactivePicker() (string, error) {
 	names := tools.Names()
-	println("Pick a tool to launch:")
+	cliout.Println("Pick a tool to launch:")
 	for i, n := range names {
-		printf("  %d) %s\n", i+1, n)
+		cliout.Printf("  %d) %s\n", i+1, n)
 	}
-	printf("Enter name or number: ")
+	cliout.Printf("Enter name or number: ")
 	var choice string
 	if _, err := fmt.Scanln(&choice); err != nil {
 		return "", fmt.Errorf("read selection: %w", err)

@@ -42,7 +42,7 @@ import (
 // Only api.everyapi.ai is pinned: that is the ONLY host the CLI's
 // pinned transport actually TLS-dials (the sanitizer proxy forwards
 // there too). app.everyapi.ai / everyapi.ai are opened in the user's
-// browser via openBrowser(), not through this http.Client, so a pin
+// browser via cliprompt.OpenBrowser(), not through this http.Client, so a pin
 // for them would never be exercised by inspect() — pinning only what
 // is actually verified keeps the set honest and avoids shipping
 // config no smoke test can reach.
@@ -55,11 +55,11 @@ import (
 //
 // ── CERT-ROTATION RUNBOOK ──────────────────────────────────────────
 //  1. Re-capture the live leaf pin:
-//       openssl s_client -servername api.everyapi.ai \
-//         -connect api.everyapi.ai:443 </dev/null 2>/dev/null \
-//       | openssl x509 -noout -pubkey | openssl pkey -pubin \
-//         -outform der 2>/dev/null | openssl dgst -sha256 -binary \
-//       | openssl base64
+//     openssl s_client -servername api.everyapi.ai \
+//     -connect api.everyapi.ai:443 </dev/null 2>/dev/null \
+//     | openssl x509 -noout -pubkey | openssl pkey -pubin \
+//     -outform der 2>/dev/null | openssl dgst -sha256 -binary \
+//     | openssl base64
 //  2. Replace the value below; bump the capture date in this comment.
 //  3. Ship a CLI release. Until users upgrade, an old binary just logs
 //     the (benign) mismatch — no functional breakage.

@@ -157,7 +157,7 @@ func handleSellerAddOAuthCodexPoll(ctx context.Context, raw json.RawMessage) (st
 		if res.Email != "" {
 			fmt.Fprintf(&b, "Bound account: %s\n", res.Email)
 		}
-		fmt.Fprintf(&b, "Dashboard: %s/seller/channels", trimAPIBaseToWebOrigin(creds.APIBase))
+		fmt.Fprintf(&b, "Dashboard: %s/seller/channels", api.WebOriginFromBase(creds.APIBase))
 		return b.String(), nil
 	default:
 		return "", fmt.Errorf("unexpected poll state %d", res.State)
@@ -282,6 +282,6 @@ func handleSellerAddOAuthClaudeComplete(ctx context.Context, raw json.RawMessage
 	if res.ExpiresAt != "" {
 		fmt.Fprintf(&b, "Token expires: %s (auto-refreshes).\n", res.ExpiresAt)
 	}
-	fmt.Fprintf(&b, "Dashboard: %s/seller/channels", trimAPIBaseToWebOrigin(creds.APIBase))
+	fmt.Fprintf(&b, "Dashboard: %s/seller/channels", api.WebOriginFromBase(creds.APIBase))
 	return b.String(), nil
 }

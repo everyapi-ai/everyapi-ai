@@ -1,4 +1,4 @@
-package cmd
+package seller
 
 import (
 	"bufio"
@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 )
 
 func TestParseAddKeyArgs(t *testing.T) {
@@ -194,10 +196,10 @@ func TestChannelTypeLabel(t *testing.T) {
 		want string
 	}{
 		{1, "openai"},
-		{6, "claude"},     // not "anthropic"
-		{18, "aws"},       // not "bedrock"
-		{26, "vertex"},    // not "vertexai"
-		{33, "xai"},       // not "grok"
+		{6, "claude"},  // not "anthropic"
+		{18, "aws"},    // not "bedrock"
+		{26, "vertex"}, // not "vertexai"
+		{33, "xai"},    // not "grok"
 		{13, "gemini"},
 		{28, "deepseek"},
 		{42, "codex"},
@@ -240,7 +242,7 @@ func TestChannelStatusLabel(t *testing.T) {
 //
 // Each scripted line ends with "\n" so bufio.Reader returns it the
 // same way a terminal would. Empty lines (\n) accept defaults; we use
-// "n\n" / "y\n" for promptYesNo and bare values for promptLine.
+// "n\n" / "y\n" for cliprompt.YesNo and bare values for cliprompt.Line.
 func TestCollectSellerKeys(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -284,9 +286,9 @@ func TestCollectSellerKeys(t *testing.T) {
 			// Redirect prompts' Out so the test isn't drowned in
 			// prompt-label echo + the OAuth-blob warning. io.Discard
 			// is the natural choice — Out is now typed as io.Writer.
-			origOut := Out
-			Out = io.Discard
-			defer func() { Out = origOut }()
+			origOut := cliout.Out
+			cliout.Out = io.Discard
+			defer func() { cliout.Out = origOut }()
 
 			keys, remarks, err := collectSellerKeys(bufio.NewReader(bytes.NewBufferString(c.script)))
 			if c.wantErrIs != nil {

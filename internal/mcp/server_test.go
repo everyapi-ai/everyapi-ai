@@ -152,13 +152,13 @@ func TestServe_ToolsListIncludesV0Set(t *testing.T) {
 func TestRegisterTools_HasV0Set(t *testing.T) {
 	got := registerTools()
 	want := map[string]bool{
-		"everyapi_status":                          true,
-		"everyapi_topup":                           true,
-		"everyapi_seller_list":                     true,
-		"everyapi_seller_withdraw":                 true,
-		"everyapi_seller_add_oauth_codex_start":    true,
-		"everyapi_seller_add_oauth_codex_poll":     true,
-		"everyapi_seller_add_oauth_claude_start":   true,
+		"everyapi_status":                           true,
+		"everyapi_topup":                            true,
+		"everyapi_seller_list":                      true,
+		"everyapi_seller_withdraw":                  true,
+		"everyapi_seller_add_oauth_codex_start":     true,
+		"everyapi_seller_add_oauth_codex_poll":      true,
+		"everyapi_seller_add_oauth_claude_start":    true,
 		"everyapi_seller_add_oauth_claude_complete": true,
 	}
 	if len(got) != len(want) {
