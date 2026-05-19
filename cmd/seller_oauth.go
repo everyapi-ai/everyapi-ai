@@ -1,0 +1,419 @@
+package cmd
+
+import (
+	"bufio"
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/everyapi-ai/everyapi-ai/internal/api"
+	"github.com/everyapi-ai/everyapi-ai/internal/config"
+	"github.com/everyapi-ai/everyapi-ai/internal/oauthloopback"
+)
+
+// sellerNetTimeout bounds a single upstream OAuth HTTP exchange
+// (eligibility, /start, /complete) so a hung or slow backend can't
+// wedge the CLI indefinitely even when the user isn't watching to
+// press Ctrl+C. The interactive waits — device-code poll, loopback
+// callback, stdin paste — are deliberately NOT bounded by this; they
+// have their own, much longer, user-facing budgets and are
+// SIGINT-cancellable via the parent signalCtx.
+const sellerNetTimeout = 60 * time.Second
+
+// sellerExchangeCtx derives a bounded child of parent for one discrete
+// network round-trip. Caller MUST call the returned cancel right after
+// the call returns (not deferred — these handlers make several in a
+// row and we want each timer released promptly).
+func sellerExchangeCtx(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, sellerNetTimeout)
+}
+
+// SellerAddOAuth is the seller OAuth-based onboarding bridge: the CLI
+// walks the seller through OpenAI's device-auth flow and the backend
+// mounts the resulting credential as their channel — the seller
+// NEVER copies a token string by hand. docs/cli/channel-marketplace.md
+// §7-1 calls this the "game changer" for seller onboarding.
+//
+// V1 supports `codex` only (Codex / ChatGPT subscription, RFC 8628-ish
+// device flow — no local listener, just type the short user_code into
+// chatgpt.com). `claude` / `gemini` need browser-callback OAuth and
+// arrive in a follow-up.
+//
+// Usage:
+//
+//	everyapi seller add-oauth codex --name <n> --models <m> [--no-browser]
+//
+// The flow:
+//  1. Eligibility pre-check (skip ahead of OpenAI hit if user can't mount)
+//  2. POST /api/seller/codex/device/start → user_code + verification_uri
+//  3. Print code + URL, open browser (unless --no-browser)
+//  4. Poll until success / expiry / deny — backend mints the channel
+//     server-side, so the CLI just reports the resulting channel id
+func SellerAddOAuth(args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: everyapi seller add-oauth <provider> [flags]\nproviders: codex (claude/gemini coming in a follow-up)")
+	}
+	provider := strings.ToLower(args[0])
+	rest := args[1:]
+	switch provider {
+	case "codex":
+		return sellerAddOAuthCodex(rest)
+	case "claude":
+		return sellerAddOAuthClaude(rest)
+	case "gemini":
+		return sellerAddOAuthGemini(rest)
+	case "chatgpt":
+		return fmt.Errorf("provider %q is ChatGPT Plus — same upstream as codex. Use `everyapi seller add-oauth codex` instead", provider)
+	default:
+		return fmt.Errorf("unknown provider %q — supported: codex, claude, gemini", provider)
+	}
+}
+
+func sellerAddOAuthCodex(args []string) error {
+	fs := flag.NewFlagSet("seller add-oauth codex", flag.ContinueOnError)
+	name := fs.String("name", "", "channel display name (free-form, shown in the dashboard)")
+	models := fs.String("models", "", "comma-separated models this channel will serve (e.g. gpt-4,gpt-4o)")
+	noBrowser := fs.Bool("no-browser", false, "skip auto-opening the verification URL (you'll copy it manually)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	*name = strings.TrimSpace(*name)
+	*models = strings.TrimSpace(*models)
+	if *name == "" || *models == "" {
+		var missing []string
+		if *name == "" {
+			missing = append(missing, "--name")
+		}
+		if *models == "" {
+			missing = append(missing, "--models")
+		}
+		return fmt.Errorf("missing required flag(s): %s", strings.Join(missing, ", "))
+	}
+
+	creds, err := config.Load()
+	if errors.Is(err, config.ErrNoCredentials) {
+		return errors.New("not logged in — run 'everyapi login' first")
+	}
+	if err != nil {
+		return err
+	}
+	// WithCookieJar is the load-bearing call here: backend stashes the
+	// device_auth_id / user_code / name / models keyed by a session
+	// cookie set on /start. Without a jar the /poll call would land
+	// in a fresh session and the handler would 200 with code=expired.
+	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID).WithCookieJar()
+	ctx, stop := signalCtx()
+	defer stop()
+
+	// Pre-check eligibility — same reasoning as `add-key`: failing a
+	// gate AFTER the seller authorised in their browser is a worse UX
+	// than telling them now to fix it first.
+	ecx, ecancel := sellerExchangeCtx(ctx)
+	elig, err := client.GetSellerEligibility(ecx)
+	ecancel()
+	if err != nil {
+		return classifySellerErr(err)
+	}
+	if !elig.Eligible {
+		renderEligibility(elig)
+		println("")
+		println("Marketplace eligibility check failed. Fix the unchecked items above, then re-run.")
+		printf("Dashboard: %s/seller/channels\n", trimAPIBaseToWebOrigin(creds.APIBase))
+		return errors.New("not eligible to mount a seller channel")
+	}
+
+	scx, scancel := sellerExchangeCtx(ctx)
+	start, err := client.StartSellerCodexOAuth(scx, *name, *models)
+	scancel()
+	if err != nil {
+		return classifySellerErr(err)
+	}
+
+	println("")
+	println("To bind your Codex / ChatGPT subscription, visit this URL and enter the code:")
+	printf("\n    URL:  %s\n", start.VerificationURI)
+	printf("    Code: %s\n\n", start.UserCode)
+
+	if !*noBrowser {
+		// Same fail-soft approach as `everyapi login`: a missing
+		// xdg-open / `open` shouldn't crash; the URL is already
+		// printed for the user to copy.
+		if berr := openBrowser(start.VerificationURI); berr == nil {
+			println("Browser opened. Approve there and come back; this will finish on its own.")
+		} else {
+			fmt.Fprintln(os.Stderr, "Couldn't open the browser automatically — copy the URL above.")
+		}
+	}
+	println("")
+	println("Waiting for authorization...")
+
+	res, err := client.PollSellerCodexUntilDone(ctx, start.FlowID, start.Interval)
+	if err != nil {
+		switch {
+		case errors.Is(err, api.ErrSellerCodexPollExpired):
+			return errors.New("the code timed out before you approved it — run 'everyapi seller add-oauth codex' again")
+		case errors.Is(err, api.ErrSellerCodexPollDenied):
+			return errors.New("authorization was denied in the browser")
+		default:
+			return fmt.Errorf("poll: %w", classifySellerErr(err))
+		}
+	}
+
+	bound := res.Email
+	if bound == "" {
+		bound = "(account email not exposed by token)"
+	}
+	printf("\nMounted channel #%d (%s, type=codex, account=%s).\n", res.ChannelID, *name, bound)
+	printf("Status: enabled. Run 'everyapi seller list' to inspect, or visit %s/seller/channels.\n",
+		trimAPIBaseToWebOrigin(creds.APIBase))
+	return nil
+}
+
+// sellerAddOAuthClaude drives the Anthropic Claude OAuth flow. Unlike
+// codex device flow, Claude can't be auto-completed by the CLI:
+// Anthropic's OAuth provider hard-codes `redirect_uri` to
+// console.anthropic.com/oauth/code/callback, so we can't open a local
+// listener to receive the code. The user has to paste a short string
+// from the browser back into the terminal — annoying but still much
+// better than chasing ~/.claude/auth.json yourself.
+//
+// Usage:
+//
+//	everyapi seller add-oauth claude --name <n> --models <m> [--no-browser]
+func sellerAddOAuthClaude(args []string) error {
+	fs := flag.NewFlagSet("seller add-oauth claude", flag.ContinueOnError)
+	name := fs.String("name", "", "channel display name (free-form, shown in the dashboard)")
+	models := fs.String("models", "", "comma-separated models this channel will serve (e.g. claude-3-opus,claude-3-sonnet)")
+	noBrowser := fs.Bool("no-browser", false, "skip auto-opening the authorize URL (you'll copy it manually)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	*name = strings.TrimSpace(*name)
+	*models = strings.TrimSpace(*models)
+	if *name == "" || *models == "" {
+		var missing []string
+		if *name == "" {
+			missing = append(missing, "--name")
+		}
+		if *models == "" {
+			missing = append(missing, "--models")
+		}
+		return fmt.Errorf("missing required flag(s): %s", strings.Join(missing, ", "))
+	}
+
+	creds, err := config.Load()
+	if errors.Is(err, config.ErrNoCredentials) {
+		return errors.New("not logged in — run 'everyapi login' first")
+	}
+	if err != nil {
+		return err
+	}
+	// WithCookieJar same as codex: backend stashes state/verifier/
+	// name/models under a session keyed by `everyapi_session` cookie,
+	// and the complete call has to land in the SAME session.
+	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID).WithCookieJar()
+	ctx, stop := signalCtx()
+	defer stop()
+
+	// Eligibility pre-check — fail before we burn a round-trip to
+	// Anthropic's authorize endpoint.
+	ecx, ecancel := sellerExchangeCtx(ctx)
+	elig, err := client.GetSellerEligibility(ecx)
+	ecancel()
+	if err != nil {
+		return classifySellerErr(err)
+	}
+	if !elig.Eligible {
+		renderEligibility(elig)
+		println("")
+		println("Marketplace eligibility check failed. Fix the unchecked items above, then re-run.")
+		printf("Dashboard: %s/seller/channels\n", trimAPIBaseToWebOrigin(creds.APIBase))
+		return errors.New("not eligible to mount a seller channel")
+	}
+
+	scx, scancel := sellerExchangeCtx(ctx)
+	authorizeURL, err := client.StartSellerClaudeOAuth(scx, *name, *models)
+	scancel()
+	if err != nil {
+		return classifySellerErr(err)
+	}
+
+	println("")
+	println("To bind your Anthropic Claude subscription:")
+	printf("\n  1) Open this URL in a browser (or copy if --no-browser):\n     %s\n\n", authorizeURL)
+	println("  2) Sign in and approve the connection.")
+	println("  3) Anthropic's callback page shows a string like `<code>#<state>`.")
+	println("     Copy that string and paste it below.")
+	println("")
+
+	if !*noBrowser {
+		if berr := openBrowser(authorizeURL); berr == nil {
+			println("Browser opened.")
+		} else {
+			fmt.Fprintln(os.Stderr, "Couldn't open the browser automatically — copy the URL above.")
+		}
+	}
+
+	in := bufio.NewReader(os.Stdin)
+	pasted, err := promptLine(in, "Paste authorization string", "")
+	if err != nil {
+		return err
+	}
+
+	ccx, ccancel := sellerExchangeCtx(ctx)
+	res, err := client.CompleteSellerClaudeOAuth(ccx, pasted)
+	ccancel()
+	if err != nil {
+		return classifySellerErr(err)
+	}
+
+	printf("\nMounted channel #%d (%s, type=claude).\n", res.ChannelID, *name)
+	if res.ExpiresAt != "" {
+		printf("Token expires: %s (auto-refreshes before then).\n", res.ExpiresAt)
+	}
+	printf("Status: enabled. Run 'everyapi seller list' to inspect, or visit %s/seller/channels.\n",
+		trimAPIBaseToWebOrigin(creds.APIBase))
+	return nil
+}
+
+// sellerAddOAuthGemini is the true one-click OAuth path. Google's
+// gemini-cli installed-app client accepts http://127.0.0.1:<port>/
+// callback as a redirect_uri, so the CLI runs its own listener and
+// Google sends the code straight to it — no manual paste like
+// claude, no user_code typing like codex.
+//
+// Usage:
+//
+//	everyapi seller add-oauth gemini --name <n> --models <m> [--no-browser] [--timeout 5m]
+//
+// Flow:
+//  1. Listen on a random ephemeral port (127.0.0.1:0)
+//  2. Eligibility pre-check
+//  3. Tell backend `redirect_uri = http://127.0.0.1:<port>/callback`,
+//     receive the Google authorize URL + state (backend validates
+//     redirect is a real loopback before handing it back)
+//  4. Open browser
+//  5. Block on listener until Google redirects to /callback with
+//     `?code=…&state=…` OR `?error=…`
+//  6. Forward code+state to backend's /complete, which exchanges
+//     with Google and mints the channel
+func sellerAddOAuthGemini(args []string) error {
+	fs := flag.NewFlagSet("seller add-oauth gemini", flag.ContinueOnError)
+	name := fs.String("name", "", "channel display name")
+	models := fs.String("models", "", "comma-separated models this channel will serve (e.g. gemini-1.5-pro)")
+	noBrowser := fs.Bool("no-browser", false, "skip auto-opening the authorize URL")
+	timeout := fs.Duration("timeout", 5*time.Minute, "how long to wait for the OAuth callback before giving up")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	*name = strings.TrimSpace(*name)
+	*models = strings.TrimSpace(*models)
+	if *name == "" || *models == "" {
+		var missing []string
+		if *name == "" {
+			missing = append(missing, "--name")
+		}
+		if *models == "" {
+			missing = append(missing, "--models")
+		}
+		return fmt.Errorf("missing required flag(s): %s", strings.Join(missing, ", "))
+	}
+
+	creds, err := config.Load()
+	if errors.Is(err, config.ErrNoCredentials) {
+		return errors.New("not logged in — run 'everyapi login' first")
+	}
+	if err != nil {
+		return err
+	}
+	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID).WithCookieJar()
+
+	// Start the listener BEFORE eligibility check — we need the
+	// loopback URL to hand to /start. Eligibility-fail path Close()s
+	// the listener immediately so the port is held for milliseconds.
+	listener, err := oauthloopback.Listen()
+	if err != nil {
+		return fmt.Errorf("loopback listen: %w", err)
+	}
+	defer listener.Close()
+
+	ctx, stop := signalCtx()
+	defer stop()
+
+	ecx, ecancel := sellerExchangeCtx(ctx)
+	elig, err := client.GetSellerEligibility(ecx)
+	ecancel()
+	if err != nil {
+		return classifySellerErr(err)
+	}
+	if !elig.Eligible {
+		renderEligibility(elig)
+		println("")
+		println("Marketplace eligibility check failed. Fix the unchecked items above, then re-run.")
+		printf("Dashboard: %s/seller/channels\n", trimAPIBaseToWebOrigin(creds.APIBase))
+		return errors.New("not eligible to mount a seller channel")
+	}
+
+	scx, scancel := sellerExchangeCtx(ctx)
+	start, err := client.StartSellerGeminiOAuth(scx, *name, *models, listener.URL())
+	scancel()
+	if err != nil {
+		return classifySellerErr(err)
+	}
+
+	println("")
+	println("To bind your Google Gemini account, sign in at:")
+	printf("\n    %s\n\n", start.AuthorizeURL)
+	if !*noBrowser {
+		if berr := openBrowser(start.AuthorizeURL); berr == nil {
+			println("Browser opened. Sign in there; this will finish on its own.")
+		} else {
+			fmt.Fprintln(os.Stderr, "Couldn't open the browser automatically — copy the URL above.")
+		}
+	}
+	printf("Waiting for the redirect on 127.0.0.1:%d (timeout %s)...\n", listener.Port(), *timeout)
+
+	waitCtx, cancel := context.WithTimeout(ctx, *timeout)
+	defer cancel()
+	cb, err := listener.Wait(waitCtx)
+	if err != nil {
+		return fmt.Errorf("waiting for OAuth callback: %w", err)
+	}
+	if cb.Error != "" {
+		desc := cb.ErrorDesc
+		if desc == "" {
+			desc = cb.Error
+		}
+		return fmt.Errorf("authorization failed: %s", desc)
+	}
+	if cb.Code == "" {
+		return errors.New("OAuth callback delivered no authorization code")
+	}
+	// State check: the callback MUST carry the same state we got
+	// back from /start. Otherwise this is either a stale flow
+	// (browser re-played an old URL) or a forged hit. Bail with a
+	// clear message — the backend also checks but failing locally
+	// avoids a wasted round-trip.
+	if cb.State != start.State {
+		return fmt.Errorf("OAuth state mismatch (got %q, expected %q) — re-run the command", cb.State, start.State)
+	}
+
+	gcx, gcancel := sellerExchangeCtx(ctx)
+	res, err := client.CompleteSellerGeminiOAuth(gcx, cb.Code, cb.State)
+	gcancel()
+	if err != nil {
+		return classifySellerErr(err)
+	}
+
+	printf("\nMounted channel #%d (%s, type=gemini).\n", res.ChannelID, *name)
+	if res.ExpiresAt != "" {
+		printf("Token expires: %s (auto-refreshes before then).\n", res.ExpiresAt)
+	}
+	printf("Status: enabled. Run 'everyapi seller list' to inspect, or visit %s/seller/channels.\n",
+		trimAPIBaseToWebOrigin(creds.APIBase))
+	return nil
+}

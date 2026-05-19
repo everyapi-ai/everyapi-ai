@@ -1,0 +1,130 @@
+# GoReleaser config for the everyapi CLI.
+#
+# Triggered by `.github/workflows/cli-release.yml` on every `v*` tag.
+# Cross-compiles one binary (`everyapi`) per platform — the MCP server
+# lives in the same binary as the `everyapi mcp` subcommand, so there
+# is exactly one artifact to ship per OS/arch combo.
+#
+# EVERYAPI_VERSION env var: bare semver (no `v` prefix) for ldflag
+# interpolation and brew formula version field. The workflow exports
+# it from `${TAG#v}` once.
+
+version: 2
+project_name: everyapi
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: everyapi
+    main: ./
+    binary: everyapi
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    # 5-platform matrix to match the original; no windows/arm64.
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/everyapi-ai/everyapi-ai/internal/version.Version={{ .Env.EVERYAPI_VERSION }}
+      - -X github.com/everyapi-ai/everyapi-ai/internal/version.Commit={{ .ShortCommit }}
+
+archives:
+  - id: everyapi
+    ids: [everyapi]
+    name_template: "everyapi_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - SECURITY.md
+
+checksum:
+  name_template: SHA256SUMS
+
+# Sigstore cosign keyless signing of the SHA256SUMS file. Pairs the
+# SHA-checksum trust with a cryptographic identity (the GitHub Actions
+# OIDC token of the workflow run that built the release), so a user
+# verifying a binary can answer not just "did this match the
+# checksum" but "was the checksum produced by the legitimate release
+# pipeline".
+#
+# Outputs alongside the existing release artefacts:
+#   - SHA256SUMS.sig    — cosign signature of the checksum file
+#   - SHA256SUMS.pem    — short-lived signing certificate (Fulcio)
+#
+# Verification: derive the certificate's subject identity from
+# SHA256SUMS.pem (the cert's SAN includes the workflow URL that signed
+# it) and feed it to `cosign verify-blob --certificate-identity ...
+# --certificate-oidc-issuer https://token.actions.githubusercontent.com
+# --cert SHA256SUMS.pem --signature SHA256SUMS.sig SHA256SUMS`. The
+# verify command isn't documented in the public README because the
+# build pipeline lives in a private repo and the OIDC identity that
+# pins the verification would leak that path.
+#
+# Requires `id-token: write` on the workflow job — set in
+# .github/workflows/cli-release.yml.
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--yes"
+      - "--output-certificate=${certificate}"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+    artifacts: checksum
+    output: true
+
+snapshot:
+  version_template: "{{ .Env.EVERYAPI_VERSION }}-snapshot-{{ .ShortCommit }}"
+
+release:
+  github:
+    # Pin the Release target to the public CLI repo so `brew install`
+    # / direct `curl` download URLs work without org access. The
+    # mirror step (in cli-release.yml) must run BEFORE goreleaser so
+    # the v* tag exists on this repo when the Release is created;
+    # otherwise goreleaser creates the tag itself pointing at the
+    # mirror's stale HEAD.
+    owner: everyapi-ai
+    name: everyapi-ai
+  name_template: "{{ .Tag }}"
+  mode: append
+
+brews:
+  - name: everyapi
+    ids: [everyapi]
+    repository:
+      owner: everyapi-ai
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: https://everyapi.ai
+    description: "EveryAPI CLI — Claude Code / Codex / Gemini CLI integration + MCP server"
+    license: MIT
+    install: |
+      bin.install "everyapi"
+    # Two-pronged smoke test: the `version` subcommand verifies the
+    # CLI surface, and an `mcp` initialize handshake verifies the
+    # built-in MCP server speaks the protocol. Both run without
+    # credentials or network — safe in `brew test`'s sandbox.
+    test: |
+      assert_match "everyapi", shell_output("#{bin}/everyapi version")
+      output = pipe_output("#{bin}/everyapi mcp",
+        %({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n),
+        0)
+      assert_match "2024-11-05", output
+    commit_author:
+      name: everyapi-ai
+      email: noreply@everyapi.ai
+    commit_msg_template: "Release everyapi v{{ .Env.EVERYAPI_VERSION }}"
