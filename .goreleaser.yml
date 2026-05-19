@@ -87,6 +87,45 @@ signs:
 snapshot:
   version_template: "{{ .Env.EVERYAPI_VERSION }}-snapshot-{{ .ShortCommit }}"
 
+# Release notes generation. Default goreleaser behaviour dumps every
+# commit subject under a single "Changelog" heading, which produces a
+# noisy wall of `chore:` / `docs:` / merge entries. We bucket commits
+# by conventional-commit prefix and drop the housekeeping ones so the
+# GitHub Release body reads like a user-facing summary.
+changelog:
+  filters:
+    exclude:
+      - "^chore:"
+      - "^chore\\("
+      - "^docs:"
+      - "^docs\\("
+      - "^test:"
+      - "^test\\("
+      - "^ci:"
+      - "^ci\\("
+      - "^style:"
+      - "^style\\("
+      - "^build:"
+      - "^build\\("
+      - "^Merge pull request"
+      - "^Merge branch"
+      - "^Release v"
+  groups:
+    - title: Features
+      regexp: "^feat(\\(.+\\))?!?:"
+      order: 0
+    - title: Bug fixes
+      regexp: "^fix(\\(.+\\))?!?:"
+      order: 1
+    - title: Performance
+      regexp: "^perf(\\(.+\\))?!?:"
+      order: 2
+    - title: Refactoring
+      regexp: "^refactor(\\(.+\\))?!?:"
+      order: 3
+    - title: Other changes
+      order: 999
+
 release:
   github:
     # Pin the Release target to the public CLI repo so `brew install`
