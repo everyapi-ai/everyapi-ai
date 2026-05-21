@@ -5,9 +5,9 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/api"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/config"
+	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
 // Status renders the user's quota and usage in USD. Reads
@@ -46,6 +46,16 @@ func Status(args []string) error {
 			return errors.New("your session expired — run 'everyapi login' again")
 		}
 		return fmt.Errorf("fetch user: %w", err)
+	}
+	// Lazy-migrate the cached role for credentials.json files
+	// written before the Role field existed. Old creds end up with
+	// Role=0 (treated as non-admin → help hides admin block); the
+	// first `everyapi status` from an admin user repopulates it
+	// without needing them to re-login. Save errors are non-fatal —
+	// status display is the primary job here.
+	if self.Role != creds.Role {
+		creds.Role = self.Role
+		_ = config.Save(creds)
 	}
 
 	perUnit := status.QuotaPerUnit

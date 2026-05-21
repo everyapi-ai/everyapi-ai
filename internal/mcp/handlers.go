@@ -21,8 +21,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/api"
-	"github.com/everyapi-ai/everyapi-ai/internal/config"
+	"github.com/everyapi-ai/everyapi-sdk/api"
+	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
 // errNotLoggedIn is the canonical user-facing message for missing

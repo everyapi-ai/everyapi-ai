@@ -17,8 +17,8 @@ import (
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/config"
-	"github.com/everyapi-ai/everyapi-ai/internal/sanitizer"
+	"github.com/everyapi-ai/everyapi-sdk/config"
+	"github.com/everyapi-ai/everyapi-sdk/sanitizer"
 )
 
 // Proxy is the dispatcher for `everyapi proxy <subcommand>`.

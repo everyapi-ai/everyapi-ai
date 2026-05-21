@@ -66,6 +66,7 @@ if ($expected -ne $actual) { throw "checksum mismatch" } else { "OK" }
 | `everyapi topup` | 打开充值页（带反钓鱼暗号 phrase 验证） |
 | `everyapi use <tool>` | 配好 env 并 exec 进第三方 CLI（指向 EveryAPI） |
 | `everyapi seller <sub>` | Marketplace 卖家端命令（list / withdraw / add-key / setup） |
+| `everyapi edge <sub>` | BYO-GPU supplier agent 一键部署（register / start / status / logs / models / stop / update / remove） |
 | `everyapi mcp` | 作为 MCP server 跑（stdin/stdout JSON-RPC） |
 | `everyapi update` | 检查是否有新版本，打印对应安装方式的升级命令 |
 | `everyapi version` | 显示构建版本 |
@@ -205,6 +206,27 @@ everyapi seller add-key   --type claude --name 'claude-pool' \
 | `gemini` | user 在浏览器登 + 关掉 tab 即完成 | Google 接受 loopback redirect |
 
 `--timeout` 控制最长等待时间（默认 5 分钟）。超时退出 + 干净关闭 listener。
+
+### `everyapi edge <sub>` — BYO-GPU supplier agent 一键部署
+
+把空闲 GPU 接入 EveryAPI 卖算力。CLI 把整套部署收口成 8 个子命令，省掉 supplier 自己抄 docker-compose / 填 `.env` / 复制 registration token 这些手动步骤：
+
+```bash
+everyapi login                              # 复用现有登录
+everyapi edge register --name "rtx-4090"    # 调 /api/seller/edge/nodes 拿 node_id + token，落到 ~/.local/share/everyapi/edge/<id>/
+everyapi edge start                         # 自动探 NVIDIA / ROCm / Apple Silicon / CPU，docker compose up -d
+everyapi edge models pull llama3.1:8b       # docker compose exec ollama ollama pull ...
+everyapi edge status                        # 本地 docker compose ps + dashboard 端 online/offline
+everyapi edge logs -f                       # 跟实时日志
+everyapi edge update                        # docker compose pull && up -d
+everyapi edge remove                        # down -v + 删本地 dir + 调 backend DELETE
+```
+
+`start` 通过 `text/template` runtime 渲染 `docker-compose.yml`（**不是 embed 静态 YAML**）—— 这样 container name 按 node_id namespace，单机多 node 不互踩；GPU passthrough 按 mode 条件渲染（NVIDIA = `deploy.resources.devices` + nvidia driver；ROCm = `/dev/kfd`+`/dev/dri`+`group_add: video`；macOS = 无 ollama 容器，agent 通过 `host.docker.internal` 连本地原生 ollama）。
+
+凭证流：cli 用现有 `sk-everyapi-` Bearer 调 `POST /api/seller/edge/nodes` → backend 一次性返回 `registration_token`（之后 backend 只存 sha256，永不再回显）→ cli 0600 落盘到 `~/.local/share/everyapi/edge/<id>/node.json` → render 进 compose 的 `EVERYAPI_REGISTRATION_TOKEN` env。**注册 token 不会写进任何 .env 文件**（避免 supplier 误 commit）。
+
+依赖：`docker` + `docker compose v2`（v1 EOL 不支持）。macOS 需要 `brew install ollama && brew services start ollama`（Metal 加速在 docker 容器里跑不了）。
 
 ### `everyapi topup` — 带反钓鱼暗号的充值跳转
 

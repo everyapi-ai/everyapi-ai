@@ -8,10 +8,10 @@ import (
 	"io"
 	"os"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/api"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/config"
+	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
 // Topup opens the dashboard top-up page behind the §7-5 Layer 3

@@ -1,0 +1,86 @@
+package edge
+
+import (
+	"errors"
+	"os/exec"
+	"runtime"
+)
+
+// Mode is the inferred (or operator-overridden) hardware/OS profile.
+// It picks which docker-compose template variant to render and which
+// ollama image tag to pull. Values are lowercase strings so they round-
+// trip through the --mode flag without case wrangling.
+type Mode string
+
+const (
+	ModeAuto   Mode = "auto"   // detect at start time
+	ModeNVIDIA Mode = "nvidia" // CUDA / NVIDIA Container Toolkit
+	ModeROCm   Mode = "rocm"   // AMD ROCm 5.7+
+	ModeMacOS  Mode = "macos"  // Apple Silicon, native ollama (host.docker.internal)
+	ModeCPU    Mode = "cpu"    // fallback; chat throughput too low for prod
+)
+
+// detectMode probes the host for a usable GPU + OS pairing. Returns
+// the most specific mode first (nvidia > rocm > macos > cpu). Caller
+// can override via --mode if the detection is wrong (e.g. a CUDA-
+// capable machine without nvidia-container-toolkit installed yet).
+func detectMode() Mode {
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		return ModeMacOS
+	}
+	if hasBinary("nvidia-smi") && nvidiaQueryOK() {
+		return ModeNVIDIA
+	}
+	if hasBinary("rocminfo") {
+		return ModeROCm
+	}
+	return ModeCPU
+}
+
+// nvidiaQueryOK runs `nvidia-smi -L` and returns true if the binary
+// reports at least one GPU. nvidia-smi being on PATH isn't enough —
+// machines with WSL2 + Windows driver shim leave the binary present
+// but failing. The -L flag is the cheapest sanity query.
+func nvidiaQueryOK() bool {
+	cmd := exec.Command("nvidia-smi", "-L")
+	out, err := cmd.Output()
+	if err != nil || len(out) == 0 {
+		return false
+	}
+	return true
+}
+
+// hasBinary checks PATH lookup without invoking the program.
+func hasBinary(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
+}
+
+// parseMode converts a user-supplied --mode flag to a Mode, treating
+// the empty string and "auto" the same. Returns an error for unknown
+// values so a typo doesn't silently fall back to CPU.
+func parseMode(s string) (Mode, error) {
+	switch s {
+	case "", "auto":
+		return ModeAuto, nil
+	case "nvidia":
+		return ModeNVIDIA, nil
+	case "rocm":
+		return ModeROCm, nil
+	case "macos":
+		return ModeMacOS, nil
+	case "cpu":
+		return ModeCPU, nil
+	default:
+		return "", errors.New("--mode must be one of: auto, nvidia, rocm, macos, cpu")
+	}
+}
+
+// resolveMode collapses ModeAuto into a concrete mode via detection.
+// Other modes pass through unchanged — operator override always wins.
+func resolveMode(m Mode) Mode {
+	if m == "" || m == ModeAuto {
+		return detectMode()
+	}
+	return m
+}

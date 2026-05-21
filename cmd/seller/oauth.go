@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/api"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/config"
-	"github.com/everyapi-ai/everyapi-ai/internal/oauthloopback"
+	"github.com/everyapi-ai/everyapi-sdk/config"
+	"github.com/everyapi-ai/everyapi-sdk/oauthloopback"
 )
 
 // sellerNetTimeout bounds a single upstream OAuth HTTP exchange

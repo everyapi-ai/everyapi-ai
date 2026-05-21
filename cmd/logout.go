@@ -5,7 +5,7 @@ import (
 	"flag"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/config"
+	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
 // Logout removes the on-disk credentials. Idempotent — calling it

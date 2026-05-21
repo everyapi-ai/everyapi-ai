@@ -3,9 +3,3 @@
 # subtree-copies the directory.
 /bin/
 /dist/
-
-# Menubar .app bundle output from cmd/menubar/build-macos.sh.
-cmd/menubar/dist/
-# `go build ./cmd/menubar` without -o drops the binary here.
-/menubar
-/menubar.exe

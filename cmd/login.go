@@ -1,18 +1,20 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/mdp/qrterminal/v3"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/api"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/config"
+	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
 // Login runs the device authorization flow: POST start → show user
@@ -109,6 +111,27 @@ func Login(args []string) error {
 		UserID:      res.UserID,
 		Username:    res.Username,
 	}
+	// One extra GetSelf round-trip during login to capture the
+	// user's backend role (admin / common). We persist it so the
+	// help-text renderer can hide admin-only subcommands locally
+	// without per-help-render network traffic. A failure here is
+	// non-fatal — login itself succeeded; role defaults to 0
+	// (treated as non-admin), and the next `everyapi status` will
+	// retry the lookup.
+	//
+	// Reuse the SignalCtx so Ctrl+C still cancels (the device-auth
+	// poll just returned, but a stuck TCP connection here would
+	// otherwise wedge the login flow indefinitely). 10s cap because
+	// the device-auth happy path completes in <1s; anything longer
+	// is a transient backend issue worth giving up on rather than
+	// blocking the user.
+	roleCtx, roleCancel := context.WithTimeout(ctx, 10*time.Second)
+	if self, sErr := api.New(*apiBase, res.AccessToken).
+		WithUserID(res.UserID).
+		GetSelf(roleCtx); sErr == nil {
+		creds.Role = self.Role
+	}
+	roleCancel()
 	if err := config.Save(creds); err != nil {
 		return fmt.Errorf("save credentials: %w", err)
 	}

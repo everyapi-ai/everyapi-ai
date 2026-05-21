@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/api"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/config"
+	"github.com/everyapi-ai/everyapi-sdk/config"
 	"github.com/everyapi-ai/everyapi-ai/internal/tools"
 )
 

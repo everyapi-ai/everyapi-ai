@@ -9,12 +9,16 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/everyapi-ai/everyapi-ai/cmd"
+	"github.com/everyapi-ai/everyapi-ai/cmd/admin"
+	"github.com/everyapi-ai/everyapi-ai/cmd/edge"
 	mcpcmd "github.com/everyapi-ai/everyapi-ai/cmd/mcp"
 	"github.com/everyapi-ai/everyapi-ai/cmd/proxy"
 	"github.com/everyapi-ai/everyapi-ai/cmd/seller"
 	"github.com/everyapi-ai/everyapi-ai/internal/mcp"
+	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
 const usage = `everyapi — EveryAPI CLI
@@ -27,42 +31,18 @@ COMMANDS
   logout          Remove this device's credentials
   status          Show current quota, usage, and balance
   topup           Open the wallet top-up page (anti-phishing verification phrase)
-  use <tool>      Launch a third-party CLI (claude / codex / gemini) routed through EveryAPI
-                  (--group/--channel <name>: route via the key bound to that group;
-                   bare --group/--channel: pick the group interactively)
-  seller <sub>    Channel-marketplace seller commands:
-                    seller list                      List your mounted channels
-                    seller withdraw [--quota N]      Move pending earnings to main balance
-                    seller add-key  --type/--name/--key/--models …
-                                                     Mount a plain-API-key channel
-                    seller setup                     Interactive mount wizard
-  proxy <sub>     Local sanitizer proxy (privacy filter for SDK requests):
-                    proxy start [--listen … --upstream …]   Run in the foreground
-                    proxy status                            Show running stats
-  mcp                    Run the MCP server on stdio (spawned by Claude Code / Codex / Gemini)
-  mcp install [client]   Auto-register everyapi as an MCP server (client: claude|codex|gemini; default claude)
-  mcp uninstall [client] Remove the MCP registration created by 'mcp install' (default claude)
+  use <tool>      Launch a third-party CLI (claude / codex / gemini) via EveryAPI
+  seller <sub>    Channel-marketplace seller commands
+__ADMIN_BLOCK__
+  edge <sub>      BYO-GPU supplier agent (docker + ollama)
+  proxy <sub>     Local sanitizer proxy (privacy filter for SDK requests)
+  mcp [sub]       MCP server for AI CLIs (Claude Code / Codex / Gemini)
   update          Check for a newer release and run the matching upgrade
-                  (brew / go install — auto-detected from binary path)
-                  (--check: silent compare, exits 1 if outdated;
-                   --dry-run: print the command instead of running it)
   version         Print the build version
   help            Show this message
 
-Run 'everyapi <command> --help' for command-specific flags.
-
-MCP server: quickest path on macOS / Linux with one of the AI CLIs installed:
-  everyapi mcp install            # default: claude
-  everyapi mcp install codex
-  everyapi mcp install gemini
-That runs "<client> mcp add everyapi everyapi mcp" under the hood. After it,
-the client spawns "everyapi mcp" on demand — ask the AI "what's my
-EveryAPI balance?" and it'll invoke the everyapi_status tool.
-
-Manual config (other MCP clients, or to opt out of the helper):
-  { "command": "everyapi", "args": ["mcp"] }
-The server reads JSON-RPC from stdin, writes to stdout, logs to stderr.
-Auth is read from ~/.config/everyapi/credentials.json — run 'everyapi login' first.
+Run 'everyapi <command> help' for subcommand details and flags
+(e.g. 'everyapi seller help', 'everyapi edge help').
 `
 
 // command is a single top-level subcommand. The registry below
@@ -88,10 +68,41 @@ var commands = []command{
 	{name: "topup", run: cmd.Topup},
 	{name: "use", run: cmd.Use},
 	{name: "seller", run: seller.Run},
+	{name: "edge", run: edge.Run},
+	{name: "admin", run: admin.Run},
 	{name: "proxy", run: proxy.Run},
 	{name: "mcp", run: runMCP},
 	{name: "update", run: cmd.Update},
 	{name: "version", aliases: []string{"--version", "-v"}, run: cmd.Version},
+}
+
+// adminUsageBlock is appended to the base usage by renderUsage when
+// the logged-in user has admin role. Keeping it out of the base
+// string means non-admin users don't see commands they can't run —
+// the backend still rejects them with a 403 if a non-admin types the
+// command anyway, but the help output stays clean.
+const adminUsageBlock = `  admin <sub>     Operator commands (admin role required)
+`
+
+// adminBlockSentinel is the placeholder inside the static `usage`
+// string that renderUsage substitutes. A sentinel rather than a
+// text-anchor (e.g. strings.Index(usage, "  proxy <sub>")) is more
+// robust to future help-text reorders — the placeholder moves with
+// the help block, so reordering the COMMANDS section can't silently
+// orphan the admin block at the end.
+const adminBlockSentinel = "__ADMIN_BLOCK__\n"
+
+// renderUsage returns the usage block, substituting adminUsageBlock
+// into the sentinel iff the cached credential's Role indicates an
+// admin user. Non-admin / unauthenticated callers see the sentinel
+// stripped (no leak). Falls through to plain strip on any
+// credential-load error.
+func renderUsage() string {
+	creds, err := config.Load()
+	if err != nil || !creds.IsAdmin() {
+		return strings.Replace(usage, adminBlockSentinel, "", 1)
+	}
+	return strings.Replace(usage, adminBlockSentinel, adminUsageBlock, 1)
 }
 
 // lookup resolves a CLI-typed name (incl. aliases) to its command.
@@ -111,20 +122,20 @@ func lookup(name string) (command, bool) {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Print(usage)
+		fmt.Print(renderUsage())
 		os.Exit(2)
 	}
 	name := os.Args[1]
 	args := os.Args[2:]
 
 	if name == "help" || name == "--help" || name == "-h" {
-		fmt.Print(usage)
+		fmt.Print(renderUsage())
 		return
 	}
 
 	c, ok := lookup(name)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s", name, usage)
+		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s", name, renderUsage())
 		os.Exit(2)
 	}
 
@@ -156,7 +167,7 @@ func runMCP(args []string) error {
 		// `everyapi mcp --help` used to fall through to the unknown-
 		// subcommand branch and exit 2 with a confusing message;
 		// keep parity with every other command's help-flag handling.
-		fmt.Print(usage)
+		fmt.Print(renderUsage())
 		return nil
 	default:
 		fmt.Fprintf(os.Stderr, "unknown 'mcp' subcommand %q. Try 'everyapi mcp install' to register, 'everyapi mcp uninstall' to remove, or 'everyapi mcp' (no args) to run the server.\n", args[0])

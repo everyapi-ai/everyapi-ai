@@ -26,7 +26,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/api"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 )
 
 // ---- everyapi_seller_add_oauth_codex_start ----------------------------
