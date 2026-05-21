@@ -42,7 +42,7 @@ func Topup(args []string) error {
 	}
 	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
 
-	res, err := client.CreateJumpSession(cliout.WithCtx(), "topup")
+	res, err := client.CreateJumpSession(cliout.WithCtx())
 	if err != nil {
 		if api.IsUnauthorized(err) {
 			return errors.New("your session expired — run 'everyapi login' again")
@@ -50,10 +50,16 @@ func Topup(args []string) error {
 		return fmt.Errorf("create jump session: %w", err)
 	}
 
+	// Compose the dashboard URL ourselves. The backend deliberately
+	// doesn't know about frontend routes (a frontend rename
+	// shouldn't be a backend deploy), so the path lives here.
+	jumpURL := fmt.Sprintf("%s/wallet?jump_session=%s",
+		api.WebOriginFromBase(creds.APIBase), res.SessionID)
+
 	cliout.Println("")
 	cliout.Println("Before opening the browser, verify this is the real EveryAPI dashboard.")
 	cliout.Println("")
-	cliout.Printf("  URL:    %s\n", res.URL)
+	cliout.Printf("  URL:    %s\n", jumpURL)
 	cliout.Printf("  Phrase: %s\n", res.VerificationPhrase)
 	if res.ExpiresIn > 0 {
 		cliout.Printf("  (this session expires in ~%d seconds)\n", res.ExpiresIn)
@@ -84,7 +90,7 @@ func Topup(args []string) error {
 		cliout.Println("Copy the URL above into your browser.")
 		return nil
 	}
-	if berr := cliprompt.OpenBrowser(res.URL); berr == nil {
+	if berr := cliprompt.OpenBrowser(jumpURL); berr == nil {
 		cliout.Println("Browser opened. Verify the phrase on the page matches the one above.")
 	} else {
 		fmt.Fprintln(os.Stderr, "Couldn't open the browser automatically — copy the URL above.")
