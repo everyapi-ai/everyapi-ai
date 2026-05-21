@@ -70,31 +70,53 @@ func Update(args []string) error {
 		return fmt.Errorf("check latest version: %w", err)
 	}
 
-	cmp := compareSemver(version.Version, latest)
+	ver, commit := version.Resolve()
+
+	// Dev builds (local `go build` without -ldflags stamping) shouldn't
+	// be force-marched onto a release tarball — the natural upgrade is
+	// `git pull && go build`, not `curl | tar` overwriting their dev
+	// binary. Detect and short-circuit with a tailored message.
+	if ver == "dev" {
+		if *checkOnly {
+			cliout.Printf("dev build (commit %s); latest release is %s\n", commit, latest)
+			return nil
+		}
+		cliout.Printf("\nYou're on a dev build (commit %s). Latest tagged release: %s.\n", commit, latest)
+		cliout.Println("")
+		cliout.Println("To rebuild from this source tree:")
+		cliout.Println("  cd clients/cli && go build")
+		cliout.Println("")
+		cliout.Println("To switch to a release-channel binary:")
+		cliout.Println("  brew install everyapi-ai/tap/everyapi   # macOS / Linux")
+		cliout.Println("  go install github.com/everyapi-ai/everyapi-ai@latest")
+		return nil
+	}
+
+	cmp := compareSemver(ver, latest)
 
 	if *checkOnly {
 		if cmp >= 0 {
-			cliout.Printf("up to date (%s)\n", version.Version)
+			cliout.Printf("up to date (%s)\n", ver)
 			return nil
 		}
-		cliout.Printf("update available: %s → %s\n", version.Version, latest)
+		cliout.Printf("update available: %s → %s\n", ver, latest)
 		os.Exit(1)
 		return nil // unreachable
 	}
 
 	if cmp > 0 {
-		cliout.Printf("\nYou're running a pre-release: %s (latest tag: %s)\n", version.Version, latest)
+		cliout.Printf("\nYou're running a pre-release: %s (latest tag: %s)\n", ver, latest)
 		cliout.Printf("Nothing to do.\n")
 		return nil
 	}
 	if cmp == 0 {
-		cliout.Printf("\neveryapi %s — up to date.\n", version.Version)
+		cliout.Printf("\neveryapi %s — up to date.\n", ver)
 		return nil
 	}
 
 	// cmp < 0: outdated. Pick a method based on where the binary lives.
 	method := detectInstallMethod()
-	cliout.Printf("\nUpdate available: %s → %s\n", version.Version, latest)
+	cliout.Printf("\nUpdate available: %s → %s\n", ver, latest)
 	cliout.Printf("Install method:   %s\n\n", method)
 
 	switch method {

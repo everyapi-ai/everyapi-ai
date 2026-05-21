@@ -217,30 +217,33 @@ func runLauncher() error {
 		labels = append(labels, fmt.Sprintf("%-*s  %s", maxName, c.name, c.desc))
 	}
 
+	lastSel := 0
 	for {
-		idx, err := cliprompt.Pick("EveryAPI — pick a command:", labels)
+		idx, err := cliprompt.PickWithSelected("EveryAPI — pick a command:", labels, lastSel)
 		if err != nil {
 			if errors.Is(err, cliprompt.ErrPickCancelled) {
 				return nil
 			}
 			return err
 		}
+		lastSel = idx
 		err = dispatchInteractive(visible[idx], nil)
-		// Three outcomes:
-		//   nil           — command finished cleanly; loop back to
-		//                   the picker so the user can do another
-		//                   thing without re-spawning the CLI.
-		//   ErrPickCancelled / io.EOF
-		//                 — user hit Esc inside a nested prompt or
-		//                   the sub-picker; the implicit "back" goes
-		//                   to this same picker.
-		//   other         — surface to the caller so 'Error: …'
-		//                   prints and the process exits non-zero.
-		if err == nil || errors.Is(err, cliprompt.ErrPickCancelled) || errors.Is(err, io.EOF) {
-			cliout.Println("")
-			continue
+		// Stay in the menu regardless of how the dispatched
+		// command returned. Real errors (not-logged-in,
+		// transient API failure, etc.) print to stderr and the
+		// loop re-renders, so the user can pick 'login' or some
+		// other command without re-spawning the CLI. Without
+		// this, leaf commands that surface errors (status,
+		// topup) eject the user from the launcher and leaf
+		// commands that print friendly messages and return nil
+		// (proxy status when nothing's running) don't — same
+		// menu, two contradictory exit semantics.
+		if err != nil &&
+			!errors.Is(err, cliprompt.ErrPickCancelled) &&
+			!errors.Is(err, io.EOF) {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		}
-		return err
+		cliout.Println("")
 	}
 }
 
@@ -282,22 +285,26 @@ func runSubPicker(c command) error {
 		labels[i] = fmt.Sprintf("%-*s  %s", maxName, s.name, s.desc)
 	}
 	prompt := fmt.Sprintf("%s — pick a subcommand:", c.name)
+	lastSel := 0
 	for {
-		idx, err := cliprompt.Pick(prompt, labels)
+		idx, err := cliprompt.PickWithSelected(prompt, labels, lastSel)
 		if err != nil {
 			return err
 		}
+		lastSel = idx
 		err = c.run(c.subs[idx].args)
-		// Loop back to this sub-picker on both success and on a
-		// nested cancel — same "stay in the menu until the user
-		// explicitly Esc's out" UX the launcher has at the top.
-		// Esc from THIS sub-picker (handled above) bubbles up so
-		// the launcher re-renders the parent menu.
-		if err == nil || errors.Is(err, cliprompt.ErrPickCancelled) || errors.Is(err, io.EOF) {
-			cliout.Println("")
-			continue
+		// Same "stay in the menu" rule as runLauncher: real
+		// errors get printed to stderr but don't eject the
+		// user from this sub-picker — they can pick something
+		// else or Esc to go up. Esc from THIS picker (handled
+		// above) bubbles up so the launcher re-renders the
+		// parent menu.
+		if err != nil &&
+			!errors.Is(err, cliprompt.ErrPickCancelled) &&
+			!errors.Is(err, io.EOF) {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		}
-		return err
+		cliout.Println("")
 	}
 }
 

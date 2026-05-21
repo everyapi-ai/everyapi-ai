@@ -23,14 +23,34 @@ var ErrPickCancelled = errors.New("pick cancelled")
 //
 // Interactive (TTY) path is delegated to charmbracelet/huh's Select;
 // the fallback prints a numbered list and reads one line.
+//
+// Picker always opens with the first row highlighted. Use
+// PickWithSelected when the caller wants to restore a previous
+// selection — typical for a loop that re-shows the same menu after
+// dispatching the chosen action.
 func Pick(prompt string, items []string) (int, error) {
+	return PickWithSelected(prompt, items, 0)
+}
+
+// PickWithSelected is the stateful variant of Pick: starts with row
+// `initial` highlighted instead of always row 0. The launcher uses
+// this so Esc-ing back into a menu restores the cursor to the row
+// the user just visited, rather than punting them back to the top.
+//
+// Out-of-range initial values clamp to 0 — never returns an error
+// just because the caller passed a stale index after the items
+// slice shrank.
+func PickWithSelected(prompt string, items []string, initial int) (int, error) {
 	if len(items) == 0 {
 		return -1, errors.New("nothing to pick from")
 	}
 	if !isInteractive() {
 		return pickByNumber(prompt, items)
 	}
-	return pickViaHuh(prompt, items)
+	if initial < 0 || initial >= len(items) {
+		initial = 0
+	}
+	return pickViaHuh(prompt, items, initial)
 }
 
 func pickByNumber(prompt string, items []string) (int, error) {
@@ -56,15 +76,18 @@ func pickByNumber(prompt string, items []string) (int, error) {
 // handles ↑/↓ / j/k / 1..9 / Enter / Ctrl-C natively; we just map
 // the result back to an index.
 //
+// initial seeds the highlighted row — PickWithSelected uses this
+// to restore the cursor across re-entries of the same menu.
+//
 // huh.ErrUserAborted is the sentinel huh returns on Ctrl-C; we
 // re-surface it as our package-local ErrPickCancelled so callers
 // don't have to import huh just to detect cancel.
-func pickViaHuh(prompt string, items []string) (int, error) {
+func pickViaHuh(prompt string, items []string, initial int) (int, error) {
 	opts := make([]huh.Option[int], len(items))
 	for i, item := range items {
 		opts[i] = huh.NewOption(item, i)
 	}
-	var sel int
+	sel := initial
 	err := runHuhField(huh.NewSelect[int]().
 		Title(prompt).
 		Options(opts...).
