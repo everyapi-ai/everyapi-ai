@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 	"github.com/everyapi-ai/everyapi-ai/internal/tools"
 )
@@ -133,8 +136,7 @@ func Use(args []string) error {
 	// command experience, not "remember to run two windows".
 	apiBaseForEnv := creds.APIBase
 	if !direct {
-		const proxyListen = "127.0.0.1:8888"
-		proxyAddr, perr := ensureSanitizerRunning(proxyListen, creds.APIBase)
+		proxyAddr, perr := ensureSanitizerRunning(creds.APIBase)
 		if perr != nil {
 			cliout.Printf("Warning: sanitizer proxy didn't start (%v).\n", perr)
 			cliout.Printf("Falling back to direct mode — your traffic will reach %s without the privacy filter.\n", creds.APIBase)
@@ -145,6 +147,38 @@ func Use(args []string) error {
 	}
 
 	env := t.Env(apiBaseForEnv, relayKey)
+
+	// Dangerous-mode prompt. Each tool exposes a single "skip
+	// every confirmation" flag (Tool.YoloFlag); if the user
+	// hasn't already passed it via `-- <flags>`, offer it through
+	// a TTY confirm so they don't have to remember the exact
+	// string. Default is No — opt-in for an obvious reason
+	// (sandbox bypass, every permission auto-approved).
+	if t.YoloFlag != "" && !containsFlag(extraArgs, t.YoloFlag) && cliprompt.IsInteractive() {
+		enable, perr := cliprompt.YesNo(
+			bufio.NewReader(os.Stdin),
+			fmt.Sprintf("Enable %s? (skips every safety prompt)", t.YoloLabel),
+			false,
+		)
+		if perr != nil {
+			// Esc / Ctrl-C in the prompt → propagate the cancel
+			// sentinel so the launcher loop catches it. EOF on a
+			// piped stdin (no answer) defaults to "no, don't enable".
+			if errors.Is(perr, cliprompt.ErrPickCancelled) {
+				return perr
+			}
+			if !errors.Is(perr, io.EOF) {
+				return perr
+			}
+		}
+		if enable {
+			// Prepend so a user-passed flag after `--` still
+			// wins on conflict (last-flag wins in Go's flag and
+			// in claude/codex/gemini's argv parsing alike).
+			extraArgs = append([]string{t.YoloFlag}, extraArgs...)
+		}
+	}
+
 	// Surface the resolved base URL so an aspiring debugger knows
 	// where the requests are heading. One line, before the exec
 	// disappears the parent process.
@@ -154,6 +188,18 @@ func Use(args []string) error {
 		cliout.Printf("Launching %s against %s\n", t.ExecName, creds.APIBase)
 	}
 	return tools.Exec(t, env, extraArgs)
+}
+
+// containsFlag reports whether the user already passed `flag` in
+// `--`-trailing args. Matches both `--foo` and `--foo=value` forms.
+// Cheap linear scan — extraArgs is at most a handful of tokens.
+func containsFlag(args []string, flag string) bool {
+	for _, a := range args {
+		if a == flag || strings.HasPrefix(a, flag+"=") {
+			return true
+		}
+	}
+	return false
 }
 
 // ensureSanitizerRunning checks if a sanitizer proxy is already
@@ -171,16 +217,37 @@ func Use(args []string) error {
 // On any failure the caller is responsible for falling back to direct
 // mode — better to launch the tool against the gateway directly than
 // to refuse to launch at all.
-func ensureSanitizerRunning(listen, upstream string) (string, error) {
-	url := "http://" + listen
-	// Fast path: already healthy. The existing proxy keeps whatever
-	// parent-pid binding it was started with — we don't retrofit
-	// ours; the cost of "previous parent dies, proxy outlives it
-	// until idle-replaced" is bounded by the existing detector's 2s
-	// poll.
-	if sanitizerHealthy(listen) {
-		return url, nil
+func ensureSanitizerRunning(upstream string) (string, error) {
+	// Pick the listen address. Three-tier resolution, prefer
+	// stable / discoverable answers first so a debugger landing
+	// on a running session doesn't have to chase ephemeral ports:
+	//
+	//   1. If sanitizer.pid records a listen and that address is
+	//      currently serving our sanitizer, reuse it. Same
+	//      process across multiple `use` invocations.
+	//   2. Else if 127.0.0.1:8888 is sanitizer-healthy already,
+	//      use it (covers the case where the PID file got cleared
+	//      but the proxy is still alive).
+	//   3. Else pick a fresh listen: 8888 if free, otherwise a
+	//      kernel-assigned ephemeral port. The chosen address
+	//      gets written into sanitizer.pid by 'proxy start', so
+	//      'proxy status' and the next 'use' both find it.
+	const defaultListen = "127.0.0.1:8888"
+	if listen := sanitizerListenFromPID(); listen != "" && sanitizerHealthy(listen) {
+		return "http://" + listen, nil
 	}
+	if sanitizerHealthy(defaultListen) {
+		return "http://" + defaultListen, nil
+	}
+	listen := defaultListen
+	if portOccupied(listen) {
+		port, err := pickFreePort()
+		if err != nil {
+			return "", fmt.Errorf("port %s is held by another process and no free fallback port found: %w", defaultListen, err)
+		}
+		listen = fmt.Sprintf("127.0.0.1:%d", port)
+	}
+	url := "http://" + listen
 	exe, err := os.Executable()
 	if err != nil {
 		return "", fmt.Errorf("locate self: %w", err)
@@ -197,6 +264,69 @@ func ensureSanitizerRunning(listen, upstream string) (string, error) {
 		return "", fmt.Errorf("spawn proxy: %w", err)
 	}
 	return url, nil
+}
+
+// pickFreePort asks the kernel for an unused ephemeral port by
+// binding 127.0.0.1:0 and reading back what we got. The listener
+// closes immediately — there's an inherent TOCTOU window before
+// the caller's spawned proxy re-binds, but it's measured in
+// microseconds on a typical desktop, vs. seconds for the
+// alternative of probing a hardcoded ladder (8889, 8890, …) and
+// hoping each one stays free.
+func pickFreePort() (int, error) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port, nil
+}
+
+// sanitizerListenFromPID reads the listen address recorded by
+// 'proxy start' into ~/.config/everyapi/sanitizer.pid. Returns
+// the empty string if the file is missing, malformed, or written
+// by an old binary that only persisted the PID — callers MUST
+// treat empty as "no recorded listen, pick one fresh".
+//
+// File format (from cmd/proxy/proxy.go writePIDFile):
+//
+//	"<pid> <listen-addr>\n"   (current)
+//	"<pid>\n"                  (legacy)
+func sanitizerListenFromPID() string {
+	dir, err := config.ConfigDir()
+	if err != nil {
+		return ""
+	}
+	data, err := os.ReadFile(strings.TrimRight(dir, "/") + "/sanitizer.pid")
+	if err != nil {
+		return ""
+	}
+	var pid int
+	var listen string
+	n, _ := fmt.Sscanf(strings.TrimSpace(string(data)), "%d %s", &pid, &listen)
+	if n < 2 || pid <= 0 {
+		return ""
+	}
+	return listen
+}
+
+// portOccupied returns true when SOMETHING accepts a TCP connection
+// to `listen` — without saying whether that something is the
+// EveryAPI sanitizer or an unrelated service. Use AFTER
+// sanitizerHealthy to discriminate "free port" from "someone else's
+// port"; the combination tells the caller whether spawning a fresh
+// sanitizer on this address can possibly succeed.
+//
+// 250 ms dial timeout matches sanitizerHealthy's HTTP probe budget:
+// we're answering the same "is anyone there" question at the
+// transport layer instead of the application layer.
+func portOccupied(listen string) bool {
+	conn, err := net.DialTimeout("tcp", listen, 250*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
 }
 
 // sanitizerHealthy is a 250ms probe to /__sanitizer/health. Returns
@@ -301,8 +431,8 @@ func parseUseArgs(args []string) (toolName, group string, pickGroup, direct bool
 // buyer CLI has no channel-listing endpoint (that's admin-only), so
 // "available channels" is necessarily expressed as the groups the user
 // already holds a key for. The empty group (default tokens) shows as
-// "(default)" and selecting it returns "" — the normal newest-enabled
-// -key path.
+// "(default — newest enabled key)" and selecting it returns "" — the
+// normal newest-enabled-key path.
 func pickGroupInteractive(creds *config.Credentials) (string, error) {
 	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
 	tokens, err := client.ListTokens(cliout.WithCtx())
@@ -323,50 +453,29 @@ func pickGroupInteractive(creds *config.Credentials) (string, error) {
 	if len(groups) == 0 {
 		return "", errors.New("no enabled relay API keys on your account to pick a group from — create one in the EveryAPI dashboard, then 'everyapi login'")
 	}
-	cliout.Println("Pick a routing group:")
+	labels := make([]string, len(groups))
 	for i, g := range groups {
-		label := g
 		if g == "" {
-			label = "(default — newest enabled key)"
-		}
-		cliout.Printf("  %d) %s\n", i+1, label)
-	}
-	cliout.Printf("Enter name or number: ")
-	var choice string
-	if _, err := fmt.Scanln(&choice); err != nil {
-		return "", fmt.Errorf("read selection: %w", err)
-	}
-	choice = strings.TrimSpace(choice)
-	for i, g := range groups {
-		if choice == fmt.Sprintf("%d", i+1) || choice == g {
-			return g, nil
-		}
-		if g == "" && strings.EqualFold(choice, "default") {
-			return "", nil
+			labels[i] = "(default — newest enabled key)"
+		} else {
+			labels[i] = g
 		}
 	}
-	return "", fmt.Errorf("unknown selection %q", choice)
+	idx, err := cliprompt.Pick("Pick a routing group:", labels)
+	if err != nil {
+		return "", err
+	}
+	return groups[idx], nil
 }
 
-// interactivePicker is the no-arg fallback. Stays simple: list the
-// registered tools, ask the user to pick by name. Avoids dragging in
-// a TUI library — `everyapi use` with an arg is the primary path.
+// interactivePicker is the no-arg fallback. Renders the registered
+// tools as an arrow-navigable list when run on a TTY; falls back to
+// a numbered prompt otherwise (CI / piped input).
 func interactivePicker() (string, error) {
 	names := tools.Names()
-	cliout.Println("Pick a tool to launch:")
-	for i, n := range names {
-		cliout.Printf("  %d) %s\n", i+1, n)
+	idx, err := cliprompt.Pick("Pick a tool to launch:", names)
+	if err != nil {
+		return "", err
 	}
-	cliout.Printf("Enter name or number: ")
-	var choice string
-	if _, err := fmt.Scanln(&choice); err != nil {
-		return "", fmt.Errorf("read selection: %w", err)
-	}
-	choice = strings.TrimSpace(choice)
-	for i, n := range names {
-		if choice == n || choice == fmt.Sprintf("%d", i+1) {
-			return n, nil
-		}
-	}
-	return "", fmt.Errorf("unknown selection %q", choice)
+	return names[idx], nil
 }

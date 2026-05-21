@@ -1,6 +1,7 @@
 package edge
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -12,6 +13,7 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/api"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 )
 
 func edgeRegister(args []string) error {
@@ -22,8 +24,20 @@ func edgeRegister(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if strings.TrimSpace(*name) == "" {
-		return errors.New("--name is required (e.g. --name 'rtx-4090-tokyo')")
+	nodeName := strings.TrimSpace(*name)
+	if nodeName == "" {
+		// Prompt for the missing required flag on a TTY; off-TTY
+		// (CI / piped) keep the original "--name is required"
+		// error so scripted invocations stay deterministic.
+		if !cliprompt.IsInteractive() {
+			return errors.New("--name is required (e.g. --name 'rtx-4090-tokyo')")
+		}
+		in := bufio.NewReader(os.Stdin)
+		v, perr := cliprompt.Line(in, "Node name (e.g. rtx-4090-tokyo)", "")
+		if perr != nil {
+			return perr
+		}
+		nodeName = strings.TrimSpace(v)
 	}
 
 	client, creds, err := edgeClient()
@@ -31,7 +45,7 @@ func edgeRegister(args []string) error {
 		return err
 	}
 
-	req := api.EdgeNodeCreate{Name: strings.TrimSpace(*name)}
+	req := api.EdgeNodeCreate{Name: nodeName}
 	if *country != "" || *region != "" {
 		req.Location = &api.EdgeLoc{Country: strings.ToUpper(*country), Region: *region}
 	}

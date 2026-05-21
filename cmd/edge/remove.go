@@ -1,12 +1,14 @@
 package edge
 
 import (
+	"bufio"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 )
 
 func edgeRemove(args []string) error {
@@ -24,16 +26,19 @@ func edgeRemove(args []string) error {
 	}
 
 	if !*yes {
-		cliout.Printf("This will delete local data for node #%d", nodeID)
+		summary := fmt.Sprintf("Remove edge node #%d?", nodeID)
+		detail := fmt.Sprintf("Local data for node #%d will be deleted", nodeID)
 		if !*keepBackend {
-			cliout.Println(" AND delete the node row on the EveryAPI backend.")
+			detail += " AND the backend node row will be removed."
 		} else {
-			cliout.Println(" but keep the backend node row.")
+			detail += "; the backend node row will be kept."
 		}
-		cliout.Println("Continue? Type 'yes' to confirm:")
-		var resp string
-		_, _ = fmt.Scanln(&resp)
-		if resp != "yes" {
+		cliout.Println(detail)
+		confirmed, err := cliprompt.YesNo(bufio.NewReader(os.Stdin), summary, false)
+		if err != nil {
+			return err
+		}
+		if !confirmed {
 			return errors.New("aborted")
 		}
 	}

@@ -71,7 +71,9 @@ SUBCOMMANDS
   add-oauth codex --name <N> --models <M> [--no-browser]
                                     Mount a channel via Codex device-authorization
                                     (one-click OAuth — the seller never copies a token)
-  setup                             Interactive wizard wrapping add-key
+  setup                             Interactive wizard: pick API key
+                                    or OAuth (codex / claude / gemini),
+                                    then walk through add-key / add-oauth
   help                              Show this message`
 
 // ---- seller list ---------------------------------------------------
@@ -326,13 +328,19 @@ func parseAddKeyArgs(args []string) (*addKeyArgs, error) {
 
 // ---- seller setup --------------------------------------------------
 
-// sellerSetup is the small-talk wizard for `everyapi seller add-key`:
-// query eligibility upfront (so the user finds out about a failed gate
-// BEFORE typing a key), then prompt for type / name / key / models, then
-// POST. Confirms before submit so a typo is recoverable. Reuses
-// parseAddKeyArgs to keep validation in one place — once the wizard
-// has the values it assembles an argv and routes through the same
-// non-interactive path.
+// sellerSetup is the small-talk wizard for mounting a new seller
+// channel. Asks the user up-front which auth method they want —
+// raw API key, or one of the OAuth flows (Codex / Claude / Gemini)
+// — and routes into either the inline add-key wizard (key path)
+// or sellerAddOAuth (OAuth paths). Eligibility is checked once,
+// here, so a failed gate surfaces before the user types anything.
+//
+// The OAuth branches forward the collected name + models via argv
+// to sellerAddOAuth — same validator, same flow as a flag-driven
+// `everyapi seller add-oauth <provider> --name N --models M` call.
+// The add-oauth* handlers re-run the eligibility check internally;
+// the duplicate round-trip is intentional (defense-in-depth: nothing
+// downstream of this function trusts the caller has gated).
 func sellerSetup(args []string) error {
 	fs := flag.NewFlagSet("seller setup", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
@@ -357,8 +365,30 @@ func sellerSetup(args []string) error {
 
 	in := bufio.NewReader(os.Stdin)
 	cliout.Println("")
-	cliout.Println("Mounting a new channel. Press Ctrl+C to cancel.")
+	cliout.Println("Mounting a new channel. Press Esc / Ctrl+C to cancel.")
 	cliout.Println("")
+
+	// Auth-method picker. Index → branch so the labels stay free
+	// to grow without breaking string-match branching.
+	methodIdx, err := cliprompt.Pick("Authentication method",
+		[]string{
+			"API key             — paste a vendor key (openai / anthropic / etc.)",
+			"Codex / ChatGPT OAuth — bind a ChatGPT Plus subscription (device flow, no token paste)",
+			"Claude OAuth        — bind an Anthropic Claude subscription (one paste from the browser)",
+			"Gemini OAuth        — bind a Google Gemini account (full one-click)",
+		})
+	if err != nil {
+		return err
+	}
+	switch methodIdx {
+	case 1:
+		return sellerSetupOAuth(in, "codex")
+	case 2:
+		return sellerSetupOAuth(in, "claude")
+	case 3:
+		return sellerSetupOAuth(in, "gemini")
+	}
+	// case 0 falls through to the existing API-key wizard.
 
 	typeAlias, err := cliprompt.Choice(in, "Upstream type", sellerTypeChoices())
 	if err != nil {
@@ -425,6 +455,42 @@ func sellerSetup(args []string) error {
 }
 
 // collectSellerKeys prompts the user for one or more keys + per-key
+// sellerSetupOAuth is the OAuth branch of the setup wizard. Asks
+// for name + models (the only two values add-oauth* needs from the
+// user beyond what the OAuth provider gives) and forwards via
+// argv to sellerAddOAuth so the wizard and the flag-driven call
+// share one execution path. Each provider gets a sensible default
+// model list so a user who just wants the most common models can
+// hit Enter through both prompts.
+func sellerSetupOAuth(in *bufio.Reader, provider string) error {
+	name, err := cliprompt.Line(in, "Channel name", "")
+	if err != nil {
+		return err
+	}
+	defaultModels := map[string]string{
+		"codex":  "gpt-4o,gpt-4o-mini,o1,o1-mini",
+		"claude": "claude-3-5-sonnet-latest,claude-3-opus-latest",
+		"gemini": "gemini-1.5-pro,gemini-1.5-flash",
+	}[provider]
+	models, err := cliprompt.Line(in, "Models (comma-separated)", defaultModels)
+	if err != nil {
+		return err
+	}
+
+	cliout.Println("")
+	cliout.Printf("About to mount via %s OAuth: %s / models=%s\n", provider, name, models)
+	ok, err := cliprompt.YesNo(in, "Submit?", true)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		cliout.Println("Cancelled — nothing was submitted.")
+		return nil
+	}
+
+	return sellerAddOAuth([]string{provider, "--name", name, "--models", models})
+}
+
 // remarks. Pulled out of sellerSetup so the multi-slot/OAuth-blob
 // interaction can be unit-tested with a mock stdin (bytes.Buffer
 // wrapped in bufio.Reader) — the rest of the wizard (eligibility

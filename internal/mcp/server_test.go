@@ -146,20 +146,29 @@ func TestServe_ToolsListIncludesV0Set(t *testing.T) {
 	}
 }
 
-// TestRegisterTools_HasV1Set pins the V1 tool set so adding /
-// removing a tool is a deliberate spec change that breaks this
-// test. Doesn't invoke handlers — just checks the registry.
+// TestRegisterTools_HasFullSet pins the registered tool set so
+// adding / removing a tool is a deliberate spec change that breaks
+// this test. Doesn't invoke handlers — just checks the registry.
 func TestRegisterTools_HasV0Set(t *testing.T) {
 	got := registerTools()
 	want := map[string]bool{
-		"everyapi_status":                           true,
-		"everyapi_topup":                            true,
-		"everyapi_seller_list":                      true,
-		"everyapi_seller_withdraw":                  true,
+		// V0
+		"everyapi_status":          true,
+		"everyapi_topup":           true,
+		"everyapi_seller_list":     true,
+		"everyapi_seller_withdraw": true,
+		// V1: seller OAuth onboarding
 		"everyapi_seller_add_oauth_codex_start":     true,
 		"everyapi_seller_add_oauth_codex_poll":      true,
 		"everyapi_seller_add_oauth_claude_start":    true,
 		"everyapi_seller_add_oauth_claude_complete": true,
+		// V2: BYO-GPU edge surface (read + delete)
+		"everyapi_edge_list":   true,
+		"everyapi_edge_status": true,
+		"everyapi_edge_remove": true,
+		// V2: operator marketplace toggle
+		"everyapi_admin_marketplace_status": true,
+		"everyapi_admin_marketplace_set":    true,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("want %d tools, got %d (%v)", len(want), len(got), toolNames(got))

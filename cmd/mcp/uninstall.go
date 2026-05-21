@@ -22,11 +22,10 @@ func Uninstall(args []string) error {
 		return nil
 	}
 
-	clientName := "claude"
-	if len(args) > 0 {
-		clientName = args[0]
+	clientName, err := resolveClient(args, "uninstall")
+	if err != nil {
+		return err
 	}
-
 	c, err := lookupClient(clientName)
 	if err != nil {
 		return err

@@ -12,6 +12,7 @@ func Version(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	cliout.Printf("everyapi %s (commit %s)\n", version.Version, version.Commit)
+	ver, commit := version.Resolve()
+	cliout.Printf("everyapi %s (commit %s)\n", ver, commit)
 	return nil
 }

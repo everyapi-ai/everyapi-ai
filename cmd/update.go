@@ -225,14 +225,14 @@ func printUnknownInstallHint(latest string) {
 	cliout.Printf("  # Homebrew (after `brew tap everyapi-ai/tap`)\n")
 	cliout.Printf("  brew update && brew upgrade everyapi\n\n")
 	cliout.Printf("  # go install\n")
-	cliout.Printf("  go install github.com/everyapi-ai/everyapi@latest\n\n")
+	cliout.Printf("  go install github.com/everyapi-ai/everyapi-ai@latest\n\n")
 	cliout.Printf("  # Direct binary (current platform: %s/%s)\n", runtime.GOOS, runtime.GOARCH)
 	cliout.Printf("  curl -L -o %s.new \\\n", binaryPath)
-	cliout.Printf("    https://github.com/everyapi-ai/everyapi/releases/download/%s/everyapi_%s_%s.tar.gz\n",
+	cliout.Printf("    https://github.com/everyapi-ai/everyapi-ai/releases/download/%s/everyapi_%s_%s.tar.gz\n",
 		latest, runtime.GOOS, runtime.GOARCH)
 	cliout.Printf("  # verify SHA256 + cosign per README before replacing the binary\n")
 
-	cliout.Printf("\nRelease notes: https://github.com/everyapi-ai/everyapi/releases/tag/%s\n", latest)
+	cliout.Printf("\nRelease notes: https://github.com/everyapi-ai/everyapi-ai/releases/tag/%s\n", latest)
 }
 
 // guessBinaryPath returns the binary's full on-disk path for use in
@@ -251,7 +251,14 @@ func guessBinaryPath() string {
 // public CLI repo. Token-less GETs against this endpoint are
 // rate-limited but don't require auth, which is what `everyapi update`
 // relies on for the unauthenticated version check.
-const latestReleasePollURL = "https://api.github.com/repos/everyapi-ai/everyapi/releases/latest"
+// latestReleasePollURL hits the PUBLIC CLI mirror (everyapi-ai/
+// everyapi-ai) where the release pipeline actually publishes
+// tags + binary assets. The monorepo at everyapi-ai/everyapi has
+// no v* tags or releases — it's the source of truth, the mirror
+// is the distribution channel. cli-release.yml's mirror step
+// pushes the rewritten clients/cli/ tree + a v* tag and
+// GoReleaser attaches the platform tarballs there.
+const latestReleasePollURL = "https://api.github.com/repos/everyapi-ai/everyapi-ai/releases/latest"
 
 // errNoReleaseYet surfaces when the mirror's Releases endpoint is
 // empty (pre-v0.1.0 state, or a brand-new install pre-first-release).

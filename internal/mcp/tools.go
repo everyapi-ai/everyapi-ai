@@ -24,6 +24,23 @@ package mcp
 //   - everyapi_seller_add_oauth_claude_start — get authorize_url
 //   - everyapi_seller_add_oauth_claude_complete — paste code+state
 //
+// V2 adds the read-and-delete slice of the BYO-GPU edge surface.
+// register / start / stop / logs stay CLI-only — they need either
+// local docker access or one-shot-secret display that the chat
+// channel can't preserve.
+//
+//   - everyapi_edge_list    — every node owned by the caller
+//   - everyapi_edge_status  — one node's detail (by id)
+//   - everyapi_edge_remove  — delete a node (confirm-gated)
+//
+// V2 also exposes the operator marketplace toggle. Both handlers
+// check creds.IsAdmin locally before hitting the backend so a
+// non-admin AI agent sees "admin role required" rather than a bare
+// 403 envelope; the backend still gates the actual write.
+//
+//   - everyapi_admin_marketplace_status — read marketplace.enabled
+//   - everyapi_admin_marketplace_set    — open / close (confirm-gated)
+//
 // The remaining tools from the design list (sanitizer / seller setup
 // / add-key) await their CLI counterparts.
 func registerTools() []Tool {
@@ -36,5 +53,10 @@ func registerTools() []Tool {
 		toolSellerAddOAuthCodexPoll(),
 		toolSellerAddOAuthClaudeStart(),
 		toolSellerAddOAuthClaudeComplete(),
+		toolEdgeList(),
+		toolEdgeStatus(),
+		toolEdgeRemove(),
+		toolAdminMarketplaceStatus(),
+		toolAdminMarketplaceSet(),
 	}
 }

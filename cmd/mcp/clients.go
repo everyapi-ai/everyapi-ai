@@ -4,7 +4,48 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 )
+
+// resolveClient picks which MCP client to operate on. Three paths,
+// in priority order:
+//
+//  1. Explicit argv (`everyapi mcp install codex`) — args[0] wins.
+//  2. Interactive TTY — show a picker over every known client so
+//     the user gets a multi-row choice instead of "default claude".
+//  3. Non-TTY with no argv — fall back to the historical "claude"
+//     default so scripted invocations don't suddenly break.
+//
+// op is the verb being resolved ("install" / "uninstall"), surfaced
+// in the picker title so the user can tell which side of the wizard
+// they're on if they got here from the launcher's sub-picker.
+func resolveClient(args []string, op string) (string, error) {
+	if len(args) > 0 && args[0] != "" {
+		return args[0], nil
+	}
+	if !cliprompt.IsInteractive() {
+		return "claude", nil
+	}
+	names := clientNames()
+	// Friendly labels are inlined here rather than carried on the
+	// mcpClient struct: they're picker-UI text, not protocol data,
+	// and changing them shouldn't ripple through install/uninstall.
+	displayName := map[string]string{
+		"claude": "Claude Code (Anthropic)",
+		"codex":  "Codex CLI (OpenAI ChatGPT subscription)",
+		"gemini": "Gemini CLI (Google)",
+	}
+	labels := make([]string, len(names))
+	for i, n := range names {
+		labels[i] = fmt.Sprintf("%-8s — %s", n, displayName[n])
+	}
+	idx, err := cliprompt.Pick(fmt.Sprintf("mcp %s — pick a client:", op), labels)
+	if err != nil {
+		return "", err
+	}
+	return names[idx], nil
+}
 
 // mcpClient describes one MCP-capable host CLI that knows how to
 // register an external MCP server in its own config. Each entry owns

@@ -71,18 +71,22 @@ func Topup(args []string) error {
 	cliout.Println("  2) The page header must show the SAME phrase above.")
 	cliout.Println("If either differs, close the tab — you may be looking at a phishing page.")
 	cliout.Println("")
-	cliout.Printf("Press Enter to open the browser, or Ctrl-C to abort.")
 
-	// Read one line; ignore whatever the user typed — the act of
-	// pressing Enter IS the confirmation. Ctrl-C kills the process
-	// at the OS layer so we don't have to special-case it here.
-	// EOF on stdin is normal when stdin's been redirected away;
-	// treat it the same as Enter so a scripted invocation can
-	// still proceed (the phrase is still in stdout for the caller
-	// to inspect).
-	in := bufio.NewReader(os.Stdin)
-	if _, err := in.ReadString('\n'); err != nil && !errors.Is(err, io.EOF) {
-		return fmt.Errorf("read confirmation: %w", err)
+	// Confirmation gate. On a TTY this is a huh confirm prompt; off
+	// TTY (CI / piped invocation) cliprompt.YesNo falls back to the
+	// line-reader. EOF on a redirected stdin treats as proceed so a
+	// scripted invocation can still pipe through — the phrase is on
+	// stdout regardless and the caller can read it.
+	confirmed, cErr := cliprompt.YesNo(bufio.NewReader(os.Stdin), "Open the browser now?", true)
+	if cErr != nil {
+		if errors.Is(cErr, io.EOF) {
+			confirmed = true
+		} else {
+			return fmt.Errorf("read confirmation: %w", cErr)
+		}
+	}
+	if !confirmed {
+		return errors.New("aborted by user")
 	}
 
 	cliout.Println("")

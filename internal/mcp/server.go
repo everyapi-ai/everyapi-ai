@@ -222,11 +222,12 @@ func dispatch(req *jsonRPCRequest, tools map[string]*Tool, log io.Writer) jsonRP
 // only the `tools` capability — no resources, no prompts, no
 // sampling.
 func handleInitialize() any {
+	ver, _ := version.Resolve()
 	return map[string]any{
 		"protocolVersion": mcpProtocolVersion,
 		"serverInfo": map[string]any{
 			"name":    "everyapi-mcp",
-			"version": version.Version,
+			"version": ver,
 		},
 		"capabilities": map[string]any{
 			"tools": map[string]any{},

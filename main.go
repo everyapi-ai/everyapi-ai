@@ -7,7 +7,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -17,6 +19,8 @@ import (
 	mcpcmd "github.com/everyapi-ai/everyapi-ai/cmd/mcp"
 	"github.com/everyapi-ai/everyapi-ai/cmd/proxy"
 	"github.com/everyapi-ai/everyapi-ai/cmd/seller"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/mcp"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -54,7 +58,39 @@ type command struct {
 	// a special case in main. The principle is "alias = synonym", not
 	// "alias = different behavior".
 	aliases []string
-	run     func(args []string) error
+	// desc is the one-line summary the launcher (bare `everyapi` on
+	// a TTY) renders next to the command name. Mirrors the text in
+	// the static `usage` block — kept in sync by review, not code:
+	// the usage block targets the piped / -h reader and the
+	// launcher targets the interactive picker.
+	desc string
+	// adminOnly hides the row from the launcher when the cached
+	// credential isn't an admin user. Mirrors adminUsageBlock's
+	// gating in renderUsage. Hides UI affordances the user can't
+	// usefully exercise; the backend still 403s if a non-admin
+	// invokes the command anyway, so this is cosmetic.
+	adminOnly bool
+	// subs is the subcommand menu rendered when this command is
+	// picked from the launcher (or invoked bare on a TTY without
+	// arguments). Each entry's args slice is passed verbatim to
+	// run, so a row {args: []string{"marketplace", "on"}} dispatches
+	// the same way `everyapi admin marketplace on` would. Only
+	// includes subcommands that are useful without further flags —
+	// flag-required actions (seller add-key, edge register --name N)
+	// stay command-line-only. Empty/nil means "no sub-menu — pick
+	// runs the command bare".
+	subs []subcommand
+	run  func(args []string) error
+}
+
+// subcommand is one row in a command group's sub-menu rendered by
+// runSubPicker. name is what the picker shows; desc is the help
+// blurb to its right; args is what the parent command's run gets
+// when this row is selected.
+type subcommand struct {
+	name string
+	desc string
+	args []string
 }
 
 // commands is the registered set, in the order they appear in the
@@ -62,18 +98,44 @@ type command struct {
 // matches the documented order — keeps the "which command runs when
 // two names conflict" question impossible.
 var commands = []command{
-	{name: "login", run: cmd.Login},
-	{name: "logout", run: cmd.Logout},
-	{name: "status", run: cmd.Status},
-	{name: "topup", run: cmd.Topup},
-	{name: "use", run: cmd.Use},
-	{name: "seller", run: seller.Run},
-	{name: "edge", run: edge.Run},
-	{name: "admin", run: admin.Run},
-	{name: "proxy", run: proxy.Run},
-	{name: "mcp", run: runMCP},
-	{name: "update", run: cmd.Update},
-	{name: "version", aliases: []string{"--version", "-v"}, run: cmd.Version},
+	{name: "login", desc: "Authenticate this device with EveryAPI", run: cmd.Login},
+	{name: "logout", desc: "Remove this device's credentials", run: cmd.Logout},
+	{name: "status", desc: "Show current quota, usage, and balance", run: cmd.Status},
+	{name: "topup", desc: "Open the wallet top-up page (anti-phishing verification phrase)", run: cmd.Topup},
+	{name: "use", desc: "Launch a third-party CLI (claude / codex / gemini) via EveryAPI", run: cmd.Use},
+	{name: "seller", desc: "Channel-marketplace seller commands", run: seller.Run, subs: []subcommand{
+		{name: "list", desc: "List the channels you've mounted", args: []string{"list"}},
+		{name: "setup", desc: "Interactive add-channel wizard (API key or OAuth: codex / claude / gemini)", args: []string{"setup"}},
+		{name: "withdraw", desc: "Transfer pending seller earnings to main balance", args: []string{"withdraw"}},
+	}},
+	{name: "edge", desc: "BYO-GPU supplier agent (docker + ollama)", run: edge.Run, subs: []subcommand{
+		{name: "register", desc: "Register this machine as an edge node (prompts for name)", args: []string{"register"}},
+		{name: "list", desc: "List nodes on the active backend", args: []string{"list"}},
+		{name: "status", desc: "docker compose ps + dashboard view of the active node", args: []string{"status"}},
+		{name: "start", desc: "Detect hardware + docker compose up", args: []string{"start"}},
+		{name: "stop", desc: "docker compose down", args: []string{"stop"}},
+		{name: "logs", desc: "docker compose logs", args: []string{"logs"}},
+		{name: "models", desc: "List / pull / remove ollama models on the active node", args: []string{"models"}},
+		{name: "update", desc: "docker compose pull && up", args: []string{"update"}},
+		{name: "remove", desc: "Remove the active node + delete backend row", args: []string{"remove"}},
+	}},
+	{name: "admin", desc: "Operator commands (admin role required)", adminOnly: true, run: admin.Run, subs: []subcommand{
+		{name: "marketplace status", desc: "Show marketplace.enabled flag", args: []string{"marketplace", "status"}},
+		{name: "marketplace on", desc: "Open the marketplace", args: []string{"marketplace", "on"}},
+		{name: "marketplace off", desc: "Close the marketplace", args: []string{"marketplace", "off"}},
+	}},
+	{name: "proxy", desc: "Local sanitizer proxy (privacy filter for SDK requests)", run: proxy.Run, subs: []subcommand{
+		{name: "start", desc: "Run the sanitizer proxy (asks background vs foreground)", args: []string{"start"}},
+		{name: "stop", desc: "Stop the running proxy (uses PID file)", args: []string{"stop"}},
+		{name: "status", desc: "Show running stats", args: []string{"status"}},
+		{name: "configure", desc: "Interactive detector + custom-pattern setup", args: []string{"configure"}},
+	}},
+	{name: "mcp", desc: "MCP server for AI CLIs (Claude Code / Codex / Gemini)", run: runMCP, subs: []subcommand{
+		{name: "install", desc: "Auto-register everyapi as an MCP server (default: claude)", args: []string{"install"}},
+		{name: "uninstall", desc: "Remove the MCP registration", args: []string{"uninstall"}},
+	}},
+	{name: "update", desc: "Check for a newer release and run the matching upgrade", run: cmd.Update},
+	{name: "version", aliases: []string{"--version", "-v"}, desc: "Print the build version", run: cmd.Version},
 }
 
 // adminUsageBlock is appended to the base usage by renderUsage when
@@ -120,8 +182,134 @@ func lookup(name string) (command, bool) {
 	return command{}, false
 }
 
+// runLauncher is the bare-`everyapi` interactive entry point: shows
+// every visible command in a huh-backed picker, then dispatches the
+// chosen one with no extra args. Each command's own no-arg handler
+// takes over from there (e.g. `use` opens its tool picker, `seller`
+// renders its subcommand help / picker).
+//
+// Hidden from non-admin users:
+//   - rows marked adminOnly
+//   - --version / -v aliases (the canonical "version" row stays)
+//
+// Esc / Ctrl-C from a NESTED picker (a tool picker, group picker,
+// confirm dialog, etc. surfaced by the dispatched command) returns
+// here and re-renders the launcher — that's the "back to parent
+// level" affordance. Esc / Ctrl-C from the launcher itself exits
+// cleanly with status 0.
+func runLauncher() error {
+	creds, _ := config.Load()
+	isAdmin := creds != nil && creds.IsAdmin()
+
+	var visible []command
+	var labels []string
+	maxName := 0
+	for _, c := range commands {
+		if c.adminOnly && !isAdmin {
+			continue
+		}
+		if len(c.name) > maxName {
+			maxName = len(c.name)
+		}
+		visible = append(visible, c)
+	}
+	for _, c := range visible {
+		labels = append(labels, fmt.Sprintf("%-*s  %s", maxName, c.name, c.desc))
+	}
+
+	for {
+		idx, err := cliprompt.Pick("EveryAPI — pick a command:", labels)
+		if err != nil {
+			if errors.Is(err, cliprompt.ErrPickCancelled) {
+				return nil
+			}
+			return err
+		}
+		err = dispatchInteractive(visible[idx], nil)
+		// Three outcomes:
+		//   nil           — command finished cleanly; loop back to
+		//                   the picker so the user can do another
+		//                   thing without re-spawning the CLI.
+		//   ErrPickCancelled / io.EOF
+		//                 — user hit Esc inside a nested prompt or
+		//                   the sub-picker; the implicit "back" goes
+		//                   to this same picker.
+		//   other         — surface to the caller so 'Error: …'
+		//                   prints and the process exits non-zero.
+		if err == nil || errors.Is(err, cliprompt.ErrPickCancelled) || errors.Is(err, io.EOF) {
+			cliout.Println("")
+			continue
+		}
+		return err
+	}
+}
+
+// dispatchInteractive is the single entry point for "run a command
+// the way an interactive user would expect". If the command has a
+// subs menu and the user hasn't already typed a subcommand on the
+// argv, render the sub-picker. Otherwise dispatch verbatim.
+//
+// The sub-picker has the same back-on-cancel UX as the launcher:
+// Esc returns the sentinel ErrPickCancelled so the CALLER's loop
+// (launcher or main) can re-render the parent menu instead of
+// exiting the process.
+//
+// Non-TTY callers (CI / piped) skip the picker — they get the
+// command's original "no subcommand specified" usage text exactly
+// the way it printed before any of this picker code existed.
+func dispatchInteractive(c command, args []string) error {
+	if len(args) > 0 || len(c.subs) == 0 || !cliprompt.IsInteractive() {
+		return c.run(args)
+	}
+	return runSubPicker(c)
+}
+
+// runSubPicker renders a huh-backed Select over c.subs and
+// dispatches the chosen row's args to c.run. Loops on
+// ErrPickCancelled from the dispatched action (so cancelling a
+// nested prompt re-renders the sub-picker), returns
+// ErrPickCancelled itself when the user cancels the sub-picker
+// (so the caller — runLauncher or main — re-renders THE PARENT).
+func runSubPicker(c command) error {
+	maxName := 0
+	for _, s := range c.subs {
+		if len(s.name) > maxName {
+			maxName = len(s.name)
+		}
+	}
+	labels := make([]string, len(c.subs))
+	for i, s := range c.subs {
+		labels[i] = fmt.Sprintf("%-*s  %s", maxName, s.name, s.desc)
+	}
+	prompt := fmt.Sprintf("%s — pick a subcommand:", c.name)
+	for {
+		idx, err := cliprompt.Pick(prompt, labels)
+		if err != nil {
+			return err
+		}
+		err = c.run(c.subs[idx].args)
+		// Loop back to this sub-picker on both success and on a
+		// nested cancel — same "stay in the menu until the user
+		// explicitly Esc's out" UX the launcher has at the top.
+		// Esc from THIS sub-picker (handled above) bubbles up so
+		// the launcher re-renders the parent menu.
+		if err == nil || errors.Is(err, cliprompt.ErrPickCancelled) || errors.Is(err, io.EOF) {
+			cliout.Println("")
+			continue
+		}
+		return err
+	}
+}
+
 func main() {
 	if len(os.Args) < 2 {
+		if cliprompt.IsInteractive() {
+			if err := runLauncher(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+				os.Exit(1)
+			}
+			return
+		}
 		fmt.Print(renderUsage())
 		os.Exit(2)
 	}
@@ -139,10 +327,26 @@ func main() {
 		os.Exit(2)
 	}
 
-	if err := c.run(args); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-		os.Exit(1)
+	err := dispatchInteractive(c, args)
+	if err == nil {
+		return
 	}
+	// User cancelled an interactive prompt (Esc / Ctrl-C) inside
+	// the dispatched command. Don't treat it as an error worth
+	// printing to stderr — fall through to the launcher so the
+	// user can pick a different command without a fresh shell
+	// invocation. Matches the mental model "Esc = up one level"
+	// regardless of how the CLI was entered.
+	if cliprompt.IsInteractive() &&
+		(errors.Is(err, cliprompt.ErrPickCancelled) || errors.Is(err, io.EOF)) {
+		if lerr := runLauncher(); lerr != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", lerr)
+			os.Exit(1)
+		}
+		return
+	}
+	fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+	os.Exit(1)
 }
 
 // runMCP is the `mcp` family dispatcher. Three shapes:

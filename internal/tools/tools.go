@@ -27,6 +27,21 @@ type Tool struct {
 	ExecName    string
 	InstallHint string
 
+	// YoloFlag is the tool-specific "skip every confirmation"
+	// argument the user might want to pass — claude's
+	// --dangerously-skip-permissions, codex's
+	// --dangerously-bypass-approvals-and-sandbox, gemini's --yolo.
+	// 'everyapi use' offers the flag via a TTY confirm prompt
+	// before exec so the user can opt in without having to
+	// remember the exact string. Empty for tools where no such
+	// blanket-bypass flag exists.
+	YoloFlag string
+	// YoloLabel is the human-readable name shown in the prompt:
+	// "Enable <YoloLabel>? [y/N]". Should be short and reflect
+	// what the user gets — "skip permission prompts (claude)" /
+	// "bypass approvals + sandbox (codex)" / "yolo mode (gemini)".
+	YoloLabel string
+
 	// envFn builds the env vars from the resolved API base + access
 	// token. Returns a map[name]value to merge into os.Environ before
 	// exec. Implemented as a function (not a static map) because the
@@ -63,6 +78,8 @@ var Registry = map[string]*Tool{
 		Name:        "claude",
 		ExecName:    "claude",
 		InstallHint: "Install Claude Code: https://docs.claude.com/en/docs/claude-code/setup",
+		YoloFlag:    "--dangerously-skip-permissions",
+		YoloLabel:   "skip all permission prompts (--dangerously-skip-permissions)",
 		envFn: func(apiBase, token string) map[string]string {
 			return map[string]string{
 				"ANTHROPIC_BASE_URL":  joinBase(apiBase, ""),
@@ -78,6 +95,8 @@ var Registry = map[string]*Tool{
 		Name:        "codex",
 		ExecName:    "codex",
 		InstallHint: "Install Codex CLI: https://github.com/openai/codex#installation",
+		YoloFlag:    "--dangerously-bypass-approvals-and-sandbox",
+		YoloLabel:   "bypass approvals + sandbox (--dangerously-bypass-approvals-and-sandbox)",
 		envFn: func(apiBase, token string) map[string]string {
 			return map[string]string{
 				"OPENAI_BASE_URL": joinBase(apiBase, "/v1"),
@@ -94,6 +113,8 @@ var Registry = map[string]*Tool{
 		Name:        "gemini",
 		ExecName:    "gemini",
 		InstallHint: "Install Gemini CLI: https://github.com/google-gemini/gemini-cli#installation",
+		YoloFlag:    "--yolo",
+		YoloLabel:   "yolo mode — auto-approve every tool call (--yolo)",
 		envFn: func(apiBase, token string) map[string]string {
 			return map[string]string{
 				"GEMINI_API_KEY":         token,
