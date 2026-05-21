@@ -17,7 +17,7 @@ import (
 //	everyapi mcp uninstall codex
 //	everyapi mcp uninstall gemini
 func Uninstall(args []string) error {
-	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
+	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
 		fmt.Fprintln(os.Stdout, uninstallUsage)
 		return nil
 	}

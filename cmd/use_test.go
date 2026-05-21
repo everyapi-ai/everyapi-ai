@@ -68,3 +68,37 @@ func TestParseUseArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestWantsUseHelp(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{"empty", nil, false},
+		{"bare tool", []string{"claude"}, false},
+		{"--help alone", []string{"--help"}, true},
+		{"-h alone", []string{"-h"}, true},
+		{"help alone", []string{"help"}, true},
+		{"help after tool is not help", []string{"claude", "help"}, false},
+		{"--help after tool still triggers", []string{"claude", "--help"}, true},
+		{"--help shielded by --", []string{"claude", "--", "--help"}, false},
+		{"-h shielded by --", []string{"claude", "--", "-h"}, false},
+		{"help shielded by --", []string{"claude", "--", "help"}, false},
+		// The bug the helper exists to prevent: a routing group
+		// literally named "help" must not be intercepted.
+		{"--group help (space form)", []string{"claude", "--group", "help"}, false},
+		{"--channel help (space form)", []string{"claude", "--channel", "help"}, false},
+		{"--group=help (eq form)", []string{"claude", "--group=help"}, false},
+		{"--channel help before tool", []string{"--channel", "help", "claude"}, false},
+		// But an actual --help / -h after --group still triggers.
+		{"--group val then --help", []string{"--group", "byteplus", "--help"}, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := wantsUseHelp(c.args); got != c.want {
+				t.Fatalf("wantsUseHelp(%q) = %v, want %v", c.args, got, c.want)
+			}
+		})
+	}
+}

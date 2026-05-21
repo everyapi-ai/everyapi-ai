@@ -28,7 +28,7 @@ import (
 // scope precedence) and that surface changes across versions. The
 // `<client> mcp add` subcommand is the stable API.
 func Install(args []string) error {
-	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
+	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
 		fmt.Fprintln(os.Stdout, installUsage)
 		return nil
 	}

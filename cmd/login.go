@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/mdp/qrterminal/v3"
+	"golang.org/x/term"
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
@@ -71,13 +73,15 @@ func Login(args []string) error {
 		// keeps the QR small enough to fit a normal terminal.
 		qrterminal.GenerateHalfBlock(prefilledURL, qrterminal.L, cliout.Out)
 		cliout.Println("")
-		cliout.Println("Or visit this URL manually:")
+		cliout.Println("Or visit this URL manually (code is baked into the link):")
 	} else {
-		cliout.Println("To authorize this device, visit:")
+		cliout.Println("To authorize this device, visit (code is baked into the link):")
 	}
-	cliout.Printf("\n    %s\n\n", start.VerificationURI)
-	cliout.Println("And enter the code:")
-	cliout.Printf("\n    %s\n\n", start.UserCode)
+	cliout.Printf("\n    %s\n\n", prefilledURL)
+	// Surface the bare user_code too in case the dashboard fails to
+	// pre-fill (older /cli/auth deploys, query-stripping middlebox,
+	// user pasted the URL into a tool that drops query strings).
+	cliout.Printf("If the page doesn't pre-fill, enter the code: %s\n\n", start.UserCode)
 
 	if !*noBrowser {
 		if err := cliprompt.OpenBrowser(prefilledURL); err == nil {
@@ -90,10 +94,39 @@ func Login(args []string) error {
 			fmt.Fprintln(os.Stderr, "Couldn't open the browser automatically — scan the QR or copy the URL above.")
 		}
 	}
-	cliout.Println("")
-	cliout.Println("Waiting for authorization... (Ctrl+C to cancel)")
 
-	res, err := client.PollUntilDone(ctx, start.DeviceCode, start.Interval)
+	// Probe stdin once so we pick the right hint copy AND only bother
+	// starting the raw-mode watcher when keystrokes are reachable.
+	fd := int(os.Stdin.Fd())
+	ttyIn := term.IsTerminal(fd)
+
+	cliout.Println("")
+	if ttyIn {
+		cliout.Println("Waiting for authorization... (Ctrl+C to cancel, press 'c' to copy URL)")
+	} else {
+		cliout.Println("Waiting for authorization... (Ctrl+C to cancel)")
+	}
+
+	// Wrap ctx in WithCancel so the raw-mode reader (which swallows
+	// SIGINT — see startLoginKeyWatcher) can still propagate Ctrl+C
+	// as a context cancellation. Outside raw mode the existing
+	// SignalCtx already cancels ctx on SIGINT, so this is a no-op
+	// passthrough then.
+	pctx, cancelPoll := context.WithCancel(ctx)
+	defer cancelPoll()
+
+	stopWatcher := func() {}
+	if ttyIn {
+		stopWatcher = startLoginKeyWatcher(fd, prefilledURL, cancelPoll)
+	}
+	defer stopWatcher()
+
+	res, err := client.PollUntilDone(pctx, start.DeviceCode, start.Interval)
+	// Restore terminal BEFORE further printing — the success / error
+	// branches below use plain "\n", which renders as a column-zero
+	// newline only in cooked mode. stopWatcher is idempotent so the
+	// deferred call is harmless.
+	stopWatcher()
 	if err != nil {
 		switch err {
 		case api.ErrDeviceAuthExpired:
@@ -161,4 +194,62 @@ func Login(args []string) error {
 
 	cliout.Println("Next: try 'everyapi status' or 'everyapi use claude'.")
 	return nil
+}
+
+// startLoginKeyWatcher puts stdin into raw mode for the duration of
+// the device-auth poll and watches for single keystrokes:
+//
+//	c / C   — copy the prefilled verification URL to the clipboard
+//	^C / ^D — cancel the poll (raw mode swallows SIGINT, so we have
+//	          to propagate cancellation through ctx ourselves)
+//
+// Returns an idempotent stop func that restores the terminal. Caller
+// must invoke it before any subsequent printing — in raw mode "\n"
+// alone leaves the cursor mid-line and the success message would
+// look like staircase output otherwise.
+//
+// Robustness notes: when MakeRaw fails (rare — non-tty fd, locked-
+// down container) we return a no-op so the rest of login still works;
+// the URL is already on screen for manual copy. The reader goroutine
+// outlives stop() in the edge case where it's still blocked on
+// os.Stdin.Read — acceptable because login is a short-lived CLI
+// command and the OS reaps the goroutine on process exit; the
+// `stopped` flag stops it from acting on any keystroke that sneaks
+// in between Restore and process exit.
+func startLoginKeyWatcher(fd int, url string, cancelPoll context.CancelFunc) func() {
+	oldState, err := term.MakeRaw(fd)
+	if err != nil {
+		return func() {}
+	}
+
+	var stopped atomic.Bool
+	stop := func() {
+		if stopped.CompareAndSwap(false, true) {
+			_ = term.Restore(fd, oldState)
+		}
+	}
+
+	go func() {
+		buf := make([]byte, 1)
+		for {
+			n, rerr := os.Stdin.Read(buf)
+			if rerr != nil || n == 0 || stopped.Load() {
+				return
+			}
+			switch buf[0] {
+			case 'c', 'C':
+				// Raw mode means a bare "\n" stays in the same column.
+				// Use "\r\n" so the message lines up at column zero.
+				if cerr := cliprompt.CopyToClipboard(url); cerr == nil {
+					fmt.Fprint(cliout.Out, "\r\nURL copied to clipboard.\r\n")
+				} else {
+					fmt.Fprintf(cliout.Out, "\r\nCouldn't copy: %v\r\n", cerr)
+				}
+			case 0x03, 0x04: // ^C, ^D
+				cancelPoll()
+				return
+			}
+		}
+	}()
+	return stop
 }

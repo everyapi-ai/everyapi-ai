@@ -20,6 +20,37 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/internal/tools"
 )
 
+// useUsage is split so the prose can embed literal backticks (e.g.
+// "`-- <flag>`") without colliding with the raw-string delimiter.
+const useUsage = `everyapi use — launch a third-party CLI routed through EveryAPI
+
+USAGE
+  everyapi use [<tool>] [--group <name> | --channel <name>] [--direct] [-- tool args...]
+
+ARGUMENTS
+  <tool>                 claude | codex | gemini
+                         Omit to open an interactive picker over installed tools.
+
+FLAGS
+  --group <name>         Relay via the key bound to that routing group.
+  --channel <name>       Alias of --group.
+  (bare --group/--channel, no value) → interactive picker over your
+                         enabled keys' routing groups.
+  --direct               Bypass the local sanitizer proxy (no privacy filter).
+  --                     End of everyapi's option parsing; remaining args are
+                         forwarded verbatim to the tool's argv.
+
+Yolo: when launched on a TTY without a pre-passed dangerous flag,
+everyapi asks once whether to enable the tool's "skip every safety
+prompt" mode (default Yes). Pre-pass the flag with ` + "`-- <flag>`" + ` or
+answer "n" to keep the tool's native prompts intact.
+
+EXAMPLES
+  everyapi use claude
+  everyapi use codex --channel byteplus
+  everyapi use claude -- --model opus
+`
+
 // Use is the buyer onboarding bridge: verify credentials, configure
 // the tool's env vars to point at EveryAPI, exec into the tool.
 //
@@ -52,6 +83,11 @@ import (
 // forwarded raw to the tool — use it for tool flags like claude's
 // `--dangerously-skip-permissions` or codex's `--dangerously-bypass-*`.
 func Use(args []string) error {
+	if wantsUseHelp(args) {
+		cliout.Println(useUsage)
+		return nil
+	}
+
 	toolName, group, pickGroup, direct, extraArgs, err := parseUseArgs(args)
 	if err != nil {
 		return err
@@ -152,13 +188,15 @@ func Use(args []string) error {
 	// every confirmation" flag (Tool.YoloFlag); if the user
 	// hasn't already passed it via `-- <flags>`, offer it through
 	// a TTY confirm so they don't have to remember the exact
-	// string. Default is No — opt-in for an obvious reason
-	// (sandbox bypass, every permission auto-approved).
+	// string. Default is YES — `everyapi use` is meant to be the
+	// "just run the agent" shortcut, so the press-Enter happy path
+	// keeps you out of the per-tool permission loop. Pick "no"
+	// once if you want the prompts back.
 	if t.YoloFlag != "" && !containsFlag(extraArgs, t.YoloFlag) && cliprompt.IsInteractive() {
 		enable, perr := cliprompt.YesNo(
 			bufio.NewReader(os.Stdin),
 			fmt.Sprintf("Enable %s? (skips every safety prompt)", t.YoloLabel),
-			false,
+			true,
 		)
 		if perr != nil {
 			// Esc / Ctrl-C in the prompt → propagate the cancel
@@ -197,6 +235,41 @@ func containsFlag(args []string, flag string) bool {
 	for _, a := range args {
 		if a == flag || strings.HasPrefix(a, flag+"=") {
 			return true
+		}
+	}
+	return false
+}
+
+// wantsUseHelp reports whether argv asks for `everyapi use` help.
+//
+// Stops at `--` so `everyapi use claude -- --help` still forwards
+// --help to the underlying tool. Skips the value token after a
+// space-form --group/--channel so a routing group literally named
+// "help" isn't hijacked as a usage request. Bare `help` only counts
+// as a help command before the tool positional appears — after that
+// it's just a stray arg and `parseUseArgs` will surface the real
+// "two positionals" error.
+func wantsUseHelp(args []string) bool {
+	toolSeen := false
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			return false
+		}
+		if a == "--help" || a == "-h" {
+			return true
+		}
+		if a == "--group" || a == "-group" || a == "--channel" || a == "-channel" {
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				i++
+			}
+			continue
+		}
+		if a == "help" && !toolSeen {
+			return true
+		}
+		if !strings.HasPrefix(a, "-") {
+			toolSeen = true
 		}
 	}
 	return false

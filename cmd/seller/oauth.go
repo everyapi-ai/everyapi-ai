@@ -57,11 +57,14 @@ func sellerExchangeCtx(parent context.Context) (context.Context, context.CancelF
 //     server-side, so the CLI just reports the resulting channel id
 func sellerAddOAuth(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: everyapi seller add-oauth <provider> [flags]\nproviders: codex (claude/gemini coming in a follow-up)")
+		return errors.New("usage: everyapi seller add-oauth <provider> [flags]\nproviders: codex, claude, gemini")
 	}
 	provider := strings.ToLower(args[0])
 	rest := args[1:]
 	switch provider {
+	case "help", "--help", "-h":
+		cliout.Println(sellerAddOAuthUsage)
+		return nil
 	case "codex":
 		return sellerAddOAuthCodex(rest)
 	case "claude":
@@ -74,6 +77,24 @@ func sellerAddOAuth(args []string) error {
 		return fmt.Errorf("unknown provider %q — supported: codex, claude, gemini", provider)
 	}
 }
+
+const sellerAddOAuthUsage = `everyapi seller add-oauth — mount a channel via a provider's OAuth flow
+
+USAGE
+  everyapi seller add-oauth <provider> [flags]
+
+PROVIDERS
+  codex     Codex / ChatGPT subscription (RFC 8628 device flow)
+  claude    Anthropic Claude (browser-callback OAuth)
+  gemini    Google Gemini (browser-callback OAuth)
+
+COMMON FLAGS
+  --name <n>      Channel display name (required)
+  --models <m>    Comma-separated model list this channel will serve (required)
+  --no-browser    Skip auto-opening the verification URL
+
+Run 'everyapi seller add-oauth <provider> --help' for provider-specific flags.
+`
 
 func sellerAddOAuthCodex(args []string) error {
 	fs := flag.NewFlagSet("seller add-oauth codex", flag.ContinueOnError)

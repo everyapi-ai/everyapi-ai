@@ -8,6 +8,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -70,6 +71,15 @@ type command struct {
 	// usefully exercise; the backend still 403s if a non-admin
 	// invokes the command anyway, so this is cosmetic.
 	adminOnly bool
+	// requireLogin hides the row from the launcher when no
+	// credentials are cached. Pure UX: typing the command at the
+	// shell still works (and errors with "not logged in"), but the
+	// menu shouldn't advertise actions that immediately fail.
+	requireLogin bool
+	// hideLoggedIn is the inverse — hides the row once credentials
+	// exist. Used for the `login` row so the launcher shows EITHER
+	// login OR logout, not both at once.
+	hideLoggedIn bool
 	// subs is the subcommand menu rendered when this command is
 	// picked from the launcher (or invoked bare on a TTY without
 	// arguments). Each entry's args slice is passed verbatim to
@@ -98,17 +108,17 @@ type subcommand struct {
 // matches the documented order — keeps the "which command runs when
 // two names conflict" question impossible.
 var commands = []command{
-	{name: "login", desc: "Authenticate this device with EveryAPI", run: cmd.Login},
-	{name: "logout", desc: "Remove this device's credentials", run: cmd.Logout},
-	{name: "status", desc: "Show current quota, usage, and balance", run: cmd.Status},
-	{name: "topup", desc: "Open the wallet top-up page (anti-phishing verification phrase)", run: cmd.Topup},
-	{name: "use", desc: "Launch a third-party CLI (claude / codex / gemini) via EveryAPI", run: cmd.Use},
-	{name: "seller", desc: "Channel-marketplace seller commands", run: seller.Run, subs: []subcommand{
+	{name: "login", desc: "Authenticate this device with EveryAPI", hideLoggedIn: true, run: cmd.Login},
+	{name: "logout", desc: "Remove this device's credentials", requireLogin: true, run: cmd.Logout},
+	{name: "status", desc: "Show current quota, usage, and balance", requireLogin: true, run: cmd.Status},
+	{name: "topup", desc: "Open the wallet top-up page (anti-phishing verification phrase)", requireLogin: true, run: cmd.Topup},
+	{name: "use", desc: "Launch a third-party CLI (claude / codex / gemini) via EveryAPI", requireLogin: true, run: cmd.Use},
+	{name: "seller", desc: "Channel-marketplace seller commands", requireLogin: true, run: seller.Run, subs: []subcommand{
 		{name: "list", desc: "List the channels you've mounted", args: []string{"list"}},
 		{name: "setup", desc: "Interactive add-channel wizard (API key or OAuth: codex / claude / gemini)", args: []string{"setup"}},
 		{name: "withdraw", desc: "Transfer pending seller earnings to main balance", args: []string{"withdraw"}},
 	}},
-	{name: "edge", desc: "BYO-GPU supplier agent (docker + ollama)", run: edge.Run, subs: []subcommand{
+	{name: "edge", desc: "BYO-GPU supplier agent (docker + ollama)", requireLogin: true, run: edge.Run, subs: []subcommand{
 		{name: "register", desc: "Register this machine as an edge node (prompts for name)", args: []string{"register"}},
 		{name: "list", desc: "List nodes on the active backend", args: []string{"list"}},
 		{name: "status", desc: "docker compose ps + dashboard view of the active node", args: []string{"status"}},
@@ -119,7 +129,7 @@ var commands = []command{
 		{name: "update", desc: "docker compose pull && up", args: []string{"update"}},
 		{name: "remove", desc: "Remove the active node + delete backend row", args: []string{"remove"}},
 	}},
-	{name: "admin", desc: "Operator commands (admin role required)", adminOnly: true, run: admin.Run, subs: []subcommand{
+	{name: "admin", desc: "Operator commands (admin role required)", adminOnly: true, requireLogin: true, run: admin.Run, subs: []subcommand{
 		{name: "marketplace status", desc: "Show marketplace.enabled flag", args: []string{"marketplace", "status"}},
 		{name: "marketplace on", desc: "Open the marketplace", args: []string{"marketplace", "on"}},
 		{name: "marketplace off", desc: "Close the marketplace", args: []string{"marketplace", "off"}},
@@ -199,13 +209,20 @@ func lookup(name string) (command, bool) {
 // cleanly with status 0.
 func runLauncher() error {
 	creds, _ := config.Load()
-	isAdmin := creds != nil && creds.IsAdmin()
+	loggedIn := creds != nil
+	isAdmin := loggedIn && creds.IsAdmin()
 
 	var visible []command
 	var labels []string
 	maxName := 0
 	for _, c := range commands {
 		if c.adminOnly && !isAdmin {
+			continue
+		}
+		if c.requireLogin && !loggedIn {
+			continue
+		}
+		if c.hideLoggedIn && loggedIn {
 			continue
 		}
 		if len(c.name) > maxName {
@@ -336,6 +353,15 @@ func main() {
 
 	err := dispatchInteractive(c, args)
 	if err == nil {
+		return
+	}
+	// flag.ErrHelp bubbles up when any flag.FlagSet down the call
+	// tree sees --help / -h. The FlagSet has already printed its
+	// usage to stderr; exit cleanly rather than dress "flag: help
+	// requested" up as an Error: line. Makes
+	// `everyapi <cmd> [<sub>...] --help` reach the user as help
+	// text instead of as a noisy failure at every level.
+	if errors.Is(err, flag.ErrHelp) {
 		return
 	}
 	// User cancelled an interactive prompt (Esc / Ctrl-C) inside
