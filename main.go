@@ -17,7 +17,9 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/cmd"
 	"github.com/everyapi-ai/everyapi-ai/cmd/admin"
 	"github.com/everyapi-ai/everyapi-ai/cmd/checkin"
+	"github.com/everyapi-ai/everyapi-ai/cmd/doctor"
 	"github.com/everyapi-ai/everyapi-ai/cmd/edge"
+	"github.com/everyapi-ai/everyapi-ai/cmd/events"
 	logcmd "github.com/everyapi-ai/everyapi-ai/cmd/log"
 	mcpcmd "github.com/everyapi-ai/everyapi-ai/cmd/mcp"
 	"github.com/everyapi-ai/everyapi-ai/cmd/models"
@@ -54,6 +56,8 @@ __ADMIN_BLOCK__
   edge <sub>      BYO-GPU supplier agent (docker + ollama)
   proxy <sub>     Local sanitizer proxy (privacy filter for SDK requests)
   mcp [sub]       MCP server for AI CLIs (Claude Code / Codex / Gemini)
+  doctor          Self-check (creds, gateway, sanitizer, tools)
+  events          Subscribe to the live event stream (SSE)
   update          Check for a newer release and run the matching upgrade
   version         Print the build version
   help            Show this message
@@ -180,6 +184,8 @@ var commands = []command{
 		{name: "install", desc: "Auto-register everyapi as an MCP server (default: claude)", args: []string{"install"}},
 		{name: "uninstall", desc: "Remove the MCP registration", args: []string{"uninstall"}},
 	}},
+	{name: "doctor", desc: "Self-check (creds, gateway, sanitizer, tools)", run: doctor.Run},
+	{name: "events", desc: "Subscribe to the live event stream (SSE)", requireLogin: true, run: events.Run},
 	{name: "update", desc: "Check for a newer release and run the matching upgrade", run: cmd.Update},
 	{name: "version", aliases: []string{"--version", "-v"}, desc: "Print the build version", run: cmd.Version},
 }
