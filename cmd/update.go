@@ -65,10 +65,16 @@ func Update(args []string) error {
 	ctx, cancel := context.WithTimeout(cliout.WithCtx(), 10*time.Second)
 	defer cancel()
 
-	latest, err := fetchLatestVersion(ctx)
+	// fetchLatestRelease also pulls the body so the outdated
+	// branch below can render the changelog before handing off
+	// to brew / go install. --check and dev-build paths only
+	// look at .Tag — the extra body payload is the cost of not
+	// branching on which fields the caller needs.
+	rel, err := fetchLatestRelease(ctx)
 	if err != nil {
 		return fmt.Errorf("check latest version: %w", err)
 	}
+	latest := rel.Tag
 
 	ver, commit := version.Resolve()
 
@@ -117,6 +123,7 @@ func Update(args []string) error {
 	// cmp < 0: outdated. Pick a method based on where the binary lives.
 	method := detectInstallMethod()
 	cliout.Printf("\nUpdate available: %s → %s\n", ver, latest)
+	renderChangelog(rel)
 	cliout.Printf("Install method:   %s\n\n", method)
 
 	switch method {
@@ -288,10 +295,25 @@ const latestReleasePollURL = "https://api.github.com/repos/everyapi-ai/everyapi-
 // than the raw `tag_name field empty` error.
 var errNoReleaseYet = errors.New("no public release tagged yet")
 
-func fetchLatestVersion(ctx context.Context) (string, error) {
+// latestRelease is the subset of GitHub's release payload we surface
+// in the update flow. Body is the auto-generated changelog goreleaser
+// produced; HTMLURL points at the release page so a user who wants
+// more context (compare link, assets) can open it.
+type latestRelease struct {
+	Tag     string
+	Body    string
+	HTMLURL string
+}
+
+// fetchLatestRelease pulls /releases/latest from the mirror and
+// returns the tag plus the body. Used by Update() to render the
+// changelog BEFORE handing off to brew / go install, so the user
+// gets the "what's new in this upgrade" preview the dashboard
+// release page would normally give them.
+func fetchLatestRelease(ctx context.Context) (*latestRelease, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", latestReleasePollURL, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	// User-Agent is recommended by the GitHub API even for
@@ -302,26 +324,61 @@ func fetchLatestVersion(ctx context.Context) (string, error) {
 	hc := &http.Client{Timeout: 10 * time.Second}
 	resp, err := hc.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
-		return "", errNoReleaseYet
+		return nil, errNoReleaseYet
 	}
 	if resp.StatusCode/100 != 2 {
-		return "", fmt.Errorf("github releases API returned %d", resp.StatusCode)
+		return nil, fmt.Errorf("github releases API returned %d", resp.StatusCode)
 	}
 	var payload struct {
 		TagName string `json:"tag_name"`
+		Body    string `json:"body"`
+		HTMLURL string `json:"html_url"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return "", err
+		return nil, err
 	}
 	tag := strings.TrimSpace(payload.TagName)
 	if tag == "" {
-		return "", errNoReleaseYet
+		return nil, errNoReleaseYet
 	}
-	return tag, nil
+	return &latestRelease{Tag: tag, Body: payload.Body, HTMLURL: payload.HTMLURL}, nil
+}
+
+// renderChangelog prints the release body (goreleaser's auto-
+// generated changelog) between "Update available:" and "Install
+// method:" so the user gets a preview of what they're upgrading
+// to without having to open GitHub. The body is GitHub-flavoured
+// markdown; we print it raw because the bulleted headings and
+// `(#PR)` links are already terminal-readable, and a real
+// markdown renderer would pull in a dep just for cosmetics.
+//
+// Empty body — typical for backfilled releases or releases cut
+// before goreleaser's changelog block was tightened up — we just
+// print the release URL so the user can read the diff manually
+// instead of staring at an empty paragraph.
+func renderChangelog(rel *latestRelease) {
+	cliout.Println("")
+	cliout.Println("─── What's new ───")
+	body := strings.TrimSpace(rel.Body)
+	if body == "" {
+		cliout.Println("(no release notes attached)")
+	} else {
+		// Indent each line so the changelog block is visually
+		// distinct from the "Update available:" and "Install
+		// method:" lines that bracket it.
+		for _, line := range strings.Split(body, "\n") {
+			cliout.Printf("  %s\n", line)
+		}
+	}
+	if rel.HTMLURL != "" {
+		cliout.Printf("\nFull release: %s\n", rel.HTMLURL)
+	}
+	cliout.Println("──────────────────")
+	cliout.Println("")
 }
 
 // ---- semver compare ------------------------------------------------
