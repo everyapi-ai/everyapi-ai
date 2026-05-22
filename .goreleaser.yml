@@ -93,6 +93,12 @@ snapshot:
 # by conventional-commit prefix and drop the housekeeping ones so the
 # GitHub Release body reads like a user-facing summary.
 changelog:
+  # `abbrev: -1` strips the commit SHA prefix that goreleaser's
+  # default `git` use mode prepends to every line. The squash-merge
+  # subjects already carry the `(#PR)` suffix that GitHub auto-links
+  # in the rendered release body, so the hash adds noise without
+  # adding info anyone clicks on.
+  abbrev: -1
   filters:
     exclude:
       - "^chore:"
@@ -138,6 +144,22 @@ release:
     name: everyapi-ai
   name_template: "{{ .Tag }}"
   mode: append
+  # Compare link + install one-liner under the auto-generated
+  # changelog. `{{ .PreviousTag }}` is goreleaser-builtin (the v*
+  # tag immediately before .Tag in chronological order). Render as
+  # plain markdown so it picks up GitHub's auto-link rendering.
+  footer: |
+
+    ---
+
+    **Full diff:** https://github.com/everyapi-ai/everyapi-ai/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    **Install / upgrade:**
+    ```
+    brew upgrade everyapi              # macOS / Linux (Homebrew)
+    go install github.com/everyapi-ai/everyapi-ai@{{ .Tag }}   # Go users
+    everyapi update                    # already installed
+    ```
 
 brews:
   - name: everyapi
