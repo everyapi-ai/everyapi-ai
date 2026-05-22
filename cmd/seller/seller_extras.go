@@ -13,6 +13,7 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 // --- seller update -----------------------------------------------
@@ -26,11 +27,11 @@ import (
 // limit; both surface verbatim.
 func sellerUpdate(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: everyapi seller update <id> [--name N] [--models M] [--status 1|2] [--remark R] [--test-model M]")
+		return errors.New(i18n.T("seller.usage_update"))
 	}
 	id, err := strconv.Atoi(args[0])
 	if err != nil || id <= 0 {
-		return fmt.Errorf("invalid channel id %q", args[0])
+		return fmt.Errorf(i18n.T("seller.invalid_channel_id"), args[0])
 	}
 	fs := flag.NewFlagSet("seller update", flag.ContinueOnError)
 	name := fs.String("name", "", "channel display name")
@@ -45,7 +46,7 @@ func sellerUpdate(args []string) error {
 	seen := map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { seen[f.Name] = true })
 	if len(seen) == 0 {
-		return errors.New("nothing to update: pass at least one flag")
+		return errors.New(i18n.T("seller.update_no_flags"))
 	}
 	client, _, err := sellerClient()
 	if err != nil {
@@ -63,7 +64,7 @@ func sellerUpdate(args []string) error {
 		}
 	}
 	if cur == nil {
-		return fmt.Errorf("channel #%d not found among your %d mounted channel(s)", id, len(all))
+		return fmt.Errorf(i18n.T("seller.channel_not_found"), id)
 	}
 	req := api.SellerChannelUpdate{
 		Name:         cur.Name,
@@ -85,7 +86,7 @@ func sellerUpdate(args []string) error {
 	if err := client.UpdateSellerChannel(cliout.WithCtx(), id, req); err != nil {
 		return classifySellerErr(err)
 	}
-	cliout.Printf("Channel #%d updated.\n", id)
+	cliout.Printf(i18n.T("seller.channel_updated")+"\n", id)
 	return nil
 }
 
@@ -93,11 +94,11 @@ func sellerUpdate(args []string) error {
 
 func sellerRemove(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: everyapi seller remove <id> [-y]")
+		return errors.New(i18n.T("seller.usage_remove"))
 	}
 	id, err := strconv.Atoi(args[0])
 	if err != nil || id <= 0 {
-		return fmt.Errorf("invalid channel id %q", args[0])
+		return fmt.Errorf(i18n.T("seller.invalid_channel_id"), args[0])
 	}
 	fs := flag.NewFlagSet("seller remove", flag.ContinueOnError)
 	yes := fs.Bool("y", false, "skip confirmation")
@@ -120,21 +121,21 @@ func sellerRemove(args []string) error {
 		}
 		ok, err := cliprompt.YesNo(
 			bufio.NewReader(os.Stdin),
-			fmt.Sprintf("Delete seller channel #%d %q? Buyers routing here will start failing immediately.", id, name),
+			fmt.Sprintf(i18n.T("seller.remove_confirm"), id, name),
 			false,
 		)
 		if err != nil {
 			return err
 		}
 		if !ok {
-			cliout.Println("Canceled.")
+			cliout.Println(i18n.T("common.canceled"))
 			return nil
 		}
 	}
 	if err := client.DeleteSellerChannel(cliout.WithCtx(), id); err != nil {
 		return classifySellerErr(err)
 	}
-	cliout.Printf("Channel #%d removed.\n", id)
+	cliout.Printf(i18n.T("seller.channel_removed")+"\n", id)
 	return nil
 }
 
@@ -142,11 +143,11 @@ func sellerRemove(args []string) error {
 
 func sellerRefresh(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: everyapi seller refresh <id>")
+		return errors.New(i18n.T("seller.usage_refresh"))
 	}
 	id, err := strconv.Atoi(args[0])
 	if err != nil || id <= 0 {
-		return fmt.Errorf("invalid channel id %q", args[0])
+		return fmt.Errorf(i18n.T("seller.invalid_channel_id"), args[0])
 	}
 	fs := flag.NewFlagSet("seller refresh", flag.ContinueOnError)
 	kindFlag := fs.String("kind", "", "OAuth kind: codex / claude / gemini (auto-detect by default)")
@@ -177,26 +178,26 @@ func sellerRefresh(args []string) error {
 			}
 		}
 		if !found {
-			return fmt.Errorf("channel #%d not found among your channels", id)
+			return fmt.Errorf(i18n.T("seller.channel_not_found"), id)
 		}
 		kind = oauthKindForChannelType(t)
 		if kind == "" {
-			return fmt.Errorf("channel #%d (type=%s) is not an OAuth channel — refresh only applies to codex / claude / gemini", id, channelTypeLabel(t))
+			return fmt.Errorf(i18n.T("seller.oauth_only_refresh"), id, channelTypeLabel(t))
 		}
 	}
 	res, err := client.RefreshChannelCredential(cliout.WithCtx(), id, kind)
 	if err != nil {
 		return classifySellerErr(err)
 	}
-	cliout.Printf("Channel #%d (%s) credential refreshed.\n", res.ChannelID, res.ChannelType)
+	cliout.Printf(i18n.T("seller.refresh_done")+"\n", res.ChannelID, res.ChannelType)
 	if res.Email != "" {
-		cliout.Printf("  account: %s\n", res.Email)
+		cliout.Printf(i18n.T("seller.refresh_account_label")+"\n", res.Email)
 	}
 	if res.ExpiresAt > 0 {
-		cliout.Printf("  expires: %s\n", time.Unix(res.ExpiresAt, 0).Format("2006-01-02 15:04:05"))
+		cliout.Printf(i18n.T("seller.refresh_expires_label")+"\n", time.Unix(res.ExpiresAt, 0).Format("2006-01-02 15:04:05"))
 	}
 	if res.LastRefresh > 0 {
-		cliout.Printf("  last refresh: %s\n", time.Unix(res.LastRefresh, 0).Format("2006-01-02 15:04:05"))
+		cliout.Printf(i18n.T("seller.refresh_last_refresh_label")+"\n", time.Unix(res.LastRefresh, 0).Format("2006-01-02 15:04:05"))
 	}
 	return nil
 }
@@ -239,10 +240,10 @@ func sellerSales(args []string) error {
 		return classifySellerErr(err)
 	}
 	if len(rows) == 0 {
-		cliout.Println("No sales yet — buyers route here only after a channel is enabled and discoverable.")
+		cliout.Println(i18n.T("seller.no_sales"))
 		return nil
 	}
-	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)
+	cliout.Printf(i18n.T("common.rows_of_total")+"\n", len(rows), total)
 	totalCharge, totalTake := 0, 0
 	for _, r := range rows {
 		when := time.Unix(r.CreatedAt, 0).Format("2006-01-02 15:04:05")
@@ -251,7 +252,7 @@ func sellerSales(args []string) error {
 		totalCharge += r.BuyerCharge
 		totalTake += r.SellerTake
 	}
-	cliout.Printf("  page total: charge=%d  take=%d\n", totalCharge, totalTake)
+	cliout.Printf(i18n.T("seller.sales_page_total")+"\n", totalCharge, totalTake)
 	return nil
 }
 
@@ -278,17 +279,17 @@ func sellerEligibility(args []string) error {
 		return classifySellerErr(err)
 	}
 	if elig.Eligible {
-		cliout.Println("✓ Eligible to mount channels.")
+		cliout.Println(i18n.T("seller.eligible_yes"))
 	} else {
-		cliout.Println("✗ Not yet eligible.")
+		cliout.Println(i18n.T("seller.eligible_no"))
 	}
-	cliout.Println("Gates:")
-	cliout.Printf("  marketplace_enabled : %v\n", elig.MarketplaceEnabled)
-	cliout.Printf("  account_active      : %v\n", elig.AccountActive)
-	cliout.Printf("  email_verified      : %v\n", elig.EmailVerified)
-	cliout.Printf("  account_age_ok      : %v (min %d days)\n", elig.AccountAgeOK, elig.MinAgeDays)
-	cliout.Printf("  has_consume_log     : %v\n", elig.HasConsumeLog)
-	cliout.Printf("  under_cap           : %v (%d / %d mounted)\n", elig.UnderCap, elig.ChannelCount, elig.ChannelCap)
+	cliout.Println(i18n.T("seller.gates_header"))
+	cliout.Printf(i18n.T("seller.gate_marketplace_enabled")+"\n", elig.MarketplaceEnabled)
+	cliout.Printf(i18n.T("seller.gate_account_active")+"\n", elig.AccountActive)
+	cliout.Printf(i18n.T("seller.gate_email_verified")+"\n", elig.EmailVerified)
+	cliout.Printf(i18n.T("seller.gate_account_age_ok")+"\n", elig.AccountAgeOK, elig.MinAgeDays)
+	cliout.Printf(i18n.T("seller.gate_has_consume_log")+"\n", elig.HasConsumeLog)
+	cliout.Printf(i18n.T("seller.gate_under_cap")+"\n", elig.UnderCap, elig.ChannelCount, elig.ChannelCap)
 	return nil
 }
 
@@ -296,7 +297,7 @@ func sellerEligibility(args []string) error {
 
 func sellerCompensation(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: everyapi seller compensation {submit|list} [flags]")
+		return errors.New(i18n.T("seller.usage_compensation"))
 	}
 	switch args[0] {
 	case "submit":
@@ -304,10 +305,10 @@ func sellerCompensation(args []string) error {
 	case "list":
 		return sellerCompensationList(args[1:])
 	case "help", "--help", "-h":
-		cliout.Println("everyapi seller compensation {submit|list} — file / view compensation claims")
+		cliout.Println(i18n.T("seller.usage_compensation_help"))
 		return nil
 	default:
-		return fmt.Errorf("unknown compensation subcommand %q", args[0])
+		return fmt.Errorf(i18n.T("seller.unknown_compensation_sub"), args[0])
 	}
 }
 
@@ -320,10 +321,10 @@ func sellerCompensationSubmit(args []string) error {
 		return err
 	}
 	if strings.TrimSpace(*upstream) == "" {
-		return errors.New("--upstream is required")
+		return errors.New(i18n.T("seller.compensation_upstream_required"))
 	}
 	if strings.TrimSpace(*desc) == "" {
-		return errors.New("--description is required")
+		return errors.New(i18n.T("seller.compensation_description_required"))
 	}
 	client, _, err := sellerClient()
 	if err != nil {
@@ -337,8 +338,8 @@ func sellerCompensationSubmit(args []string) error {
 	if err != nil {
 		return classifySellerErr(err)
 	}
-	cliout.Printf("Claim filed (id=%d, status=%s, suggested cap=%d).\n", row.ID, row.Status, row.SuggestedCap)
-	cliout.Println("An admin will review; check 'everyapi seller compensation list' for updates.")
+	cliout.Printf(i18n.T("seller.compensation_filed")+"\n", row.ID, row.Status, row.SuggestedCap)
+	cliout.Println(i18n.T("seller.compensation_admin_review"))
 	return nil
 }
 
@@ -359,10 +360,10 @@ func sellerCompensationList(args []string) error {
 		return classifySellerErr(err)
 	}
 	if len(items) == 0 {
-		cliout.Println("No claims found.")
+		cliout.Println(i18n.T("seller.compensation_no_claims"))
 		return nil
 	}
-	cliout.Printf("%d claim(s) of %d total:\n", len(items), total)
+	cliout.Printf(i18n.T("seller.claims_total")+"\n", len(items), total)
 	for _, c := range items {
 		filed := time.Unix(c.FiledAt, 0).Format("2006-01-02")
 		cliout.Printf("  [#%d] %s  upstream=%s  status=%s  cap=%d  approved=%d\n",

@@ -19,17 +19,17 @@
 package admin
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
 		cliout.Println(adminUsage)
 		if len(args) == 0 {
-			return errors.New("missing subcommand (try 'everyapi admin help')")
+			return fmt.Errorf(i18n.T("common.missing_subcommand"), "everyapi admin")
 		}
 		return nil
 	}
@@ -50,7 +50,7 @@ func Run(args []string) error {
 		return adminAudit(rest)
 	default:
 		cliout.Printf("%s\n", adminUsage)
-		return fmt.Errorf("unknown 'admin' subcommand %q", sub)
+		return fmt.Errorf(i18n.T("common.unknown_subcommand"), "admin", sub)
 	}
 }
 

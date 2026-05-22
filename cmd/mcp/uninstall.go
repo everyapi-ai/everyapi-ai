@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 // Uninstall is the inverse of Install: it removes the "everyapi" MCP
@@ -18,7 +20,7 @@ import (
 //	everyapi mcp uninstall gemini
 func Uninstall(args []string) error {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
-		fmt.Fprintln(os.Stdout, uninstallUsage)
+		fmt.Fprint(os.Stdout, i18n.T("mcp.uninstall_usage"))
 		return nil
 	}
 
@@ -47,18 +49,3 @@ func Uninstall(args []string) error {
 	return nil
 }
 
-const uninstallUsage = `everyapi mcp uninstall — unregister everyapi from an AI CLI
-
-USAGE
-  everyapi mcp uninstall [client]
-
-ARGUMENTS
-  client    One of: claude, codex, gemini. Defaults to claude.
-
-Runs ` + "`<client> mcp remove everyapi`" + ` under the hood, undoing what
-` + "`everyapi mcp install [client]`" + ` did. Restart the client afterward to
-drop the running server process.
-
-Requires the chosen client's CLI on PATH. If you registered everyapi by
-hand-editing the client's settings, remove the "everyapi" entry from the
-mcpServers object manually.`

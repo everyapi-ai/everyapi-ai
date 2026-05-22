@@ -11,25 +11,26 @@ import (
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
-
-const usage = `everyapi checkin — daily check-in for quota grants
-
-USAGE
-  everyapi checkin                       Claim today's reward
-  everyapi checkin status [--month YYYY-MM]
-                                         Show the calendar of past check-ins
-`
 
 func Run(args []string) error {
 	if len(args) > 0 {
 		switch args[0] {
 		case "help", "--help", "-h":
-			cliout.Println(usage)
+			cliout.Println(i18n.T("checkin.usage"))
 			return nil
 		case "status":
 			return runStatus(args[1:])
+		case "claim":
+			// Explicit alias for bare `everyapi checkin`. The bare
+			// form predates the explicit verb but the picker only
+			// shows declared subs, so a user landing on the picker
+			// would think `status` was all the command did. Adding
+			// `claim` surfaces the claim action in the picker too;
+			// bare-form invocation stays valid.
+			return runCheckin()
 		}
 	}
 	return runCheckin()
@@ -38,7 +39,7 @@ func Run(args []string) error {
 func newClient() (*api.Client, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return nil, errors.New("not logged in — run 'everyapi login' first")
+		return nil, errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return nil, err
@@ -51,7 +52,7 @@ func classifyErr(err error) error {
 		return nil
 	}
 	if api.IsUnauthorized(err) {
-		return errors.New("your session expired — run 'everyapi login' again")
+		return errors.New(i18n.T("auth.session_expired"))
 	}
 	return err
 }
@@ -65,7 +66,7 @@ func runCheckin() error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Check-in successful: +%d quota awarded (date %s).\n", res.QuotaAwarded, res.CheckinDate)
+	cliout.Printf(i18n.T("checkin.success")+"\n", res.QuotaAwarded, res.CheckinDate)
 	return nil
 }
 
@@ -84,21 +85,21 @@ func runStatus(args []string) error {
 		return classifyErr(err)
 	}
 	if !stat.Enabled {
-		cliout.Println("Check-in feature is disabled on this instance.")
+		cliout.Println(i18n.T("checkin.disabled"))
 		return nil
 	}
-	cliout.Printf("Reward range: %d – %d quota per day\n", stat.MinQuota, stat.MaxQuota)
-	cliout.Printf("Lifetime: %d check-in(s) for %d quota total.\n", stat.Stats.TotalCheckins, stat.Stats.TotalQuota)
+	cliout.Printf(i18n.T("checkin.reward_range")+"\n", stat.MinQuota, stat.MaxQuota)
+	cliout.Printf(i18n.T("checkin.lifetime")+"\n", stat.Stats.TotalCheckins, stat.Stats.TotalQuota)
 	if stat.Stats.CheckedInToday {
-		cliout.Println("Today: already claimed.")
+		cliout.Println(i18n.T("checkin.today_claimed"))
 	} else {
-		cliout.Println("Today: not yet claimed — run 'everyapi checkin' to grab it.")
+		cliout.Println(i18n.T("checkin.today_unclaimed"))
 	}
 	if len(stat.Stats.Records) == 0 {
-		cliout.Println("No check-ins in this month yet.")
+		cliout.Println(i18n.T("checkin.no_records"))
 		return nil
 	}
-	cliout.Printf("\n%d day(s) this month:\n", stat.Stats.CheckinCount)
+	cliout.Printf(i18n.T("checkin.month_days")+"\n", stat.Stats.CheckinCount)
 	for _, r := range stat.Stats.Records {
 		cliout.Printf("  %s  +%d quota\n", r.CheckinDate, r.QuotaAwarded)
 	}

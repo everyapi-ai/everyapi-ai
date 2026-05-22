@@ -18,36 +18,15 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-const usage = `everyapi user — profile / 2FA / OAuth bindings / aff code
-
-USAGE
-  everyapi user <subcommand> [flags]
-
-SUBCOMMANDS
-  info                                  Rolled-up profile + security view
-  2fa                                   2FA status (enabled / locked / backup codes remaining)
-  2fa disable --code <6-digits>         Turn 2FA off
-  2fa backup  --code <6-digits>         Rotate the backup-code set
-  passkey                               Passkey registration status
-  oauth list                            Linked OAuth providers
-  oauth unbind <provider_id>            Remove one OAuth binding
-  aff                                   Show your affiliate code
-  aff reset                             Rotate the affiliate code
-
-NOTE
-  2FA setup (QR scan), passkey registration, and email/wechat
-  verification all need a browser flow — use the dashboard for
-  the initial setup, then come back here for ongoing management.
-`
-
 func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		cliout.Println(usage)
+		cliout.Println(i18n.T("user.usage"))
 		if len(args) == 0 {
-			return errors.New("missing subcommand (try 'everyapi user help')")
+			return fmt.Errorf(i18n.T("common.missing_subcommand"), "everyapi user")
 		}
 		return nil
 	}
@@ -63,15 +42,15 @@ func Run(args []string) error {
 	case "aff":
 		return runAff(args[1:])
 	default:
-		cliout.Println(usage)
-		return fmt.Errorf("unknown 'user' subcommand %q", args[0])
+		cliout.Println(i18n.T("user.usage"))
+		return fmt.Errorf(i18n.T("common.unknown_subcommand"), "user", args[0])
 	}
 }
 
 func newClient() (*api.Client, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return nil, errors.New("not logged in — run 'everyapi login' first")
+		return nil, errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return nil, err
@@ -84,7 +63,7 @@ func classifyErr(err error) error {
 		return nil
 	}
 	if api.IsUnauthorized(err) {
-		return errors.New("your session expired — run 'everyapi login' again")
+		return errors.New(i18n.T("auth.session_expired"))
 	}
 	return err
 }
@@ -105,7 +84,7 @@ func runInfo(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Account #%d  %s  (%s)\n", self.ID, self.Username, self.Email)
+	cliout.Printf(i18n.T("user.account_header")+"\n", self.ID, self.Username, self.Email)
 	cliout.Printf("  role:           %d\n", self.Role)
 	cliout.Printf("  quota:          remain=%d  used=%d  requests=%d\n", self.Quota, self.UsedQuota, self.RequestCount)
 	if self.SellerQuota > 0 {
@@ -189,14 +168,14 @@ func runTwoFAStatus(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("2FA: enabled=%v locked=%v\n", st.Enabled, st.Locked)
+	cliout.Printf(i18n.T("user.2fa_status")+"\n", st.Enabled, st.Locked)
 	if st.Enabled {
-		cliout.Printf("Backup codes remaining: %d\n", st.BackupCodesRemaining)
+		cliout.Printf(i18n.T("user.2fa_backup_remaining")+"\n", st.BackupCodesRemaining)
 		if st.BackupCodesRemaining <= 1 {
-			cliout.Println("  (low — consider 'everyapi user 2fa backup --code <new-totp>' to regenerate)")
+			cliout.Println(i18n.T("user.2fa_low_hint"))
 		}
 	} else {
-		cliout.Println("Setup is a browser flow (QR scan) — use the dashboard, then come back to manage codes.")
+		cliout.Println(i18n.T("user.2fa_disabled_msg"))
 	}
 	return nil
 }
@@ -217,7 +196,7 @@ func runTwoFADisable(args []string) error {
 	if err := client.Disable2FA(cliout.WithCtx(), *code); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Println("2FA disabled.")
+	cliout.Println(i18n.T("user.2fa_disabled"))
 	return nil
 }
 
@@ -238,7 +217,7 @@ func runTwoFABackup(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Regenerated %d backup codes — save these now, they won't be shown again:\n", len(codes))
+	cliout.Printf(i18n.T("user.backup_regenerated")+"\n", len(codes))
 	for _, c := range codes {
 		cliout.Printf("  %s\n", c)
 	}
@@ -259,15 +238,15 @@ func runPasskey(args []string) error {
 	ps, err := client.GetPasskeyStatus(cliout.WithCtx())
 	if err != nil {
 		if api.IsUnauthorized(err) {
-			return errors.New("passkey status is gated on the dashboard session cookie — use the web UI for passkey management")
+			return errors.New(i18n.T("user.passkey_dashboard_gated"))
 		}
 		return classifyErr(err)
 	}
 	if ps.Enabled {
-		cliout.Printf("Passkey registered. Last used: %s\n", formatUnixOrNever(ps.LastUsedAt))
-		cliout.Println("(Register / delete are browser flows — use the dashboard.)")
+		cliout.Printf(i18n.T("user.passkey_registered_last_used")+"\n", formatUnixOrNever(ps.LastUsedAt))
+		cliout.Println(i18n.T("user.passkey_use_dashboard"))
 	} else {
-		cliout.Println("No passkey registered. Register one in the dashboard (browser-only flow).")
+		cliout.Println(i18n.T("user.passkey_none"))
 	}
 	return nil
 }
@@ -276,8 +255,8 @@ func runPasskey(args []string) error {
 
 func runOAuth(args []string) error {
 	if len(args) == 0 {
-		cliout.Println("Usage: everyapi user oauth {list|unbind <provider_id>}")
-		return errors.New("missing subcommand")
+		cliout.Println(i18n.T("user.oauth_usage"))
+		return fmt.Errorf(i18n.T("common.missing_subcommand"), "everyapi user oauth")
 	}
 	switch args[0] {
 	case "list":
@@ -285,7 +264,7 @@ func runOAuth(args []string) error {
 	case "unbind":
 		return runOAuthUnbind(args[1:])
 	default:
-		return fmt.Errorf("unknown 'user oauth' subcommand %q", args[0])
+		return fmt.Errorf(i18n.T("common.unknown_subcommand"), "user oauth", args[0])
 	}
 }
 
@@ -303,10 +282,10 @@ func runOAuthList(args []string) error {
 		return classifyErr(err)
 	}
 	if len(bs) == 0 {
-		cliout.Println("No OAuth bindings.")
+		cliout.Println(i18n.T("user.no_bindings"))
 		return nil
 	}
-	cliout.Printf("%d binding(s):\n", len(bs))
+	cliout.Printf(i18n.T("user.bindings_count")+"\n", len(bs))
 	for _, b := range bs {
 		cliout.Printf("  [#%d] %s (%s) — provider user id: %s\n", b.ProviderID, b.ProviderName, b.ProviderSlug, b.ProviderUserID)
 	}
@@ -333,21 +312,21 @@ func runOAuthUnbind(args []string) error {
 	if !*yes && cliprompt.IsInteractive() {
 		ok, err := cliprompt.YesNo(
 			bufio.NewReader(os.Stdin),
-			fmt.Sprintf("Unbind OAuth provider #%d? You won't be able to log in via this provider until you re-bind it.", id),
+			fmt.Sprintf(i18n.T("user.unbind_confirm"), id),
 			false,
 		)
 		if err != nil {
 			return err
 		}
 		if !ok {
-			cliout.Println("Canceled.")
+			cliout.Println(i18n.T("common.canceled"))
 			return nil
 		}
 	}
 	if err := client.UnbindOAuth(cliout.WithCtx(), id); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Unbound provider #%d.\n", id)
+	cliout.Printf(i18n.T("user.unbound")+"\n", id)
 	return nil
 }
 
@@ -363,14 +342,14 @@ func runAff(args []string) error {
 		if err != nil {
 			return classifyErr(err)
 		}
-		cliout.Printf("New affiliate code: %s\n", newCode)
-		cliout.Println("Any links embedding the previous code no longer credit you.")
+		cliout.Printf(i18n.T("user.aff_new")+"\n", newCode)
+		cliout.Println(i18n.T("user.aff_rotated_warning"))
 		return nil
 	}
 	code, err := client.GetAffCode(cliout.WithCtx())
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Affiliate code: %s\n", code)
+	cliout.Printf(i18n.T("user.aff_code")+"\n", code)
 	return nil
 }

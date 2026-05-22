@@ -11,20 +11,18 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"time"
 
+	"golang.org/x/term"
+
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-ai/internal/tools"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
-
-const usage = `everyapi doctor — self-check (creds, gateway, sanitizer, tools)
-
-USAGE
-  everyapi doctor
-`
 
 // Run runs every check in order, prints them as they complete (not
 // all-at-once at the end — so a hanging network probe is obvious),
@@ -32,13 +30,15 @@ USAGE
 // not fail the command — they're advisory.
 func Run(args []string) error {
 	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
-		cliout.Println(usage)
+		cliout.Println(i18n.T("doctor.usage"))
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	report := newReport()
+
+	report.section(i18n.T("doctor.section.account"))
 	report.run("credentials cached", func() (string, string, error) {
 		creds, err := config.Load()
 		if errors.Is(err, config.ErrNoCredentials) {
@@ -59,15 +59,7 @@ func Run(args []string) error {
 	}
 	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
 
-	report.run("gateway reachable", func() (string, string, error) {
-		st, err := client.GetStatus(ctx)
-		if err != nil {
-			return "", "", err
-		}
-		return fmt.Sprintf("quota_per_unit=%g", st.QuotaPerUnit), "", nil
-	})
-
-	report.run("user session authenticated", func() (string, string, error) {
+	report.run("session authenticated", func() (string, string, error) {
 		self, err := client.GetSelf(ctx)
 		if err != nil {
 			if api.IsUnauthorized(err) {
@@ -78,7 +70,7 @@ func Run(args []string) error {
 		return fmt.Sprintf("logged in as %s (id=%d)", self.Username, self.ID), "", nil
 	})
 
-	report.run("at least one relay token exists", func() (string, string, error) {
+	report.run("relay token mintable", func() (string, string, error) {
 		toks, err := client.ListTokens(ctx)
 		if err != nil {
 			return "", "", err
@@ -95,6 +87,15 @@ func Run(args []string) error {
 				errSoft("no enabled tokens")
 		}
 		return fmt.Sprintf("%d enabled / %d total", enabled, len(toks)), "", nil
+	})
+
+	report.section(i18n.T("doctor.section.gateway"))
+	report.run("backend reachable", func() (string, string, error) {
+		st, err := client.GetStatus(ctx)
+		if err != nil {
+			return "", "", err
+		}
+		return fmt.Sprintf("quota_per_unit=%g", st.QuotaPerUnit), "", nil
 	})
 
 	report.run("sanitizer proxy", func() (string, string, error) {
@@ -116,9 +117,10 @@ func Run(args []string) error {
 		return "listening on 127.0.0.1:8786", "", nil
 	})
 
+	report.section(i18n.T("doctor.section.tools"))
 	for _, name := range tools.Names() {
 		name := name
-		report.run("tool "+name+" on PATH", func() (string, string, error) {
+		report.run(name, func() (string, string, error) {
 			t, err := tools.Lookup(name)
 			if err != nil {
 				return "", "", err
@@ -137,43 +139,72 @@ func Run(args []string) error {
 
 // --- report plumbing ---------------------------------------------
 
+// Column widths chosen so the longest expected name + the longest
+// status badge fit without ragged wrapping on an 80-col terminal.
+// Names exceeding nameCol just push the badge right; better than
+// truncating something the user is trying to copy into a ticket.
+const (
+	nameCol      = 28
+	statusBadgeW = 6 // "  ok  " / " warn " / " fail "
+)
+
 type report struct {
-	failed bool
-	warned bool
+	failed     bool
+	warned     bool
+	totals     map[string]int
+	sectionLed bool // suppresses the leading blank-line before the very first section
 }
 
-func newReport() *report { return &report{} }
+func newReport() *report {
+	return &report{totals: map[string]int{}}
+}
+
+func (r *report) section(title string) {
+	if r.sectionLed {
+		cliout.Println("")
+	}
+	r.sectionLed = true
+	cliout.Printf("%s\n", paint(title, ansiBold))
+	cliout.Printf("%s\n", paint(repeat("─", len(title)), ansiDim))
+}
 
 func (r *report) run(name string, fn func() (detail, hint string, err error)) {
 	detail, hint, err := fn()
-	if err == nil {
-		cliout.Printf("  [OK]   %-32s  %s\n", name, detail)
-		return
-	}
-	if isSoft(err) {
+	var badge, color string
+	switch {
+	case err == nil:
+		badge, color = "  ok  ", ansiGreen
+		r.totals["ok"]++
+	case isSoft(err):
+		badge, color = " warn ", ansiYellow
 		r.warned = true
-		cliout.Printf("  [WARN] %-32s  %s\n", name, detail)
-		if hint != "" {
-			cliout.Printf("         hint: %s\n", hint)
-		}
-		return
+		r.totals["warn"]++
+	default:
+		badge, color = " fail ", ansiRed
+		r.failed = true
+		r.totals["fail"]++
+		detail = err.Error()
 	}
-	r.failed = true
-	cliout.Printf("  [FAIL] %-32s  %s\n", name, err.Error())
-	if hint != "" {
-		cliout.Printf("         hint: %s\n", hint)
+	cliout.Printf("  %s  %-*s  %s\n", paint(badge, color, ansiInverse), nameCol, name, detail)
+	if err != nil && hint != "" {
+		cliout.Printf("  %s  %-*s  %s%s\n",
+			repeat(" ", statusBadgeW), nameCol, "", paint("hint: ", ansiDim), hint)
 	}
 }
 
 func (r *report) summarize() {
+	cliout.Println("")
+	var summary string
 	switch {
 	case r.failed:
-		cliout.Println("\nResult: one or more required checks failed.")
+		summary = paint(i18n.T("doctor.result.failed"), ansiRed, ansiBold)
 	case r.warned:
-		cliout.Println("\nResult: ok with warnings (advisory; tool will still run).")
+		summary = paint(i18n.T("doctor.result.warned"), ansiYellow)
 	default:
-		cliout.Println("\nResult: all green.")
+		summary = paint(i18n.T("doctor.result.green"), ansiGreen, ansiBold)
 	}
+	cliout.Printf("%s  "+i18n.T("doctor.tally")+"\n", summary,
+		r.totals["ok"], r.totals["warn"], r.totals["fail"])
 }
 
 func (r *report) err() error {
@@ -193,4 +224,55 @@ func errSoft(s string) error     { return &softErr{s: s} }
 func isSoft(err error) bool {
 	_, ok := err.(*softErr)
 	return ok
+}
+
+// --- tiny ANSI wrapper (TTY-aware, NO_COLOR-aware) ----------------
+//
+// Doctor prints colored status badges + section headers, but only
+// when the output is a real terminal. Captured into a file, piped
+// to another program, or running under NO_COLOR=1, every paint()
+// call short-circuits and just returns the unstyled text.
+//
+// Kept inline (not a shared internal/ansi package) because doctor
+// is the only command that needs styling today; if a second comes
+// along, extract.
+
+const (
+	ansiReset   = "\x1b[0m"
+	ansiBold    = "\x1b[1m"
+	ansiDim     = "\x1b[2m"
+	ansiInverse = "\x1b[7m"
+	ansiRed     = "\x1b[31m"
+	ansiGreen   = "\x1b[32m"
+	ansiYellow  = "\x1b[33m"
+)
+
+func paint(s string, codes ...string) string {
+	if !colorEnabled() {
+		return s
+	}
+	var buf string
+	for _, c := range codes {
+		buf += c
+	}
+	return buf + s + ansiReset
+}
+
+// colorEnabled is intentionally checked per-call: NO_COLOR could
+// be flipped mid-run (rare, but cheap to honour) and stdout could
+// be redirected partway through tests. The Fd() / IsTerminal()
+// pair is the same shape cliprompt uses for its picker gate.
+func colorEnabled() bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	return term.IsTerminal(int(os.Stdout.Fd()))
+}
+
+func repeat(s string, n int) string {
+	out := ""
+	for i := 0; i < n; i++ {
+		out += s
+	}
+	return out
 }

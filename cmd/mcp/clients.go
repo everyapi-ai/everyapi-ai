@@ -92,6 +92,14 @@ type mcpClient struct {
 	// RemoveArgv returns the argv to unregister the server named
 	// `serverName`.
 	RemoveArgv func(serverName string) []string
+
+	// ListArgv returns the argv to enumerate every MCP server
+	// already registered with this client. `everyapi mcp status`
+	// runs it and looks for "everyapi" in the combined stdout +
+	// stderr — substring rather than structured parse because each
+	// client formats its list differently and the output drifts
+	// across versions, but the server name is always present.
+	ListArgv func() []string
 }
 
 // mcpClients is the registered set, keyed by the name the user types
@@ -114,6 +122,7 @@ var mcpClients = map[string]*mcpClient{
 		RemoveArgv: func(name string) []string {
 			return []string{"mcp", "remove", name}
 		},
+		ListArgv: func() []string { return []string{"mcp", "list"} },
 	},
 	"codex": {
 		Name:        "codex",
@@ -131,6 +140,7 @@ args = ["mcp"]`,
 		RemoveArgv: func(name string) []string {
 			return []string{"mcp", "remove", name}
 		},
+		ListArgv: func() []string { return []string{"mcp", "list"} },
 	},
 	"gemini": {
 		Name:        "gemini",
@@ -148,6 +158,7 @@ args = ["mcp"]`,
 		RemoveArgv: func(name string) []string {
 			return []string{"mcp", "remove", name}
 		},
+		ListArgv: func() []string { return []string{"mcp", "list"} },
 	},
 }
 

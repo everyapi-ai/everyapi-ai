@@ -7,6 +7,7 @@ import (
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -28,7 +29,7 @@ func Status(args []string) error {
 	}
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return errors.New("not logged in — run 'everyapi login' first")
+		return errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return err
@@ -43,7 +44,7 @@ func Status(args []string) error {
 	self, err := client.GetSelf(ctx)
 	if err != nil {
 		if api.IsUnauthorized(err) {
-			return errors.New("your session expired — run 'everyapi login' again")
+			return errors.New(i18n.T("auth.session_expired"))
 		}
 		return fmt.Errorf("fetch user: %w", err)
 	}
@@ -74,9 +75,9 @@ func Status(args []string) error {
 	} else {
 		cliout.Printf("  %s\n", self.Username)
 	}
-	cliout.Printf("  quota:     $%.2f remaining   $%.2f used\n", quotaUSD, usedUSD)
-	cliout.Printf("  requests:  %d\n", self.RequestCount)
-	cliout.Printf("  topup:     %s/wallet\n", api.WebOriginFromBase(creds.APIBase))
+	cliout.Printf("  %-10s "+i18n.T("status.remaining_used")+"\n", i18n.T("status.quota"), quotaUSD, usedUSD)
+	cliout.Printf("  %-10s %d\n", i18n.T("status.requests"), self.RequestCount)
+	cliout.Printf("  %-10s %s/wallet\n", i18n.T("status.topup"), api.WebOriginFromBase(creds.APIBase))
 
 	// The quota line above comes from /api/user/self (UserAuth) and
 	// says nothing about whether the RELAY works: the access token

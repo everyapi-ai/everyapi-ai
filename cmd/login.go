@@ -16,6 +16,7 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -65,7 +66,7 @@ func Login(args []string) error {
 
 	cliout.Println("")
 	if !*noQR {
-		cliout.Println("Scan this QR with your phone (or any device already signed in to EveryAPI):")
+		cliout.Println(i18n.T("login.qr_hint"))
 		cliout.Println("")
 		// qrterminal renders to stdout with Unicode half-blocks by
 		// default (▀▄ etc.) — about half the height of the ASCII
@@ -73,25 +74,25 @@ func Login(args []string) error {
 		// keeps the QR small enough to fit a normal terminal.
 		qrterminal.GenerateHalfBlock(prefilledURL, qrterminal.L, cliout.Out)
 		cliout.Println("")
-		cliout.Println("Or visit this URL manually (code is baked into the link):")
+		cliout.Println(i18n.T("login.url_hint_with_qr"))
 	} else {
-		cliout.Println("To authorize this device, visit (code is baked into the link):")
+		cliout.Println(i18n.T("login.url_hint"))
 	}
 	cliout.Printf("\n    %s\n\n", prefilledURL)
 	// Surface the bare user_code too in case the dashboard fails to
 	// pre-fill (older /cli/auth deploys, query-stripping middlebox,
 	// user pasted the URL into a tool that drops query strings).
-	cliout.Printf("If the page doesn't pre-fill, enter the code: %s\n\n", start.UserCode)
+	cliout.Printf(i18n.T("login.code_hint")+"\n\n", start.UserCode)
 
 	if !*noBrowser {
 		if err := cliprompt.OpenBrowser(prefilledURL); err == nil {
-			cliout.Println("Browser opened. Approve there (or finish on your phone); this will finish on its own.")
+			cliout.Println(i18n.T("login.browser_opened"))
 		} else {
 			// stderr so a user piping `everyapi login | …` gets a clean
 			// stdout (the URL + code go through the cmd.Out writer
 			// above). xdg-open missing on a headless Linux desktop is
 			// the common case here.
-			fmt.Fprintln(os.Stderr, "Couldn't open the browser automatically — scan the QR or copy the URL above.")
+			fmt.Fprintln(os.Stderr, i18n.T("common.browser_open_failed_qr"))
 		}
 	}
 
@@ -102,9 +103,9 @@ func Login(args []string) error {
 
 	cliout.Println("")
 	if ttyIn {
-		cliout.Println("Waiting for authorization... (Ctrl+C to cancel, press 'c' to copy URL)")
+		cliout.Println(i18n.T("login.waiting_with_copy"))
 	} else {
-		cliout.Println("Waiting for authorization... (Ctrl+C to cancel)")
+		cliout.Println(i18n.T("login.waiting"))
 	}
 
 	// Wrap ctx in WithCancel so the raw-mode reader (which swallows
@@ -170,7 +171,7 @@ func Login(args []string) error {
 	}
 
 	dir, _ := config.ConfigDir()
-	cliout.Printf("\nLogged in as %s. Credentials saved to %s/credentials.json\n", res.Username, dir)
+	cliout.Printf(i18n.T("login.logged_in_saved"), res.Username, dir)
 
 	// Resolve the relay API key now (and cache it) so `everyapi use`
 	// works on first try. The access token alone can't relay — it's
@@ -187,12 +188,12 @@ func Login(args []string) error {
 	// status` will retry the resolution anyway.
 	if _, err := resolveRelayKey(creds, ""); err != nil && errors.Is(err, errNoRelayKey) {
 		cliout.Println("")
-		cliout.Println("Note: your account has no relay API key yet. `everyapi use` needs one")
+		cliout.Println(i18n.T("login.no_relay_note_1"))
 		cliout.Println("(it's separate from this login token). Create an API key in the")
-		cliout.Println("EveryAPI dashboard, then run 'everyapi login' again.")
+		cliout.Println(i18n.T("login.no_relay_note_2"))
 	}
 
-	cliout.Println("Next: try 'everyapi status' or 'everyapi use claude'.")
+	cliout.Println(i18n.T("login.next_hint"))
 	return nil
 }
 
@@ -241,9 +242,9 @@ func startLoginKeyWatcher(fd int, url string, cancelPoll context.CancelFunc) fun
 				// Raw mode means a bare "\n" stays in the same column.
 				// Use "\r\n" so the message lines up at column zero.
 				if cerr := cliprompt.CopyToClipboard(url); cerr == nil {
-					fmt.Fprint(cliout.Out, "\r\nURL copied to clipboard.\r\n")
+					fmt.Fprint(cliout.Out, "\r\n"+i18n.T("login.url_copied")+"\r\n")
 				} else {
-					fmt.Fprintf(cliout.Out, "\r\nCouldn't copy: %v\r\n", cerr)
+					fmt.Fprintf(cliout.Out, "\r\n"+i18n.T("login.url_copy_failed")+"\r\n", cerr)
 				}
 			case 0x03, 0x04: // ^C, ^D
 				cancelPoll()

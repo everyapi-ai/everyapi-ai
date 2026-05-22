@@ -11,6 +11,7 @@ import (
 
 	rootcmd "github.com/everyapi-ai/everyapi-ai/cmd"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 // Install wires `everyapi mcp` into a supported MCP client's config so
@@ -29,7 +30,7 @@ import (
 // `<client> mcp add` subcommand is the stable API.
 func Install(args []string) error {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
-		fmt.Fprintln(os.Stdout, installUsage)
+		fmt.Fprint(os.Stdout, i18n.T("mcp.install_usage"))
 		return nil
 	}
 
@@ -135,19 +136,3 @@ func isAlreadyRegistered(stderr string) bool {
 	return strings.Contains(s, "already exists") || strings.Contains(s, "already configured")
 }
 
-const installUsage = `everyapi mcp install — register everyapi as an MCP server with an AI CLI
-
-USAGE
-  everyapi mcp install [client]
-
-ARGUMENTS
-  client    One of: claude, codex, gemini. Defaults to claude.
-
-Runs ` + "`<client> mcp add everyapi everyapi mcp`" + ` under the hood (with the
-syntax each client expects). After this your AI CLI spawns ` + "`everyapi mcp`" + `
-on demand, exposing the four everyapi_* tools (status, topup, seller_list,
-seller_withdraw).
-
-Requires the chosen client's CLI on PATH. If it isn't installed, the
-error message includes the install link and a config snippet you can
-paste into the client's settings by hand.`

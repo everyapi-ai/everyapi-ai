@@ -12,6 +12,7 @@ import (
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -61,7 +62,7 @@ func Run(args []string) error {
 	}
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return errors.New("not logged in — run 'everyapi login' first")
+		return errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return err
@@ -70,12 +71,12 @@ func Run(args []string) error {
 	rows, err := client.UserQuotaDates(cliout.WithCtx(), start, end)
 	if err != nil {
 		if api.IsUnauthorized(err) {
-			return errors.New("your session expired — run 'everyapi login' again")
+			return errors.New(i18n.T("auth.session_expired"))
 		}
 		return err
 	}
 	if len(rows) == 0 {
-		cliout.Println("No usage rows in this window.")
+		cliout.Println(i18n.T("usage.no_rows"))
 		return nil
 	}
 	if *perModel {
@@ -108,7 +109,7 @@ func renderPerDay(rows []api.QuotaDay) {
 		days = append(days, d)
 	}
 	sort.Strings(days)
-	cliout.Printf("Day-by-day usage (%d day(s)):\n", len(days))
+	cliout.Printf(i18n.T("usage.day_by_day")+"\n", len(days))
 	total := agg{}
 	for _, d := range days {
 		a := byDay[d]
@@ -140,7 +141,7 @@ func renderPerModel(rows []api.QuotaDay) {
 		models = append(models, m)
 	}
 	sort.Slice(models, func(i, j int) bool { return byModel[models[i]].quota > byModel[models[j]].quota })
-	cliout.Printf("Per-model usage (%d model(s)):\n", len(models))
+	cliout.Printf(i18n.T("usage.per_model")+"\n", len(models))
 	total := agg{}
 	for _, m := range models {
 		a := byModel[m]

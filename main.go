@@ -30,6 +30,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/cmd/proxy"
 	"github.com/everyapi-ai/everyapi-ai/cmd/report"
 	"github.com/everyapi-ai/everyapi-ai/cmd/seller"
+	"github.com/everyapi-ai/everyapi-ai/cmd/settings"
 	"github.com/everyapi-ai/everyapi-ai/cmd/subscription"
 	"github.com/everyapi-ai/everyapi-ai/cmd/token"
 	usagecmd "github.com/everyapi-ai/everyapi-ai/cmd/usage"
@@ -37,48 +38,10 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/cmd/wallet"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-ai/internal/mcp"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
-
-const usage = `everyapi — EveryAPI CLI
-
-USAGE
-  everyapi <command> [flags]
-
-COMMANDS
-  login           Authenticate this device with EveryAPI
-  logout          Remove this device's credentials
-  status          Show current quota, usage, and balance
-  topup           Open the wallet top-up page (anti-phishing verification phrase)
-  wallet <sub>    Payment history / methods / redemption keys
-  checkin         Claim today's daily-grant quota
-  user <sub>      Profile / 2FA / passkey / oauth bindings / aff code
-  subscription <sub>  Subscription plans / self / billing preference
-  use <tool>      Launch a third-party CLI (claude / codex / gemini) via EveryAPI
-  token <sub>     Manage relay API tokens (list / show / create / update / key / revoke)
-  log <sub>       Request log: list / stat / summary
-  usage           Day-by-day quota usage
-  models <sub>    Model catalog: list / pricing / groups
-  demand <sub>    Buyer-side marketplace postings (list/my/show/submit/cancel/remove)
-  dispute <sub>   Open / list / inspect disputes
-  report          File an abuse / TOS-violation report
-  notify <sub>    In-app notifications (list / count / read / readall)
-  dm <sub>        Direct messages (threads / open / send / messages / read)
-  seller <sub>    Channel-marketplace seller commands
-__ADMIN_BLOCK__
-  edge <sub>      BYO-GPU supplier agent (docker + ollama)
-  proxy <sub>     Local sanitizer proxy (privacy filter for SDK requests)
-  mcp [sub]       MCP server for AI CLIs (Claude Code / Codex / Gemini)
-  doctor          Self-check (creds, gateway, sanitizer, tools)
-  events          Subscribe to the live event stream (SSE)
-  update          Check for a newer release and run the matching upgrade
-  version         Print the build version
-  help            Show this message
-
-Run 'everyapi <command> help' for subcommand details and flags
-(e.g. 'everyapi seller help', 'everyapi edge help').
-`
 
 // command is a single top-level subcommand. The registry below
 // replaces the older switch/case dispatch — adding a command is now
@@ -96,7 +59,7 @@ type command struct {
 	// launcher targets the interactive picker.
 	desc string
 	// adminOnly hides the row from the launcher when the cached
-	// credential isn't an admin user. Mirrors adminUsageBlock's
+	// credential isn't an admin user. Mirrors the admin block's
 	// gating in renderUsage. Hides UI affordances the user can't
 	// usefully exercise; the backend still 403s if a non-admin
 	// invokes the command anyway, so this is cosmetic.
@@ -133,6 +96,17 @@ type subcommand struct {
 	args []string
 }
 
+// mcpSubs is the picker menu for `everyapi mcp`. Extracted into its
+// own var so `runMCP` can hand it to runSubPicker when invoked bare
+// on a TTY without referencing the `commands` slice — that ref
+// would close a commands → runMCP → lookup → commands package-init
+// cycle and refuse to compile.
+var mcpSubs = []subcommand{
+	{name: "install", desc: "Auto-register everyapi as an MCP server (default: claude)", args: []string{"install"}},
+	{name: "uninstall", desc: "Remove the MCP registration", args: []string{"uninstall"}},
+	{name: "status", desc: "Show which MCP clients have everyapi registered", args: []string{"status"}},
+}
+
 // commands is the registered set, in the order they appear in the
 // help text. main() walks this slice (not a map) so the lookup order
 // matches the documented order — keeps the "which command runs when
@@ -147,6 +121,7 @@ var commands = []command{
 		{name: "info", desc: "Enabled payment methods + suggested amounts", args: []string{"info"}},
 	}},
 	{name: "checkin", desc: "Claim today's daily-grant quota", requireLogin: true, run: checkin.Run, subs: []subcommand{
+		{name: "claim", desc: "Claim today's reward", args: []string{"claim"}},
 		{name: "status", desc: "Show this month's check-in calendar", args: []string{"status"}},
 	}},
 	{name: "user", desc: "Profile / 2FA / passkey / oauth bindings / aff code", requireLogin: true, run: usercmd.Run, subs: []subcommand{
@@ -221,25 +196,15 @@ var commands = []command{
 		{name: "status", desc: "Show running stats", args: []string{"status"}},
 		{name: "configure", desc: "Interactive detector + custom-pattern setup", args: []string{"configure"}},
 	}},
-	{name: "mcp", desc: "MCP server for AI CLIs (Claude Code / Codex / Gemini)", run: runMCP, subs: []subcommand{
-		{name: "install", desc: "Auto-register everyapi as an MCP server (default: claude)", args: []string{"install"}},
-		{name: "uninstall", desc: "Remove the MCP registration", args: []string{"uninstall"}},
-	}},
+	{name: "mcp", desc: "MCP server for AI CLIs (Claude Code / Codex / Gemini)", run: runMCP, subs: mcpSubs},
 	{name: "doctor", desc: "Self-check (creds, gateway, sanitizer, tools)", run: doctor.Run},
 	{name: "events", desc: "Subscribe to the live event stream (SSE)", requireLogin: true, run: events.Run},
+	{name: "settings", desc: "View / change CLI preferences (language, …)", run: settings.Run},
 	{name: "update", desc: "Check for a newer release and run the matching upgrade", run: cmd.Update},
 	{name: "version", aliases: []string{"--version", "-v"}, desc: "Print the build version", run: cmd.Version},
 }
 
-// adminUsageBlock is appended to the base usage by renderUsage when
-// the logged-in user has admin role. Keeping it out of the base
-// string means non-admin users don't see commands they can't run —
-// the backend still rejects them with a 403 if a non-admin types the
-// command anyway, but the help output stays clean.
-const adminUsageBlock = `  admin <sub>     Operator commands (admin role required)
-`
-
-// adminBlockSentinel is the placeholder inside the static `usage`
+// adminBlockSentinel is the placeholder inside the launcher usage
 // string that renderUsage substitutes. A sentinel rather than a
 // text-anchor (e.g. strings.Index(usage, "  proxy <sub>")) is more
 // robust to future help-text reorders — the placeholder moves with
@@ -247,17 +212,19 @@ const adminUsageBlock = `  admin <sub>     Operator commands (admin role require
 // orphan the admin block at the end.
 const adminBlockSentinel = "__ADMIN_BLOCK__\n"
 
-// renderUsage returns the usage block, substituting adminUsageBlock
+// renderUsage returns the usage block, substituting the admin block
 // into the sentinel iff the cached credential's Role indicates an
 // admin user. Non-admin / unauthenticated callers see the sentinel
 // stripped (no leak). Falls through to plain strip on any
 // credential-load error.
 func renderUsage() string {
+	base := i18n.T("launcher.usage")
+	adminBlock := i18n.T("launcher.usage_admin_block")
 	creds, err := config.Load()
 	if err != nil || !creds.IsAdmin() {
-		return strings.Replace(usage, adminBlockSentinel, "", 1)
+		return strings.Replace(base, adminBlockSentinel, "", 1)
 	}
-	return strings.Replace(usage, adminBlockSentinel, adminUsageBlock, 1)
+	return strings.Replace(base, adminBlockSentinel, adminBlock, 1)
 }
 
 // lookup resolves a CLI-typed name (incl. aliases) to its command.
@@ -285,6 +252,24 @@ func lookup(name string) (command, bool) {
 //   - rows marked adminOnly
 //   - --version / -v aliases (the canonical "version" row stays)
 //
+// resolveLanguage publishes the user's preferred language to both
+// the in-process i18n table and EVERYAPI_LANG so SDK calls attach
+// Accept-Language. See the doc on main() for the precedence chain.
+func resolveLanguage() {
+	lang := ""
+	if s, err := config.LoadSettings(); err == nil && s != nil {
+		lang = s.Language
+	}
+	if lang == "" {
+		lang = i18n.DetectFromEnv()
+	}
+	i18n.SetLanguage(lang)
+	// DetectFromEnv always returns at least LangEn, so lang is
+	// guaranteed non-empty here — set the env unconditionally so
+	// the SDK's per-request Accept-Language header has a value.
+	_ = os.Setenv("EVERYAPI_LANG", lang)
+}
+
 // Esc / Ctrl-C from a NESTED picker (a tool picker, group picker,
 // confirm dialog, etc. surfaced by the dispatched command) returns
 // here and re-renders the launcher — that's the "back to parent
@@ -319,7 +304,7 @@ func runLauncher() error {
 
 	lastSel := 0
 	for {
-		idx, err := cliprompt.PickWithSelected("EveryAPI — pick a command:", labels, lastSel)
+		idx, err := cliprompt.PickWithSelected(i18n.T("launcher.welcome"), labels, lastSel)
 		if err != nil {
 			if errors.Is(err, cliprompt.ErrPickCancelled) {
 				return nil
@@ -341,7 +326,7 @@ func runLauncher() error {
 		if err != nil &&
 			!errors.Is(err, cliprompt.ErrPickCancelled) &&
 			!errors.Is(err, io.EOF) {
-			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), err)
 		}
 		cliout.Println("")
 	}
@@ -384,7 +369,7 @@ func runSubPicker(c command) error {
 	for i, s := range c.subs {
 		labels[i] = fmt.Sprintf("%-*s  %s", maxName, s.name, s.desc)
 	}
-	prompt := fmt.Sprintf("%s — pick a subcommand:", c.name)
+	prompt := fmt.Sprintf(i18n.T("common.pick_subcommand"), c.name)
 	lastSel := 0
 	for {
 		idx, err := cliprompt.PickWithSelected(prompt, labels, lastSel)
@@ -402,17 +387,31 @@ func runSubPicker(c command) error {
 		if err != nil &&
 			!errors.Is(err, cliprompt.ErrPickCancelled) &&
 			!errors.Is(err, io.EOF) {
-			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), err)
 		}
 		cliout.Println("")
 	}
 }
 
 func main() {
+	// Resolve the user's language preference once at startup and
+	// publish it two ways: i18n.SetLanguage for CLI-originated
+	// strings, EVERYAPI_LANG env for the SDK to attach as
+	// Accept-Language on every API call (so backend errors come
+	// back translated). Resolution chain (first-wins):
+	//   1. settings.json's `language` field
+	//   2. EVERYAPI_LANG / LC_ALL / LC_MESSAGES / LANG env
+	//   3. "en"
+	// A broken / missing settings file falls through to the env
+	// chain rather than failing startup — the user shouldn't be
+	// locked out of `everyapi login` because the preference file
+	// is corrupt.
+	resolveLanguage()
+
 	if len(os.Args) < 2 {
 		if cliprompt.IsInteractive() {
 			if err := runLauncher(); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+				fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), err)
 				os.Exit(1)
 			}
 			return
@@ -456,12 +455,12 @@ func main() {
 	if cliprompt.IsInteractive() &&
 		(errors.Is(err, cliprompt.ErrPickCancelled) || errors.Is(err, io.EOF)) {
 		if lerr := runLauncher(); lerr != nil {
-			fmt.Fprintf(os.Stderr, "Error: %s\n", lerr)
+			fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), lerr)
 			os.Exit(1)
 		}
 		return
 	}
-	fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+	fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), err)
 	os.Exit(1)
 }
 
@@ -476,6 +475,26 @@ func main() {
 // about each other — main wires both.
 func runMCP(args []string) error {
 	if len(args) == 0 {
+		// Two callers reach this branch:
+		//   (a) An MCP client (Claude Desktop, codex, gemini) that
+		//       spawned us through a pipe and wants to speak JSON-RPC
+		//       over stdio. stdin is NOT a TTY in this case.
+		//   (b) A human who typed `everyapi mcp` at a shell prompt —
+		//       both stdin and stdout are TTYs. Used to silently
+		//       block on stdin.Read() forever because the server was
+		//       waiting for an LSP-style request; looked indistinguish-
+		//       able from a hang.
+		//
+		// Differentiate via cliprompt.IsInteractive (both stdin AND
+		// stdout TTY). When true, drop into the same sub-picker the
+		// launcher uses so the human gets install / uninstall /
+		// status as options instead of a dead cursor. Synthesize a
+		// command{} on the fly because referencing the `commands`
+		// slice from here would close the
+		// commands → runMCP → lookup → commands init cycle.
+		if cliprompt.IsInteractive() {
+			return runSubPicker(command{name: "mcp", subs: mcpSubs, run: runMCP})
+		}
 		return mcp.Run(os.Stdin, os.Stdout, os.Stderr)
 	}
 	switch args[0] {
@@ -483,6 +502,8 @@ func runMCP(args []string) error {
 		return mcpcmd.Install(args[1:])
 	case "uninstall":
 		return mcpcmd.Uninstall(args[1:])
+	case "status":
+		return mcpcmd.Status(args[1:])
 	case "help", "--help", "-h":
 		// `everyapi mcp --help` used to fall through to the unknown-
 		// subcommand branch and exit 2 with a confusing message;
@@ -490,7 +511,7 @@ func runMCP(args []string) error {
 		fmt.Print(renderUsage())
 		return nil
 	default:
-		fmt.Fprintf(os.Stderr, "unknown 'mcp' subcommand %q. Try 'everyapi mcp install' to register, 'everyapi mcp uninstall' to remove, or 'everyapi mcp' (no args) to run the server.\n", args[0])
+		fmt.Fprintf(os.Stderr, "unknown 'mcp' subcommand %q. Try 'everyapi mcp install' to register, 'everyapi mcp uninstall' to remove, 'everyapi mcp status' to check, or 'everyapi mcp' (no args) to run the server.\n", args[0])
 		os.Exit(2)
 		return nil // unreachable
 	}

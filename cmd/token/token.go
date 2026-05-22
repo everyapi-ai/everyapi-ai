@@ -20,52 +20,18 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
-
-const usage = `everyapi token — manage relay API tokens (the keys your apps embed)
-
-USAGE
-  everyapi token <subcommand> [flags]
-
-SUBCOMMANDS
-  list                                 List your tokens (masked keys)
-  show     <id>                        Show one token in detail
-  key      <id>                        Print the full plaintext key
-  create   --name <n> [flags]          Mint a new token
-  update   <id> [flags]                Edit a token's fields (omit a flag → keep current)
-  enable   <id>                        Flip status to enabled
-  disable  <id>                        Flip status to disabled
-  revoke   <id> [-y]                   Delete a token (soft-delete; asks unless -y)
-
-CREATE / UPDATE FLAGS
-  --name <n>           Display name (required for create; max 50 chars)
-  --group <g>          Routing group (default "" = auto)
-  --unlimited          No quota cap (overrides --quota)
-  --quota <int>        Remaining quota (in gateway units; see 'everyapi status')
-  --expires <when>     "never" (default for create) or absolute Unix seconds
-  --models <a,b,c>     Restrict to this CSV of model ids (omit / empty → all)
-  --ip <cidr,cidr>     IP allowlist (omit → no restriction)
-  --cross-group        Allow auto-routing to retry across groups
-
-EXAMPLES
-  everyapi token list
-  everyapi token create --name prod --unlimited
-  everyapi token create --name byteplus-only --quota 1000000 --group byteplus
-  everyapi token update 42 --name renamed
-  everyapi token disable 42
-  everyapi token key 42                  (prints sk-everyapi-…)
-  everyapi token revoke 42 -y
-`
 
 // Run is the dispatcher registered in main.go. Behaves like
 // cmd/seller's Run: bare invocation prints help + errors so the
 // launcher's sub-picker isn't masked by a successful no-op.
 func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		cliout.Println(usage)
+		cliout.Println(i18n.T("token.usage"))
 		if len(args) == 0 {
-			return errors.New("missing subcommand (try 'everyapi token help')")
+			return fmt.Errorf(i18n.T("common.missing_subcommand"), "everyapi token")
 		}
 		return nil
 	}
@@ -87,8 +53,8 @@ func Run(args []string) error {
 	case "revoke":
 		return runRevoke(args[1:])
 	default:
-		cliout.Println(usage)
-		return fmt.Errorf("unknown 'token' subcommand %q", args[0])
+		cliout.Println(i18n.T("token.usage"))
+		return fmt.Errorf(i18n.T("common.unknown_subcommand"), "token", args[0])
 	}
 }
 
@@ -97,7 +63,7 @@ func Run(args []string) error {
 func newClient() (*api.Client, *config.Credentials, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return nil, nil, errors.New("not logged in — run 'everyapi login' first")
+		return nil, nil, errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return nil, nil, err
@@ -110,18 +76,18 @@ func classifyErr(err error) error {
 		return nil
 	}
 	if api.IsUnauthorized(err) {
-		return errors.New("your session expired — run 'everyapi login' again")
+		return errors.New(i18n.T("auth.session_expired"))
 	}
 	return err
 }
 
 func parseID(args []string, verb string) (int, []string, error) {
 	if len(args) == 0 {
-		return 0, nil, fmt.Errorf("usage: everyapi token %s <id> [flags]", verb)
+		return 0, nil, fmt.Errorf(i18n.T("token.usage_arg_id"), verb)
 	}
 	id, err := strconv.Atoi(args[0])
 	if err != nil || id <= 0 {
-		return 0, nil, fmt.Errorf("invalid token id %q (must be a positive integer)", args[0])
+		return 0, nil, fmt.Errorf(i18n.T("token.invalid_id"), args[0])
 	}
 	return id, args[1:], nil
 }
@@ -129,13 +95,13 @@ func parseID(args []string, verb string) (int, []string, error) {
 func statusLabel(s int) string {
 	switch s {
 	case api.TokenStatusEnabled:
-		return "enabled"
+		return i18n.T("token.status_enabled")
 	case api.TokenStatusDisabled:
-		return "disabled"
+		return i18n.T("token.status_disabled")
 	case api.TokenStatusExpired:
-		return "expired"
+		return i18n.T("token.status_expired")
 	case api.TokenStatusExhausted:
-		return "exhausted"
+		return i18n.T("token.status_exhausted")
 	default:
 		return fmt.Sprintf("status=%d", s)
 	}
@@ -143,7 +109,7 @@ func statusLabel(s int) string {
 
 func expiresLabel(t int64) string {
 	if t == api.TokenExpiresNever {
-		return "never"
+		return i18n.T("token.label.expires_never")
 	}
 	return time.Unix(t, 0).Format("2006-01-02 15:04:05")
 }
@@ -164,11 +130,11 @@ func runList(args []string) error {
 		return classifyErr(err)
 	}
 	if len(toks) == 0 {
-		cliout.Println("No tokens yet. Use 'everyapi token create --name <n>'.")
+		cliout.Println(i18n.T("token.no_tokens"))
 		return nil
 	}
 	sort.Slice(toks, func(i, j int) bool { return toks[i].ID < toks[j].ID })
-	cliout.Printf("%d token(s):\n", len(toks))
+	cliout.Printf(i18n.T("token.count")+"\n", len(toks))
 	for _, t := range toks {
 		group := t.Group
 		if group == "" {
@@ -177,7 +143,7 @@ func runList(args []string) error {
 		cliout.Printf("  [#%d] %s — %s, group=%s\n",
 			t.ID, t.Name, statusLabel(t.Status), group)
 	}
-	cliout.Println("\nFull keys with 'everyapi token key <id>'.")
+	cliout.Println(i18n.T("token.full_keys_hint"))
 	return nil
 }
 
@@ -200,28 +166,28 @@ func runShow(args []string) error {
 	if t.AllowIPs != nil {
 		allowIPs = *t.AllowIPs
 	}
-	cliout.Printf("Token #%d\n", t.ID)
-	cliout.Printf("  name:        %s\n", t.Name)
-	cliout.Printf("  key:         %s (masked)\n", t.Key)
-	cliout.Printf("  status:      %s\n", statusLabel(t.Status))
-	cliout.Printf("  group:       %s\n", emptyAs(t.Group, "(auto)"))
-	cliout.Printf("  created:     %s\n", time.Unix(t.CreatedTime, 0).Format("2006-01-02 15:04:05"))
-	cliout.Printf("  last used:   %s\n", time.Unix(t.AccessedTime, 0).Format("2006-01-02 15:04:05"))
-	cliout.Printf("  expires:     %s\n", expiresLabel(t.ExpiredTime))
+	cliout.Printf(i18n.T("token.label.id")+"\n", t.ID)
+	cliout.Printf("  %-12s %s\n", i18n.T("token.label.name"), t.Name)
+	cliout.Printf("  %-12s "+i18n.T("token.label.key_masked")+"\n", i18n.T("token.label.key"), t.Key)
+	cliout.Printf("  %-12s %s\n", i18n.T("token.label.status"), statusLabel(t.Status))
+	cliout.Printf("  %-12s %s\n", i18n.T("token.label.group"), emptyAs(t.Group, i18n.T("token.label.auto")))
+	cliout.Printf("  %-12s %s\n", i18n.T("token.label.created"), time.Unix(t.CreatedTime, 0).Format("2006-01-02 15:04:05"))
+	cliout.Printf("  %-12s %s\n", i18n.T("token.label.last_used"), time.Unix(t.AccessedTime, 0).Format("2006-01-02 15:04:05"))
+	cliout.Printf("  %-12s %s\n", i18n.T("token.label.expires"), expiresLabel(t.ExpiredTime))
 	if t.UnlimitedQuota {
-		cliout.Printf("  quota:       unlimited (used %d)\n", t.UsedQuota)
+		cliout.Printf("  %-12s "+i18n.T("token.label.unlimited")+"\n", i18n.T("token.label.quota"), t.UsedQuota)
 	} else {
-		cliout.Printf("  quota:       %d remain / %d used\n", t.RemainQuota, t.UsedQuota)
+		cliout.Printf("  %-12s "+i18n.T("token.label.quota_split")+"\n", i18n.T("token.label.quota"), t.RemainQuota, t.UsedQuota)
 	}
 	if t.ModelLimitsEnabled {
-		cliout.Printf("  models:      %s\n", t.ModelLimits)
+		cliout.Printf("  %-12s %s\n", i18n.T("token.label.models"), t.ModelLimits)
 	} else {
-		cliout.Printf("  models:      (all)\n")
+		cliout.Printf("  %-12s %s\n", i18n.T("token.label.models"), i18n.T("token.label.all"))
 	}
-	cliout.Printf("  allow ips:   %s\n", emptyAs(allowIPs, "(any)"))
-	cliout.Printf("  cross-group: %v\n", t.CrossGroupRetry)
+	cliout.Printf("  %-12s %s\n", i18n.T("token.label.allow_ips"), emptyAs(allowIPs, i18n.T("token.label.any")))
+	cliout.Printf("  %-12s %v\n", i18n.T("token.label.cross_group"), t.CrossGroupRetry)
 	if t.SpecificChannelID != nil {
-		cliout.Printf("  pinned ch:   #%d\n", *t.SpecificChannelID)
+		cliout.Printf("  %-12s #%d\n", i18n.T("token.label.pinned_ch"), *t.SpecificChannelID)
 	}
 	return nil
 }
@@ -320,7 +286,7 @@ func runCreate(args []string) error {
 		return err
 	}
 	if strings.TrimSpace(tf.name) == "" {
-		return errors.New("--name is required for 'token create'")
+		return errors.New(i18n.T("token.name_required"))
 	}
 	exp, err := expiresValue(tf.expires, api.TokenExpiresNever)
 	if err != nil {
@@ -346,7 +312,7 @@ func runCreate(args []string) error {
 	if err := client.CreateToken(cliout.WithCtx(), req); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Println("Token created. Run 'everyapi token list' to see its id, then 'everyapi token key <id>' for the plaintext.")
+	cliout.Println(i18n.T("token.created"))
 	return nil
 }
 
@@ -362,7 +328,7 @@ func runUpdate(args []string) error {
 		return err
 	}
 	if len(tf.seen) == 0 {
-		return errors.New("nothing to update: pass at least one flag (see 'everyapi token update -h')")
+		return errors.New(i18n.T("token.update_no_flags"))
 	}
 	client, _, err := newClient()
 	if err != nil {
@@ -428,7 +394,7 @@ func runUpdate(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Token #%d updated (status: %s).\n", out.ID, statusLabel(out.Status))
+	cliout.Printf(i18n.T("token.updated")+"\n", out.ID, statusLabel(out.Status))
 	return nil
 }
 
@@ -451,7 +417,7 @@ func runSetStatus(args []string, status int) (err error) {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Token #%d is now %s.\n", out.ID, statusLabel(out.Status))
+	cliout.Printf(i18n.T("token.status_changed")+"\n", out.ID, statusLabel(out.Status))
 	return nil
 }
 
@@ -462,11 +428,11 @@ func runRevoke(args []string) error {
 	yes := fs.Bool("y", false, "skip the confirmation prompt")
 	yesLong := fs.Bool("yes", false, "alias of -y")
 	if len(args) == 0 {
-		return errors.New("usage: everyapi token revoke <id> [-y]")
+		return errors.New(i18n.T("token.usage_revoke"))
 	}
 	id, err := strconv.Atoi(args[0])
 	if err != nil || id <= 0 {
-		return fmt.Errorf("invalid token id %q (must be a positive integer)", args[0])
+		return fmt.Errorf(i18n.T("token.invalid_id"), args[0])
 	}
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
@@ -483,20 +449,20 @@ func runRevoke(args []string) error {
 		}
 		ok, err := cliprompt.YesNo(
 			bufio.NewReader(os.Stdin),
-			fmt.Sprintf("Revoke token #%d %q? Apps using this key will start getting 401.", t.ID, t.Name),
+			fmt.Sprintf(i18n.T("token.revoke_confirm"), t.ID, t.Name),
 			false,
 		)
 		if err != nil {
 			return err
 		}
 		if !ok {
-			cliout.Println("Canceled.")
+			cliout.Println(i18n.T("common.canceled"))
 			return nil
 		}
 	}
 	if err := client.DeleteToken(cliout.WithCtx(), id); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Token #%d revoked.\n", id)
+	cliout.Printf(i18n.T("token.revoked")+"\n", id)
 	return nil
 }

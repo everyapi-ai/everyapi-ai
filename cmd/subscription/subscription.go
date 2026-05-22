@@ -13,29 +13,13 @@ import (
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-const usage = `everyapi subscription — subscription plans / self / preference
-
-USAGE
-  everyapi subscription <subcommand> [flags]
-
-SUBCOMMANDS
-  plans                            List enabled subscription plans
-  self                             Show your active + past subscriptions
-  preference --set <value>         Update billing preference
-                                   (commonly: "topup" / "subscription" / "subscription_first")
-                                   Backend normalises unknown values.
-
-NOTE
-  Buying a plan is still a browser flow — use 'everyapi topup' to
-  open the dashboard wallet behind the anti-phishing handshake.
-`
-
 func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		cliout.Println(usage)
+		cliout.Println(i18n.T("subscription.usage"))
 		if len(args) == 0 {
 			return errors.New("missing subcommand (try 'everyapi subscription help')")
 		}
@@ -49,7 +33,7 @@ func Run(args []string) error {
 	case "preference":
 		return runPreference(args[1:])
 	default:
-		cliout.Println(usage)
+		cliout.Println(i18n.T("subscription.usage"))
 		return fmt.Errorf("unknown 'subscription' subcommand %q", args[0])
 	}
 }
@@ -57,7 +41,7 @@ func Run(args []string) error {
 func newClient() (*api.Client, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return nil, errors.New("not logged in — run 'everyapi login' first")
+		return nil, errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return nil, err
@@ -70,7 +54,7 @@ func classifyErr(err error) error {
 		return nil
 	}
 	if api.IsUnauthorized(err) {
-		return errors.New("your session expired — run 'everyapi login' again")
+		return errors.New(i18n.T("auth.session_expired"))
 	}
 	return err
 }
@@ -89,11 +73,11 @@ func runPlans(args []string) error {
 		return classifyErr(err)
 	}
 	if len(plans) == 0 {
-		cliout.Println("No enabled subscription plans.")
+		cliout.Println(i18n.T("subscription.no_plans"))
 		return nil
 	}
 	sort.Slice(plans, func(i, j int) bool { return plans[i].PriceAmount < plans[j].PriceAmount })
-	cliout.Printf("%d plan(s):\n", len(plans))
+	cliout.Printf(i18n.T("subscription.plans_count")+"\n", len(plans))
 	for _, p := range plans {
 		dur := formatDuration(p.DurationUnit, p.DurationValue, p.CustomSeconds)
 		extra := ""
@@ -179,13 +163,13 @@ func runPreference(args []string) error {
 		if err != nil {
 			return classifyErr(err)
 		}
-		cliout.Printf("Current billing preference: %s\n", self.BillingPreference)
-		cliout.Println("Use --set <value> to change. Backend normalises unknown values to the default.")
+		cliout.Printf(i18n.T("subscription.current_preference")+"\n", self.BillingPreference)
+		cliout.Println(i18n.T("subscription.set_hint"))
 		return nil
 	}
 	if err := client.UpdateSubscriptionPreference(cliout.WithCtx(), *set); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Billing preference updated to %q.\n", *set)
+	cliout.Printf(i18n.T("subscription.preference_updated")+"\n", *set)
 	return nil
 }

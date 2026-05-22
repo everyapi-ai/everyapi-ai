@@ -8,6 +8,7 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/config"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 const marketplaceOptionKey = "marketplace.enabled"
@@ -39,10 +40,10 @@ func marketplaceStatus() error {
 		return err
 	}
 	if !found {
-		cliout.Printf("marketplace.enabled: <unset> (backend default: false)\n")
+		cliout.Printf("%s", i18n.T("admin.marketplace.status_unset"))
 		return nil
 	}
-	cliout.Printf("marketplace.enabled: %s\n", val)
+	cliout.Printf(i18n.T("admin.marketplace.status_set"), val)
 	return nil
 }
 
@@ -67,10 +68,10 @@ func marketplaceSet(target bool) error {
 		return err
 	}
 	if prev == targetStr {
-		cliout.Printf("marketplace.enabled: already %s — no change\n", targetStr)
+		cliout.Printf(i18n.T("admin.marketplace.no_change"), targetStr)
 		return nil
 	}
-	cliout.Printf("marketplace.enabled: %s → %s\n", prevOrUnset(prev), targetStr)
+	cliout.Printf(i18n.T("admin.marketplace.changed"), prevOrUnset(prev), targetStr)
 	return nil
 }
 
@@ -87,7 +88,7 @@ func prevOrUnset(prev string) string {
 func adminClient() (*api.Client, *config.Credentials, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return nil, nil, errors.New("not logged in — run 'everyapi login' first")
+		return nil, nil, errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return nil, nil, err

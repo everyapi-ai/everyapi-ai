@@ -12,26 +12,16 @@ import (
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
-
-const usage = `everyapi models — model catalog visible to your account
-
-USAGE
-  everyapi models <subcommand> [flags]
-
-SUBCOMMANDS
-  list                       Print every model id your group can route to
-  pricing [--model <m>]      Per-model rate sheet (optionally filtered)
-  groups                     Routing groups your account can use
-`
 
 func Run(args []string) error {
 	if len(args) == 0 || args[0] == "list" {
 		return runList(args[1:])
 	}
 	if args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		cliout.Println(usage)
+		cliout.Println(i18n.T("models.usage"))
 		return nil
 	}
 	switch args[0] {
@@ -40,7 +30,7 @@ func Run(args []string) error {
 	case "groups":
 		return runGroups(args[1:])
 	default:
-		cliout.Println(usage)
+		cliout.Println(i18n.T("models.usage"))
 		return fmt.Errorf("unknown 'models' subcommand %q", args[0])
 	}
 }
@@ -48,7 +38,7 @@ func Run(args []string) error {
 func newClient() (*api.Client, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return nil, errors.New("not logged in — run 'everyapi login' first")
+		return nil, errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return nil, err
@@ -61,7 +51,7 @@ func classifyErr(err error) error {
 		return nil
 	}
 	if api.IsUnauthorized(err) {
-		return errors.New("your session expired — run 'everyapi login' again")
+		return errors.New(i18n.T("auth.session_expired"))
 	}
 	return err
 }
@@ -80,11 +70,11 @@ func runList(args []string) error {
 		return classifyErr(err)
 	}
 	if len(ms) == 0 {
-		cliout.Println("No models routable from your group. Ask an admin to enable one.")
+		cliout.Println(i18n.T("models.no_models"))
 		return nil
 	}
 	sort.Strings(ms)
-	cliout.Printf("%d model(s) accessible:\n", len(ms))
+	cliout.Printf(i18n.T("models.count")+"\n", len(ms))
 	for _, m := range ms {
 		cliout.Printf("  %s\n", m)
 	}
@@ -117,7 +107,7 @@ func runPricing(args []string) error {
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].ModelName < rows[j].ModelName })
 	if len(rows) == 0 {
-		cliout.Println("No pricing rows match.")
+		cliout.Println(i18n.T("models.no_pricing"))
 		return nil
 	}
 	cliout.Printf("%d model(s):\n", len(rows))
@@ -164,7 +154,7 @@ func runGroups(args []string) error {
 		return classifyErr(err)
 	}
 	if len(groups) == 0 {
-		cliout.Println("No routing groups available to your account.")
+		cliout.Println(i18n.T("models.no_groups"))
 		return nil
 	}
 	names := make([]string, 0, len(groups))

@@ -21,6 +21,7 @@ import (
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 	"github.com/everyapi-ai/everyapi-sdk/sanitizer"
 )
@@ -130,7 +131,7 @@ func proxyStart(args []string) error {
 	if !detachExplicit && cliprompt.IsInteractive() {
 		bg, perr := cliprompt.YesNo(
 			bufio.NewReader(os.Stdin),
-			"Run the proxy in the background (detached)? Yes = run + return to your shell; No = stay in this terminal with the live log (Ctrl+C to stop)",
+			i18n.T("proxy.detach_prompt"),
 			true,
 		)
 		if perr != nil {
@@ -224,11 +225,11 @@ func proxyStart(args []string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	cliout.Printf("Sanitizer proxy listening on http://%s\n", *listen)
-	cliout.Printf("Upstream: %s\n", resolvedUpstream)
-	cliout.Printf("Active detectors: %d\n", len(detectors))
-	cliout.Println("Point your SDK at http://" + *listen + " (or run 'everyapi use <tool>').")
-	cliout.Println("Ctrl+C to stop. The mapping table lives only in memory.")
+	cliout.Printf(i18n.T("proxy.start_listening")+"\n", *listen)
+	cliout.Printf(i18n.T("proxy.start_upstream")+"\n", resolvedUpstream)
+	cliout.Printf(i18n.T("proxy.start_detectors")+"\n", len(detectors))
+	cliout.Printf(i18n.T("proxy.start_point_sdk")+"\n", *listen)
+	cliout.Println(i18n.T("proxy.start_ctrl_c"))
 	cliout.Println("")
 
 	return srv.Run(ctx)
@@ -247,7 +248,7 @@ func proxyStop(args []string) error {
 	}
 	pid, _, ok := readPIDFile()
 	if !ok {
-		cliout.Println("Sanitizer proxy is not running (no PID file).")
+		cliout.Println(i18n.T("proxy.stop_not_running"))
 		return nil
 	}
 	proc, err := os.FindProcess(pid)
@@ -261,12 +262,12 @@ func proxyStop(args []string) error {
 		_ = removePIDFile()
 		if strings.Contains(err.Error(), "process already finished") ||
 			strings.Contains(err.Error(), "no such process") {
-			cliout.Println("Sanitizer proxy was not running; cleaned up stale PID file.")
+			cliout.Println(i18n.T("proxy.stop_was_not_running"))
 			return nil
 		}
 		return fmt.Errorf("signal pid %d: %w", pid, err)
 	}
-	cliout.Printf("Sent SIGTERM to sanitizer proxy (pid=%d). Waiting up to 3s for it to exit…\n", pid)
+	cliout.Printf(i18n.T("proxy.stop_sent_sigterm"), pid)
 	// Wait briefly for the process to actually exit before
 	// reporting success. The server uses an 5s shutdown grace, so
 	// 3s here is "polled until done or report still-running".
@@ -274,12 +275,12 @@ func proxyStop(args []string) error {
 	for time.Now().Before(deadline) {
 		if !processAlive(pid) {
 			_ = removePIDFile()
-			cliout.Println("Stopped.")
+			cliout.Println(i18n.T("proxy.stop_stopped"))
 			return nil
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	cliout.Println("Process still alive after 3s — it should exit shortly on its own.")
+	cliout.Println(i18n.T("proxy.stop_still_alive"))
 	return nil
 }
 
@@ -303,8 +304,8 @@ func proxyConfigure(args []string) error {
 	}
 	in := bufio.NewReader(os.Stdin)
 
-	cliout.Println("everyapi proxy — sanitizer configuration")
-	cliout.Printf("Config file: %s\n", cfgPath)
+	cliout.Println(i18n.T("proxy.configure_header"))
+	cliout.Printf(i18n.T("proxy.configure_config_file")+"\n", cfgPath)
 	cliout.Println("")
 
 	// Phase 1: built-in detectors. Replaces the previous "Toggle any?
@@ -337,7 +338,7 @@ func proxyConfigure(args []string) error {
 		}
 	}
 	selectedEnabled, err := cliprompt.PickMany(
-		"Built-in detectors — leave the ones you want ENABLED checked:",
+		i18n.T("proxy.configure_builtin_prompt"),
 		labels, allDetectors, preselected)
 	if err != nil {
 		return err
@@ -358,17 +359,17 @@ func proxyConfigure(args []string) error {
 	// needs can still hand-edit the JSON.
 	if len(fc.CustomPatterns) > 0 {
 		cliout.Println("")
-		cliout.Println("Existing custom patterns:")
+		cliout.Println(i18n.T("proxy.configure_existing_patterns"))
 		for _, p := range fc.CustomPatterns {
 			cliout.Printf("  %s = %s\n", p.Name, p.Regex)
 		}
 	}
-	addCustom, err := cliprompt.YesNo(in, "Add or replace a custom regex pattern?", false)
+	addCustom, err := cliprompt.YesNo(in, i18n.T("proxy.configure_add_replace_prompt"), false)
 	if err != nil {
 		return err
 	}
 	for addCustom {
-		name, err := cliprompt.Line(in, "Pattern name (no spaces)", "")
+		name, err := cliprompt.Line(in, i18n.T("proxy.configure_pattern_name_prompt"), "")
 		if err != nil {
 			return err
 		}
@@ -383,22 +384,22 @@ func proxyConfigure(args []string) error {
 		def := ""
 		if existingIdx >= 0 {
 			def = fc.CustomPatterns[existingIdx].Regex
-			cliout.Printf("(pattern %q already exists with regex %q — entering a new value will replace it)\n", name, def)
+			cliout.Printf(i18n.T("proxy.configure_pattern_exists")+"\n", name, def)
 		}
-		expr, err := cliprompt.Line(in, "Regex (Go syntax)", def)
+		expr, err := cliprompt.Line(in, i18n.T("proxy.configure_regex_prompt"), def)
 		if err != nil {
 			return err
 		}
 		if _, err := regexp.Compile(expr); err != nil {
-			cliout.Printf("Invalid regex %q: %v — skipped.\n", expr, err)
+			cliout.Printf(i18n.T("proxy.configure_invalid_regex")+"\n", expr, err)
 		} else if existingIdx >= 0 {
 			fc.CustomPatterns[existingIdx].Regex = expr
-			cliout.Printf("→ replaced pattern %q.\n", name)
+			cliout.Printf(i18n.T("proxy.configure_replaced")+"\n", name)
 		} else {
 			fc.CustomPatterns = append(fc.CustomPatterns, sanitizer.UserPattern{Name: name, Regex: expr})
-			cliout.Printf("→ added pattern %q.\n", name)
+			cliout.Printf(i18n.T("proxy.configure_added")+"\n", name)
 		}
-		addCustom, err = cliprompt.YesNo(in, "Add or replace another?", false)
+		addCustom, err = cliprompt.YesNo(in, i18n.T("proxy.configure_add_replace_another"), false)
 		if err != nil {
 			return err
 		}
@@ -413,13 +414,13 @@ func proxyConfigure(args []string) error {
 	if err := sanitizer.SaveFileConfig(fc); err != nil {
 		return err
 	}
-	cliout.Printf("Saved → %s\n", cfgPath)
+	cliout.Printf(i18n.T("proxy.configure_saved")+"\n", cfgPath)
 	// Hint: if a proxy is running, it won't pick up the new config
 	// until restart. Detect that and tell the user.
 	if pid, _, ok := readPIDFile(); ok && processAlive(pid) {
 		cliout.Println("")
-		cliout.Println("A sanitizer proxy is currently running. Restart it to pick up the new config:")
-		cliout.Println("  everyapi proxy stop && everyapi proxy start --detach")
+		cliout.Println(i18n.T("proxy.configure_restart_hint_1"))
+		cliout.Println(i18n.T("proxy.configure_restart_hint_2"))
 	}
 	return nil
 }
@@ -575,8 +576,8 @@ func reexecDetached(listen, upstream string, parentPID int) error {
 		if err == nil {
 			_ = resp.Body.Close()
 			if resp.StatusCode == 200 {
-				cliout.Printf("Sanitizer proxy started (pid=%d, listen=%s).\n", cmd.Process.Pid, listen)
-				cliout.Printf("Logs: %s\n", logPath)
+				cliout.Printf(i18n.T("proxy.started_pid")+"\n", cmd.Process.Pid, listen)
+				cliout.Printf(i18n.T("proxy.started_logs")+"\n", logPath)
 				return nil
 			}
 		}
@@ -619,21 +620,18 @@ func proxyStatus(args []string) error {
 	resp, err := client.Get("http://" + addr + "/__sanitizer/status")
 	if err != nil {
 		// Most likely: connection refused → proxy not running.
-		fmt.Fprintln(os.Stderr, "Sanitizer proxy is not running.")
-		fmt.Fprintln(os.Stderr, "Start it with: everyapi proxy start")
+		fmt.Fprintln(os.Stderr, i18n.T("proxy.status_not_running"))
+		fmt.Fprintln(os.Stderr, i18n.T("proxy.status_start_hint"))
 		return nil
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 || !looksLikeSanitizerJSON(body, resp.Header.Get("Content-Type")) {
 		ct := resp.Header.Get("Content-Type")
-		fmt.Fprintf(os.Stderr,
-			"Port %s is responding, but not with the EveryAPI sanitizer (got HTTP %d, content-type %q).\n",
+		fmt.Fprintf(os.Stderr, i18n.T("proxy.status_wrong_server_line1"),
 			addr, resp.StatusCode, ct)
-		fmt.Fprintln(os.Stderr,
-			"Something else is bound to that port — pick another with --listen 127.0.0.1:<port>,")
-		fmt.Fprintln(os.Stderr,
-			"or stop the other service. 'lsof -iTCP:"+portOf(addr)+" -sTCP:LISTEN' will name it on macOS/Linux.")
+		fmt.Fprintln(os.Stderr, i18n.T("proxy.status_wrong_server_line2"))
+		fmt.Fprintf(os.Stderr, i18n.T("proxy.status_wrong_server_line3")+"\n", portOf(addr))
 		return nil
 	}
 	return renderSanitizerStatus(body)
@@ -670,10 +668,10 @@ func renderSanitizerStatus(body []byte) error {
 	if err := json.Unmarshal(body, &st); err != nil {
 		// Don't return — surface raw body so a sanitizer that grew a
 		// new field doesn't black-hole on a stale CLI.
-		cliout.Printf("Sanitizer proxy (raw): %s\n", string(body))
+		cliout.Printf(i18n.T("proxy.status_raw_prefix")+"\n", string(body))
 		return nil
 	}
-	cliout.Println("Sanitizer proxy")
+	cliout.Println(i18n.T("proxy.status_header"))
 	cliout.Printf("  %-12s%s\n", "listen:", st.Listen)
 	cliout.Printf("  %-12s%s\n", "upstream:", st.Upstream)
 	cliout.Printf("  %-12s%s\n", "uptime:", humanDurationSec(st.UptimeSeconds))

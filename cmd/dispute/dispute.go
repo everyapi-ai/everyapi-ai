@@ -11,24 +11,13 @@ import (
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-const usage = `everyapi dispute — open / list / inspect disputes
-
-USAGE
-  everyapi dispute <subcommand> [flags]
-
-SUBCOMMANDS
-  submit --counterparty <uid> --type <t> --target-kind <k> --target <id> --description <d> [--amount <quota>]
-                                       Open a dispute
-  my     [--page P] [--limit N]        List your open + resolved disputes
-  show   <id>                          Single dispute in detail
-`
-
 func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		cliout.Println(usage)
+		cliout.Println(i18n.T("dispute.usage"))
 		if len(args) == 0 {
 			return errors.New("missing subcommand")
 		}
@@ -42,7 +31,7 @@ func Run(args []string) error {
 	case "show":
 		return runShow(args[1:])
 	default:
-		cliout.Println(usage)
+		cliout.Println(i18n.T("dispute.usage"))
 		return fmt.Errorf("unknown 'dispute' subcommand %q", args[0])
 	}
 }
@@ -50,7 +39,7 @@ func Run(args []string) error {
 func newClient() (*api.Client, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return nil, errors.New("not logged in — run 'everyapi login' first")
+		return nil, errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return nil, err
@@ -63,7 +52,7 @@ func classifyErr(err error) error {
 		return nil
 	}
 	if api.IsUnauthorized(err) {
-		return errors.New("your session expired — run 'everyapi login' again")
+		return errors.New(i18n.T("auth.session_expired"))
 	}
 	return err
 }
@@ -97,7 +86,7 @@ func runSubmit(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Dispute #%d opened (state=%s).\n", d.ID, d.State)
+	cliout.Printf(i18n.T("dispute.opened")+"\n", d.ID, d.State)
 	return nil
 }
 
@@ -117,7 +106,7 @@ func runList(args []string) error {
 		return classifyErr(err)
 	}
 	if len(rows) == 0 {
-		cliout.Println("No disputes.")
+		cliout.Println(i18n.T("dispute.no_rows"))
 		return nil
 	}
 	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)

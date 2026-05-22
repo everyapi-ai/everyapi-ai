@@ -16,6 +16,7 @@ import (
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -66,11 +67,11 @@ func Run(args []string) error {
 		if *quiet {
 			return
 		}
-		fmt.Fprintf(os.Stderr, "[transport] %s — reconnecting\n", e)
+		fmt.Fprintf(os.Stderr, i18n.T("events.transport_err")+"\n", e)
 	}
 	ch := client.SubscribeEvents(ctx, onErr)
 
-	cliout.Println("Connected. Streaming events (Ctrl-C to stop)…")
+	cliout.Println(i18n.T("events.connected"))
 	for ev := range ch {
 		if len(wantType) > 0 && !wantType[ev.Type] {
 			continue

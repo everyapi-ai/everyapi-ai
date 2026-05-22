@@ -1,6 +1,14 @@
 package cmd
 
-import "testing"
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+)
 
 // compareSemver is the only piece of `everyapi update` worth unit-
 // testing in isolation: the GitHub roundtrip is integration-shaped
@@ -105,4 +113,172 @@ func endsWith(s, suffix string) bool {
 		return false
 	}
 	return s[len(s)-len(suffix):] == suffix
+}
+
+// TestGithubAPIError covers the three branches githubAPIError walks
+// through. The rate-limit path is the one users actually hit (60 req
+// shared per IP, exhausted on busy NATs) and the error message has to
+// be specific enough to point at the GITHUB_TOKEN workaround.
+func TestGithubAPIError(t *testing.T) {
+	t.Run("rate-limit exhausted with reset header", func(t *testing.T) {
+		reset := time.Now().Add(15 * time.Minute).Unix()
+		resp := &http.Response{
+			StatusCode: http.StatusForbidden,
+			Header:     http.Header{},
+		}
+		resp.Header.Set("X-RateLimit-Remaining", "0")
+		resp.Header.Set("X-RateLimit-Reset", strconv.FormatInt(reset, 10))
+		err := githubAPIError(resp)
+		if err == nil {
+			t.Fatal("want error")
+		}
+		msg := err.Error()
+		if !strings.Contains(msg, "rate-limit exhausted") {
+			t.Errorf("missing rate-limit text: %q", msg)
+		}
+		if !strings.Contains(msg, "GITHUB_TOKEN") {
+			t.Errorf("missing GITHUB_TOKEN hint: %q", msg)
+		}
+		if !strings.Contains(msg, "resets in") {
+			t.Errorf("missing 'resets in' duration: %q", msg)
+		}
+	})
+
+	t.Run("rate-limit exhausted without reset header", func(t *testing.T) {
+		// Some proxies strip the rate-limit headers; fall back to a
+		// shorter message that still names the bucket + workaround.
+		resp := &http.Response{StatusCode: http.StatusForbidden, Header: http.Header{}}
+		resp.Header.Set("X-RateLimit-Remaining", "0")
+		err := githubAPIError(resp)
+		if err == nil || !strings.Contains(err.Error(), "GITHUB_TOKEN") {
+			t.Errorf("want GITHUB_TOKEN hint without reset header, got %v", err)
+		}
+	})
+
+	t.Run("403 that is NOT a rate-limit case falls through generic", func(t *testing.T) {
+		// Could be auth (private repo + bad token) or abuse detection.
+		// Don't claim rate-limit when there's no header proof.
+		resp := &http.Response{StatusCode: http.StatusForbidden, Header: http.Header{}}
+		// X-RateLimit-Remaining absent or non-zero → not the bucket
+		// case; surface raw status so the user sees the real story.
+		err := githubAPIError(resp)
+		if err == nil || !strings.Contains(err.Error(), "returned 403") {
+			t.Errorf("want generic 403, got %v", err)
+		}
+	})
+
+	t.Run("non-403 status passes through generic", func(t *testing.T) {
+		resp := &http.Response{StatusCode: http.StatusBadGateway, Header: http.Header{}}
+		err := githubAPIError(resp)
+		if err == nil || !strings.Contains(err.Error(), "returned 502") {
+			t.Errorf("want generic 502, got %v", err)
+		}
+	})
+}
+
+// TestFetchLatestRelease_Auth covers the header-injection plumbing
+// — the actual behavioural change of the rate-limit fix. Without
+// these checks a refactor could silently drop the Authorization
+// header and the loud-fail-on-403 message would still test green
+// while users still got rate-limited.
+func TestFetchLatestRelease_Auth(t *testing.T) {
+	t.Run("no env vars → no Authorization header", func(t *testing.T) {
+		t.Setenv("GH_TOKEN", "")
+		t.Setenv("GITHUB_TOKEN", "")
+		var seen string
+		srv := newReleaseTestServer(func(r *http.Request) (int, string) {
+			seen = r.Header.Get("Authorization")
+			return 200, `{"tag_name":"v1.2.3"}`
+		})
+		defer srv.Close()
+		swapPollURL(t, srv.URL+"/releases/latest")
+		if _, err := fetchLatestRelease(testCtx(t)); err != nil {
+			t.Fatalf("fetchLatestRelease: %v", err)
+		}
+		if seen != "" {
+			t.Errorf("unexpected Authorization header sent: %q", seen)
+		}
+	})
+
+	t.Run("GITHUB_TOKEN set → sent as Bearer", func(t *testing.T) {
+		t.Setenv("GH_TOKEN", "")
+		t.Setenv("GITHUB_TOKEN", "ghp_classic_xyz")
+		var seen string
+		srv := newReleaseTestServer(func(r *http.Request) (int, string) {
+			seen = r.Header.Get("Authorization")
+			return 200, `{"tag_name":"v1.2.3"}`
+		})
+		defer srv.Close()
+		swapPollURL(t, srv.URL+"/releases/latest")
+		if _, err := fetchLatestRelease(testCtx(t)); err != nil {
+			t.Fatalf("fetchLatestRelease: %v", err)
+		}
+		if seen != "Bearer ghp_classic_xyz" {
+			t.Errorf("Authorization header = %q, want Bearer ghp_classic_xyz", seen)
+		}
+	})
+
+	t.Run("GH_TOKEN wins over GITHUB_TOKEN", func(t *testing.T) {
+		// gh CLI sets GH_TOKEN; CI sets GITHUB_TOKEN. When both are
+		// set the user's gh login should take precedence.
+		t.Setenv("GH_TOKEN", "ghp_from_gh_cli")
+		t.Setenv("GITHUB_TOKEN", "ghp_from_ci")
+		var seen string
+		srv := newReleaseTestServer(func(r *http.Request) (int, string) {
+			seen = r.Header.Get("Authorization")
+			return 200, `{"tag_name":"v1.2.3"}`
+		})
+		defer srv.Close()
+		swapPollURL(t, srv.URL+"/releases/latest")
+		if _, err := fetchLatestRelease(testCtx(t)); err != nil {
+			t.Fatalf("fetchLatestRelease: %v", err)
+		}
+		if seen != "Bearer ghp_from_gh_cli" {
+			t.Errorf("Authorization header = %q, want gh CLI token to win", seen)
+		}
+	})
+
+	t.Run("whitespace-only env is treated as unset", func(t *testing.T) {
+		t.Setenv("GH_TOKEN", "   ")
+		t.Setenv("GITHUB_TOKEN", "")
+		var seen string
+		srv := newReleaseTestServer(func(r *http.Request) (int, string) {
+			seen = r.Header.Get("Authorization")
+			return 200, `{"tag_name":"v1.2.3"}`
+		})
+		defer srv.Close()
+		swapPollURL(t, srv.URL+"/releases/latest")
+		if _, err := fetchLatestRelease(testCtx(t)); err != nil {
+			t.Fatalf("fetchLatestRelease: %v", err)
+		}
+		if seen != "" {
+			t.Errorf("whitespace token leaked into Authorization: %q", seen)
+		}
+	})
+}
+
+// --- test helpers below; kept package-local because they touch
+// the file-scope latestReleasePollURL var and shouldn't leak.
+
+func newReleaseTestServer(handler func(r *http.Request) (status int, body string)) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		st, body := handler(r)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(st)
+		_, _ = w.Write([]byte(body))
+	}))
+}
+
+func swapPollURL(t *testing.T, url string) {
+	t.Helper()
+	prev := latestReleasePollURL
+	latestReleasePollURL = url
+	t.Cleanup(func() { latestReleasePollURL = prev })
+}
+
+func testCtx(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+	return ctx
 }

@@ -1,0 +1,787 @@
+# Traductions françaises pour les chaînes propres au CLI.
+#
+# Pour ajouter une nouvelle clé : l'ajouter ici ET dans en.toml au
+# même chemin. Les clés absentes en fr retombent automatiquement sur
+# la valeur en ; les clés absentes des DEUX renvoient la clé brute
+# (échec bruyant pour le développeur).
+#
+# Les blocs USAGE multilignes utilisent les chaînes littérales
+# multilignes de TOML ('''…'''). Elles n'interprètent pas les
+# échappements antislash, donc le texte d'un raw string Go s'y colle
+# tel quel. TOML supprime le saut de ligne immédiatement après le '''
+# d'ouverture — exactement comme les raw strings Go quand le backtick
+# est en fin de ligne — donc écrivez le bloc collé à gauche et la
+# sortie commencera là où l'utilisateur s'y attend.
+#
+# Pour ajouter une nouvelle langue : déposez un {lang}.toml dans ce
+# répertoire ; le chargeur le prend en charge à l'init(). Aucun
+# changement de code n'est nécessaire au-delà de l'ajout de la
+# constante Lang* et de son inclusion dans SupportedLanguages.
+
+[auth]
+not_logged_in = "non connecté — exécutez d'abord 'everyapi login'"
+session_expired = "votre session a expiré — exécutez 'everyapi login' à nouveau"
+
+[common]
+canceled = "Annulé."
+error_prefix = "Erreur"
+missing_subcommand = "sous-commande manquante (essayez '%s help')"
+unknown_subcommand = "sous-commande '%s' inconnue %q"
+pick_subcommand = "%s — choisissez une sous-commande :"
+browser_open_failed = "Impossible d'ouvrir le navigateur automatiquement — copiez l'URL ci-dessus."
+browser_open_failed_qr = "Impossible d'ouvrir le navigateur automatiquement — scannez le QR ou copiez l'URL ci-dessus."
+open_browser_now = "Ouvrir le navigateur maintenant ?"
+aborted_by_user = "interrompu par l'utilisateur"
+cancelled_nothing_submitted = "Annulé — rien n'a été soumis."
+rows_of_total = "%d ligne(s) sur %d au total :"
+
+[launcher]
+welcome = "everyapi — choisissez une commande :"
+usage = '''
+everyapi — CLI EveryAPI
+
+UTILISATION
+  everyapi <commande> [options]
+
+COMMANDES
+  login           Authentifier cet appareil auprès d'EveryAPI
+  logout          Supprimer les identifiants de cet appareil
+  status          Afficher quota, utilisation et solde actuels
+  topup           Ouvrir la page de rechargement (phrase de vérification anti-phishing)
+  wallet <sub>    Historique de paiements / méthodes / clés d'échange
+  checkin         Réclamer le quota quotidien d'aujourd'hui
+  user <sub>      Profil / 2FA / passkey / liaisons OAuth / code d'affiliation
+  subscription <sub>  Plans d'abonnement / mon compte / préférence de facturation
+  use <outil>     Lancer un CLI tiers (claude / codex / gemini) via EveryAPI
+  token <sub>     Gérer les tokens de relais (list / show / create / update / key / revoke)
+  log <sub>       Journal des requêtes : list / stat / summary
+  usage           Utilisation de quota jour par jour
+  models <sub>    Catalogue de modèles : list / pricing / groups
+  demand <sub>    Annonces marketplace côté acheteur (list/my/show/submit/cancel/remove)
+  dispute <sub>   Ouvrir / lister / consulter des litiges
+  report          Déposer un signalement d'abus / violation des CGU
+  notify <sub>    Notifications dans l'app (list / count / read / readall)
+  dm <sub>        Messages directs (threads / open / send / messages / read)
+  seller <sub>    Commandes vendeur du marketplace de canaux
+__ADMIN_BLOCK__
+  edge <sub>      Agent fournisseur BYO-GPU (docker + ollama)
+  proxy <sub>     Proxy de nettoyage local (filtre de confidentialité pour les requêtes SDK)
+  mcp [sub]       Serveur MCP pour CLIs d'IA (Claude Code / Codex / Gemini)
+  doctor          Auto-vérification (identifiants, gateway, sanitizer, outils)
+  events          S'abonner au flux d'événements en direct (SSE)
+  settings        Voir / modifier les préférences du CLI (langue, …)
+  update          Vérifier une version plus récente et lancer la mise à niveau correspondante
+  version         Afficher la version du build
+  help            Afficher ce message
+
+Exécutez 'everyapi <commande> help' pour les détails et options des sous-commandes
+(par ex. 'everyapi seller help', 'everyapi edge help').
+'''
+usage_admin_block = '''  admin <sub>     Commandes opérateur (rôle admin requis)
+'''
+
+[settings]
+saved = "Paramètres enregistrés."
+lang_invalid = "langue invalide ; prises en charge"
+current = "Paramètres actuels"
+lang_label = "langue"
+file_at = "Fichier de paramètres :"
+reset_confirm = "Réinitialiser tous les paramètres du CLI aux valeurs par défaut ?"
+unknown_key = "clé de paramètre inconnue %q"
+usage_get = "utilisation : everyapi settings get <clé>"
+usage_set = "utilisation : everyapi settings set <clé> <valeur>"
+default_label = "(par défaut : %s)"
+usage = '''
+everyapi settings — voir / modifier les préférences du CLI
+
+UTILISATION
+  everyapi settings                        Afficher les paramètres actuels (alias de list)
+  everyapi settings list                   Afficher les paramètres actuels
+  everyapi settings get <clé>              Afficher un seul paramètre
+  everyapi settings set <clé> <valeur>     Mettre à jour un paramètre
+  everyapi settings reset                  Effacer tous les paramètres (retour aux défauts)
+
+CLÉS
+  language                                 en | zh | ja | ko | es | de | fr
+
+Le fichier de paramètres est un JSON simple au chemin que
+'everyapi settings list' affiche. L'édition manuelle est OK ; le CLI
+relit le fichier à la prochaine invocation.
+'''
+
+[token]
+no_tokens = "Pas encore de tokens. Utilisez 'everyapi token create --name <n>'."
+count = "%d token(s) :"
+full_keys_hint = "\nClés complètes avec 'everyapi token key <id>'."
+created = "Token créé. Exécutez 'everyapi token list' pour voir son id, puis 'everyapi token key <id>' pour le texte en clair."
+updated = "Token #%d mis à jour (statut : %s)."
+status_changed = "Token #%d est maintenant %s."
+revoked = "Token #%d révoqué."
+revoke_confirm = "Révoquer le token #%d %q ? Les apps utilisant cette clé commenceront à recevoir 401."
+update_no_flags = "rien à mettre à jour : passez au moins une option (voir 'everyapi token update -h')"
+name_required = "--name est requis pour 'token create'"
+invalid_id = "id de token invalide %q (doit être un entier positif)"
+usage_revoke = "utilisation : everyapi token revoke <id> [-y]"
+status_enabled = "activé"
+status_disabled = "désactivé"
+status_expired = "expiré"
+status_exhausted = "épuisé"
+usage_arg_id = "utilisation : everyapi token %s <id> [options]"
+usage = '''
+everyapi token — gérer les tokens de relais (les clés intégrées à vos apps)
+
+UTILISATION
+  everyapi token <sous-commande> [options]
+
+SOUS-COMMANDES
+  list                                 Lister vos tokens (clés masquées)
+  show     <id>                        Afficher un token en détail
+  key      <id>                        Afficher la clé complète en clair
+  create   --name <n> [options]        Créer un nouveau token
+  update   <id> [options]              Modifier les champs d'un token (option omise → valeur conservée)
+  enable   <id>                        Passer le statut à activé
+  disable  <id>                        Passer le statut à désactivé
+  revoke   <id> [-y]                   Supprimer un token (soft-delete ; demande sauf avec -y)
+
+OPTIONS CREATE / UPDATE
+  --name <n>           Nom affiché (requis à la création ; max 50 caractères)
+  --group <g>          Groupe de routage (par défaut "" = auto)
+  --unlimited          Aucune limite de quota (écrase --quota)
+  --quota <int>        Quota restant (en unités gateway ; voir 'everyapi status')
+  --expires <quand>    "never" (par défaut à la création) ou secondes Unix absolues
+  --models <a,b,c>     Restreindre à ce CSV d'ids de modèles (omis / vide → tous)
+  --ip <cidr,cidr>     Liste blanche d'IP (omis → aucune restriction)
+  --cross-group        Autoriser le routage auto à réessayer entre groupes
+
+EXEMPLES
+  everyapi token list
+  everyapi token create --name prod --unlimited
+  everyapi token create --name byteplus-only --quota 1000000 --group byteplus
+  everyapi token update 42 --name renamed
+  everyapi token disable 42
+  everyapi token key 42                  (affiche sk-everyapi-…)
+  everyapi token revoke 42 -y
+'''
+
+[token.label]
+id = "Token #%d"
+name = "nom :"
+key = "key :"
+key_masked = "%s (masquée)"
+status = "statut :"
+group = "groupe :"
+created = "créé :"
+last_used = "dernier usage :"
+expires = "expire :"
+quota = "quota :"
+unlimited = "illimité (utilisé %d)"
+quota_split = "%d restant / %d utilisé"
+models = "modèles :"
+all = "(tous)"
+allow_ips = "ips autorisées :"
+any = "(quelconque)"
+cross_group = "inter-groupes :"
+pinned_ch = "canal épinglé :"
+auto = "(auto)"
+expires_never = "jamais"
+
+[log]
+no_rows = "Aucune ligne de log ne correspond."
+no_spend = "Aucune dépense enregistrée dans cette fenêtre."
+usage = '''
+everyapi log — votre journal de requêtes
+
+UTILISATION
+  everyapi log <sous-commande> [options]
+
+SOUS-COMMANDES
+  list    [options]   Entrées récentes (plus récentes en premier ; 20 lignes par défaut)
+  stat    [options]   Totaux quota / RPM / TPM sur la fenêtre
+  summary [options]   Dépenses par modèle sur les 7 derniers jours (ou --since/--until)
+
+OPTIONS COMMUNES
+  --token  <nom>          Filtrer sur un token (par nom affiché)
+  --model  <nom>          Filtrer sur un modèle
+  --group  <nom>          Filtrer sur un groupe de routage
+  --since  <fenêtre|ts>   Début de fenêtre : 1h / 24h / 7d / 30d, ou Unix s absolu
+  --until  <ts>           Fin de fenêtre (par défaut : maintenant)
+
+OPTIONS LIST UNIQUEMENT
+  --limit  <int>          Taille de page (par défaut 20, max imposé par le serveur)
+  --page   <int>          Index de page basé sur 1
+  --request-id <id>       Épingler un request id upstream
+  --type   <int>          Filtre de type de log (ex. 2=consume ; constantes backend)
+'''
+
+[log.label]
+rows_window = "%d ligne(s) sur %d au total :"
+per_model_hdr = "Dépenses par modèle %s → %s"
+window = "Fenêtre : %s → %s"
+open = "(ouvert)"
+
+[usage]
+no_rows = "Aucune ligne d'utilisation dans cette fenêtre."
+day_by_day = "Utilisation jour par jour (%d jour(s)) :"
+per_model = "Utilisation par modèle (%d modèle(s)) :"
+
+[models]
+no_models = "Aucun modèle routable depuis votre groupe. Demandez à un admin d'en activer un."
+count = "%d modèle(s) accessibles :"
+no_pricing = "Aucune ligne de tarif ne correspond."
+no_groups = "Aucun groupe de routage disponible pour votre compte."
+usage = '''
+everyapi models — catalogue de modèles visible pour votre compte
+
+UTILISATION
+  everyapi models <sous-commande> [options]
+
+SOUS-COMMANDES
+  list                       Afficher tous les ids de modèles vers lesquels votre groupe peut router
+  pricing [--model <m>]      Grille tarifaire par modèle (filtrée si souhaité)
+  groups                     Groupes de routage utilisables par votre compte
+'''
+
+[wallet]
+no_topups = "Aucun rechargement enregistré."
+redeemed = "Échangé : +%d quota crédité."
+usage_redeem = "utilisation : everyapi wallet redeem <key>"
+usage = '''
+everyapi wallet — historique de paiements, méthodes, clés d'échange
+
+UTILISATION
+  everyapi wallet <sous-commande> [options]
+
+SOUS-COMMANDES
+  history [--limit N] [--page P] [--keyword K]   Historique de paiements paginé
+  info                                            Méthodes de paiement activées, rechargement min, options
+  redeem <key>                                    Appliquer une clé de rechargement / d'échange
+
+NOTES
+  Pour les vrais paiements (Stripe / Creem / Waffo / EPay), utilisez
+  'everyapi topup' — cela ouvre le dashboard avec la phrase de
+  vérification anti-phishing. Le passage au navigateur est requis là
+  parce que la collecte de la carte se fait hors bande.
+'''
+
+[wallet.label]
+payment_methods = "Méthodes de paiement :"
+none_enabled = "(aucune activée — l'admin doit en configurer au moins une)"
+feature_flags = "Drapeaux de fonctionnalité :"
+min_topup = "Rechargement minimum global : %d"
+suggested = "Montants suggérés : %s"
+discount_tiers = "Paliers de remise :"
+
+[checkin]
+success = "Check-in réussi : +%d quota attribué (date %s)."
+disabled = "La fonction check-in est désactivée sur cette instance."
+no_records = "Pas encore de check-ins ce mois-ci."
+lifetime = "Cumul : %d check-in(s) pour %d quota au total."
+reward_range = "Plage de récompense : %d – %d quota par jour"
+today_claimed = "Aujourd'hui : déjà réclamé."
+today_unclaimed = "Aujourd'hui : pas encore réclamé — exécutez 'everyapi checkin' pour le récupérer."
+month_days = "\n%d jour(s) ce mois-ci :"
+usage = '''
+everyapi checkin — check-in quotidien pour attribution de quota
+
+UTILISATION
+  everyapi checkin                       Récupérer la récompense du jour (alias de 'claim')
+  everyapi checkin claim                 Récupérer la récompense du jour (verbe explicite)
+  everyapi checkin status [--month YYYY-MM]
+                                         Afficher le calendrier des check-ins passés
+'''
+
+[seller]
+no_channels = "Aucun canal vendeur monté pour l'instant."
+setup_hint = "Utilisez 'everyapi seller setup' (assistant) ou 'everyapi seller add-key' (options)."
+list_count = "%d canal/canaux vendeur :"
+channel_updated = "Canal #%d mis à jour."
+channel_removed = "Canal #%d supprimé."
+remove_confirm = "Supprimer le canal vendeur #%d %q ? Les acheteurs routés ici échoueront immédiatement."
+refresh_done = "Identifiants du canal #%d (%s) rafraîchis."
+no_sales = "Pas encore de ventes — les acheteurs ne sont routés ici qu'après activation et publication du canal."
+eligible_yes = "✓ Éligible au montage de canaux."
+eligible_no = "✗ Pas encore éligible."
+compensation_filed = "Demande déposée (id=%d, statut=%s, plafond suggéré=%d)."
+compensation_admin_review = "Un admin examinera ; consultez 'everyapi seller compensation list' pour le suivi."
+compensation_no_claims = "Aucune demande trouvée."
+usage_update = "utilisation : everyapi seller update <id> [--name N] [--models M] [--status 1|2] [--remark R] [--test-model M]"
+update_no_flags = "rien à mettre à jour : passez au moins une option"
+usage_remove = "utilisation : everyapi seller remove <id> [-y]"
+usage_refresh = "utilisation : everyapi seller refresh <id>"
+usage_compensation = "utilisation : everyapi seller compensation {submit|list} [options]"
+usage_compensation_help = "everyapi seller compensation {submit|list} — déposer / consulter des demandes d'indemnisation"
+withdraw_nothing = "Rien à retirer — votre solde vendeur est de $0."
+withdraw_done = "Transféré $%.2f du solde vendeur vers le solde principal.\n"
+withdraw_check_url = "Vérifier : %s/wallet\n"
+eligibility_header = "Éligibilité Marketplace :"
+eligibility_marketplace_enabled = "  %s marketplace activé"
+eligibility_account_active = "  %s compte actif"
+eligibility_email_verified = "  %s email vérifié"
+eligibility_account_age = "  %s compte ≥ %d jour(s) d'ancienneté"
+eligibility_has_consume_log = "  %s au moins une consommation réussie"
+eligibility_under_cap = "  %s sous la limite de canaux (%d / %d)"
+eligibility_check_failed = "Échec de la vérification d'éligibilité Marketplace. Corrigez les éléments non cochés ci-dessus, puis relancez."
+dashboard_url_line = "Dashboard : %s/seller/channels"
+not_eligible_error = "non éligible pour monter un canal seller"
+mounted_with_pool = "Canal #%d monté (%s, type=%s)%s.\n"
+key_backup_pool = " avec pool de sauvegarde de %d clés"
+mounted_status_hint = "Statut : activé. Lancez 'everyapi seller list' pour inspecter, ou visitez le dashboard."
+requirements_not_met = "Vous ne remplissez pas encore les conditions de montage. Corrigez d'abord les éléments ci-dessus, puis relancez."
+mounting_new_channel = "Montage d'un nouveau canal. Esc / Ctrl+C pour annuler."
+method_picker_label = "Méthode d'authentification"
+method_api_key = "API key             — collez une clé vendor (openai / anthropic / etc.)"
+method_codex_oauth = "Codex / ChatGPT OAuth — liez un abonnement ChatGPT Plus (device flow, pas de collage de token)"
+method_claude_oauth = "Claude OAuth        — liez un abonnement Anthropic Claude (un collage depuis le navigateur)"
+method_gemini_oauth = "Gemini OAuth        — liez un compte Google Gemini (un seul clic)"
+prompt_upstream_type = "Type upstream"
+prompt_channel_name = "Nom du canal"
+prompt_models = "Modèles (séparés par des virgules)"
+prompt_internal_remark = "Note interne (optionnel)"
+about_to_mount = "Sur le point de monter : %s / type=%s / models=%s%s"
+about_to_mount_oauth = "Sur le point de monter via %s OAuth : %s / models=%s"
+submit_prompt = "Soumettre ?"
+oauth_blob_in_backup_1 = "Cela ressemble à un blob d'identification OAuth/JSON."
+oauth_blob_in_backup_2 = "Les identifiants OAuth ne peuvent pas être combinés avec d'autres clés dans un pool de sauvegarde — ils doivent être la seule clé du canal."
+oauth_blob_in_backup_3 = "Saisissez à nouveau une API key normale, ou appuyez sur Ctrl-C pour annuler et relancer avec le blob OAuth comme seule clé."
+prompt_upstream_key = "API key upstream"
+prompt_backup_key = "Clé de sauvegarde #%d"
+prompt_remark_for_key = "Note pour la clé #%d (optionnel)"
+prompt_add_another_backup = "Ajouter une autre clé de sauvegarde ?"
+oauth_usage = '''everyapi seller add-oauth — monter un canal via le flux OAuth d'un provider
+
+UTILISATION
+  everyapi seller add-oauth <provider> [flags]
+
+PROVIDERS
+  codex     Abonnement Codex / ChatGPT (device flow RFC 8628)
+  claude    Anthropic Claude (OAuth callback navigateur)
+  gemini    Google Gemini (OAuth callback navigateur)
+
+FLAGS COMMUNS
+  --name <n>      Nom affiché du canal (requis)
+  --models <m>    Liste de modèles servis par ce canal, séparés par des virgules (requis)
+  --no-browser    Ne pas ouvrir l'URL de vérification automatiquement
+
+Lancez 'everyapi seller add-oauth <provider> --help' pour les flags spécifiques au provider.
+'''
+oauth_use_provider_help = "utilisation : everyapi seller add-oauth <provider> [flags]\nproviders : codex, claude, gemini"
+oauth_unknown_provider = "provider %q inconnu — supportés : codex, claude, gemini"
+oauth_chatgpt_redirect = "le provider %q est ChatGPT Plus — même upstream que codex. Utilisez `everyapi seller add-oauth codex` à la place"
+oauth_missing_flags = "flag(s) requis manquant(s) : %s"
+oauth_codex_intro = "Pour lier votre abonnement Codex / ChatGPT, visitez cette URL et entrez le code :"
+oauth_browser_approve = "Navigateur ouvert. Approuvez là-bas et revenez ; cela se terminera tout seul."
+oauth_waiting_auth = "Attente d'autorisation..."
+oauth_codex_timeout = "le code a expiré avant que vous l'approuviez — relancez 'everyapi seller add-oauth codex'"
+oauth_denied = "l'autorisation a été refusée dans le navigateur"
+oauth_email_unknown = "(email du compte non exposé par le token)"
+oauth_mounted_with_email = "\nCanal #%d monté (%s, type=codex, account=%s).\n"
+oauth_status_visit = "Statut : activé. Lancez 'everyapi seller list' pour inspecter, ou visitez %s/seller/channels.\n"
+oauth_claude_intro = "Pour lier votre abonnement Anthropic Claude :"
+oauth_claude_step_1 = "  1) Ouvrez cette URL dans un navigateur (ou copiez si --no-browser) :\n     %s\n"
+oauth_claude_step_2 = "  2) Connectez-vous et approuvez la connexion."
+oauth_claude_step_3a = "  3) La page de callback d'Anthropic montre une chaîne comme `<code>#<state>`."
+oauth_claude_step_3b = "     Copiez cette chaîne et collez-la ci-dessous."
+oauth_browser_opened = "Navigateur ouvert."
+oauth_paste_string = "Collez la chaîne d'autorisation"
+oauth_mounted_claude = "\nCanal #%d monté (%s, type=claude).\n"
+oauth_token_expires = "Le token expire : %s (renouvellement automatique avant).\n"
+oauth_gemini_intro = "Pour lier votre compte Google Gemini, connectez-vous à :"
+oauth_browser_sign_in = "Navigateur ouvert. Connectez-vous là-bas ; cela se terminera tout seul."
+oauth_waiting_redirect = "Attente de la redirection sur 127.0.0.1:%d (timeout %s)...\n"
+oauth_callback_no_code = "le callback OAuth n'a pas livré de code d'autorisation"
+oauth_state_mismatch = "incohérence d'état OAuth (reçu %q, attendu %q) — relancez la commande"
+oauth_mounted_gemini = "\nCanal #%d monté (%s, type=gemini).\n"
+gates_header = "Gates :"
+gate_marketplace_enabled = "  marketplace_enabled : %v"
+gate_account_active = "  account_active      : %v"
+gate_email_verified = "  email_verified      : %v"
+gate_account_age_ok = "  account_age_ok      : %v (min %d jours)"
+gate_has_consume_log = "  has_consume_log     : %v"
+gate_under_cap = "  under_cap           : %v (%d / %d montés)"
+compensation_upstream_required = "--upstream est requis"
+compensation_description_required = "--description est requis"
+claims_total = "%d réclamation(s) sur %d au total :"
+sales_page_total = "  total de la page : charge=%d  take=%d"
+refresh_account_label = "  account : %s"
+refresh_expires_label = "  expires : %s"
+refresh_last_refresh_label = "  last refresh : %s"
+invalid_channel_id = "id de canal invalide %q"
+channel_not_found = "canal #%d introuvable parmi vos canaux montés"
+oauth_only_refresh = "le canal #%d (type=%s) n'est pas un canal OAuth — refresh ne s'applique qu'à codex / claude / gemini"
+unknown_compensation_sub = "sous-commande compensation inconnue %q"
+unknown_channel_type = "type de canal inconnu %q — utilisez l'un de : %s, ou un id numérique"
+
+[demand]
+no_rows = "Aucune demande."
+posted = "Demande #%d publiée (state=%s)."
+cancelled = "Demande #%d annulée."
+removed = "Demande #%d supprimée."
+remove_confirm = "Supprimer définitivement la demande #%d ?"
+usage = '''
+everyapi demand — annonces marketplace côté acheteur
+
+UTILISATION
+  everyapi demand <sous-commande> [options]
+
+SOUS-COMMANDES
+  list   [--state open|closed] [--page P] [--limit N]
+                                  Flux public du marketplace
+  my     [--page P] [--limit N]   Demandes que vous avez publiées
+  show   <id>                     Annonce unique en détail
+  submit --title <T> --model <M> --max-price <usd_par_M> [--est <tokens>]
+         [--description <D>] [--expires <unix_s>] [--require-oauth]
+                                  Publier une nouvelle demande
+  cancel <id>                     Annuler une de vos demandes
+  remove <id> [-y]                Supprimer une annonce (demande sauf -y)
+'''
+
+[dispute]
+no_rows = "Aucun litige."
+opened = "Litige #%d ouvert (state=%s)."
+usage = '''
+everyapi dispute — ouvrir / lister / consulter les litiges
+
+UTILISATION
+  everyapi dispute <sous-commande> [options]
+
+SOUS-COMMANDES
+  submit --counterparty <uid> --type <t> --target-kind <k> --target <id> --description <d> [--amount <quota>]
+                                       Ouvrir un litige
+  my     [--page P] [--limit N]        Lister vos litiges ouverts + résolus
+  show   <id>                          Litige unique en détail
+'''
+
+[report]
+filed = "Signalement déposé. L'équipe abuse fera le suivi via l'email fourni."
+usage = '''
+everyapi report — déposer un signalement d'abus / violation des CGU
+
+UTILISATION
+  everyapi report --email <e> --category <c> --target-type <t> --description <d>
+                  [--target-id <id>] [--evidence <url>]
+
+NOTES
+  Endpoint public — fonctionne sans être connecté. Quand appelé en
+  étant connecté, l'user_id du signaleur est capturé côté serveur
+  pour le tri.
+'''
+
+[notify]
+no_rows = "Aucune notification."
+no_unread = "Aucune notification non lue."
+unread_count = "%d non lue(s)"
+marked_read = "#%d marquée comme lue."
+marked_all = "%d notification(s) marquée(s) comme lues."
+usage = '''
+everyapi notify — notifications dans l'app
+
+UTILISATION
+  everyapi notify <sous-commande> [options]
+
+SOUS-COMMANDES
+  list   [--unread] [--page P] [--limit N]   Notifications récentes
+  count                                       Juste le nombre de non lues
+  read   <id>                                 Marquer une notification comme lue
+  readall                                     Passer toutes les non lues en lues
+'''
+
+[dm]
+no_threads = "Aucun fil de DM."
+no_contacts = "Pas encore de contacts DM."
+no_messages = "(aucun message)"
+sent_at = "Envoyé #%d à %s"
+marked_read = "Fil #%d marqué comme lu."
+usage = '''
+everyapi dm — messages directs avec d'autres utilisateurs
+
+UTILISATION
+  everyapi dm <sous-commande> [options]
+
+SOUS-COMMANDES
+  threads  [--page P] [--limit N]      Vos fils de DM (plus récents en premier)
+  contacts                              Utilisateurs avec qui vous avez échangé
+  count                                 Nombre de DM non lus (scalaire)
+  open <other_user_id>                  Ouvrir un fil avec un autre utilisateur (idempotent)
+  messages <thread_id> [--after <id>] [--limit N]
+                                        Lire les messages d'un fil
+  send <thread_id> <body>               Envoyer un message
+  read <thread_id>                      Marquer un fil comme lu
+'''
+
+[user]
+account_header = "Compte #%d  %s  (%s)"
+passkey_use_dashboard = "(Enregistrement / suppression sont des flux navigateur — utilisez le dashboard.)"
+passkey_none = "Aucune passkey enregistrée. Enregistrez-en une dans le dashboard (flux navigateur uniquement)."
+"2fa_disabled_msg" = "La configuration est un flux navigateur (scan QR) — utilisez le dashboard, puis revenez ici pour gérer les codes."
+"2fa_disabled" = "2FA désactivée."
+no_bindings = "Aucune liaison OAuth."
+bindings_count = "%d liaison(s) :"
+unbound = "Fournisseur #%d délié."
+unbind_confirm = "Délier le fournisseur OAuth #%d ? Vous ne pourrez plus vous connecter via ce fournisseur avant de le relier."
+aff_code = "Code d'affiliation : %s"
+aff_new = "Nouveau code d'affiliation : %s"
+aff_rotated_warning = "Les liens contenant le code précédent ne vous créditeront plus."
+oauth_usage = "Utilisation : everyapi user oauth {list|unbind <provider_id>}"
+passkey_dashboard_gated = "le statut passkey dépend du cookie de session du dashboard — utilisez l'UI web pour gérer les passkeys"
+passkey_registered_last_used = "Passkey enregistrée. Dernière utilisation : %s"
+"2fa_status" = "2FA : enabled=%v locked=%v"
+"2fa_backup_remaining" = "Codes de sauvegarde restants : %d"
+"2fa_low_hint" = "  (bas — envisagez 'everyapi user 2fa backup --code <new-totp>' pour régénérer)"
+backup_regenerated = "%d codes de sauvegarde régénérés — enregistrez-les maintenant, ils ne seront plus affichés :"
+usage = '''
+everyapi user — profil / 2FA / liaisons OAuth / code d'affiliation
+
+UTILISATION
+  everyapi user <sous-commande> [options]
+
+SOUS-COMMANDES
+  info                                  Vue consolidée profil + sécurité
+  2fa                                   Statut 2FA (activée / verrouillée / codes de secours restants)
+  2fa disable --code <6 chiffres>       Désactiver la 2FA
+  2fa backup  --code <6 chiffres>       Régénérer l'ensemble des codes de secours
+  passkey                               Statut d'enregistrement passkey
+  oauth list                            Fournisseurs OAuth liés
+  oauth unbind <provider_id>            Retirer une liaison OAuth
+  aff                                   Afficher votre code d'affiliation
+  aff reset                             Régénérer le code d'affiliation
+
+NOTE
+  La configuration 2FA (scan QR), l'enregistrement passkey et la
+  vérification email/wechat nécessitent tous un flux navigateur —
+  utilisez le dashboard pour la configuration initiale, puis revenez
+  ici pour la gestion courante.
+'''
+
+[subscription]
+no_plans = "Aucun plan d'abonnement activé."
+plans_count = "%d plan(s) :"
+preference_updated = "Préférence de facturation mise à jour vers %q."
+current_preference = "Préférence de facturation actuelle : %s"
+set_hint = "Utilisez --set <valeur> pour modifier. Le backend normalise les valeurs inconnues vers la valeur par défaut."
+usage = '''
+everyapi subscription — plans d'abonnement / mon compte / préférence
+
+UTILISATION
+  everyapi subscription <sous-commande> [options]
+
+SOUS-COMMANDES
+  plans                            Lister les plans d'abonnement activés
+  self                             Afficher vos abonnements actifs + passés
+  preference --set <valeur>        Mettre à jour la préférence de facturation
+                                   (courant : "topup" / "subscription" / "subscription_first")
+                                   Le backend normalise les valeurs inconnues.
+
+NOTE
+  L'achat d'un plan reste un flux navigateur — utilisez 'everyapi topup'
+  pour ouvrir le wallet du dashboard derrière la poignée de main
+  anti-phishing.
+'''
+
+[admin.user]
+no_matches = "Aucune correspondance."
+deleted = "Utilisateur #%d supprimé."
+delete_confirm = "Supprimer l'utilisateur #%d ? C'est destructif et irréversible."
+action_applied = "admin user manage : action=%q appliquée à l'utilisateur #%d"
+
+[admin.abuse]
+no_reports = "Aucun signalement."
+
+[admin.audit]
+no_rows = "Aucune ligne d'audit."
+
+[admin.marketplace]
+status_unset = "marketplace.enabled : <non défini> (défaut backend : false)\n"
+status_set = "marketplace.enabled : %s\n"
+no_change = "marketplace.enabled : déjà %s — aucun changement\n"
+changed = "marketplace.enabled : %s → %s\n"
+
+[doctor.section]
+account = "Compte"
+gateway = "Gateway"
+tools = "Outils dans le PATH"
+
+[doctor.result]
+failed = "Résultat : des échecs sont présents."
+warned = "Résultat : ok avec avertissements."
+green = "Résultat : tout est vert."
+
+[doctor]
+tally = "(ok=%d warn=%d fail=%d)"
+usage = '''
+everyapi doctor — auto-vérification (identifiants, gateway, sanitizer, outils)
+
+UTILISATION
+  everyapi doctor
+'''
+
+[events]
+connected = "Connecté. Réception des événements (Ctrl-C pour arrêter)…"
+transport_err = "[transport] %s — reconnexion"
+
+[mcp.status]
+count = "%d client(s) MCP connu(s) :"
+registered_count = "%d sur %d enregistrés."
+state_registered = "enregistré"
+state_not_registered = "non enregistré"
+state_not_installed = "pas dans le PATH"
+state_probe_failed = "(probe échouée)"
+run_install_hint = "exécutez 'everyapi mcp install %s'"
+
+[mcp]
+install_usage = '''everyapi mcp install — enregistrer everyapi comme serveur MCP auprès d'un CLI d'IA
+
+UTILISATION
+  everyapi mcp install [client]
+
+ARGUMENTS
+  client    Un parmi : claude, codex, gemini. Par défaut claude.
+
+Exécute en interne `<client> mcp add everyapi everyapi mcp` (avec la
+syntaxe attendue par chaque client). Ensuite votre CLI d'IA lancera
+`everyapi mcp` à la demande, exposant les quatre outils everyapi_*
+(status, topup, seller_list, seller_withdraw).
+
+Requiert le CLI du client choisi dans le PATH. S'il n'est pas
+installé, le message d'erreur inclut le lien d'installation et un
+extrait de configuration que vous pouvez coller à la main dans les
+paramètres du client.'''
+uninstall_usage = '''everyapi mcp uninstall — désenregistrer everyapi d'un CLI d'IA
+
+UTILISATION
+  everyapi mcp uninstall [client]
+
+ARGUMENTS
+  client    Un parmi : claude, codex, gemini. Par défaut claude.
+
+Exécute en interne `<client> mcp remove everyapi`, annulant ce que
+`everyapi mcp install [client]` a fait. Redémarrez le client ensuite
+pour terminer le processus serveur en cours.
+
+Requiert le CLI du client choisi dans le PATH. Si vous avez enregistré
+everyapi en éditant à la main les paramètres du client, retirez
+manuellement l'entrée "everyapi" de l'objet mcpServers.'''
+status_usage = '''everyapi mcp status — afficher quels clients MCP ont enregistré everyapi
+
+UTILISATION
+  everyapi mcp status
+
+Indique pour chaque client connu (claude / codex / gemini) un parmi :
+  registered      — everyapi est inscrit dans la liste des serveurs MCP de ce client
+  not registered  — client installé mais serveur non ajouté
+  not on PATH     — binaire client non installé
+  (probe failed)  — binaire client présent mais `mcp list` a échoué
+'''
+
+[proxy]
+start_listening = "Proxy sanitizer à l'écoute sur http://%s"
+start_upstream = "Upstream : %s"
+start_detectors = "Détecteurs actifs : %d"
+start_point_sdk = "Pointez votre SDK vers http://%s (ou lancez 'everyapi use <tool>')."
+start_ctrl_c = "Ctrl+C pour arrêter. La table de mapping vit uniquement en mémoire."
+stop_not_running = "Le proxy sanitizer n'est pas en cours d'exécution (pas de fichier PID)."
+stop_was_not_running = "Le proxy sanitizer n'était pas en cours ; fichier PID obsolète nettoyé."
+stop_sent_sigterm = "SIGTERM envoyé au proxy sanitizer (pid=%d). Attente jusqu'à 3s pour qu'il se termine…\n"
+stop_stopped = "Arrêté."
+stop_still_alive = "Le processus est toujours actif après 3s — il devrait se terminer de lui-même sous peu."
+status_not_running = "Le proxy sanitizer n'est pas en cours d'exécution."
+status_start_hint = "Lancez-le avec : everyapi proxy start"
+status_wrong_server_line1 = "Le port %s répond, mais pas avec le sanitizer EveryAPI (HTTP %d, content-type %q).\n"
+status_wrong_server_line2 = "Autre chose est lié à ce port — choisissez-en un autre avec --listen 127.0.0.1:<port>,"
+status_wrong_server_line3 = "ou arrêtez l'autre service. 'lsof -iTCP:%s -sTCP:LISTEN' le nommera sur macOS/Linux."
+status_header = "Proxy sanitizer"
+status_raw_prefix = "Proxy sanitizer (raw) : %s"
+detach_prompt = "Lancer le proxy en arrière-plan (detached) ? Yes = exécuter et revenir au shell ; No = rester dans ce terminal avec le log en direct (Ctrl+C pour arrêter)"
+started_pid = "Proxy sanitizer démarré (pid=%d, listen=%s)."
+started_logs = "Logs : %s"
+configure_header = "everyapi proxy — configuration du sanitizer"
+configure_config_file = "Fichier de configuration : %s"
+configure_builtin_prompt = "Détecteurs built-in — laissez cochés ceux que vous voulez ACTIVÉS :"
+configure_existing_patterns = "Patterns personnalisés existants :"
+configure_add_replace_prompt = "Ajouter ou remplacer un pattern regex personnalisé ?"
+configure_pattern_name_prompt = "Nom du pattern (sans espaces)"
+configure_pattern_exists = "(le pattern %q existe déjà avec regex %q — saisir une nouvelle valeur le remplacera)"
+configure_regex_prompt = "Regex (syntaxe Go)"
+configure_invalid_regex = "Regex %q invalide : %v — ignoré."
+configure_replaced = "→ pattern %q remplacé."
+configure_added = "→ pattern %q ajouté."
+configure_add_replace_another = "Ajouter ou remplacer un autre ?"
+configure_saved = "Enregistré → %s"
+configure_restart_hint_1 = "Un proxy sanitizer est en cours d'exécution. Redémarrez-le pour prendre en compte la nouvelle configuration :"
+configure_restart_hint_2 = "  everyapi proxy stop && everyapi proxy start --detach"
+
+[edge]
+no_nodes = "Aucun nœud edge enregistré."
+register_hint = "Lancez 'everyapi edge register --name <nom-du-nœud>' pour en créer un."
+
+[status]
+quota = "quota :"
+requests = "requêtes :"
+topup = "rechargement :"
+remaining_used = "$%.2f restant   $%.2f utilisé"
+
+[topup]
+before_open = "Avant d'ouvrir le navigateur, vérifiez qu'il s'agit du vrai dashboard EveryAPI."
+url_label = "URL :"
+phrase_label = "Phrase :"
+expires_in = "(cette session expire dans ~%d secondes)"
+checks_header = "Vérifiez DEUX choses après l'ouverture du navigateur :"
+check_1 = "  1) L'URL de page ci-dessus doit être sur VOTRE origine EveryAPI\n     (app.everyapi.ai par défaut, ou votre self-host)."
+check_2 = "  2) L'en-tête de la page doit afficher la MÊME phrase que ci-dessus."
+phishing_hint = "Si l'un diffère, fermez l'onglet — vous regardez peut-être une page de phishing."
+copy_url = "Copiez l'URL ci-dessus dans votre navigateur."
+browser_opened = "Navigateur ouvert. Vérifiez que la phrase sur la page correspond à celle ci-dessus."
+
+[login]
+waiting = "En attente d'autorisation... (Ctrl+C pour annuler)"
+waiting_with_copy = "En attente d'autorisation... (Ctrl+C pour annuler, 'c' pour copier l'URL)"
+next_hint = "Suite : essayez 'everyapi status' ou 'everyapi use claude'."
+url_copied = "URL copiée dans le presse-papiers."
+url_copy_failed = "Impossible de copier : %v"
+qr_hint = "Scannez ce QR avec votre téléphone (ou tout appareil déjà connecté à EveryAPI) :"
+url_hint_with_qr = "Ou visitez cette URL manuellement (le code est intégré dans le lien) :"
+url_hint = "Pour autoriser cet appareil, visitez (le code est intégré dans le lien) :"
+code_hint = "Si la page ne se pré-remplit pas, saisissez le code : %s"
+browser_opened = "Navigateur ouvert. Approuvez là-bas (ou terminez sur votre téléphone) ; ceci se terminera tout seul."
+no_relay_note_1 = "Note : votre compte n'a pas encore de relay API key. `everyapi use` en requiert une"
+no_relay_note_2 = "EveryAPI dashboard, puis relancez 'everyapi login'."
+logged_in_saved = "\nConnecté en tant que %s. Identifiants enregistrés dans %s/credentials.json\n"
+
+[logout]
+done = "Déconnecté."
+
+[update]
+up_to_date = "everyapi %s — à jour."
+up_to_date_check = "à jour (%s)"
+available = "mise à jour disponible : %s → %s"
+update_available = "Mise à jour disponible : %s → %s"
+install_method = "Méthode d'installation : %s"
+whats_new = "─── Nouveautés ───"
+no_notes = "(aucune note de release jointe)"
+full_release = "Release complète : %s"
+prerelease = "Vous utilisez une pré-release : %s (dernier tag : %s)"
+nothing_to_do = "Rien à faire."
+dev_build_check = "build dev (commit %s) ; la dernière release est %s\n"
+rebuild_header = "Pour reconstruire depuis cet arbre source :"
+switch_header = "Pour passer à un binaire du canal release :"
+cant_auto = "Impossible de mettre à niveau automatiquement — votre binaire n'est pas sous un chemin\nCellar/ (brew) ou $GOBIN/$GOPATH/bin reconnu. Choisissez-en un :\n"
+dev_build_intro = "\nVous êtes sur un build dev (commit %s). Dernière release taguée : %s.\n"
+rebuild_cmd = "  cd clients/cli && go build"
+switch_cmd_brew = "  brew install everyapi-ai/tap/everyapi   # macOS / Linux"
+switch_cmd_go = "  go install github.com/everyapi-ai/everyapi-ai@latest"
+
+[use]
+tool_picker = "Choisissez un outil :"
+group_picker = "Choisissez un groupe de routage :"
+yolo_prompt = "Activer %s ? (saute toutes les confirmations de sécurité)"
+launching = "Lancement de %s contre %s"
+launching_via = "Lancement de %s contre %s → %s"
+sanitizer_warn = "Avertissement : le proxy sanitizer n'a pas démarré (%v).\n"
+fallback_direct = "Bascule en mode direct — votre trafic atteindra %s sans le filtre de confidentialité.\n"
+fallback_hint = "Relancez avec --direct pour faire taire ce message, ou 'everyapi proxy start' pour déboguer.\n\n"
+no_relay_keys = "aucune relay API key activée sur votre compte pour choisir un groupe — créez-en une dans le dashboard EveryAPI, puis 'everyapi login'"
+no_relay_key_long = '''
+aucune clé API relais utilisable sur votre compte — `everyapi use` en a besoin,
+elle est distincte du jeton de connexion. Créez une clé API dans le
+tableau de bord EveryAPI (%s), puis relancez 'everyapi login'.'''
+unknown_flag = "flag inconnu %q (utilisez `--` avant les flags de l'outil : `everyapi use <tool> -- %s ...`)"
+usage = "utilisation : everyapi use <tool> [--group <nom>|--channel <nom>] [--direct] [-- arguments de l'outil...]"

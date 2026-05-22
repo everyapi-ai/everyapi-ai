@@ -1,0 +1,776 @@
+# CLI 自身の文字列に対する日本語訳。
+#
+# 新しいキーを追加する場合: en.toml にも同じパスで追加すること。
+# ここに無いキーは自動で en.toml の値にフォールバックする。両方に
+# 無い場合はキー自体が返る（開発者向けの明示的な失敗）。
+#
+# 複数行の USAGE ブロックは TOML のリテラル複数行文字列 ('''…''')
+# を使う。バックスラッシュエスケープを解釈しないため、Go の raw
+# 文字列をそのまま貼り付け可能。TOML は ''' 直後の改行を取り除く
+# ため、ブロックは左端揃えで書けば期待どおりに出力される。
+#
+# 新しい言語を追加する場合: このディレクトリに {lang}.toml を置く
+# だけで init() がロードする。SupportedLanguages に含めるため
+# Lang* 定数を追加する以外はコード変更不要。
+
+[auth]
+not_logged_in = "ログインしていません — まず 'everyapi login' を実行してください"
+session_expired = "セッションの有効期限が切れました — 再度 'everyapi login' を実行してください"
+
+[common]
+canceled = "キャンセルしました。"
+error_prefix = "エラー"
+missing_subcommand = "サブコマンドがありません（'%s help' を試してください）"
+unknown_subcommand = "不明な '%s' サブコマンド %q"
+pick_subcommand = "%s — サブコマンドを選択してください:"
+browser_open_failed = "ブラウザを自動で開けませんでした — 上の URL をコピーしてください。"
+browser_open_failed_qr = "ブラウザを自動で開けませんでした — QR をスキャンするか、上の URL をコピーしてください。"
+open_browser_now = "ブラウザを開きますか？"
+aborted_by_user = "ユーザーによって中止されました"
+cancelled_nothing_submitted = "キャンセルしました — 何も送信されていません。"
+rows_of_total = "%d 行 / 全 %d 行:"
+
+[launcher]
+welcome = "everyapi — コマンドを選択してください:"
+usage = '''
+everyapi — EveryAPI CLI
+
+使用法
+  everyapi <command> [flags]
+
+コマンド
+  login           この端末を EveryAPI に認証
+  logout          この端末の認証情報を削除
+  status          現在のクォータ、使用量、残高を表示
+  topup           ウォレット入金ページを開く（フィッシング対策フレーズあり）
+  wallet <sub>    支払い履歴 / 支払い方法 / 引換キー
+  checkin         本日のデイリー付与クォータを受領
+  user <sub>      プロフィール / 2FA / passkey / OAuth 連携 / アフィリエイトコード
+  subscription <sub>  サブスクリプションプラン / 自分の契約 / 課金設定
+  use <tool>      EveryAPI 経由でサードパーティ CLI を起動 (claude / codex / gemini)
+  token <sub>     リレー API トークン管理 (list / show / create / update / key / revoke)
+  log <sub>       リクエストログ: list / stat / summary
+  usage           日別のクォータ使用量
+  models <sub>    モデルカタログ: list / pricing / groups
+  demand <sub>    バイヤー側マーケットプレイス投稿 (list/my/show/submit/cancel/remove)
+  dispute <sub>   ディスピュート: 起票 / 一覧 / 詳細
+  report          不正利用 / 規約違反を報告
+  notify <sub>    アプリ内通知 (list / count / read / readall)
+  dm <sub>        ダイレクトメッセージ (threads / open / send / messages / read)
+  seller <sub>    チャネルマーケットプレイスのセラー向けコマンド
+__ADMIN_BLOCK__
+  edge <sub>      BYO-GPU サプライヤーエージェント (docker + ollama)
+  proxy <sub>     ローカルサニタイザプロキシ (SDK リクエストのプライバシーフィルタ)
+  mcp [sub]       AI CLI 向け MCP サーバー (Claude Code / Codex / Gemini)
+  doctor          セルフチェック（認証情報、ゲートウェイ、サニタイザ、ツール）
+  events          ライブイベントストリームを購読 (SSE)
+  settings        CLI 設定を表示 / 変更（言語など）
+  update          新しいリリースを確認し、対応するアップグレードを実行
+  version         ビルドバージョンを表示
+  help            このメッセージを表示
+
+サブコマンドの詳細とフラグは 'everyapi <command> help' を参照
+（例: 'everyapi seller help'、'everyapi edge help'）。
+'''
+usage_admin_block = '''  admin <sub>     運用コマンド（admin ロールが必要）
+'''
+
+[settings]
+saved = "設定を保存しました。"
+lang_invalid = "サポートされていない言語です。利用可能"
+current = "現在の設定"
+lang_label = "言語"
+file_at = "設定ファイル:"
+reset_confirm = "すべての CLI 設定をデフォルトに戻しますか？"
+unknown_key = "不明な設定キー %q"
+usage_get = "使用法: everyapi settings get <key>"
+usage_set = "使用法: everyapi settings set <key> <値>"
+default_label = "(デフォルト: %s)"
+usage = '''
+everyapi settings — CLI 設定の表示 / 変更
+
+使用法
+  everyapi settings                        現在の設定を表示（list のエイリアス）
+  everyapi settings list                   現在の設定を表示
+  everyapi settings get <key>              単一の設定を表示
+  everyapi settings set <key> <value>      設定を更新
+  everyapi settings reset                  すべての設定をクリア（デフォルトに戻す）
+
+キー
+  language                                 en | zh | ja | ko | es | de | fr
+
+設定ファイルは 'everyapi settings list' が表示するパスのプレーン JSON
+です。手動編集も可能で、CLI は次回起動時に読み直します。
+'''
+
+[token]
+no_tokens = "トークンがまだありません。'everyapi token create --name <名前>' を実行してください。"
+count = "%d 個のトークン:"
+full_keys_hint = "\n完全なキーは 'everyapi token key <id>' で取得できます。"
+created = "トークンを作成しました。'everyapi token list' で id を確認し、'everyapi token key <id>' でプレーンテキストを取得してください。"
+updated = "Token #%d を更新しました (状態: %s)。"
+status_changed = "Token #%d は現在 %s です。"
+revoked = "Token #%d を取り消しました。"
+revoke_confirm = "トークン #%d %q を取り消しますか？このキーを使うアプリは 401 を受け取るようになります。"
+update_no_flags = "更新する項目がありません: 少なくとも 1 つのフラグを指定してください ('everyapi token update -h' 参照)"
+name_required = "'token create' には --name が必要です"
+invalid_id = "無効なトークン id %q（正の整数である必要があります）"
+usage_revoke = "使用法: everyapi token revoke <id> [-y]"
+status_enabled = "有効"
+status_disabled = "無効"
+status_expired = "期限切れ"
+status_exhausted = "枠を使い切り"
+usage_arg_id = "使用法: everyapi token %s <id> [フラグ]"
+usage = '''
+everyapi token — リレー API トークン管理（アプリに埋め込むキー）
+
+使用法
+  everyapi token <subcommand> [flags]
+
+サブコマンド
+  list                                 トークン一覧（キーはマスク表示）
+  show     <id>                        単一トークンの詳細
+  key      <id>                        プレーンテキストの完全なキーを表示
+  create   --name <n> [flags]          新規トークンを作成
+  update   <id> [flags]                トークンの項目を編集（フラグ未指定 → 現状維持）
+  enable   <id>                        状態を有効に切り替え
+  disable  <id>                        状態を無効に切り替え
+  revoke   <id> [-y]                   トークンを削除（ソフトデリート、-y なしで確認）
+
+CREATE / UPDATE フラグ
+  --name <n>           表示名 (create で必須、最大 50 文字)
+  --group <g>          ルーティンググループ (デフォルト "" = 自動)
+  --unlimited          クォータ無制限 (--quota を上書き)
+  --quota <int>        残りクォータ (ゲートウェイ単位、'everyapi status' 参照)
+  --expires <when>     "never" (create のデフォルト) または絶対 Unix 秒
+  --models <a,b,c>     指定モデル id の CSV に制限 (未指定 / 空 → すべて)
+  --ip <cidr,cidr>     IP 許可リスト (未指定 → 制限なし)
+  --cross-group        自動ルーティングのグループ越え再試行を許可
+
+例
+  everyapi token list
+  everyapi token create --name prod --unlimited
+  everyapi token create --name byteplus-only --quota 1000000 --group byteplus
+  everyapi token update 42 --name renamed
+  everyapi token disable 42
+  everyapi token key 42                  (sk-everyapi-… を表示)
+  everyapi token revoke 42 -y
+'''
+
+[token.label]
+id = "Token #%d"
+name = "名前:"
+key = "key:"
+key_masked = "%s (マスク済み)"
+status = "状態:"
+group = "グループ:"
+created = "作成日時:"
+last_used = "最終使用:"
+expires = "有効期限:"
+quota = "クォータ:"
+unlimited = "無制限 (使用 %d)"
+quota_split = "残り %d / 使用 %d"
+models = "モデル:"
+all = "(すべて)"
+allow_ips = "許可 IP:"
+any = "(任意)"
+cross_group = "グループ越え:"
+pinned_ch = "ピン留めチャネル:"
+auto = "(自動)"
+expires_never = "期限なし"
+
+[log]
+no_rows = "条件に一致するログ行はありません。"
+no_spend = "この期間に支出記録はありません。"
+usage = '''
+everyapi log — リクエストログ
+
+使用法
+  everyapi log <subcommand> [flags]
+
+サブコマンド
+  list    [flags]   最近のログ (新しい順、デフォルト 20 行)
+  stat    [flags]   期間内の quota / RPM / TPM 合計
+  summary [flags]   過去 7 日間（または --since/--until）のモデル別支出
+
+共通フラグ
+  --token  <name>         単一トークンで絞り込み (表示名)
+  --model  <name>         単一モデルで絞り込み
+  --group  <name>         単一ルーティンググループで絞り込み
+  --since  <window|ts>    期間開始: 1h / 24h / 7d / 30d、または絶対 Unix 秒
+  --until  <ts>           期間終了 (デフォルト: 現在時刻)
+
+LIST 専用フラグ
+  --limit  <int>          ページサイズ (デフォルト 20、上限はサーバー側)
+  --page   <int>          1 始まりのページ番号
+  --request-id <id>       単一の上流 request id に固定
+  --type   <int>          ログタイプフィルタ (例: 2=consume、バックエンド定数)
+'''
+
+[log.label]
+rows_window = "%d 行 / 合計 %d 行:"
+per_model_hdr = "モデル別支出 %s → %s"
+window = "期間: %s → %s"
+open = "(オープン)"
+
+[usage]
+no_rows = "この期間に使用量の記録はありません。"
+day_by_day = "日別使用量 (%d 日):"
+per_model = "モデル別使用量 (%d モデル):"
+
+[models]
+no_models = "あなたのグループからルーティング可能なモデルはありません。管理者に有効化を依頼してください。"
+count = "利用可能なモデル %d 個:"
+no_pricing = "条件に一致する価格行はありません。"
+no_groups = "このアカウントで利用可能なルーティンググループはありません。"
+usage = '''
+everyapi models — アカウントから参照できるモデルカタログ
+
+使用法
+  everyapi models <subcommand> [flags]
+
+サブコマンド
+  list                       あなたのグループがルーティングできるすべてのモデル id を表示
+  pricing [--model <m>]      モデル別の料金表（任意で絞り込み）
+  groups                     アカウントが利用できるルーティンググループ
+'''
+
+[wallet]
+no_topups = "入金記録がありません。"
+redeemed = "引き換え成功: +%d クォータを付与しました。"
+usage_redeem = "使用法: everyapi wallet redeem <key>"
+usage = '''
+everyapi wallet — 支払い履歴、支払い方法、引換キー
+
+使用法
+  everyapi wallet <subcommand> [flags]
+
+サブコマンド
+  history [--limit N] [--page P] [--keyword K]   ページ送りの支払い履歴
+  info                                            有効な支払い方法、最低入金、オプション
+  redeem <key>                                    入金 / 引換キーを適用
+
+注意
+  実際の入金 (Stripe / Creem / Waffo / EPay) には 'everyapi topup' を
+  使ってください。フィッシング対策フレーズ付きでダッシュボードが
+  開きます。カード決済は帯域外で処理されるため、ブラウザ移動が
+  必須です。
+'''
+
+[wallet.label]
+payment_methods = "支払い方法:"
+none_enabled = "(有効な支払い方法なし — 管理者が少なくとも 1 つ設定する必要があります)"
+feature_flags = "機能フラグ:"
+min_topup = "全体の最低入金額: %d"
+suggested = "推奨金額: %s"
+discount_tiers = "割引段階:"
+
+[checkin]
+success = "チェックイン成功: +%d クォータを獲得 (日付 %s)。"
+disabled = "このインスタンスではチェックイン機能が無効です。"
+no_records = "今月はまだチェックインがありません。"
+lifetime = "累計: %d 回のチェックインで合計 %d クォータ。"
+reward_range = "報酬範囲: 1 日あたり %d – %d クォータ"
+today_claimed = "本日: すでに受け取り済み。"
+today_unclaimed = "本日: 未受け取り — 'everyapi checkin' を実行して受け取ってください。"
+month_days = "\n今月のチェックイン %d 日:"
+usage = '''
+everyapi checkin — クォータ付与のためのデイリーチェックイン
+
+使用法
+  everyapi checkin                       本日の報酬を受け取る ('claim' のエイリアス)
+  everyapi checkin claim                 本日の報酬を受け取る (明示形)
+  everyapi checkin status [--month YYYY-MM]
+                                         過去のチェックインカレンダーを表示
+'''
+
+[seller]
+no_channels = "セラーチャネルがまだマウントされていません。"
+setup_hint = "'everyapi seller setup' (ウィザード) または 'everyapi seller add-key' (フラグ) を使ってください。"
+list_count = "%d 個のセラーチャネル:"
+channel_updated = "チャネル #%d を更新しました。"
+channel_removed = "チャネル #%d を削除しました。"
+remove_confirm = "セラーチャネル #%d %q を削除しますか？ここを経由するバイヤーは直ちに失敗します。"
+refresh_done = "チャネル #%d (%s) の認証情報を更新しました。"
+no_sales = "売上はまだありません — チャネルが有効化され検索可能になってからバイヤーがルーティングされます。"
+eligible_yes = "✓ チャネルをマウントする資格があります。"
+eligible_no = "✗ まだ資格がありません。"
+compensation_filed = "申請を受け付けました (id=%d, 状態=%s, 推奨上限=%d)。"
+compensation_admin_review = "管理者がレビューします。'everyapi seller compensation list' で進捗を確認してください。"
+compensation_no_claims = "申請はありません。"
+usage_update = "使用法: everyapi seller update <id> [--name N] [--models M] [--status 1|2] [--remark R] [--test-model M]"
+update_no_flags = "更新する項目がありません: 少なくとも 1 つのフラグを指定してください"
+usage_remove = "使用法: everyapi seller remove <id> [-y]"
+usage_refresh = "使用法: everyapi seller refresh <id>"
+usage_compensation = "使用法: everyapi seller compensation {submit|list} [flags]"
+usage_compensation_help = "everyapi seller compensation {submit|list} — 補償申請を起票 / 表示"
+withdraw_nothing = "出金できる金額がありません — セラー残高は $0 です。"
+withdraw_done = "セラー残高からメイン残高へ $%.2f を振り替えました。\n"
+withdraw_check_url = "確認: %s/wallet\n"
+eligibility_header = "Marketplace 適格性:"
+eligibility_marketplace_enabled = "  %s marketplace 有効"
+eligibility_account_active = "  %s アカウントが有効"
+eligibility_email_verified = "  %s メール認証済み"
+eligibility_account_age = "  %s アカウント作成から ≥ %d 日"
+eligibility_has_consume_log = "  %s 成功した消費が少なくとも 1 回ある"
+eligibility_under_cap = "  %s チャネル上限内（%d / %d）"
+eligibility_check_failed = "Marketplace 適格性チェックに失敗しました。上記の未チェック項目を修正してから再実行してください。"
+dashboard_url_line = "Dashboard: %s/seller/channels"
+not_eligible_error = "seller チャネルを mount する資格がありません"
+mounted_with_pool = "チャネル #%d をマウントしました（%s、type=%s）%s。\n"
+key_backup_pool = "（%d 個のバックアップ key 付き）"
+mounted_status_hint = "ステータス: 有効。'everyapi seller list' で確認するか、dashboard をご覧ください。"
+requirements_not_met = "マウント要件をまだ満たしていません。上記の項目をまず修正してから再実行してください。"
+mounting_new_channel = "新しいチャネルをマウント中。Esc / Ctrl+C でキャンセル。"
+method_picker_label = "認証方式"
+method_api_key = "API key             — vendor の key を貼り付け（openai / anthropic など）"
+method_codex_oauth = "Codex / ChatGPT OAuth — ChatGPT Plus サブスクをバインド（device flow、token 貼り付け不要）"
+method_claude_oauth = "Claude OAuth        — Anthropic Claude サブスクをバインド（ブラウザから 1 回貼り付け）"
+method_gemini_oauth = "Gemini OAuth        — Google Gemini アカウントをバインド（完全ワンクリック）"
+prompt_upstream_type = "上流の type"
+prompt_channel_name = "チャネル名"
+prompt_models = "モデル（カンマ区切り）"
+prompt_internal_remark = "内部メモ（任意）"
+about_to_mount = "マウントしようとしています: %s / type=%s / models=%s%s"
+about_to_mount_oauth = "%s OAuth でマウントしようとしています: %s / models=%s"
+submit_prompt = "送信しますか？"
+oauth_blob_in_backup_1 = "それは OAuth/JSON 認証情報の blob のようです。"
+oauth_blob_in_backup_2 = "OAuth 認証情報はバックアップ pool で他の key と組み合わせられません — チャネル上で唯一の key である必要があります。"
+oauth_blob_in_backup_3 = "通常の API key を再入力するか、Ctrl-C で中止して OAuth blob のみで再実行してください。"
+prompt_upstream_key = "上流 API key"
+prompt_backup_key = "バックアップ key #%d"
+prompt_remark_for_key = "key #%d のメモ（任意）"
+prompt_add_another_backup = "バックアップ key を追加しますか？"
+oauth_usage = '''everyapi seller add-oauth — provider の OAuth フローでチャネルをマウント
+
+使い方
+  everyapi seller add-oauth <provider> [フラグ]
+
+PROVIDERS
+  codex     Codex / ChatGPT サブスク（RFC 8628 device flow）
+  claude    Anthropic Claude（ブラウザ callback OAuth）
+  gemini    Google Gemini（ブラウザ callback OAuth）
+
+共通フラグ
+  --name <n>      チャネル表示名（必須）
+  --models <m>    このチャネルが提供するモデル（カンマ区切り、必須）
+  --no-browser    検証 URL を自動で開かない
+
+provider 固有のフラグは 'everyapi seller add-oauth <provider> --help' を参照。
+'''
+oauth_use_provider_help = "使い方: everyapi seller add-oauth <provider> [フラグ]\nproviders: codex, claude, gemini"
+oauth_unknown_provider = "不明な provider %q — サポート: codex, claude, gemini"
+oauth_chatgpt_redirect = "provider %q は ChatGPT Plus — codex と同じ上流です。`everyapi seller add-oauth codex` を使ってください"
+oauth_missing_flags = "必須フラグが不足: %s"
+oauth_codex_intro = "Codex / ChatGPT サブスクをバインドするには、次の URL を開き code を入力してください:"
+oauth_browser_approve = "ブラウザが開きました。そこで承認すれば、自動で完了します。"
+oauth_waiting_auth = "認可を待機中..."
+oauth_codex_timeout = "承認前に code の有効期限が切れました — もう一度 'everyapi seller add-oauth codex' を実行してください"
+oauth_denied = "ブラウザで認可が拒否されました"
+oauth_email_unknown = "（token はアカウントのメールを公開していません）"
+oauth_mounted_with_email = "\nチャネル #%d をマウントしました（%s、type=codex、account=%s）。\n"
+oauth_status_visit = "ステータス: 有効。'everyapi seller list' で確認するか、%s/seller/channels をご覧ください。\n"
+oauth_claude_intro = "Anthropic Claude サブスクをバインドするには:"
+oauth_claude_step_1 = "  1) この URL をブラウザで開く（--no-browser ならコピー）:\n     %s\n"
+oauth_claude_step_2 = "  2) サインインして接続を承認。"
+oauth_claude_step_3a = "  3) Anthropic のコールバックページに `<code>#<state>` のような文字列が表示されます。"
+oauth_claude_step_3b = "     その文字列をコピーして下に貼り付けてください。"
+oauth_browser_opened = "ブラウザが開きました。"
+oauth_paste_string = "認可文字列を貼り付け"
+oauth_mounted_claude = "\nチャネル #%d をマウントしました（%s、type=claude）。\n"
+oauth_token_expires = "Token の有効期限: %s（その前に自動更新されます）。\n"
+oauth_gemini_intro = "Google Gemini アカウントをバインドするには、次でサインイン:"
+oauth_browser_sign_in = "ブラウザが開きました。そこでサインインすれば、自動で完了します。"
+oauth_waiting_redirect = "127.0.0.1:%d でのリダイレクト待機中（タイムアウト %s）...\n"
+oauth_callback_no_code = "OAuth callback に認可 code が含まれていません"
+oauth_state_mismatch = "OAuth state が一致しません（受信: %q、期待: %q）— コマンドを再実行してください"
+oauth_mounted_gemini = "\nチャネル #%d をマウントしました（%s、type=gemini）。\n"
+gates_header = "Gates:"
+gate_marketplace_enabled = "  marketplace_enabled : %v"
+gate_account_active = "  account_active      : %v"
+gate_email_verified = "  email_verified      : %v"
+gate_account_age_ok = "  account_age_ok      : %v（最小 %d 日）"
+gate_has_consume_log = "  has_consume_log     : %v"
+gate_under_cap = "  under_cap           : %v（マウント済み %d / %d）"
+compensation_upstream_required = "--upstream は必須です"
+compensation_description_required = "--description は必須です"
+claims_total = "%d 件の請求 / 全 %d 件:"
+sales_page_total = "  ページ合計: charge=%d  take=%d"
+refresh_account_label = "  account: %s"
+refresh_expires_label = "  expires: %s"
+refresh_last_refresh_label = "  last refresh: %s"
+invalid_channel_id = "無効なチャネル id %q"
+channel_not_found = "チャネル #%d はマウント済みチャネル内に見つかりません"
+oauth_only_refresh = "チャネル #%d (type=%s) は OAuth チャネルではありません — refresh は codex / claude / gemini のみ対象です"
+unknown_compensation_sub = "不明な compensation サブコマンド %q"
+unknown_channel_type = "不明なチャネルタイプ %q — 次のいずれかを指定してください: %s, または数値 id"
+
+[demand]
+no_rows = "需要投稿はありません。"
+posted = "需要 #%d を投稿しました (state=%s)。"
+cancelled = "需要 #%d をキャンセルしました。"
+removed = "需要 #%d を削除しました。"
+remove_confirm = "需要 #%d を完全に削除しますか？"
+usage = '''
+everyapi demand — バイヤー側マーケットプレイスの投稿
+
+使用法
+  everyapi demand <subcommand> [flags]
+
+サブコマンド
+  list   [--state open|closed] [--page P] [--limit N]
+                                  公開マーケットプレイスのフィード
+  my     [--page P] [--limit N]   自分が投稿した需要
+  show   <id>                     単一投稿の詳細
+  submit --title <T> --model <M> --max-price <usd_per_M> [--est <tokens>]
+         [--description <D>] [--expires <unix_s>] [--require-oauth]
+                                  新しい需要を投稿
+  cancel <id>                     自分の需要をキャンセル
+  remove <id> [-y]                投稿を削除 (-y なしで確認)
+'''
+
+[dispute]
+no_rows = "ディスピュートはありません。"
+opened = "ディスピュート #%d を起票しました (state=%s)。"
+usage = '''
+everyapi dispute — ディスピュートの起票 / 一覧 / 詳細
+
+使用法
+  everyapi dispute <subcommand> [flags]
+
+サブコマンド
+  submit --counterparty <uid> --type <t> --target-kind <k> --target <id> --description <d> [--amount <quota>]
+                                       ディスピュートを起票
+  my     [--page P] [--limit N]        自分の未解決 + 解決済みディスピュートを表示
+  show   <id>                          単一ディスピュートの詳細
+'''
+
+[report]
+filed = "報告を受け付けました。記載いただいたメールアドレス宛に abuse 担当が連絡します。"
+usage = '''
+everyapi report — 不正利用 / TOS 違反の報告
+
+使用法
+  everyapi report --email <e> --category <c> --target-type <t> --description <d>
+                  [--target-id <id>] [--evidence <url>]
+
+注意
+  公開エンドポイント — 未ログインでも使用可能。ログイン中に呼び出すと、
+  通報者の user_id がサーバ側でトリアージ用に記録されます。
+'''
+
+[notify]
+no_rows = "通知はありません。"
+no_unread = "未読の通知はありません。"
+unread_count = "未読 %d 件"
+marked_read = "#%d を既読にしました。"
+marked_all = "%d 件の通知を既読にしました。"
+usage = '''
+everyapi notify — アプリ内通知
+
+使用法
+  everyapi notify <subcommand> [flags]
+
+サブコマンド
+  list   [--unread] [--page P] [--limit N]   最近の通知
+  count                                       未読数のみを返す
+  read   <id>                                 単一通知を既読にする
+  readall                                     すべての未読を既読にする
+'''
+
+[dm]
+no_threads = "DM スレッドはありません。"
+no_contacts = "DM 連絡先がまだいません。"
+no_messages = "(メッセージなし)"
+sent_at = "#%d を %s に送信"
+marked_read = "スレッド #%d を既読にしました。"
+usage = '''
+everyapi dm — 他ユーザーとのダイレクトメッセージ
+
+使用法
+  everyapi dm <subcommand> [flags]
+
+サブコマンド
+  threads  [--page P] [--limit N]      自分の DM スレッド (新しい順)
+  contacts                              送受信したことのあるユーザー
+  count                                 未読 DM 数 (スカラー)
+  open <other_user_id>                  他ユーザーとのスレッドを開く (冪等)
+  messages <thread_id> [--after <id>] [--limit N]
+                                        スレッド内のメッセージを読む
+  send <thread_id> <body>               メッセージを送信
+  read <thread_id>                      スレッドを既読にする
+'''
+
+[user]
+account_header = "アカウント #%d  %s  (%s)"
+passkey_use_dashboard = "(登録 / 削除はブラウザ操作です — ダッシュボードを使ってください。)"
+passkey_none = "登録された passkey はありません。ダッシュボードで登録してください (ブラウザのみ)。"
+"2fa_disabled_msg" = "セットアップはブラウザ操作 (QR スキャン) — ダッシュボードで初期設定後、ここでコード管理を行ってください。"
+"2fa_disabled" = "2FA は無効です。"
+no_bindings = "OAuth 連携はありません。"
+bindings_count = "%d 件の連携:"
+unbound = "プロバイダ #%d の連携を解除しました。"
+unbind_confirm = "OAuth プロバイダ #%d の連携を解除しますか？再連携するまで、このプロバイダ経由のログインはできません。"
+aff_code = "アフィリエイトコード: %s"
+aff_new = "新しいアフィリエイトコード: %s"
+aff_rotated_warning = "以前のコードを埋め込んだリンクは、もう報酬対象になりません。"
+oauth_usage = "使い方: everyapi user oauth {list|unbind <provider_id>}"
+passkey_dashboard_gated = "passkey ステータスは dashboard session cookie に依存します — passkey 管理は Web UI を使ってください"
+passkey_registered_last_used = "Passkey 登録済み。最終使用: %s"
+"2fa_status" = "2FA: enabled=%v locked=%v"
+"2fa_backup_remaining" = "バックアップコード残り: %d"
+"2fa_low_hint" = "  （残り少 — 'everyapi user 2fa backup --code <new-totp>' で再生成を検討）"
+backup_regenerated = "%d 個のバックアップコードを再生成しました — 今すぐ保存してください。再表示されません:"
+usage = '''
+everyapi user — プロフィール / 2FA / OAuth 連携 / アフィリエイトコード
+
+使用法
+  everyapi user <subcommand> [flags]
+
+サブコマンド
+  info                                  プロフィール + セキュリティの統合ビュー
+  2fa                                   2FA 状態 (有効 / ロック / 残りバックアップコード)
+  2fa disable --code <6 桁>             2FA を無効化
+  2fa backup  --code <6 桁>             バックアップコード一式を再生成
+  passkey                               Passkey 登録状態
+  oauth list                            連携済みの OAuth プロバイダ
+  oauth unbind <provider_id>            OAuth 連携を解除
+  aff                                   アフィリエイトコードを表示
+  aff reset                             アフィリエイトコードを再生成
+
+注意
+  2FA セットアップ (QR スキャン)、passkey 登録、メール / WeChat 検証は
+  すべてブラウザ操作が必要です。ダッシュボードで初期設定後、ここで
+  日常的な管理を行ってください。
+'''
+
+[subscription]
+no_plans = "有効なサブスクリプションプランがありません。"
+plans_count = "%d 個のプラン:"
+preference_updated = "課金設定を %q に更新しました。"
+current_preference = "現在の請求設定: %s"
+set_hint = "--set <value> で変更します。未知の値はバックエンドで既定値に正規化されます。"
+usage = '''
+everyapi subscription — サブスクリプションプラン / 自分の契約 / 設定
+
+使用法
+  everyapi subscription <subcommand> [flags]
+
+サブコマンド
+  plans                            有効なサブスクリプションプランを一覧
+  self                             有効 + 過去のサブスクリプションを表示
+  preference --set <value>         課金設定を更新
+                                   (例: "topup" / "subscription" / "subscription_first")
+                                   バックエンドが不明な値を正規化します。
+注意
+  プラン購入はブラウザ操作です — 'everyapi topup' でフィッシング対策
+  ハンドシェイクの後ろにあるダッシュボードのウォレットを開いてください。
+'''
+
+[admin.user]
+no_matches = "一致なし。"
+deleted = "ユーザー #%d を削除しました。"
+delete_confirm = "ユーザー #%d を削除しますか？この操作は破壊的で取り消せません。"
+action_applied = "admin user manage: action=%q をユーザー #%d に適用しました"
+
+[admin.abuse]
+no_reports = "報告はありません。"
+
+[admin.audit]
+no_rows = "監査ログ行はありません。"
+
+[admin.marketplace]
+status_unset = "marketplace.enabled: <未設定> (バックエンドのデフォルト: false)\n"
+status_set = "marketplace.enabled: %s\n"
+no_change = "marketplace.enabled: すでに %s — 変更なし\n"
+changed = "marketplace.enabled: %s → %s\n"
+
+[doctor.section]
+account = "アカウント"
+gateway = "ゲートウェイ"
+tools = "PATH 上のツール"
+
+[doctor.result]
+failed = "結果: 失敗あり。"
+warned = "結果: 警告ありで OK。"
+green = "結果: すべて正常。"
+
+[doctor]
+tally = "(ok=%d warn=%d fail=%d)"
+usage = '''
+everyapi doctor — セルフチェック (認証情報、ゲートウェイ、サニタイザ、ツール)
+
+使用法
+  everyapi doctor
+'''
+
+[events]
+connected = "接続しました。イベントを受信中 (Ctrl-C で停止)…"
+transport_err = "[transport] %s — 再接続中"
+
+[mcp.status]
+count = "%d 個の MCP クライアントを認識:"
+registered_count = "%d / %d が登録済み。"
+state_registered = "登録済み"
+state_not_registered = "未登録"
+state_not_installed = "PATH 上にありません"
+state_probe_failed = "(プローブ失敗)"
+run_install_hint = "'everyapi mcp install %s' を実行してください"
+
+[mcp]
+install_usage = '''everyapi mcp install — everyapi を AI CLI の MCP サーバーとして登録
+
+使用法
+  everyapi mcp install [client]
+
+引数
+  client    claude、codex、gemini のいずれか。デフォルトは claude。
+
+内部的に `<client> mcp add everyapi everyapi mcp` を実行します（各
+クライアントが期待する構文で）。完了後、AI CLI は必要に応じて
+`everyapi mcp` を起動し、4 つの everyapi_* ツール (status、topup、
+seller_list、seller_withdraw) を公開します。
+
+選択したクライアントの CLI が PATH にある必要があります。未インストール
+の場合、エラーメッセージにインストールリンクと、クライアントの設定に
+手動で貼り付けられる設定スニペットが含まれます。'''
+uninstall_usage = '''everyapi mcp uninstall — AI CLI から everyapi を登録解除
+
+使用法
+  everyapi mcp uninstall [client]
+
+引数
+  client    claude、codex、gemini のいずれか。デフォルトは claude。
+
+内部的に `<client> mcp remove everyapi` を実行し、`everyapi mcp install
+[client]` が行った登録を取り消します。実行後、サーバープロセスを
+終了させるためにクライアントを再起動してください。
+
+選択したクライアントの CLI が PATH にある必要があります。クライアントの
+設定を手動編集して everyapi を登録した場合、mcpServers オブジェクトから
+"everyapi" エントリを手動で削除してください。'''
+status_usage = '''everyapi mcp status — どの MCP クライアントが everyapi を登録済みかを表示
+
+使用法
+  everyapi mcp status
+
+既知の各クライアント (claude / codex / gemini) について、以下のいずれかを報告:
+  registered      — everyapi がこのクライアントの MCP サーバーリストに登録済み
+  not registered  — クライアントはインストール済みだがサーバー未追加
+  not on PATH     — クライアントバイナリがインストールされていない
+  (probe failed)  — クライアントバイナリは存在するが `mcp list` が失敗
+'''
+
+[proxy]
+start_listening = "サニタイザプロキシは http://%s で待ち受け中"
+start_upstream = "上流: %s"
+start_detectors = "有効な検出器: %d"
+start_point_sdk = "SDK を http://%s に向けてください（または 'everyapi use <tool>' を実行）。"
+start_ctrl_c = "Ctrl+C で停止。マッピングテーブルはメモリ上にのみ存在します。"
+stop_not_running = "サニタイザプロキシは実行されていません（PID ファイルなし）。"
+stop_was_not_running = "サニタイザプロキシは実行中ではありませんでした；古い PID ファイルを清掃しました。"
+stop_sent_sigterm = "サニタイザプロキシ（pid=%d）に SIGTERM を送信しました。最大 3 秒で終了を待機中…\n"
+stop_stopped = "停止しました。"
+stop_still_alive = "3 秒経過してもプロセスは生存中 — すぐに終了するはずです。"
+status_not_running = "サニタイザプロキシは実行されていません。"
+status_start_hint = "起動: everyapi proxy start"
+status_wrong_server_line1 = "ポート %s は応答していますが、EveryAPI サニタイザではありません（HTTP %d、content-type %q）。\n"
+status_wrong_server_line2 = "別のものがそのポートをバインドしています — --listen 127.0.0.1:<port> で別ポートを選ぶか、"
+status_wrong_server_line3 = "もう一方のサービスを停止してください。macOS/Linux では 'lsof -iTCP:%s -sTCP:LISTEN' で特定できます。"
+status_header = "サニタイザプロキシ"
+status_raw_prefix = "サニタイザプロキシ（raw）: %s"
+detach_prompt = "プロキシをバックグラウンドで実行（detached）？Yes = 実行して shell に戻る；No = この端末に残ってライブログを表示（Ctrl+C で停止）"
+started_pid = "サニタイザプロキシを起動しました（pid=%d、listen=%s）。"
+started_logs = "ログ: %s"
+configure_header = "everyapi proxy — サニタイザ設定"
+configure_config_file = "設定ファイル: %s"
+configure_builtin_prompt = "ビルトイン検出器 — 有効にしたいものをチェックしたままにしてください:"
+configure_existing_patterns = "既存のカスタムパターン:"
+configure_add_replace_prompt = "カスタム正規表現を追加または置換しますか？"
+configure_pattern_name_prompt = "パターン名（空白なし）"
+configure_pattern_exists = "（パターン %q は既存で正規表現は %q — 新しい値を入力すると上書きされます）"
+configure_regex_prompt = "正規表現（Go 構文）"
+configure_invalid_regex = "正規表現 %q は無効: %v — スキップしました。"
+configure_replaced = "→ パターン %q を置換しました。"
+configure_added = "→ パターン %q を追加しました。"
+configure_add_replace_another = "もう一つ追加または置換しますか？"
+configure_saved = "保存しました → %s"
+configure_restart_hint_1 = "サニタイザプロキシが実行中です。新しい設定を反映するには再起動してください:"
+configure_restart_hint_2 = "  everyapi proxy stop && everyapi proxy start --detach"
+
+[edge]
+no_nodes = "登録された edge ノードはありません。"
+register_hint = "作成するには 'everyapi edge register --name <node-name>' を実行してください。"
+
+[status]
+quota = "クォータ:"
+requests = "リクエスト:"
+topup = "入金:"
+remaining_used = "$%.2f 残り   $%.2f 使用"
+
+[topup]
+before_open = "ブラウザを開く前に、これが本物の EveryAPI ダッシュボードであることを確認してください。"
+url_label = "URL:"
+phrase_label = "フレーズ:"
+expires_in = "(このセッションは約 %d 秒で期限切れ)"
+checks_header = "ブラウザが開いたら 2 点確認してください:"
+check_1 = "  1) 上記の URL は必ずあなたの EveryAPI オリジン上にあること\n     (デフォルトは app.everyapi.ai、またはセルフホスト)。"
+check_2 = "  2) ページのヘッダに上記と同じフレーズが表示されていること。"
+phishing_hint = "いずれかが異なる場合はタブを閉じてください — フィッシングページの可能性があります。"
+copy_url = "上記の URL をブラウザにコピーしてください。"
+browser_opened = "ブラウザを開きました。ページ上のフレーズが上記と一致するか確認してください。"
+
+[login]
+waiting = "認証待機中... (Ctrl+C でキャンセル)"
+waiting_with_copy = "認証待機中... (Ctrl+C でキャンセル、'c' で URL コピー)"
+next_hint = "次は 'everyapi status' か 'everyapi use claude' を試してください。"
+url_copied = "URL をクリップボードにコピーしました。"
+url_copy_failed = "コピーできませんでした: %v"
+qr_hint = "この QR をスマートフォン (または既に EveryAPI にログイン済みの端末) でスキャンしてください:"
+url_hint_with_qr = "または手動でこの URL にアクセスしてください (コードはリンクに含まれています):"
+url_hint = "この端末を認証するには、以下にアクセスしてください (コードはリンクに含まれています):"
+code_hint = "ページが自動入力されない場合は、コードを入力してください: %s"
+browser_opened = "ブラウザを開きました。そちらで承認 (またはスマートフォンで完了) してください。本処理は自動で進みます。"
+no_relay_note_1 = "注意: あなたのアカウントにはまだ relay API key がありません。`everyapi use` には 1 つ必要です"
+no_relay_note_2 = "EveryAPI ダッシュボードで作成後、再度 'everyapi login' を実行してください。"
+logged_in_saved = "\n%s としてログインしました。認証情報は %s/credentials.json に保存されました\n"
+
+[logout]
+done = "ログアウトしました。"
+
+[update]
+up_to_date = "everyapi %s — 最新版です。"
+up_to_date_check = "最新版 (%s)"
+available = "アップデートあり: %s → %s"
+update_available = "アップデートあり: %s → %s"
+install_method = "インストール方法: %s"
+whats_new = "─── 更新内容 ───"
+no_notes = "(リリースノートなし)"
+full_release = "完全なリリース: %s"
+prerelease = "プレリリース版を実行中: %s (最新タグ: %s)"
+nothing_to_do = "実行する処理はありません。"
+dev_build_check = "dev ビルド (commit %s); 最新リリースは %s\n"
+rebuild_header = "現在のソースツリーから再ビルドする方法:"
+switch_header = "リリースチャネルのバイナリに切り替える方法:"
+cant_auto = "自動アップグレードできません — このバイナリは認識可能な Cellar/ (brew) や\n$GOBIN/$GOPATH/bin パスの下にありません。以下から選択してください:\n"
+dev_build_intro = "\nこれは dev ビルドです（commit %s）。最新のタグ付きリリース: %s。\n"
+rebuild_cmd = "  cd clients/cli && go build"
+switch_cmd_brew = "  brew install everyapi-ai/tap/everyapi   # macOS / Linux"
+switch_cmd_go = "  go install github.com/everyapi-ai/everyapi-ai@latest"
+
+[use]
+tool_picker = "ツールを選択:"
+group_picker = "ルーティンググループを選択:"
+yolo_prompt = "%s を有効化しますか？ (すべての安全確認をスキップします)"
+launching = "%s を %s に対して起動中"
+launching_via = "%s を %s 経由で %s に対して起動中"
+sanitizer_warn = "警告: サニタイザプロキシが起動しませんでした (%v)。\n"
+fallback_direct = "直接モードにフォールバックします — トラフィックはプライバシーフィルタを通らずに %s に到達します。\n"
+fallback_hint = "このメッセージを抑制するには --direct を指定するか、'everyapi proxy start' でデバッグしてください。\n\n"
+no_relay_keys = "アカウントにグループを選択するための有効な relay API key がありません — EveryAPI ダッシュボードで作成後、'everyapi login' を実行してください"
+no_relay_key_long = '''
+アカウントに使用可能な relay API キーがありません — `everyapi use` には必要です。
+ログイントークンとは別物です。EveryAPI dashboard (%s) で API キーを作成し、
+'everyapi login' を再度実行してください。'''
+unknown_flag = "不明なフラグ %q (ツールフラグの前に `--` を付けてください: `everyapi use <tool> -- %s ...`)"
+usage = "使用法: everyapi use <tool> [--group <名前>|--channel <名前>] [--direct] [-- ツール引数...]"

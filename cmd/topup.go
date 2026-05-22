@@ -11,6 +11,7 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -35,7 +36,7 @@ func Topup(args []string) error {
 
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return errors.New("not logged in — run 'everyapi login' first")
+		return errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return err
@@ -45,7 +46,7 @@ func Topup(args []string) error {
 	res, err := client.CreateJumpSession(cliout.WithCtx())
 	if err != nil {
 		if api.IsUnauthorized(err) {
-			return errors.New("your session expired — run 'everyapi login' again")
+			return errors.New(i18n.T("auth.session_expired"))
 		}
 		return fmt.Errorf("create jump session: %w", err)
 	}
@@ -57,19 +58,18 @@ func Topup(args []string) error {
 		api.WebOriginFromBase(creds.APIBase), res.SessionID)
 
 	cliout.Println("")
-	cliout.Println("Before opening the browser, verify this is the real EveryAPI dashboard.")
+	cliout.Println(i18n.T("topup.before_open"))
 	cliout.Println("")
-	cliout.Printf("  URL:    %s\n", jumpURL)
-	cliout.Printf("  Phrase: %s\n", res.VerificationPhrase)
+	cliout.Printf("  %-8s %s\n", i18n.T("topup.url_label"), jumpURL)
+	cliout.Printf("  %-8s %s\n", i18n.T("topup.phrase_label"), res.VerificationPhrase)
 	if res.ExpiresIn > 0 {
-		cliout.Printf("  (this session expires in ~%d seconds)\n", res.ExpiresIn)
+		cliout.Printf("  "+i18n.T("topup.expires_in")+"\n", res.ExpiresIn)
 	}
 	cliout.Println("")
-	cliout.Println("Check TWO things after the browser opens:")
-	cliout.Println("  1) The page URL above must be on YOUR EveryAPI origin")
-	cliout.Println("     (app.everyapi.ai by default, or your self-host).")
-	cliout.Println("  2) The page header must show the SAME phrase above.")
-	cliout.Println("If either differs, close the tab — you may be looking at a phishing page.")
+	cliout.Println(i18n.T("topup.checks_header"))
+	cliout.Println(i18n.T("topup.check_1"))
+	cliout.Println(i18n.T("topup.check_2"))
+	cliout.Println(i18n.T("topup.phishing_hint"))
 	cliout.Println("")
 
 	// Confirmation gate. On a TTY this is a huh confirm prompt; off
@@ -77,7 +77,7 @@ func Topup(args []string) error {
 	// line-reader. EOF on a redirected stdin treats as proceed so a
 	// scripted invocation can still pipe through — the phrase is on
 	// stdout regardless and the caller can read it.
-	confirmed, cErr := cliprompt.YesNo(bufio.NewReader(os.Stdin), "Open the browser now?", true)
+	confirmed, cErr := cliprompt.YesNo(bufio.NewReader(os.Stdin), i18n.T("common.open_browser_now"), true)
 	if cErr != nil {
 		if errors.Is(cErr, io.EOF) {
 			confirmed = true
@@ -86,18 +86,18 @@ func Topup(args []string) error {
 		}
 	}
 	if !confirmed {
-		return errors.New("aborted by user")
+		return errors.New(i18n.T("common.aborted_by_user"))
 	}
 
 	cliout.Println("")
 	if *noBrowser {
-		cliout.Println("Copy the URL above into your browser.")
+		cliout.Println(i18n.T("topup.copy_url"))
 		return nil
 	}
 	if berr := cliprompt.OpenBrowser(jumpURL); berr == nil {
-		cliout.Println("Browser opened. Verify the phrase on the page matches the one above.")
+		cliout.Println(i18n.T("topup.browser_opened"))
 	} else {
-		fmt.Fprintln(os.Stderr, "Couldn't open the browser automatically — copy the URL above.")
+		fmt.Fprintln(os.Stderr, i18n.T("common.browser_open_failed"))
 	}
 	return nil
 }

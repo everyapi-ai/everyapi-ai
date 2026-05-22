@@ -14,29 +14,13 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-const usage = `everyapi demand — buyer-side marketplace postings
-
-USAGE
-  everyapi demand <subcommand> [flags]
-
-SUBCOMMANDS
-  list   [--state open|closed] [--page P] [--limit N]
-                                  Public marketplace feed
-  my     [--page P] [--limit N]   Demands you've posted
-  show   <id>                     Single posting in detail
-  submit --title <T> --model <M> --max-price <usd_per_M> [--est <tokens>]
-         [--description <D>] [--expires <unix_s>] [--require-oauth]
-                                  Post a new demand
-  cancel <id>                     Cancel one of your demands
-  remove <id> [-y]                Delete a posting (asks unless -y)
-`
-
 func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		cliout.Println(usage)
+		cliout.Println(i18n.T("demand.usage"))
 		if len(args) == 0 {
 			return errors.New("missing subcommand")
 		}
@@ -56,7 +40,7 @@ func Run(args []string) error {
 	case "remove":
 		return runRemove(args[1:])
 	default:
-		cliout.Println(usage)
+		cliout.Println(i18n.T("demand.usage"))
 		return fmt.Errorf("unknown 'demand' subcommand %q", args[0])
 	}
 }
@@ -64,7 +48,7 @@ func Run(args []string) error {
 func newClient() (*api.Client, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return nil, errors.New("not logged in — run 'everyapi login' first")
+		return nil, errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return nil, err
@@ -77,7 +61,7 @@ func classifyErr(err error) error {
 		return nil
 	}
 	if api.IsUnauthorized(err) {
-		return errors.New("your session expired — run 'everyapi login' again")
+		return errors.New(i18n.T("auth.session_expired"))
 	}
 	return err
 }
@@ -116,7 +100,7 @@ func runList(args []string, mine bool) error {
 		return classifyErr(err)
 	}
 	if len(rows) == 0 {
-		cliout.Println("No demands.")
+		cliout.Println(i18n.T("demand.no_rows"))
 		return nil
 	}
 	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)
@@ -202,7 +186,7 @@ func runSubmit(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Demand #%d posted (state=%s).\n", d.ID, d.State)
+	cliout.Printf(i18n.T("demand.posted")+"\n", d.ID, d.State)
 	return nil
 }
 
@@ -218,7 +202,7 @@ func runCancel(args []string) error {
 	if err := client.CancelDemand(cliout.WithCtx(), id); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Demand #%d cancelled.\n", id)
+	cliout.Printf(i18n.T("demand.cancelled")+"\n", id)
 	return nil
 }
 
@@ -235,14 +219,14 @@ func runRemove(args []string) error {
 	if !*yes && cliprompt.IsInteractive() {
 		ok, err := cliprompt.YesNo(
 			bufio.NewReader(os.Stdin),
-			fmt.Sprintf("Delete demand #%d permanently?", id),
+			fmt.Sprintf(i18n.T("demand.remove_confirm"), id),
 			false,
 		)
 		if err != nil {
 			return err
 		}
 		if !ok {
-			cliout.Println("Canceled.")
+			cliout.Println(i18n.T("common.canceled"))
 			return nil
 		}
 	}
@@ -253,6 +237,6 @@ func runRemove(args []string) error {
 	if err := client.DeleteDemand(cliout.WithCtx(), id); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Demand #%d removed.\n", id)
+	cliout.Printf(i18n.T("demand.removed")+"\n", id)
 	return nil
 }

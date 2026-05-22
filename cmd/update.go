@@ -11,10 +11,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-ai/internal/version"
 )
 
@@ -84,17 +86,17 @@ func Update(args []string) error {
 	// binary. Detect and short-circuit with a tailored message.
 	if ver == "dev" {
 		if *checkOnly {
-			cliout.Printf("dev build (commit %s); latest release is %s\n", commit, latest)
+			cliout.Printf(i18n.T("update.dev_build_check"), commit, latest)
 			return nil
 		}
-		cliout.Printf("\nYou're on a dev build (commit %s). Latest tagged release: %s.\n", commit, latest)
+		cliout.Printf(i18n.T("update.dev_build_intro"), commit, latest)
 		cliout.Println("")
-		cliout.Println("To rebuild from this source tree:")
-		cliout.Println("  cd clients/cli && go build")
+		cliout.Println(i18n.T("update.rebuild_header"))
+		cliout.Println(i18n.T("update.rebuild_cmd"))
 		cliout.Println("")
-		cliout.Println("To switch to a release-channel binary:")
-		cliout.Println("  brew install everyapi-ai/tap/everyapi   # macOS / Linux")
-		cliout.Println("  go install github.com/everyapi-ai/everyapi-ai@latest")
+		cliout.Println(i18n.T("update.switch_header"))
+		cliout.Println(i18n.T("update.switch_cmd_brew"))
+		cliout.Println(i18n.T("update.switch_cmd_go"))
 		return nil
 	}
 
@@ -102,29 +104,29 @@ func Update(args []string) error {
 
 	if *checkOnly {
 		if cmp >= 0 {
-			cliout.Printf("up to date (%s)\n", ver)
+			cliout.Printf(i18n.T("update.up_to_date_check")+"\n", ver)
 			return nil
 		}
-		cliout.Printf("update available: %s → %s\n", ver, latest)
+		cliout.Printf(i18n.T("update.available")+"\n", ver, latest)
 		os.Exit(1)
 		return nil // unreachable
 	}
 
 	if cmp > 0 {
-		cliout.Printf("\nYou're running a pre-release: %s (latest tag: %s)\n", ver, latest)
-		cliout.Printf("Nothing to do.\n")
+		cliout.Printf("\n"+i18n.T("update.prerelease")+"\n", ver, latest)
+		cliout.Println(i18n.T("update.nothing_to_do"))
 		return nil
 	}
 	if cmp == 0 {
-		cliout.Printf("\neveryapi %s — up to date.\n", ver)
+		cliout.Printf("\n"+i18n.T("update.up_to_date")+"\n", ver)
 		return nil
 	}
 
 	// cmp < 0: outdated. Pick a method based on where the binary lives.
 	method := detectInstallMethod()
-	cliout.Printf("\nUpdate available: %s → %s\n", ver, latest)
+	cliout.Printf("\n"+i18n.T("update.update_available")+"\n", ver, latest)
 	renderChangelog(rel)
-	cliout.Printf("Install method:   %s\n\n", method)
+	cliout.Printf(i18n.T("update.install_method")+"\n\n", method)
 
 	switch method {
 	case installMethodBrew:
@@ -248,8 +250,7 @@ func runGoInstallUpgrade(dryRun bool) error {
 
 func printUnknownInstallHint(latest string) {
 	binaryPath := guessBinaryPath()
-	cliout.Printf("Can't auto-upgrade — your binary isn't under a Cellar/ (brew) or\n")
-	cliout.Printf("$GOBIN/$GOPATH/bin path we recognise. Pick one:\n\n")
+	cliout.Printf("%s\n", i18n.T("update.cant_auto"))
 
 	cliout.Printf("  # Homebrew (after `brew tap everyapi-ai/tap`)\n")
 	cliout.Printf("  brew update && brew upgrade everyapi\n\n")
@@ -287,7 +288,9 @@ func guessBinaryPath() string {
 // is the distribution channel. cli-release.yml's mirror step
 // pushes the rewritten clients/cli/ tree + a v* tag and
 // GoReleaser attaches the platform tarballs there.
-const latestReleasePollURL = "https://api.github.com/repos/everyapi-ai/everyapi-ai/releases/latest"
+// var, not const, so update_test.go can swap it to an httptest
+// server URL. Production callers never reassign.
+var latestReleasePollURL = "https://api.github.com/repos/everyapi-ai/everyapi-ai/releases/latest"
 
 // errNoReleaseYet surfaces when the mirror's Releases endpoint is
 // empty (pre-v0.1.0 state, or a brand-new install pre-first-release).
@@ -310,6 +313,15 @@ type latestRelease struct {
 // changelog BEFORE handing off to brew / go install, so the user
 // gets the "what's new in this upgrade" preview the dashboard
 // release page would normally give them.
+//
+// Auth: a GITHUB_TOKEN env var, when set, bumps the unauthenticated
+// 60-req/hour rate limit to authenticated 5000 req/hour. Most CLI
+// users won't have it set and the unauthenticated path stays the
+// default — but on shared NATs (offices, CI, conference Wi-Fi) the
+// 60/hour bucket is shared across every user behind the same IP and
+// runs out fast. When that happens the rate-limit branch below
+// surfaces a specific "rate limit exceeded; resets at HH:MM:SS"
+// hint instead of a bare HTTP 403.
 func fetchLatestRelease(ctx context.Context) (*latestRelease, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", latestReleasePollURL, nil)
 	if err != nil {
@@ -320,6 +332,14 @@ func fetchLatestRelease(ctx context.Context) (*latestRelease, error) {
 	// unauthenticated callers; an empty UA can trip the abuse rate
 	// limit harder than a recognisable one.
 	req.Header.Set("User-Agent", "everyapi-cli/"+version.Version)
+	// Mirror the gh CLI's env-var preference: GH_TOKEN wins over
+	// GITHUB_TOKEN. Users who set up `gh auth login` end up with
+	// GH_TOKEN in their shell; CI / GitHub Actions injects
+	// GITHUB_TOKEN. Either should Just Work without the user
+	// re-exporting between the two.
+	if tok := strings.TrimSpace(firstNonEmpty(os.Getenv("GH_TOKEN"), os.Getenv("GITHUB_TOKEN"))); tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
+	}
 
 	hc := &http.Client{Timeout: 10 * time.Second}
 	resp, err := hc.Do(req)
@@ -331,7 +351,7 @@ func fetchLatestRelease(ctx context.Context) (*latestRelease, error) {
 		return nil, errNoReleaseYet
 	}
 	if resp.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("github releases API returned %d", resp.StatusCode)
+		return nil, githubAPIError(resp)
 	}
 	var payload struct {
 		TagName string `json:"tag_name"`
@@ -348,6 +368,42 @@ func fetchLatestRelease(ctx context.Context) (*latestRelease, error) {
 	return &latestRelease{Tag: tag, Body: payload.Body, HTMLURL: payload.HTMLURL}, nil
 }
 
+// firstNonEmpty returns the first non-empty string argument. Used
+// for the GH_TOKEN / GITHUB_TOKEN preference order; lifted into its
+// own helper because the test wants to assert the preference too.
+func firstNonEmpty(vs ...string) string {
+	for _, v := range vs {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// githubAPIError wraps a non-2xx response into the most actionable
+// error we can build from the headers. Specifically: a 403 with
+// X-RateLimit-Remaining: 0 is the "you hit the unauthenticated
+// 60/hour bucket" case — surface the reset time + the GITHUB_TOKEN
+// escape hatch instead of the bare status code. Everything else
+// falls through to a generic "github API returned N" string.
+func githubAPIError(resp *http.Response) error {
+	if resp.StatusCode == http.StatusForbidden && resp.Header.Get("X-RateLimit-Remaining") == "0" {
+		hint := "set GITHUB_TOKEN env var to authenticate (bumps the limit from 60 to 5000 req/hour)"
+		if reset := resp.Header.Get("X-RateLimit-Reset"); reset != "" {
+			if ts, err := strconv.ParseInt(reset, 10, 64); err == nil {
+				wait := time.Until(time.Unix(ts, 0))
+				if wait < 0 {
+					wait = 0
+				}
+				return fmt.Errorf("github rate-limit exhausted; resets in %s (%s) — %s",
+					wait.Round(time.Second), time.Unix(ts, 0).Format("15:04:05"), hint)
+			}
+		}
+		return fmt.Errorf("github rate-limit exhausted — %s", hint)
+	}
+	return fmt.Errorf("github releases API returned %d", resp.StatusCode)
+}
+
 // renderChangelog prints the release body (goreleaser's auto-
 // generated changelog) between "Update available:" and "Install
 // method:" so the user gets a preview of what they're upgrading
@@ -362,10 +418,10 @@ func fetchLatestRelease(ctx context.Context) (*latestRelease, error) {
 // instead of staring at an empty paragraph.
 func renderChangelog(rel *latestRelease) {
 	cliout.Println("")
-	cliout.Println("─── What's new ───")
+	cliout.Println(i18n.T("update.whats_new"))
 	body := strings.TrimSpace(rel.Body)
 	if body == "" {
-		cliout.Println("(no release notes attached)")
+		cliout.Println(i18n.T("update.no_notes"))
 	} else {
 		// Indent each line so the changelog block is visually
 		// distinct from the "Update available:" and "Install
@@ -375,7 +431,7 @@ func renderChangelog(rel *latestRelease) {
 		}
 	}
 	if rel.HTMLURL != "" {
-		cliout.Printf("\nFull release: %s\n", rel.HTMLURL)
+		cliout.Printf("\n"+i18n.T("update.full_release")+"\n", rel.HTMLURL)
 	}
 	cliout.Println("──────────────────")
 	cliout.Println("")

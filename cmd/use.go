@@ -16,6 +16,7 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 	"github.com/everyapi-ai/everyapi-ai/internal/tools"
 )
@@ -95,7 +96,7 @@ func Use(args []string) error {
 
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return errors.New("not logged in — run 'everyapi login' first")
+		return errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return err
@@ -133,11 +134,7 @@ func Use(args []string) error {
 				group, api.WebOriginFromBase(creds.APIBase))
 		}
 		if errors.Is(err, errNoRelayKey) {
-			return fmt.Errorf(
-				"no usable relay API key on your account — `everyapi use` needs one,\n"+
-					"and it's separate from your login token. Create an API key in the\n"+
-					"EveryAPI dashboard (%s), then run 'everyapi login' again.",
-				api.WebOriginFromBase(creds.APIBase))
+			return fmt.Errorf(i18n.T("use.no_relay_key_long"), api.WebOriginFromBase(creds.APIBase))
 		}
 		return err
 	}
@@ -174,9 +171,9 @@ func Use(args []string) error {
 	if !direct {
 		proxyAddr, perr := ensureSanitizerRunning(creds.APIBase)
 		if perr != nil {
-			cliout.Printf("Warning: sanitizer proxy didn't start (%v).\n", perr)
-			cliout.Printf("Falling back to direct mode — your traffic will reach %s without the privacy filter.\n", creds.APIBase)
-			cliout.Printf("Re-run with --direct to silence this, or 'everyapi proxy start' to debug.\n\n")
+			cliout.Printf(i18n.T("use.sanitizer_warn"), perr)
+			cliout.Printf(i18n.T("use.fallback_direct"), creds.APIBase)
+			cliout.Printf("%s", i18n.T("use.fallback_hint"))
 		} else {
 			apiBaseForEnv = proxyAddr
 		}
@@ -195,7 +192,7 @@ func Use(args []string) error {
 	if t.YoloFlag != "" && !containsFlag(extraArgs, t.YoloFlag) && cliprompt.IsInteractive() {
 		enable, perr := cliprompt.YesNo(
 			bufio.NewReader(os.Stdin),
-			fmt.Sprintf("Enable %s? (skips every safety prompt)", t.YoloLabel),
+			fmt.Sprintf(i18n.T("use.yolo_prompt"), t.YoloLabel),
 			true,
 		)
 		if perr != nil {
@@ -221,9 +218,9 @@ func Use(args []string) error {
 	// where the requests are heading. One line, before the exec
 	// disappears the parent process.
 	if apiBaseForEnv != creds.APIBase {
-		cliout.Printf("Launching %s against %s → %s\n", t.ExecName, apiBaseForEnv, creds.APIBase)
+		cliout.Printf(i18n.T("use.launching_via")+"\n", t.ExecName, apiBaseForEnv, creds.APIBase)
 	} else {
-		cliout.Printf("Launching %s against %s\n", t.ExecName, creds.APIBase)
+		cliout.Printf(i18n.T("use.launching")+"\n", t.ExecName, creds.APIBase)
 	}
 	return tools.Exec(t, env, extraArgs)
 }
@@ -485,12 +482,12 @@ func parseUseArgs(args []string) (toolName, group string, pickGroup, direct bool
 				}
 			}
 		default:
-			return "", "", false, false, nil, fmt.Errorf("unknown flag %q (use `--` before tool flags: `everyapi use <tool> -- %s ...`)", a, a)
+			return "", "", false, false, nil, fmt.Errorf(i18n.T("use.unknown_flag"), a, a)
 		}
 	}
 
 	if len(positional) > 1 {
-		return "", "", false, false, nil, fmt.Errorf("usage: everyapi use <tool> [--group <name>|--channel <name>] [--direct] [-- tool args...]")
+		return "", "", false, false, nil, errors.New(i18n.T("use.usage"))
 	}
 	if len(positional) == 1 {
 		toolName = positional[0]
@@ -524,7 +521,7 @@ func pickGroupInteractive(creds *config.Credentials) (string, error) {
 		}
 	}
 	if len(groups) == 0 {
-		return "", errors.New("no enabled relay API keys on your account to pick a group from — create one in the EveryAPI dashboard, then 'everyapi login'")
+		return "", errors.New(i18n.T("use.no_relay_keys"))
 	}
 	labels := make([]string, len(groups))
 	for i, g := range groups {
@@ -534,7 +531,7 @@ func pickGroupInteractive(creds *config.Credentials) (string, error) {
 			labels[i] = g
 		}
 	}
-	idx, err := cliprompt.Pick("Pick a routing group:", labels)
+	idx, err := cliprompt.Pick(i18n.T("use.group_picker"), labels)
 	if err != nil {
 		return "", err
 	}
@@ -546,7 +543,7 @@ func pickGroupInteractive(creds *config.Credentials) (string, error) {
 // a numbered prompt otherwise (CI / piped input).
 func interactivePicker() (string, error) {
 	names := tools.Names()
-	idx, err := cliprompt.Pick("Pick a tool to launch:", names)
+	idx, err := cliprompt.Pick(i18n.T("use.tool_picker"), names)
 	if err != nil {
 		return "", err
 	}

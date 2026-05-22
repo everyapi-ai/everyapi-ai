@@ -14,36 +14,13 @@ import (
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-const usage = `everyapi log — your request log
-
-USAGE
-  everyapi log <subcommand> [flags]
-
-SUBCOMMANDS
-  list    [flags]   Recent log entries (newest first; default 20 rows)
-  stat    [flags]   Quota / RPM / TPM totals for the window
-  summary [flags]   Per-model spend over the last 7d (or --since/--until)
-
-COMMON FLAGS
-  --token  <name>         Filter to one token (by display name)
-  --model  <name>         Filter to one model
-  --group  <name>         Filter to one routing group
-  --since  <window|ts>    Window start: 1h / 24h / 7d / 30d, or absolute Unix s
-  --until  <ts>           Window end (default: now)
-
-LIST-ONLY FLAGS
-  --limit  <int>          Page size (default 20, max enforced by server)
-  --page   <int>          1-based page index
-  --request-id <id>       Pin one upstream request id
-  --type   <int>          Log type filter (e.g. 2=consume; backend constants)
-`
-
 func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		cliout.Println(usage)
+		cliout.Println(i18n.T("log.usage"))
 		if len(args) == 0 {
 			return errors.New("missing subcommand (try 'everyapi log help')")
 		}
@@ -57,7 +34,7 @@ func Run(args []string) error {
 	case "summary":
 		return runSummary(args[1:])
 	default:
-		cliout.Println(usage)
+		cliout.Println(i18n.T("log.usage"))
 		return fmt.Errorf("unknown 'log' subcommand %q", args[0])
 	}
 }
@@ -65,7 +42,7 @@ func Run(args []string) error {
 func newClient() (*api.Client, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return nil, errors.New("not logged in — run 'everyapi login' first")
+		return nil, errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return nil, err
@@ -78,7 +55,7 @@ func classifyErr(err error) error {
 		return nil
 	}
 	if api.IsUnauthorized(err) {
-		return errors.New("your session expired — run 'everyapi login' again")
+		return errors.New(i18n.T("auth.session_expired"))
 	}
 	return err
 }
@@ -157,10 +134,10 @@ func runList(args []string) error {
 		return classifyErr(err)
 	}
 	if len(rows) == 0 {
-		cliout.Println("No log rows match.")
+		cliout.Println(i18n.T("log.no_rows"))
 		return nil
 	}
-	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)
+	cliout.Printf(i18n.T("log.label.rows_window")+"\n", len(rows), total)
 	for _, r := range rows {
 		ts := time.Unix(r.CreatedAt, 0).Format("01-02 15:04:05")
 		model := r.ModelName
@@ -199,7 +176,7 @@ func runStat(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Window: %s → %s\n", windowLabel(f.Start), windowLabel(f.End))
+	cliout.Printf(i18n.T("log.label.window")+"\n", windowLabel(f.Start), windowLabel(f.End))
 	cliout.Printf("  quota: %d (gateway units)\n", stat.Quota)
 	cliout.Printf("  rpm:   %.2f\n", stat.RPM)
 	cliout.Printf("  tpm:   %.2f\n", stat.TPM)
@@ -231,10 +208,10 @@ func runSummary(args []string) error {
 		return classifyErr(err)
 	}
 	if len(rows) == 0 {
-		cliout.Println("No spend recorded in this window.")
+		cliout.Println(i18n.T("log.no_spend"))
 		return nil
 	}
-	cliout.Printf("Per-model spend %s → %s\n", windowLabel(start), windowLabel(end))
+	cliout.Printf(i18n.T("log.label.per_model_hdr")+"\n", windowLabel(start), windowLabel(end))
 	totalQuota := 0
 	for _, r := range rows {
 		totalQuota += r.Quota
@@ -257,7 +234,7 @@ func runSummary(args []string) error {
 
 func windowLabel(ts int64) string {
 	if ts == 0 {
-		return "(open)"
+		return i18n.T("log.label.open")
 	}
 	return time.Unix(ts, 0).Format("2006-01-02 15:04:05")
 }

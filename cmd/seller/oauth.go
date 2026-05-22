@@ -13,6 +13,7 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 	"github.com/everyapi-ai/everyapi-sdk/oauthloopback"
 )
@@ -57,13 +58,13 @@ func sellerExchangeCtx(parent context.Context) (context.Context, context.CancelF
 //     server-side, so the CLI just reports the resulting channel id
 func sellerAddOAuth(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: everyapi seller add-oauth <provider> [flags]\nproviders: codex, claude, gemini")
+		return errors.New(i18n.T("seller.oauth_use_provider_help"))
 	}
 	provider := strings.ToLower(args[0])
 	rest := args[1:]
 	switch provider {
 	case "help", "--help", "-h":
-		cliout.Println(sellerAddOAuthUsage)
+		cliout.Println(i18n.T("seller.oauth_usage"))
 		return nil
 	case "codex":
 		return sellerAddOAuthCodex(rest)
@@ -72,29 +73,11 @@ func sellerAddOAuth(args []string) error {
 	case "gemini":
 		return sellerAddOAuthGemini(rest)
 	case "chatgpt":
-		return fmt.Errorf("provider %q is ChatGPT Plus — same upstream as codex. Use `everyapi seller add-oauth codex` instead", provider)
+		return fmt.Errorf(i18n.T("seller.oauth_chatgpt_redirect"), provider)
 	default:
-		return fmt.Errorf("unknown provider %q — supported: codex, claude, gemini", provider)
+		return fmt.Errorf(i18n.T("seller.oauth_unknown_provider"), provider)
 	}
 }
-
-const sellerAddOAuthUsage = `everyapi seller add-oauth — mount a channel via a provider's OAuth flow
-
-USAGE
-  everyapi seller add-oauth <provider> [flags]
-
-PROVIDERS
-  codex     Codex / ChatGPT subscription (RFC 8628 device flow)
-  claude    Anthropic Claude (browser-callback OAuth)
-  gemini    Google Gemini (browser-callback OAuth)
-
-COMMON FLAGS
-  --name <n>      Channel display name (required)
-  --models <m>    Comma-separated model list this channel will serve (required)
-  --no-browser    Skip auto-opening the verification URL
-
-Run 'everyapi seller add-oauth <provider> --help' for provider-specific flags.
-`
 
 func sellerAddOAuthCodex(args []string) error {
 	fs := flag.NewFlagSet("seller add-oauth codex", flag.ContinueOnError)
@@ -114,12 +97,12 @@ func sellerAddOAuthCodex(args []string) error {
 		if *models == "" {
 			missing = append(missing, "--models")
 		}
-		return fmt.Errorf("missing required flag(s): %s", strings.Join(missing, ", "))
+		return fmt.Errorf(i18n.T("seller.oauth_missing_flags"), strings.Join(missing, ", "))
 	}
 
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return errors.New("not logged in — run 'everyapi login' first")
+		return errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return err
@@ -144,9 +127,9 @@ func sellerAddOAuthCodex(args []string) error {
 	if !elig.Eligible {
 		renderEligibility(elig)
 		cliout.Println("")
-		cliout.Println("Marketplace eligibility check failed. Fix the unchecked items above, then re-run.")
-		cliout.Printf("Dashboard: %s/seller/channels\n", api.WebOriginFromBase(creds.APIBase))
-		return errors.New("not eligible to mount a seller channel")
+		cliout.Println(i18n.T("seller.eligibility_check_failed"))
+		cliout.Printf(i18n.T("seller.dashboard_url_line")+"\n", api.WebOriginFromBase(creds.APIBase))
+		return errors.New(i18n.T("seller.not_eligible_error"))
 	}
 
 	scx, scancel := sellerExchangeCtx(ctx)
@@ -157,7 +140,7 @@ func sellerAddOAuthCodex(args []string) error {
 	}
 
 	cliout.Println("")
-	cliout.Println("To bind your Codex / ChatGPT subscription, visit this URL and enter the code:")
+	cliout.Println(i18n.T("seller.oauth_codex_intro"))
 	cliout.Printf("\n    URL:  %s\n", start.VerificationURI)
 	cliout.Printf("    Code: %s\n\n", start.UserCode)
 
@@ -166,21 +149,21 @@ func sellerAddOAuthCodex(args []string) error {
 		// xdg-open / `open` shouldn't crash; the URL is already
 		// printed for the user to copy.
 		if berr := cliprompt.OpenBrowser(start.VerificationURI); berr == nil {
-			cliout.Println("Browser opened. Approve there and come back; this will finish on its own.")
+			cliout.Println(i18n.T("seller.oauth_browser_approve"))
 		} else {
-			fmt.Fprintln(os.Stderr, "Couldn't open the browser automatically — copy the URL above.")
+			fmt.Fprintln(os.Stderr, i18n.T("common.browser_open_failed"))
 		}
 	}
 	cliout.Println("")
-	cliout.Println("Waiting for authorization...")
+	cliout.Println(i18n.T("seller.oauth_waiting_auth"))
 
 	res, err := client.PollSellerCodexUntilDone(ctx, start.FlowID, start.Interval)
 	if err != nil {
 		switch {
 		case errors.Is(err, api.ErrSellerCodexPollExpired):
-			return errors.New("the code timed out before you approved it — run 'everyapi seller add-oauth codex' again")
+			return errors.New(i18n.T("seller.oauth_codex_timeout"))
 		case errors.Is(err, api.ErrSellerCodexPollDenied):
-			return errors.New("authorization was denied in the browser")
+			return errors.New(i18n.T("seller.oauth_denied"))
 		default:
 			return fmt.Errorf("poll: %w", classifySellerErr(err))
 		}
@@ -188,11 +171,10 @@ func sellerAddOAuthCodex(args []string) error {
 
 	bound := res.Email
 	if bound == "" {
-		bound = "(account email not exposed by token)"
+		bound = i18n.T("seller.oauth_email_unknown")
 	}
-	cliout.Printf("\nMounted channel #%d (%s, type=codex, account=%s).\n", res.ChannelID, *name, bound)
-	cliout.Printf("Status: enabled. Run 'everyapi seller list' to inspect, or visit %s/seller/channels.\n",
-		api.WebOriginFromBase(creds.APIBase))
+	cliout.Printf(i18n.T("seller.oauth_mounted_with_email"), res.ChannelID, *name, bound)
+	cliout.Printf(i18n.T("seller.oauth_status_visit"), api.WebOriginFromBase(creds.APIBase))
 	return nil
 }
 
@@ -225,12 +207,12 @@ func sellerAddOAuthClaude(args []string) error {
 		if *models == "" {
 			missing = append(missing, "--models")
 		}
-		return fmt.Errorf("missing required flag(s): %s", strings.Join(missing, ", "))
+		return fmt.Errorf(i18n.T("seller.oauth_missing_flags"), strings.Join(missing, ", "))
 	}
 
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return errors.New("not logged in — run 'everyapi login' first")
+		return errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return err
@@ -253,9 +235,9 @@ func sellerAddOAuthClaude(args []string) error {
 	if !elig.Eligible {
 		renderEligibility(elig)
 		cliout.Println("")
-		cliout.Println("Marketplace eligibility check failed. Fix the unchecked items above, then re-run.")
-		cliout.Printf("Dashboard: %s/seller/channels\n", api.WebOriginFromBase(creds.APIBase))
-		return errors.New("not eligible to mount a seller channel")
+		cliout.Println(i18n.T("seller.eligibility_check_failed"))
+		cliout.Printf(i18n.T("seller.dashboard_url_line")+"\n", api.WebOriginFromBase(creds.APIBase))
+		return errors.New(i18n.T("seller.not_eligible_error"))
 	}
 
 	scx, scancel := sellerExchangeCtx(ctx)
@@ -266,23 +248,23 @@ func sellerAddOAuthClaude(args []string) error {
 	}
 
 	cliout.Println("")
-	cliout.Println("To bind your Anthropic Claude subscription:")
-	cliout.Printf("\n  1) Open this URL in a browser (or copy if --no-browser):\n     %s\n\n", authorizeURL)
-	cliout.Println("  2) Sign in and approve the connection.")
-	cliout.Println("  3) Anthropic's callback page shows a string like `<code>#<state>`.")
-	cliout.Println("     Copy that string and paste it below.")
+	cliout.Println(i18n.T("seller.oauth_claude_intro"))
+	cliout.Printf("\n"+i18n.T("seller.oauth_claude_step_1")+"\n", authorizeURL)
+	cliout.Println(i18n.T("seller.oauth_claude_step_2"))
+	cliout.Println(i18n.T("seller.oauth_claude_step_3a"))
+	cliout.Println(i18n.T("seller.oauth_claude_step_3b"))
 	cliout.Println("")
 
 	if !*noBrowser {
 		if berr := cliprompt.OpenBrowser(authorizeURL); berr == nil {
-			cliout.Println("Browser opened.")
+			cliout.Println(i18n.T("seller.oauth_browser_opened"))
 		} else {
-			fmt.Fprintln(os.Stderr, "Couldn't open the browser automatically — copy the URL above.")
+			fmt.Fprintln(os.Stderr, i18n.T("common.browser_open_failed"))
 		}
 	}
 
 	in := bufio.NewReader(os.Stdin)
-	pasted, err := cliprompt.Line(in, "Paste authorization string", "")
+	pasted, err := cliprompt.Line(in, i18n.T("seller.oauth_paste_string"), "")
 	if err != nil {
 		return err
 	}
@@ -294,12 +276,11 @@ func sellerAddOAuthClaude(args []string) error {
 		return classifySellerErr(err)
 	}
 
-	cliout.Printf("\nMounted channel #%d (%s, type=claude).\n", res.ChannelID, *name)
+	cliout.Printf(i18n.T("seller.oauth_mounted_claude"), res.ChannelID, *name)
 	if res.ExpiresAt != "" {
-		cliout.Printf("Token expires: %s (auto-refreshes before then).\n", res.ExpiresAt)
+		cliout.Printf(i18n.T("seller.oauth_token_expires"), res.ExpiresAt)
 	}
-	cliout.Printf("Status: enabled. Run 'everyapi seller list' to inspect, or visit %s/seller/channels.\n",
-		api.WebOriginFromBase(creds.APIBase))
+	cliout.Printf(i18n.T("seller.oauth_status_visit"), api.WebOriginFromBase(creds.APIBase))
 	return nil
 }
 
@@ -343,12 +324,12 @@ func sellerAddOAuthGemini(args []string) error {
 		if *models == "" {
 			missing = append(missing, "--models")
 		}
-		return fmt.Errorf("missing required flag(s): %s", strings.Join(missing, ", "))
+		return fmt.Errorf(i18n.T("seller.oauth_missing_flags"), strings.Join(missing, ", "))
 	}
 
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return errors.New("not logged in — run 'everyapi login' first")
+		return errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return err
@@ -376,9 +357,9 @@ func sellerAddOAuthGemini(args []string) error {
 	if !elig.Eligible {
 		renderEligibility(elig)
 		cliout.Println("")
-		cliout.Println("Marketplace eligibility check failed. Fix the unchecked items above, then re-run.")
-		cliout.Printf("Dashboard: %s/seller/channels\n", api.WebOriginFromBase(creds.APIBase))
-		return errors.New("not eligible to mount a seller channel")
+		cliout.Println(i18n.T("seller.eligibility_check_failed"))
+		cliout.Printf(i18n.T("seller.dashboard_url_line")+"\n", api.WebOriginFromBase(creds.APIBase))
+		return errors.New(i18n.T("seller.not_eligible_error"))
 	}
 
 	scx, scancel := sellerExchangeCtx(ctx)
@@ -389,16 +370,16 @@ func sellerAddOAuthGemini(args []string) error {
 	}
 
 	cliout.Println("")
-	cliout.Println("To bind your Google Gemini account, sign in at:")
+	cliout.Println(i18n.T("seller.oauth_gemini_intro"))
 	cliout.Printf("\n    %s\n\n", start.AuthorizeURL)
 	if !*noBrowser {
 		if berr := cliprompt.OpenBrowser(start.AuthorizeURL); berr == nil {
-			cliout.Println("Browser opened. Sign in there; this will finish on its own.")
+			cliout.Println(i18n.T("seller.oauth_browser_sign_in"))
 		} else {
-			fmt.Fprintln(os.Stderr, "Couldn't open the browser automatically — copy the URL above.")
+			fmt.Fprintln(os.Stderr, i18n.T("common.browser_open_failed"))
 		}
 	}
-	cliout.Printf("Waiting for the redirect on 127.0.0.1:%d (timeout %s)...\n", listener.Port(), *timeout)
+	cliout.Printf(i18n.T("seller.oauth_waiting_redirect"), listener.Port(), *timeout)
 
 	waitCtx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()
@@ -414,7 +395,7 @@ func sellerAddOAuthGemini(args []string) error {
 		return fmt.Errorf("authorization failed: %s", desc)
 	}
 	if cb.Code == "" {
-		return errors.New("OAuth callback delivered no authorization code")
+		return errors.New(i18n.T("seller.oauth_callback_no_code"))
 	}
 	// State check: the callback MUST carry the same state we got
 	// back from /start. Otherwise this is either a stale flow
@@ -422,7 +403,7 @@ func sellerAddOAuthGemini(args []string) error {
 	// clear message — the backend also checks but failing locally
 	// avoids a wasted round-trip.
 	if cb.State != start.State {
-		return fmt.Errorf("OAuth state mismatch (got %q, expected %q) — re-run the command", cb.State, start.State)
+		return fmt.Errorf(i18n.T("seller.oauth_state_mismatch"), cb.State, start.State)
 	}
 
 	gcx, gcancel := sellerExchangeCtx(ctx)
@@ -432,11 +413,10 @@ func sellerAddOAuthGemini(args []string) error {
 		return classifySellerErr(err)
 	}
 
-	cliout.Printf("\nMounted channel #%d (%s, type=gemini).\n", res.ChannelID, *name)
+	cliout.Printf(i18n.T("seller.oauth_mounted_gemini"), res.ChannelID, *name)
 	if res.ExpiresAt != "" {
-		cliout.Printf("Token expires: %s (auto-refreshes before then).\n", res.ExpiresAt)
+		cliout.Printf(i18n.T("seller.oauth_token_expires"), res.ExpiresAt)
 	}
-	cliout.Printf("Status: enabled. Run 'everyapi seller list' to inspect, or visit %s/seller/channels.\n",
-		api.WebOriginFromBase(creds.APIBase))
+	cliout.Printf(i18n.T("seller.oauth_status_visit"), api.WebOriginFromBase(creds.APIBase))
 	return nil
 }

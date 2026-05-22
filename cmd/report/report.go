@@ -9,23 +9,13 @@ import (
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-const usage = `everyapi report — file an abuse / TOS-violation report
-
-USAGE
-  everyapi report --email <e> --category <c> --target-type <t> --description <d>
-                  [--target-id <id>] [--evidence <url>]
-
-NOTES
-  Public endpoint — works without being logged in. When called while
-  logged in, the reporter user_id is captured server-side for triage.
-`
-
 func Run(args []string) error {
 	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
-		cliout.Println(usage)
+		cliout.Println(i18n.T("report.usage"))
 		return nil
 	}
 	fs := flag.NewFlagSet("report", flag.ContinueOnError)
@@ -59,6 +49,6 @@ func Run(args []string) error {
 	}); err != nil {
 		return err
 	}
-	cliout.Println("Report filed. The abuse desk will follow up via the email you provided.")
+	cliout.Println(i18n.T("report.filed"))
 	return nil
 }

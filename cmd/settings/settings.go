@@ -1,0 +1,269 @@
+// Package settings wires `everyapi settings …` — the CLI's
+// preference surface, persisted alongside credentials in
+// ConfigDir. Today the only setting is `language`; more will land
+// here as the CLI grows (default --group, default sanitizer
+// behaviour, color preference, …).
+//
+// File shape: clients/sdk/config/settings.go owns the Settings
+// struct + load/save. This package is the human-facing dispatcher.
+package settings
+
+import (
+	"bufio"
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"sort"
+	"strings"
+
+	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-sdk/config"
+)
+
+func Run(args []string) error {
+	if len(args) == 0 {
+		// Bare 'everyapi settings' on a TTY → interactive editor.
+		// On a pipe/script → fall through to list so it's still
+		// useful as a status query.
+		if cliprompt.IsInteractive() {
+			return runInteractive()
+		}
+		return runList(nil)
+	}
+	switch args[0] {
+	case "help", "--help", "-h":
+		cliout.Println(i18n.T("settings.usage"))
+		return nil
+	case "list":
+		return runList(args[1:])
+	case "get":
+		return runGet(args[1:])
+	case "set":
+		return runSet(args[1:])
+	case "reset":
+		return runReset(args[1:])
+	default:
+		cliout.Println(i18n.T("settings.usage"))
+		return fmt.Errorf(i18n.T("common.unknown_subcommand"), "settings", args[0])
+	}
+}
+
+// --- list / get -----------------------------------------------------
+
+func runList(args []string) error {
+	fs := flag.NewFlagSet("settings list", flag.ContinueOnError)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	s, err := config.LoadSettings()
+	if err != nil {
+		return err
+	}
+	cliout.Printf("%s\n", i18n.T("settings.current"))
+	cliout.Printf("  %s: %s\n", i18n.T("settings.lang_label"), labelLanguage(s.Language))
+	path, _ := config.SettingsPath()
+	if path != "" {
+		cliout.Printf("\n%s %s\n", i18n.T("settings.file_at"), path)
+	}
+	return nil
+}
+
+func runGet(args []string) error {
+	if len(args) == 0 {
+		return errors.New(i18n.T("settings.usage_get"))
+	}
+	s, err := config.LoadSettings()
+	if err != nil {
+		return err
+	}
+	val, ok := readKey(s, args[0])
+	if !ok {
+		return fmt.Errorf(i18n.T("settings.unknown_key"), args[0])
+	}
+	cliout.Println(val)
+	return nil
+}
+
+// --- set ------------------------------------------------------------
+
+func runSet(args []string) error {
+	if len(args) < 2 {
+		return errors.New(i18n.T("settings.usage_set"))
+	}
+	key, value := args[0], args[1]
+	s, err := config.LoadSettings()
+	if err != nil {
+		return err
+	}
+	if err := writeKey(s, key, value); err != nil {
+		return err
+	}
+	if err := config.SaveSettings(s); err != nil {
+		return err
+	}
+	cliout.Println(i18n.T("settings.saved"))
+	// Apply immediately so the rest of the process (and the next
+	// invocation alike) speaks the new language.
+	if key == "language" {
+		i18n.SetLanguage(value)
+		_ = os.Setenv("EVERYAPI_LANG", value)
+	}
+	return nil
+}
+
+// --- reset ----------------------------------------------------------
+
+func runReset(args []string) error {
+	fs := flag.NewFlagSet("settings reset", flag.ContinueOnError)
+	yes := fs.Bool("y", false, "skip confirmation")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if !*yes && cliprompt.IsInteractive() {
+		ok, err := cliprompt.YesNo(
+			bufio.NewReader(os.Stdin),
+			i18n.T("settings.reset_confirm"),
+			false,
+		)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			cliout.Println(i18n.T("common.canceled"))
+			return nil
+		}
+	}
+	if err := config.SaveSettings(&config.Settings{}); err != nil {
+		return err
+	}
+	i18n.SetLanguage(i18n.LangEn)
+	_ = os.Unsetenv("EVERYAPI_LANG")
+	cliout.Println(i18n.T("settings.saved"))
+	return nil
+}
+
+// --- interactive ----------------------------------------------------
+
+func runInteractive() error {
+	s, err := config.LoadSettings()
+	if err != nil {
+		return err
+	}
+	// One-question wizard for now (the only setting is language).
+	// Grows naturally as more keys land — add another picker block
+	// per setting and a final "anything else?" branch.
+	//
+	// Build options from the live SupportedLanguages list (sorted en
+	// first by the loader) so a dropped-in {lang}.toml shows up
+	// automatically. Each row is "<code> — <native name>" — the
+	// native name comes from a small lookup table because we'd
+	// otherwise need a "language.native_name" key in every locale
+	// just for self-labelling.
+	langs := i18n.SupportedLanguages()
+	nativeName := map[string]string{
+		"en": "English",
+		"zh": "中文",
+		"ja": "日本語",
+		"ko": "한국어",
+		"es": "Español",
+		"de": "Deutsch",
+		"fr": "Français",
+	}
+	options := make([]string, len(langs))
+	cur := 0
+	for i, l := range langs {
+		name := nativeName[l]
+		if name == "" {
+			name = l
+		}
+		options[i] = fmt.Sprintf("%s — %s", l, name)
+		if l == s.Language {
+			cur = i
+		}
+	}
+	idx, err := cliprompt.PickWithSelected(i18n.T("settings.lang_label"), options, cur)
+	if err != nil {
+		// Esc / Ctrl-C from the picker — treat as "no change" so
+		// the user can bail without writing the file.
+		if errors.Is(err, cliprompt.ErrPickCancelled) {
+			cliout.Println(i18n.T("common.canceled"))
+			return nil
+		}
+		return err
+	}
+	picked := langs[idx]
+	s.Language = picked
+	if err := config.SaveSettings(s); err != nil {
+		return err
+	}
+	i18n.SetLanguage(picked)
+	_ = os.Setenv("EVERYAPI_LANG", picked)
+	cliout.Println(i18n.T("settings.saved"))
+	return nil
+}
+
+// --- key plumbing ---------------------------------------------------
+
+// readKey + writeKey centralise the "key string ↔ struct field"
+// mapping. Today there's one key; the dispatcher style still pays
+// off as a stable surface for `settings get` to enumerate when a
+// second key lands.
+func readKey(s *config.Settings, key string) (string, bool) {
+	switch key {
+	case "language":
+		return s.Language, true
+	}
+	return "", false
+}
+
+func writeKey(s *config.Settings, key, value string) error {
+	switch key {
+	case "language":
+		v := strings.ToLower(strings.TrimSpace(value))
+		supported := i18n.SupportedLanguages()
+		if !contains(supported, v) {
+			// Build the supported-list dynamically so the message stays
+			// truthful when a locale is added or removed without anyone
+			// remembering to retranslate the static lang_invalid copy.
+			return fmt.Errorf("%s: %s", i18n.T("settings.lang_invalid"), strings.Join(supported, ", "))
+		}
+		s.Language = v
+		return nil
+	}
+	return fmt.Errorf(i18n.T("settings.unknown_key"), key)
+}
+
+func contains(haystack []string, needle string) bool {
+	for _, h := range haystack {
+		if h == needle {
+			return true
+		}
+	}
+	return false
+}
+
+// labelLanguage renders an unset Language as "(default)" + the
+// detected fallback, so `settings list` is informative even when
+// no preference is on disk.
+func labelLanguage(v string) string {
+	if v == "" {
+		// Surface the active runtime language so the user sees
+		// what we're actually using right now.
+		live := i18n.Language()
+		return fmt.Sprintf(i18n.T("settings.default_label"), live)
+	}
+	return v
+}
+
+// keys exists for picker enumeration (today unused, kept private
+// so the test file can rely on its presence and the dispatcher
+// can grow into "everyapi settings list --keys" later without
+// reorganising).
+var _ = func() []string {
+	out := []string{"language"}
+	sort.Strings(out)
+	return out
+}

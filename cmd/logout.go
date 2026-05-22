@@ -5,6 +5,7 @@ import (
 	"flag"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -21,12 +22,12 @@ func Logout(args []string) error {
 	}
 	_, loadErr := config.Load()
 	if errors.Is(loadErr, config.ErrNoCredentials) {
-		cliout.Println("Already logged out.")
+		cliout.Println(i18n.T("logout.done"))
 		return nil
 	}
 	if err := config.Delete(); err != nil {
 		return err
 	}
-	cliout.Println("Logged out.")
+	cliout.Println(i18n.T("logout.done"))
 	return nil
 }

@@ -16,31 +16,15 @@ import (
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-const usage = `everyapi wallet — payment history, methods, redemption keys
-
-USAGE
-  everyapi wallet <subcommand> [flags]
-
-SUBCOMMANDS
-  history [--limit N] [--page P] [--keyword K]   Paginated payment history
-  info                                            Enabled payment methods, min topup, options
-  redeem <key>                                    Apply a topup / redemption key
-
-NOTES
-  For actual money-in (Stripe / Creem / Waffo / EPay), use
-  'everyapi topup' — it opens the dashboard with the anti-phishing
-  verification phrase. Browser handoff is required there because
-  card collection happens out-of-band.
-`
-
 func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		cliout.Println(usage)
+		cliout.Println(i18n.T("wallet.usage"))
 		if len(args) == 0 {
-			return errors.New("missing subcommand (try 'everyapi wallet help')")
+			return fmt.Errorf(i18n.T("common.missing_subcommand"), "everyapi wallet")
 		}
 		return nil
 	}
@@ -52,15 +36,15 @@ func Run(args []string) error {
 	case "redeem":
 		return runRedeem(args[1:])
 	default:
-		cliout.Println(usage)
-		return fmt.Errorf("unknown 'wallet' subcommand %q", args[0])
+		cliout.Println(i18n.T("wallet.usage"))
+		return fmt.Errorf(i18n.T("common.unknown_subcommand"), "wallet", args[0])
 	}
 }
 
 func newClient() (*api.Client, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return nil, errors.New("not logged in — run 'everyapi login' first")
+		return nil, errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return nil, err
@@ -73,7 +57,7 @@ func classifyErr(err error) error {
 		return nil
 	}
 	if api.IsUnauthorized(err) {
-		return errors.New("your session expired — run 'everyapi login' again")
+		return errors.New(i18n.T("auth.session_expired"))
 	}
 	return err
 }
@@ -95,10 +79,10 @@ func runHistory(args []string) error {
 		return classifyErr(err)
 	}
 	if len(rows) == 0 {
-		cliout.Println("No topups recorded.")
+		cliout.Println(i18n.T("wallet.no_topups"))
 		return nil
 	}
-	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)
+	cliout.Printf(i18n.T("log.label.rows_window")+"\n", len(rows), total)
 	for _, t := range rows {
 		when := time.Unix(t.CreateTime, 0).Format("2006-01-02 15:04:05")
 		method := t.PaymentMethod
@@ -124,28 +108,28 @@ func runInfo(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Println("Payment methods:")
+	cliout.Println(i18n.T("wallet.label.payment_methods"))
 	if len(info.PayMethods) == 0 {
-		cliout.Println("  (none enabled — admin needs to configure at least one)")
+		cliout.Printf("  %s\n", i18n.T("wallet.label.none_enabled"))
 	}
 	for _, pm := range info.PayMethods {
 		cliout.Printf("  - %s (type=%s, min=%s)\n", pm["name"], pm["type"], pm["min_topup"])
 	}
-	cliout.Println("\nFeature flags:")
+	cliout.Println("\n" + i18n.T("wallet.label.feature_flags"))
 	cliout.Printf("  online (epay): %v\n", info.EnableOnlineTopup)
 	cliout.Printf("  stripe:        %v (min=%d)\n", info.EnableStripeTopup, info.StripeMinTopup)
 	cliout.Printf("  creem:         %v\n", info.EnableCreemTopup)
 	cliout.Printf("  waffo:         %v (min=%d)\n", info.EnableWaffoTopup, info.WaffoMinTopup)
 	cliout.Printf("  waffo-pancake: %v (min=%d)\n", info.EnableWaffoPancakeTopup, info.WaffoPancakeMinTopup)
 	if info.MinTopup > 0 {
-		cliout.Printf("\nOverall minimum top-up: %d\n", info.MinTopup)
+		cliout.Printf("\n"+i18n.T("wallet.label.min_topup")+"\n", info.MinTopup)
 	}
 	if len(info.AmountOptions) > 0 {
 		labels := make([]string, len(info.AmountOptions))
 		for i, a := range info.AmountOptions {
 			labels[i] = fmt.Sprintf("%g", a)
 		}
-		cliout.Printf("\nSuggested amounts: %s\n", strings.Join(labels, ", "))
+		cliout.Printf("\n"+i18n.T("wallet.label.suggested")+"\n", strings.Join(labels, ", "))
 	}
 	if len(info.Discount) > 0 {
 		keys := make([]string, 0, len(info.Discount))
@@ -153,7 +137,7 @@ func runInfo(args []string) error {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
-		cliout.Println("\nDiscount tiers:")
+		cliout.Println("\n" + i18n.T("wallet.label.discount_tiers"))
 		for _, k := range keys {
 			cliout.Printf("  ≥%s → ×%g\n", k, info.Discount[k])
 		}
@@ -167,7 +151,7 @@ func runInfo(args []string) error {
 
 func runRedeem(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: everyapi wallet redeem <key>")
+		return errors.New(i18n.T("wallet.usage_redeem"))
 	}
 	key := args[0]
 	rest := args[1:]
@@ -183,6 +167,6 @@ func runRedeem(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Redeemed: +%d quota credited.\n", quota)
+	cliout.Printf(i18n.T("wallet.redeemed")+"\n", quota)
 	return nil
 }

@@ -12,13 +12,14 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
 func newClient() (*api.Client, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return nil, errors.New("not logged in — run 'everyapi login' first")
+		return nil, errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return nil, err
@@ -31,7 +32,7 @@ func classifyErr(err error) error {
 		return nil
 	}
 	if api.IsUnauthorized(err) {
-		return errors.New("your session expired — run 'everyapi login' again")
+		return errors.New(i18n.T("auth.session_expired"))
 	}
 	return err
 }
@@ -74,7 +75,7 @@ func adminUserList(args []string) error {
 		return classifyErr(err)
 	}
 	if len(rows) == 0 {
-		cliout.Println("No users.")
+		cliout.Println(i18n.T("admin.user.no_matches"))
 		return nil
 	}
 	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)
@@ -99,7 +100,7 @@ func adminUserSearch(args []string) error {
 		return classifyErr(err)
 	}
 	if len(rows) == 0 {
-		cliout.Println("No matches.")
+		cliout.Println(i18n.T("admin.user.no_matches"))
 		return nil
 	}
 	cliout.Printf("%d match(es):\n", len(rows))
@@ -165,7 +166,7 @@ func adminUserManage(args []string) error {
 	}); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("admin user manage: action=%q applied to user #%d\n", *action, id)
+	cliout.Printf(i18n.T("admin.user.action_applied")+"\n", *action, id)
 	return nil
 }
 
@@ -185,14 +186,14 @@ func adminUserDelete(args []string) error {
 	if !*yes && cliprompt.IsInteractive() {
 		ok, err := cliprompt.YesNo(
 			bufio.NewReader(os.Stdin),
-			fmt.Sprintf("Delete user #%d? This is destructive and irreversible.", id),
+			fmt.Sprintf(i18n.T("admin.user.delete_confirm"), id),
 			false,
 		)
 		if err != nil {
 			return err
 		}
 		if !ok {
-			cliout.Println("Canceled.")
+			cliout.Println(i18n.T("common.canceled"))
 			return nil
 		}
 	}
@@ -203,7 +204,7 @@ func adminUserDelete(args []string) error {
 	if err := client.AdminDeleteUser(cliout.WithCtx(), id); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("User #%d deleted.\n", id)
+	cliout.Printf(i18n.T("admin.user.deleted")+"\n", id)
 	return nil
 }
 
@@ -319,7 +320,7 @@ func adminLogTail(args []string) error {
 		return classifyErr(err)
 	}
 	if len(rows) == 0 {
-		cliout.Println("No log rows match.")
+		cliout.Println(i18n.T("log.no_rows"))
 		return nil
 	}
 	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)
@@ -390,7 +391,7 @@ func adminAbuseList(args []string) error {
 		return classifyErr(err)
 	}
 	if len(rows) == 0 {
-		cliout.Println("No reports.")
+		cliout.Println(i18n.T("admin.abuse.no_reports"))
 		return nil
 	}
 	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)
@@ -482,7 +483,7 @@ func adminAudit(args []string) error {
 		return classifyErr(err)
 	}
 	if len(rows) == 0 {
-		cliout.Println("No audit rows.")
+		cliout.Println(i18n.T("admin.audit.no_rows"))
 		return nil
 	}
 	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)

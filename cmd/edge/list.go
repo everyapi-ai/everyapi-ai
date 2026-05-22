@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 // edgeList renders every node the authenticated user owns on the
@@ -43,8 +44,8 @@ func edgeList(args []string) error {
 	}
 
 	if len(nodes) == 0 {
-		cliout.Println("(no edge nodes registered on this account)")
-		cliout.Println("Run 'everyapi edge register --name <node-name>' to create one.")
+		cliout.Println(i18n.T("edge.no_nodes"))
+		cliout.Println(i18n.T("edge.register_hint"))
 		return nil
 	}
 

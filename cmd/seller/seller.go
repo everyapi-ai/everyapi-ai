@@ -13,6 +13,7 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -34,7 +35,7 @@ func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
 		cliout.Println(sellerUsage)
 		if len(args) == 0 {
-			return errors.New("missing subcommand (try 'everyapi seller help')")
+			return fmt.Errorf(i18n.T("common.missing_subcommand"), "everyapi seller")
 		}
 		return nil
 	}
@@ -65,7 +66,7 @@ func Run(args []string) error {
 		return sellerCompensation(rest)
 	default:
 		cliout.Printf("%s\n", sellerUsage)
-		return fmt.Errorf("unknown 'seller' subcommand %q", sub)
+		return fmt.Errorf(i18n.T("common.unknown_subcommand"), "seller", sub)
 	}
 }
 
@@ -117,11 +118,11 @@ func sellerList(args []string) error {
 		return classifySellerErr(err)
 	}
 	if len(channels) == 0 {
-		cliout.Println("No seller channels mounted yet.")
-		cliout.Println("Use 'everyapi seller setup' (wizard) or 'everyapi seller add-key' (flags).")
+		cliout.Println(i18n.T("seller.no_channels"))
+		cliout.Println(i18n.T("seller.setup_hint"))
 		return nil
 	}
-	cliout.Printf("%d seller channel(s):\n", len(channels))
+	cliout.Printf(i18n.T("seller.list_count")+"\n", len(channels))
 	for _, ch := range channels {
 		cliout.Printf("  [#%d] %s — type=%s status=%s\n",
 			ch.ID, ch.Name, channelTypeLabel(ch.Type), channelStatusLabel(ch.Status))
@@ -172,7 +173,7 @@ func sellerWithdraw(args []string) error {
 		}
 		amount = self.SellerQuota
 		if amount <= 0 {
-			cliout.Println("Nothing to withdraw — your seller balance is $0.")
+			cliout.Println(i18n.T("seller.withdraw_nothing"))
 			return nil
 		}
 	}
@@ -189,8 +190,8 @@ func sellerWithdraw(args []string) error {
 	if status, sErr := client.GetStatus(cliout.WithCtx()); sErr == nil && status.QuotaPerUnit > 0 {
 		perUnit = status.QuotaPerUnit
 	}
-	cliout.Printf("Transferred $%.2f from seller balance to main balance.\n", float64(amount)/perUnit)
-	cliout.Printf("Check it: %s/wallet\n", api.WebOriginFromBase(creds.APIBase))
+	cliout.Printf(i18n.T("seller.withdraw_done"), float64(amount)/perUnit)
+	cliout.Printf(i18n.T("seller.withdraw_check_url"), api.WebOriginFromBase(creds.APIBase))
 	return nil
 }
 
@@ -254,9 +255,9 @@ func sellerAddKey(args []string) error {
 	if err == nil && !elig.Eligible {
 		renderEligibility(elig)
 		cliout.Println("")
-		cliout.Println("Marketplace eligibility check failed. Fix the unchecked items above, then re-run.")
-		cliout.Printf("Dashboard: %s/seller/channels\n", api.WebOriginFromBase(creds.APIBase))
-		return errors.New("not eligible to mount a seller channel")
+		cliout.Println(i18n.T("seller.eligibility_check_failed"))
+		cliout.Printf(i18n.T("seller.dashboard_url_line")+"\n", api.WebOriginFromBase(creds.APIBase))
+		return errors.New(i18n.T("seller.not_eligible_error"))
 	}
 
 	id, err := client.CreateSellerChannel(cliout.WithCtx(), api.SellerChannelCreate{
@@ -272,10 +273,10 @@ func sellerAddKey(args []string) error {
 	}
 	pool := ""
 	if len(parsed.Keys) > 1 {
-		pool = fmt.Sprintf(" with %d-key backup pool", len(parsed.Keys))
+		pool = fmt.Sprintf(i18n.T("seller.key_backup_pool"), len(parsed.Keys))
 	}
-	cliout.Printf("Mounted channel #%d (%s, type=%s)%s.\n", id, parsed.Name, channelTypeLabel(typeID), pool)
-	cliout.Println("Status: enabled. Run 'everyapi seller list' to inspect, or visit the dashboard.")
+	cliout.Printf(i18n.T("seller.mounted_with_pool"), id, parsed.Name, channelTypeLabel(typeID), pool)
+	cliout.Println(i18n.T("seller.mounted_status_hint"))
 	return nil
 }
 
@@ -320,7 +321,7 @@ func parseAddKeyArgs(args []string) (*addKeyArgs, error) {
 		missing = append(missing, "--models")
 	}
 	if len(missing) > 0 {
-		return nil, fmt.Errorf("missing required flag(s): %s", strings.Join(missing, ", "))
+		return nil, fmt.Errorf(i18n.T("seller.oauth_missing_flags"), strings.Join(missing, ", "))
 	}
 	// More --key-remark than --key is a typo, not a feature: the extra
 	// remarks would never be applied. Catch it here so the failure
@@ -380,24 +381,24 @@ func sellerSetup(args []string) error {
 	renderEligibility(elig)
 	if !elig.Eligible {
 		cliout.Println("")
-		cliout.Println("You don't meet the mount requirements yet. Fix the items above first, then re-run.")
-		cliout.Printf("Dashboard: %s/seller/channels\n", api.WebOriginFromBase(creds.APIBase))
+		cliout.Println(i18n.T("seller.requirements_not_met"))
+		cliout.Printf(i18n.T("seller.dashboard_url_line")+"\n", api.WebOriginFromBase(creds.APIBase))
 		return nil
 	}
 
 	in := bufio.NewReader(os.Stdin)
 	cliout.Println("")
-	cliout.Println("Mounting a new channel. Press Esc / Ctrl+C to cancel.")
+	cliout.Println(i18n.T("seller.mounting_new_channel"))
 	cliout.Println("")
 
 	// Auth-method picker. Index → branch so the labels stay free
 	// to grow without breaking string-match branching.
-	methodIdx, err := cliprompt.Pick("Authentication method",
+	methodIdx, err := cliprompt.Pick(i18n.T("seller.method_picker_label"),
 		[]string{
-			"API key             — paste a vendor key (openai / anthropic / etc.)",
-			"Codex / ChatGPT OAuth — bind a ChatGPT Plus subscription (device flow, no token paste)",
-			"Claude OAuth        — bind an Anthropic Claude subscription (one paste from the browser)",
-			"Gemini OAuth        — bind a Google Gemini account (full one-click)",
+			i18n.T("seller.method_api_key"),
+			i18n.T("seller.method_codex_oauth"),
+			i18n.T("seller.method_claude_oauth"),
+			i18n.T("seller.method_gemini_oauth"),
 		})
 	if err != nil {
 		return err
@@ -412,11 +413,11 @@ func sellerSetup(args []string) error {
 	}
 	// case 0 falls through to the existing API-key wizard.
 
-	typeAlias, err := cliprompt.Choice(in, "Upstream type", sellerTypeChoices())
+	typeAlias, err := cliprompt.Choice(in, i18n.T("seller.prompt_upstream_type"), sellerTypeChoices())
 	if err != nil {
 		return err
 	}
-	name, err := cliprompt.Line(in, "Channel name", "")
+	name, err := cliprompt.Line(in, i18n.T("seller.prompt_channel_name"), "")
 	if err != nil {
 		return err
 	}
@@ -424,11 +425,11 @@ func sellerSetup(args []string) error {
 	if err != nil {
 		return err
 	}
-	models, err := cliprompt.Line(in, "Models (comma-separated)", "")
+	models, err := cliprompt.Line(in, i18n.T("seller.prompt_models"), "")
 	if err != nil {
 		return err
 	}
-	remark, err := cliprompt.Optional(in, "Internal remark (optional)")
+	remark, err := cliprompt.Optional(in, i18n.T("seller.prompt_internal_remark"))
 	if err != nil {
 		return err
 	}
@@ -436,15 +437,15 @@ func sellerSetup(args []string) error {
 	cliout.Println("")
 	pool := ""
 	if len(keys) > 1 {
-		pool = fmt.Sprintf(" with %d-key backup pool", len(keys))
+		pool = fmt.Sprintf(i18n.T("seller.key_backup_pool"), len(keys))
 	}
-	cliout.Printf("About to mount: %s / type=%s / models=%s%s\n", name, typeAlias, models, pool)
-	ok, err := cliprompt.YesNo(in, "Submit?", true)
+	cliout.Printf(i18n.T("seller.about_to_mount")+"\n", name, typeAlias, models, pool)
+	ok, err := cliprompt.YesNo(in, i18n.T("seller.submit_prompt"), true)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		cliout.Println("Cancelled — nothing was submitted.")
+		cliout.Println(i18n.T("common.cancelled_nothing_submitted"))
 		return nil
 	}
 
@@ -485,7 +486,7 @@ func sellerSetup(args []string) error {
 // model list so a user who just wants the most common models can
 // hit Enter through both prompts.
 func sellerSetupOAuth(in *bufio.Reader, provider string) error {
-	name, err := cliprompt.Line(in, "Channel name", "")
+	name, err := cliprompt.Line(in, i18n.T("seller.prompt_channel_name"), "")
 	if err != nil {
 		return err
 	}
@@ -494,19 +495,19 @@ func sellerSetupOAuth(in *bufio.Reader, provider string) error {
 		"claude": "claude-3-5-sonnet-latest,claude-3-opus-latest",
 		"gemini": "gemini-1.5-pro,gemini-1.5-flash",
 	}[provider]
-	models, err := cliprompt.Line(in, "Models (comma-separated)", defaultModels)
+	models, err := cliprompt.Line(in, i18n.T("seller.prompt_models"), defaultModels)
 	if err != nil {
 		return err
 	}
 
 	cliout.Println("")
-	cliout.Printf("About to mount via %s OAuth: %s / models=%s\n", provider, name, models)
-	ok, err := cliprompt.YesNo(in, "Submit?", true)
+	cliout.Printf(i18n.T("seller.about_to_mount_oauth")+"\n", provider, name, models)
+	ok, err := cliprompt.YesNo(in, i18n.T("seller.submit_prompt"), true)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		cliout.Println("Cancelled — nothing was submitted.")
+		cliout.Println(i18n.T("common.cancelled_nothing_submitted"))
 		return nil
 	}
 
@@ -533,9 +534,9 @@ func collectSellerKeys(in *bufio.Reader) ([]string, []string, error) {
 	for slot := 1; ; slot++ {
 		var label string
 		if slot == 1 {
-			label = "Upstream API key"
+			label = i18n.T("seller.prompt_upstream_key")
 		} else {
-			label = fmt.Sprintf("Backup key #%d", slot)
+			label = fmt.Sprintf(i18n.T("seller.prompt_backup_key"), slot)
 		}
 		k, err := cliprompt.Line(in, label, "")
 		if err != nil {
@@ -543,13 +544,13 @@ func collectSellerKeys(in *bufio.Reader) ([]string, []string, error) {
 		}
 		isBlob := strings.HasPrefix(strings.TrimSpace(k), "{")
 		if isBlob && slot > 1 {
-			cliout.Println("That looks like an OAuth/JSON credential blob.")
-			cliout.Println("OAuth credentials cannot be combined with other keys in a backup pool — they must be the only key on the channel.")
-			cliout.Println("Re-enter a plain API key, or press Ctrl-C to abort and re-run with the OAuth blob as the only key.")
+			cliout.Println(i18n.T("seller.oauth_blob_in_backup_1"))
+			cliout.Println(i18n.T("seller.oauth_blob_in_backup_2"))
+			cliout.Println(i18n.T("seller.oauth_blob_in_backup_3"))
 			slot-- // retry this same slot number
 			continue
 		}
-		r, err := cliprompt.Optional(in, fmt.Sprintf("Remark for key #%d (optional)", slot))
+		r, err := cliprompt.Optional(in, fmt.Sprintf(i18n.T("seller.prompt_remark_for_key"), slot))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -562,7 +563,7 @@ func collectSellerKeys(in *bufio.Reader) ([]string, []string, error) {
 		if isBlob {
 			break
 		}
-		more, err := cliprompt.YesNo(in, "Add another backup key?", false)
+		more, err := cliprompt.YesNo(in, i18n.T("seller.prompt_add_another_backup"), false)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -574,13 +575,13 @@ func collectSellerKeys(in *bufio.Reader) ([]string, []string, error) {
 }
 
 func renderEligibility(e *api.SellerEligibility) {
-	cliout.Println("Marketplace eligibility:")
-	cliout.Printf("  %s marketplace enabled\n", checkmark(e.MarketplaceEnabled))
-	cliout.Printf("  %s account active\n", checkmark(e.AccountActive))
-	cliout.Printf("  %s email verified\n", checkmark(e.EmailVerified))
-	cliout.Printf("  %s account ≥ %d day(s) old\n", checkmark(e.AccountAgeOK), e.MinAgeDays)
-	cliout.Printf("  %s has at least one successful consumption\n", checkmark(e.HasConsumeLog))
-	cliout.Printf("  %s under channel cap (%d / %d)\n", checkmark(e.UnderCap), e.ChannelCount, e.ChannelCap)
+	cliout.Println(i18n.T("seller.eligibility_header"))
+	cliout.Printf(i18n.T("seller.eligibility_marketplace_enabled")+"\n", checkmark(e.MarketplaceEnabled))
+	cliout.Printf(i18n.T("seller.eligibility_account_active")+"\n", checkmark(e.AccountActive))
+	cliout.Printf(i18n.T("seller.eligibility_email_verified")+"\n", checkmark(e.EmailVerified))
+	cliout.Printf(i18n.T("seller.eligibility_account_age")+"\n", checkmark(e.AccountAgeOK), e.MinAgeDays)
+	cliout.Printf(i18n.T("seller.eligibility_has_consume_log")+"\n", checkmark(e.HasConsumeLog))
+	cliout.Printf(i18n.T("seller.eligibility_under_cap")+"\n", checkmark(e.UnderCap), e.ChannelCount, e.ChannelCap)
 }
 
 func checkmark(ok bool) string {
@@ -599,7 +600,7 @@ func checkmark(ok bool) string {
 func sellerClient() (*api.Client, *config.Credentials, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return nil, nil, errors.New("not logged in — run 'everyapi login' first")
+		return nil, nil, errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return nil, nil, err
@@ -616,7 +617,7 @@ func classifySellerErr(err error) error {
 		return nil
 	}
 	if api.IsUnauthorized(err) {
-		return errors.New("your session expired — run 'everyapi login' again")
+		return errors.New(i18n.T("auth.session_expired"))
 	}
 	return err
 }
@@ -653,7 +654,7 @@ func resolveSellerType(s string) (int, error) {
 	if id, err := strconv.Atoi(s); err == nil && id > 0 {
 		return id, nil
 	}
-	return 0, fmt.Errorf("unknown channel type %q — try one of: %s, or a numeric id", s, strings.Join(sellerTypeChoices(), ", "))
+	return 0, fmt.Errorf(i18n.T("seller.unknown_channel_type"), s, strings.Join(sellerTypeChoices(), ", "))
 }
 
 // sellerTypeChoices returns alias names in stable display order. We

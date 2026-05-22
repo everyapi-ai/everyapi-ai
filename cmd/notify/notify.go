@@ -11,20 +11,9 @@ import (
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
-
-const usage = `everyapi notify — in-app notifications
-
-USAGE
-  everyapi notify <subcommand> [flags]
-
-SUBCOMMANDS
-  list   [--unread] [--page P] [--limit N]   Recent notifications
-  count                                       Just the unread count
-  read   <id>                                 Mark one notification read
-  readall                                     Flip every unread to read
-`
 
 func Run(args []string) error {
 	if len(args) == 0 {
@@ -32,7 +21,7 @@ func Run(args []string) error {
 	}
 	switch args[0] {
 	case "help", "--help", "-h":
-		cliout.Println(usage)
+		cliout.Println(i18n.T("notify.usage"))
 		return nil
 	case "list":
 		return runList(args[1:])
@@ -43,7 +32,7 @@ func Run(args []string) error {
 	case "readall":
 		return runReadAll(args[1:])
 	default:
-		cliout.Println(usage)
+		cliout.Println(i18n.T("notify.usage"))
 		return fmt.Errorf("unknown 'notify' subcommand %q", args[0])
 	}
 }
@@ -51,7 +40,7 @@ func Run(args []string) error {
 func newClient() (*api.Client, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return nil, errors.New("not logged in — run 'everyapi login' first")
+		return nil, errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return nil, err
@@ -64,7 +53,7 @@ func classifyErr(err error) error {
 		return nil
 	}
 	if api.IsUnauthorized(err) {
-		return errors.New("your session expired — run 'everyapi login' again")
+		return errors.New(i18n.T("auth.session_expired"))
 	}
 	return err
 }
@@ -87,9 +76,9 @@ func runList(args []string) error {
 	}
 	if len(rows) == 0 {
 		if *unread {
-			cliout.Println("No unread notifications.")
+			cliout.Println(i18n.T("notify.no_unread"))
 		} else {
-			cliout.Println("No notifications.")
+			cliout.Println(i18n.T("notify.no_rows"))
 		}
 		return nil
 	}
@@ -129,7 +118,7 @@ func runCount(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("%d unread\n", n)
+	cliout.Printf(i18n.T("notify.unread_count")+"\n", n)
 	return nil
 }
 
@@ -148,7 +137,7 @@ func runRead(args []string) error {
 	if err := client.MarkNotificationRead(cliout.WithCtx(), id); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Marked #%d as read.\n", id)
+	cliout.Printf(i18n.T("notify.marked_read")+"\n", id)
 	return nil
 }
 
@@ -165,6 +154,6 @@ func runReadAll(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Marked %d notification(s) as read.\n", n)
+	cliout.Printf(i18n.T("notify.marked_all")+"\n", n)
 	return nil
 }

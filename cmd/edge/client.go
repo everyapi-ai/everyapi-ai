@@ -7,6 +7,8 @@ import (
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
+
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 // edgeClient is the shared "load creds, build client" path every edge
@@ -15,7 +17,7 @@ import (
 func edgeClient() (*api.Client, *config.Credentials, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return nil, nil, errors.New("not logged in — run 'everyapi login' first")
+		return nil, nil, errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return nil, nil, err

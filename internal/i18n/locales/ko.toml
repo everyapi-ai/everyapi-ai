@@ -1,0 +1,775 @@
+# CLI 자체 문자열에 대한 한국어 번역.
+#
+# 새 키 추가: 같은 경로로 en.toml 에도 추가해야 함. 여기에 없는
+# 키는 자동으로 en.toml 값으로 대체되며, 양쪽 모두에 없으면 키
+# 자체가 반환됨 (개발자에게 즉시 보이는 실패).
+#
+# 여러 줄 USAGE 블록은 TOML 의 리터럴 멀티라인 문자열 ('''…''')
+# 을 사용함. 백슬래시 이스케이프를 해석하지 않으므로 Go raw 문자열을
+# 그대로 옮길 수 있음. TOML 은 ''' 직후의 줄바꿈을 제거하므로
+# 블록을 왼쪽 끝에 맞춰 작성하면 예상한 위치에서 출력됨.
+#
+# 새 언어 추가: 이 디렉터리에 {lang}.toml 을 추가하면 init() 이
+# 자동으로 로드함. SupportedLanguages 에 포함되려면 Lang* 상수만
+# 추가하면 되고 다른 코드 변경은 필요 없음.
+
+[auth]
+not_logged_in = "로그인되어 있지 않습니다 — 먼저 'everyapi login' 을 실행하세요"
+session_expired = "세션이 만료되었습니다 — 'everyapi login' 을 다시 실행하세요"
+
+[common]
+canceled = "취소되었습니다."
+error_prefix = "오류"
+missing_subcommand = "하위 명령이 없습니다 ('%s help' 를 시도해보세요)"
+unknown_subcommand = "알 수 없는 '%s' 하위 명령 %q"
+pick_subcommand = "%s — 하위 명령을 선택하세요:"
+browser_open_failed = "브라우저를 자동으로 열 수 없습니다 — 위 URL을 복사하세요."
+browser_open_failed_qr = "브라우저를 자동으로 열 수 없습니다 — QR을 스캔하거나 위 URL을 복사하세요."
+open_browser_now = "지금 브라우저를 열까요?"
+aborted_by_user = "사용자가 중단했습니다"
+cancelled_nothing_submitted = "취소되었습니다 — 제출된 내용이 없습니다."
+rows_of_total = "%d 행 / 총 %d 행:"
+
+[launcher]
+welcome = "everyapi — 명령을 선택하세요:"
+usage = '''
+everyapi — EveryAPI CLI
+
+사용법
+  everyapi <command> [flags]
+
+명령
+  login           이 기기를 EveryAPI 에 인증
+  logout          이 기기의 인증 정보 삭제
+  status          현재 쿼터, 사용량, 잔액 표시
+  topup           지갑 충전 페이지 열기 (피싱 방지 검증 문구 포함)
+  wallet <sub>    결제 내역 / 결제 수단 / 교환 키
+  checkin         오늘의 데일리 쿼터 수령
+  user <sub>      프로필 / 2FA / passkey / OAuth 연동 / 추천 코드
+  subscription <sub>  구독 플랜 / 내 구독 / 결제 설정
+  use <tool>      EveryAPI 를 통해 서드파티 CLI 실행 (claude / codex / gemini)
+  token <sub>     릴레이 API 토큰 관리 (list / show / create / update / key / revoke)
+  log <sub>       요청 로그: list / stat / summary
+  usage           일별 쿼터 사용량
+  models <sub>    모델 카탈로그: list / pricing / groups
+  demand <sub>    바이어 측 마켓플레이스 게시 (list/my/show/submit/cancel/remove)
+  dispute <sub>   분쟁: 제기 / 목록 / 조회
+  report          어뷰즈 / TOS 위반 신고
+  notify <sub>    앱 내 알림 (list / count / read / readall)
+  dm <sub>        다이렉트 메시지 (threads / open / send / messages / read)
+  seller <sub>    채널 마켓플레이스 셀러 명령
+__ADMIN_BLOCK__
+  edge <sub>      BYO-GPU 공급자 에이전트 (docker + ollama)
+  proxy <sub>     로컬 새너타이저 프록시 (SDK 요청 프라이버시 필터)
+  mcp [sub]       AI CLI 용 MCP 서버 (Claude Code / Codex / Gemini)
+  doctor          자가 진단 (인증 정보, 게이트웨이, 새너타이저, 도구)
+  events          라이브 이벤트 스트림 구독 (SSE)
+  settings        CLI 환경설정 조회 / 변경 (언어 등)
+  update          새 릴리스 확인 후 해당 업그레이드 실행
+  version         빌드 버전 출력
+  help            이 메시지 표시
+
+하위 명령의 상세와 플래그는 'everyapi <command> help' 로 확인
+(예: 'everyapi seller help', 'everyapi edge help').
+'''
+usage_admin_block = '''  admin <sub>     운영 명령 (admin 역할 필요)
+'''
+
+[settings]
+saved = "설정을 저장했습니다."
+lang_invalid = "지원되지 않는 언어입니다. 지원 언어"
+current = "현재 설정"
+lang_label = "언어"
+file_at = "설정 파일:"
+reset_confirm = "모든 CLI 설정을 기본값으로 초기화하시겠습니까?"
+unknown_key = "알 수 없는 설정 키 %q"
+usage_get = "사용법: everyapi settings get <key>"
+usage_set = "사용법: everyapi settings set <key> <값>"
+default_label = "(기본값: %s)"
+usage = '''
+everyapi settings — CLI 환경설정 조회 / 변경
+
+사용법
+  everyapi settings                        현재 설정 표시 (list 의 별칭)
+  everyapi settings list                   현재 설정 표시
+  everyapi settings get <key>              단일 설정 출력
+  everyapi settings set <key> <value>      설정 업데이트
+  everyapi settings reset                  모든 설정 초기화 (기본값으로 복원)
+
+키
+  language                                 en | zh | ja | ko | es | de | fr
+
+설정 파일은 'everyapi settings list' 가 출력하는 경로의 일반 JSON 입니다.
+수동 편집 가능하며, CLI 는 다음 실행 시 다시 읽습니다.
+'''
+
+[token]
+no_tokens = "토큰이 없습니다. 'everyapi token create --name <이름>' 으로 생성하세요."
+count = "%d 개의 토큰:"
+full_keys_hint = "\n전체 키는 'everyapi token key <id>' 로 확인하세요."
+created = "토큰을 생성했습니다. 'everyapi token list' 로 id 를 확인한 뒤 'everyapi token key <id>' 로 평문을 가져오세요."
+updated = "Token #%d 을 업데이트했습니다 (상태: %s)."
+status_changed = "Token #%d 은(는) 현재 %s 입니다."
+revoked = "Token #%d 을 폐기했습니다."
+revoke_confirm = "토큰 #%d %q 을(를) 폐기하시겠습니까? 이 키를 사용하는 앱은 401 을 받기 시작합니다."
+update_no_flags = "업데이트할 항목이 없습니다: 플래그를 최소 하나 지정하세요 ('everyapi token update -h' 참조)"
+name_required = "'token create' 에는 --name 이 필요합니다"
+invalid_id = "유효하지 않은 토큰 id %q (양의 정수여야 함)"
+usage_revoke = "사용법: everyapi token revoke <id> [-y]"
+status_enabled = "활성화"
+status_disabled = "비활성화"
+status_expired = "만료됨"
+status_exhausted = "쿼터 소진"
+usage_arg_id = "사용법: everyapi token %s <id> [플래그]"
+usage = '''
+everyapi token — 릴레이 API 토큰 관리 (앱에 임베드하는 키)
+
+사용법
+  everyapi token <subcommand> [flags]
+
+하위 명령
+  list                                 토큰 목록 (마스킹된 키)
+  show     <id>                        토큰 상세
+  key      <id>                        평문 전체 키 출력
+  create   --name <n> [flags]          새 토큰 발급
+  update   <id> [flags]                토큰 항목 편집 (플래그 미지정 → 현 상태 유지)
+  enable   <id>                        활성화 상태로 전환
+  disable  <id>                        비활성화 상태로 전환
+  revoke   <id> [-y]                   토큰 삭제 (소프트 삭제, -y 없으면 확인)
+
+CREATE / UPDATE 플래그
+  --name <n>           표시명 (create 필수, 최대 50 자)
+  --group <g>          라우팅 그룹 (기본 "" = 자동)
+  --unlimited          쿼터 제한 없음 (--quota 무시)
+  --quota <int>        남은 쿼터 (게이트웨이 단위, 'everyapi status' 참조)
+  --expires <when>     "never" (create 기본) 또는 절대 Unix 초
+  --models <a,b,c>     지정 모델 id CSV 로 제한 (미지정 / 빈 값 → 모두)
+  --ip <cidr,cidr>     IP 허용 목록 (미지정 → 제한 없음)
+  --cross-group        자동 라우팅의 그룹 간 재시도 허용
+
+예시
+  everyapi token list
+  everyapi token create --name prod --unlimited
+  everyapi token create --name byteplus-only --quota 1000000 --group byteplus
+  everyapi token update 42 --name renamed
+  everyapi token disable 42
+  everyapi token key 42                  (sk-everyapi-… 출력)
+  everyapi token revoke 42 -y
+'''
+
+[token.label]
+id = "Token #%d"
+name = "이름:"
+key = "key:"
+key_masked = "%s (마스킹됨)"
+status = "상태:"
+group = "그룹:"
+created = "생성일:"
+last_used = "마지막 사용:"
+expires = "만료일:"
+quota = "쿼터:"
+unlimited = "제한 없음 (사용 %d)"
+quota_split = "남은 %d / 사용 %d"
+models = "모델:"
+all = "(모두)"
+allow_ips = "허용 IP:"
+any = "(임의)"
+cross_group = "그룹 간:"
+pinned_ch = "고정 채널:"
+auto = "(자동)"
+expires_never = "기한 없음"
+
+[log]
+no_rows = "조건에 맞는 로그 행이 없습니다."
+no_spend = "이 기간 동안 소비 기록이 없습니다."
+usage = '''
+everyapi log — 요청 로그
+
+사용법
+  everyapi log <subcommand> [flags]
+
+하위 명령
+  list    [flags]   최근 로그 (최신순, 기본 20 행)
+  stat    [flags]   기간 내 quota / RPM / TPM 합계
+  summary [flags]   최근 7 일 (또는 --since/--until) 모델별 소비
+
+공통 플래그
+  --token  <name>         단일 토큰으로 필터 (표시명)
+  --model  <name>         단일 모델로 필터
+  --group  <name>         단일 라우팅 그룹으로 필터
+  --since  <window|ts>    기간 시작: 1h / 24h / 7d / 30d, 또는 절대 Unix 초
+  --until  <ts>           기간 종료 (기본: 현재)
+
+LIST 전용 플래그
+  --limit  <int>          페이지 크기 (기본 20, 서버 측 상한 적용)
+  --page   <int>          1 부터 시작하는 페이지 번호
+  --request-id <id>       단일 상류 request id 고정
+  --type   <int>          로그 타입 필터 (예: 2=consume, 백엔드 상수)
+'''
+
+[log.label]
+rows_window = "%d 행 / 총 %d 행:"
+per_model_hdr = "모델별 소비 %s → %s"
+window = "기간: %s → %s"
+open = "(오픈)"
+
+[usage]
+no_rows = "이 기간에 사용 기록이 없습니다."
+day_by_day = "일별 사용량 (%d 일):"
+per_model = "모델별 사용량 (%d 모델):"
+
+[models]
+no_models = "해당 그룹에서 라우팅 가능한 모델이 없습니다. 관리자에게 활성화를 요청하세요."
+count = "사용 가능한 모델 %d 개:"
+no_pricing = "조건에 맞는 가격 행이 없습니다."
+no_groups = "이 계정에서 사용 가능한 라우팅 그룹이 없습니다."
+usage = '''
+everyapi models — 계정에서 보이는 모델 카탈로그
+
+사용법
+  everyapi models <subcommand> [flags]
+
+하위 명령
+  list                       해당 그룹이 라우팅할 수 있는 모든 모델 id 출력
+  pricing [--model <m>]      모델별 요금표 (선택적 필터)
+  groups                     계정에서 사용 가능한 라우팅 그룹
+'''
+
+[wallet]
+no_topups = "충전 기록이 없습니다."
+redeemed = "교환 성공: +%d 쿼터 적립."
+usage_redeem = "사용법: everyapi wallet redeem <key>"
+usage = '''
+everyapi wallet — 결제 내역, 결제 수단, 교환 키
+
+사용법
+  everyapi wallet <subcommand> [flags]
+
+하위 명령
+  history [--limit N] [--page P] [--keyword K]   페이지 단위 결제 내역
+  info                                            활성 결제 수단, 최소 충전, 옵션
+  redeem <key>                                    충전 / 교환 키 적용
+
+참고
+  실제 결제 (Stripe / Creem / Waffo / EPay) 는 'everyapi topup' 을 사용하세요 —
+  피싱 방지 검증 문구가 표시된 대시보드가 열립니다. 카드 결제는 대역 외에서
+  처리되므로 브라우저 핸드오프가 필요합니다.
+'''
+
+[wallet.label]
+payment_methods = "결제 수단:"
+none_enabled = "(활성화된 결제 수단 없음 — 관리자가 최소 하나는 설정해야 함)"
+feature_flags = "기능 플래그:"
+min_topup = "전체 최소 충전 금액: %d"
+suggested = "추천 금액: %s"
+discount_tiers = "할인 단계:"
+
+[checkin]
+success = "체크인 성공: +%d 쿼터 지급 (날짜 %s)."
+disabled = "이 인스턴스에서는 체크인 기능이 비활성화되어 있습니다."
+no_records = "이번 달 체크인 기록이 없습니다."
+lifetime = "누적: 체크인 %d 회로 총 %d 쿼터."
+reward_range = "보상 범위: 일일 %d – %d 쿼터"
+today_claimed = "오늘: 이미 수령함."
+today_unclaimed = "오늘: 미수령 — 'everyapi checkin' 으로 수령하세요."
+month_days = "\n이번 달 %d 일:"
+usage = '''
+everyapi checkin — 쿼터 지급 데일리 체크인
+
+사용법
+  everyapi checkin                       오늘 보상 수령 ('claim' 의 별칭)
+  everyapi checkin claim                 오늘 보상 수령 (명시적 동사)
+  everyapi checkin status [--month YYYY-MM]
+                                         과거 체크인 캘린더 표시
+'''
+
+[seller]
+no_channels = "마운트된 셀러 채널이 없습니다."
+setup_hint = "'everyapi seller setup' (마법사) 또는 'everyapi seller add-key' (플래그) 를 사용하세요."
+list_count = "%d 개의 셀러 채널:"
+channel_updated = "채널 #%d 을 업데이트했습니다."
+channel_removed = "채널 #%d 을 삭제했습니다."
+remove_confirm = "셀러 채널 #%d %q 을(를) 삭제하시겠습니까? 여기로 라우팅되는 바이어는 즉시 실패합니다."
+refresh_done = "채널 #%d (%s) 인증 정보를 갱신했습니다."
+no_sales = "판매 기록이 없습니다 — 채널이 활성화되고 검색 가능해진 후에만 바이어가 라우팅됩니다."
+eligible_yes = "✓ 채널을 마운트할 자격이 있습니다."
+eligible_no = "✗ 아직 자격이 없습니다."
+compensation_filed = "신청을 접수했습니다 (id=%d, 상태=%s, 권장 한도=%d)."
+compensation_admin_review = "관리자가 검토합니다. 'everyapi seller compensation list' 로 진행 상황을 확인하세요."
+compensation_no_claims = "신청이 없습니다."
+usage_update = "사용법: everyapi seller update <id> [--name N] [--models M] [--status 1|2] [--remark R] [--test-model M]"
+update_no_flags = "업데이트할 항목이 없습니다: 플래그를 최소 하나 지정하세요"
+usage_remove = "사용법: everyapi seller remove <id> [-y]"
+usage_refresh = "사용법: everyapi seller refresh <id>"
+usage_compensation = "사용법: everyapi seller compensation {submit|list} [flags]"
+usage_compensation_help = "everyapi seller compensation {submit|list} — 보상 신청 제출 / 조회"
+withdraw_nothing = "출금할 금액이 없습니다 — 셀러 잔액이 $0 입니다."
+withdraw_done = "셀러 잔액에서 메인 잔액으로 $%.2f 을(를) 이체했습니다.\n"
+withdraw_check_url = "확인: %s/wallet\n"
+eligibility_header = "Marketplace 자격:"
+eligibility_marketplace_enabled = "  %s marketplace 활성화됨"
+eligibility_account_active = "  %s 계정 활성 상태"
+eligibility_email_verified = "  %s 이메일 인증 완료"
+eligibility_account_age = "  %s 계정 생성 후 ≥ %d 일"
+eligibility_has_consume_log = "  %s 성공한 소비 기록이 1건 이상 있음"
+eligibility_under_cap = "  %s 채널 상한 이내 (%d / %d)"
+eligibility_check_failed = "Marketplace 자격 확인에 실패했습니다. 위 항목을 수정한 뒤 다시 실행하세요."
+dashboard_url_line = "Dashboard: %s/seller/channels"
+not_eligible_error = "seller 채널을 mount할 자격이 없습니다"
+mounted_with_pool = "채널 #%d (%s, type=%s)%s 을(를) 마운트했습니다.\n"
+key_backup_pool = " (백업 key %d개 포함)"
+mounted_status_hint = "상태: 활성. 'everyapi seller list' 로 확인하거나 dashboard를 방문하세요."
+requirements_not_met = "마운트 요건을 아직 충족하지 못했습니다. 위 항목들을 먼저 수정한 뒤 다시 실행하세요."
+mounting_new_channel = "새 채널 마운트 중. Esc / Ctrl+C 로 취소."
+method_picker_label = "인증 방식"
+method_api_key = "API key             — vendor key 붙여넣기 (openai / anthropic 등)"
+method_codex_oauth = "Codex / ChatGPT OAuth — ChatGPT Plus 구독 바인딩 (device flow, token 붙여넣기 불필요)"
+method_claude_oauth = "Claude OAuth        — Anthropic Claude 구독 바인딩 (브라우저에서 한 번 붙여넣기)"
+method_gemini_oauth = "Gemini OAuth        — Google Gemini 계정 바인딩 (완전 원클릭)"
+prompt_upstream_type = "업스트림 type"
+prompt_channel_name = "채널 이름"
+prompt_models = "모델 (쉼표 구분)"
+prompt_internal_remark = "내부 메모 (선택)"
+about_to_mount = "마운트 직전: %s / type=%s / models=%s%s"
+about_to_mount_oauth = "%s OAuth로 마운트 직전: %s / models=%s"
+submit_prompt = "제출?"
+oauth_blob_in_backup_1 = "OAuth/JSON 인증 blob 처럼 보입니다."
+oauth_blob_in_backup_2 = "OAuth 인증 정보는 백업 풀의 다른 key와 결합할 수 없습니다 — 채널의 유일한 key여야 합니다."
+oauth_blob_in_backup_3 = "일반 API key를 다시 입력하거나, Ctrl-C로 중단 후 OAuth blob만으로 다시 실행하세요."
+prompt_upstream_key = "업스트림 API key"
+prompt_backup_key = "백업 key #%d"
+prompt_remark_for_key = "key #%d 메모 (선택)"
+prompt_add_another_backup = "백업 key를 추가하시겠습니까?"
+oauth_usage = '''everyapi seller add-oauth — provider의 OAuth 플로우로 채널 마운트
+
+사용법
+  everyapi seller add-oauth <provider> [플래그]
+
+PROVIDERS
+  codex     Codex / ChatGPT 구독 (RFC 8628 device flow)
+  claude    Anthropic Claude (브라우저 callback OAuth)
+  gemini    Google Gemini (브라우저 callback OAuth)
+
+공통 플래그
+  --name <n>      채널 표시 이름 (필수)
+  --models <m>    이 채널이 제공할 모델 (쉼표 구분, 필수)
+  --no-browser    검증 URL 자동 열기 건너뜀
+
+provider별 플래그는 'everyapi seller add-oauth <provider> --help' 참고.
+'''
+oauth_use_provider_help = "사용법: everyapi seller add-oauth <provider> [플래그]\nproviders: codex, claude, gemini"
+oauth_unknown_provider = "알 수 없는 provider %q — 지원: codex, claude, gemini"
+oauth_chatgpt_redirect = "provider %q 는 ChatGPT Plus — codex 와 동일한 업스트림입니다. `everyapi seller add-oauth codex` 를 사용하세요"
+oauth_missing_flags = "필수 플래그 누락: %s"
+oauth_codex_intro = "Codex / ChatGPT 구독을 바인딩하려면 다음 URL을 방문하고 code를 입력하세요:"
+oauth_browser_approve = "브라우저가 열렸습니다. 그곳에서 승인하면 자동으로 완료됩니다."
+oauth_waiting_auth = "인증 대기 중..."
+oauth_codex_timeout = "승인 전에 code가 만료되었습니다 — 'everyapi seller add-oauth codex' 를 다시 실행하세요"
+oauth_denied = "브라우저에서 인증이 거부되었습니다"
+oauth_email_unknown = "(token이 계정 이메일을 노출하지 않음)"
+oauth_mounted_with_email = "\n채널 #%d (%s, type=codex, account=%s) 을(를) 마운트했습니다.\n"
+oauth_status_visit = "상태: 활성. 'everyapi seller list' 로 확인하거나 %s/seller/channels 를 방문하세요.\n"
+oauth_claude_intro = "Anthropic Claude 구독을 바인딩하려면:"
+oauth_claude_step_1 = "  1) 이 URL을 브라우저에서 열기 (--no-browser면 복사):\n     %s\n"
+oauth_claude_step_2 = "  2) 로그인하고 연결을 승인하세요."
+oauth_claude_step_3a = "  3) Anthropic의 callback 페이지에 `<code>#<state>` 형태의 문자열이 표시됩니다."
+oauth_claude_step_3b = "     그 문자열을 복사해 아래에 붙여넣으세요."
+oauth_browser_opened = "브라우저가 열렸습니다."
+oauth_paste_string = "인증 문자열 붙여넣기"
+oauth_mounted_claude = "\n채널 #%d (%s, type=claude) 을(를) 마운트했습니다.\n"
+oauth_token_expires = "Token 만료: %s (만료 전 자동 갱신).\n"
+oauth_gemini_intro = "Google Gemini 계정을 바인딩하려면 여기에서 로그인하세요:"
+oauth_browser_sign_in = "브라우저가 열렸습니다. 그곳에서 로그인하면 자동으로 완료됩니다."
+oauth_waiting_redirect = "127.0.0.1:%d 리다이렉트 대기 중 (timeout %s)...\n"
+oauth_callback_no_code = "OAuth callback에 인증 code가 포함되지 않음"
+oauth_state_mismatch = "OAuth state 불일치 (수신: %q, 예상: %q) — 명령을 다시 실행하세요"
+oauth_mounted_gemini = "\n채널 #%d (%s, type=gemini) 을(를) 마운트했습니다.\n"
+gates_header = "Gates:"
+gate_marketplace_enabled = "  marketplace_enabled : %v"
+gate_account_active = "  account_active      : %v"
+gate_email_verified = "  email_verified      : %v"
+gate_account_age_ok = "  account_age_ok      : %v (최소 %d 일)"
+gate_has_consume_log = "  has_consume_log     : %v"
+gate_under_cap = "  under_cap           : %v (마운트됨 %d / %d)"
+compensation_upstream_required = "--upstream 은 필수입니다"
+compensation_description_required = "--description 은 필수입니다"
+claims_total = "%d 건의 청구 / 총 %d 건:"
+sales_page_total = "  페이지 합계: charge=%d  take=%d"
+refresh_account_label = "  account: %s"
+refresh_expires_label = "  expires: %s"
+refresh_last_refresh_label = "  last refresh: %s"
+invalid_channel_id = "잘못된 채널 id %q"
+channel_not_found = "채널 #%d 을 마운트된 채널에서 찾을 수 없습니다"
+oauth_only_refresh = "채널 #%d (type=%s) 는 OAuth 채널이 아닙니다 — refresh 는 codex / claude / gemini 에만 적용됩니다"
+unknown_compensation_sub = "알 수 없는 compensation 하위 명령 %q"
+unknown_channel_type = "알 수 없는 채널 타입 %q — 다음 중 하나를 사용하세요: %s, 또는 숫자 id"
+
+[demand]
+no_rows = "수요 게시가 없습니다."
+posted = "수요 #%d 을 게시했습니다 (state=%s)."
+cancelled = "수요 #%d 을 취소했습니다."
+removed = "수요 #%d 을 삭제했습니다."
+remove_confirm = "수요 #%d 을 영구 삭제하시겠습니까?"
+usage = '''
+everyapi demand — 바이어 측 마켓플레이스 게시
+
+사용법
+  everyapi demand <subcommand> [flags]
+
+하위 명령
+  list   [--state open|closed] [--page P] [--limit N]
+                                  공개 마켓플레이스 피드
+  my     [--page P] [--limit N]   내가 올린 수요
+  show   <id>                     단일 게시 상세
+  submit --title <T> --model <M> --max-price <usd_per_M> [--est <tokens>]
+         [--description <D>] [--expires <unix_s>] [--require-oauth]
+                                  새 수요 게시
+  cancel <id>                     내 수요 취소
+  remove <id> [-y]                게시 삭제 (-y 없으면 확인)
+'''
+
+[dispute]
+no_rows = "분쟁이 없습니다."
+opened = "분쟁 #%d 을 제기했습니다 (state=%s)."
+usage = '''
+everyapi dispute — 분쟁 제기 / 목록 / 조회
+
+사용법
+  everyapi dispute <subcommand> [flags]
+
+하위 명령
+  submit --counterparty <uid> --type <t> --target-kind <k> --target <id> --description <d> [--amount <quota>]
+                                       분쟁 제기
+  my     [--page P] [--limit N]        내 진행 중 + 해결된 분쟁 조회
+  show   <id>                          단일 분쟁 상세
+'''
+
+[report]
+filed = "신고를 접수했습니다. 어뷰즈 담당이 입력하신 이메일로 연락드립니다."
+usage = '''
+everyapi report — 어뷰즈 / TOS 위반 신고
+
+사용법
+  everyapi report --email <e> --category <c> --target-type <t> --description <d>
+                  [--target-id <id>] [--evidence <url>]
+
+참고
+  공개 엔드포인트 — 로그인 없이도 동작합니다. 로그인 상태로 호출하면,
+  신고자 user_id 가 트리아지를 위해 서버 측에서 기록됩니다.
+'''
+
+[notify]
+no_rows = "알림이 없습니다."
+no_unread = "읽지 않은 알림이 없습니다."
+unread_count = "읽지 않음 %d 개"
+marked_read = "#%d 을 읽음으로 표시했습니다."
+marked_all = "%d 개의 알림을 읽음으로 표시했습니다."
+usage = '''
+everyapi notify — 앱 내 알림
+
+사용법
+  everyapi notify <subcommand> [flags]
+
+하위 명령
+  list   [--unread] [--page P] [--limit N]   최근 알림
+  count                                       읽지 않은 개수만 반환
+  read   <id>                                 단일 알림을 읽음 표시
+  readall                                     모든 미읽음을 읽음으로 전환
+'''
+
+[dm]
+no_threads = "DM 스레드가 없습니다."
+no_contacts = "DM 연락처가 아직 없습니다."
+no_messages = "(메시지 없음)"
+sent_at = "#%d 을 %s 에 전송"
+marked_read = "스레드 #%d 을 읽음 처리했습니다."
+usage = '''
+everyapi dm — 다른 사용자와의 다이렉트 메시지
+
+사용법
+  everyapi dm <subcommand> [flags]
+
+하위 명령
+  threads  [--page P] [--limit N]      내 DM 스레드 (최신순)
+  contacts                              내가 메시지를 주고받은 사용자
+  count                                 읽지 않은 DM 수 (스칼라)
+  open <other_user_id>                  다른 사용자와의 스레드 열기 (멱등)
+  messages <thread_id> [--after <id>] [--limit N]
+                                        스레드의 메시지 읽기
+  send <thread_id> <body>               메시지 전송
+  read <thread_id>                      스레드를 읽음 처리
+'''
+
+[user]
+account_header = "계정 #%d  %s  (%s)"
+passkey_use_dashboard = "(등록 / 삭제는 브라우저 흐름입니다 — 대시보드를 사용하세요.)"
+passkey_none = "등록된 passkey 가 없습니다. 대시보드에서 등록하세요 (브라우저 전용 흐름)."
+"2fa_disabled_msg" = "초기 설정은 브라우저 흐름 (QR 스캔) 입니다 — 대시보드에서 완료한 뒤 여기서 코드 관리를 하세요."
+"2fa_disabled" = "2FA 가 비활성화되어 있습니다."
+no_bindings = "OAuth 연동이 없습니다."
+bindings_count = "%d 개의 연동:"
+unbound = "공급자 #%d 의 연동을 해제했습니다."
+unbind_confirm = "OAuth 공급자 #%d 의 연동을 해제하시겠습니까? 다시 연동하기 전까지 이 공급자로 로그인할 수 없습니다."
+aff_code = "추천 코드: %s"
+aff_new = "새 추천 코드: %s"
+aff_rotated_warning = "이전 코드가 포함된 링크는 더 이상 귀하에게 귀속되지 않습니다."
+oauth_usage = "사용법: everyapi user oauth {list|unbind <provider_id>}"
+passkey_dashboard_gated = "passkey 상태는 dashboard session cookie에 종속됩니다 — passkey 관리는 웹 UI를 사용하세요"
+passkey_registered_last_used = "Passkey 등록됨. 마지막 사용: %s"
+"2fa_status" = "2FA: enabled=%v locked=%v"
+"2fa_backup_remaining" = "백업 코드 남은 수: %d"
+"2fa_low_hint" = "  (적음 — 'everyapi user 2fa backup --code <new-totp>' 로 재생성 고려)"
+backup_regenerated = "백업 코드 %d 개를 재생성했습니다 — 지금 저장하세요. 다시 표시되지 않습니다:"
+usage = '''
+everyapi user — 프로필 / 2FA / OAuth 연동 / 추천 코드
+
+사용법
+  everyapi user <subcommand> [flags]
+
+하위 명령
+  info                                  프로필 + 보안 통합 뷰
+  2fa                                   2FA 상태 (활성 / 잠김 / 남은 백업 코드)
+  2fa disable --code <6 자리>           2FA 비활성화
+  2fa backup  --code <6 자리>           백업 코드 일괄 갱신
+  passkey                               Passkey 등록 상태
+  oauth list                            연동된 OAuth 공급자
+  oauth unbind <provider_id>            OAuth 연동 해제
+  aff                                   추천 코드 표시
+  aff reset                             추천 코드 갱신
+
+참고
+  2FA 초기 설정 (QR 스캔), passkey 등록, 이메일 / 위챗 인증은 모두
+  브라우저 흐름이 필요합니다 — 대시보드에서 초기 설정 후 여기서
+  일상적인 관리를 진행하세요.
+'''
+
+[subscription]
+no_plans = "활성화된 구독 플랜이 없습니다."
+plans_count = "%d 개의 플랜:"
+preference_updated = "결제 설정을 %q 로 업데이트했습니다."
+current_preference = "현재 청구 환경설정: %s"
+set_hint = "--set <값> 으로 변경합니다. 알 수 없는 값은 백엔드에서 기본값으로 정규화됩니다."
+usage = '''
+everyapi subscription — 구독 플랜 / 내 구독 / 설정
+
+사용법
+  everyapi subscription <subcommand> [flags]
+
+하위 명령
+  plans                            활성화된 구독 플랜 목록
+  self                             현재 + 과거 구독 표시
+  preference --set <value>         결제 설정 업데이트
+                                   (예: "topup" / "subscription" / "subscription_first")
+                                   백엔드가 알 수 없는 값을 정규화합니다.
+참고
+  플랜 구매는 브라우저 흐름입니다 — 'everyapi topup' 으로 피싱 방지
+  핸드셰이크가 적용된 대시보드 지갑을 여세요.
+'''
+
+[admin.user]
+no_matches = "일치 결과 없음."
+deleted = "사용자 #%d 을 삭제했습니다."
+delete_confirm = "사용자 #%d 을 삭제하시겠습니까? 이 작업은 파괴적이며 되돌릴 수 없습니다."
+action_applied = "admin user manage: action=%q 을 사용자 #%d 에 적용함"
+
+[admin.abuse]
+no_reports = "신고가 없습니다."
+
+[admin.audit]
+no_rows = "감사 로그가 없습니다."
+
+[admin.marketplace]
+status_unset = "marketplace.enabled: <설정되지 않음> (백엔드 기본값: false)\n"
+status_set = "marketplace.enabled: %s\n"
+no_change = "marketplace.enabled: 이미 %s — 변경 없음\n"
+changed = "marketplace.enabled: %s → %s\n"
+
+[doctor.section]
+account = "계정"
+gateway = "게이트웨이"
+tools = "PATH 상의 도구"
+
+[doctor.result]
+failed = "결과: 실패 존재."
+warned = "결과: 경고 있음, 통과."
+green = "결과: 모두 정상."
+
+[doctor]
+tally = "(ok=%d warn=%d fail=%d)"
+usage = '''
+everyapi doctor — 자가 진단 (인증 정보, 게이트웨이, 새너타이저, 도구)
+
+사용법
+  everyapi doctor
+'''
+
+[events]
+connected = "연결됨. 이벤트 수신 중 (Ctrl-C 로 중지)…"
+transport_err = "[transport] %s — 재연결 중"
+
+[mcp.status]
+count = "알려진 MCP 클라이언트 %d 개:"
+registered_count = "%d / %d 등록됨."
+state_registered = "등록됨"
+state_not_registered = "미등록"
+state_not_installed = "PATH 에 없음"
+state_probe_failed = "(프로브 실패)"
+run_install_hint = "'everyapi mcp install %s' 를 실행하세요"
+
+[mcp]
+install_usage = '''everyapi mcp install — everyapi 를 AI CLI 의 MCP 서버로 등록
+
+사용법
+  everyapi mcp install [client]
+
+인자
+  client    claude, codex, gemini 중 하나. 기본값은 claude.
+
+내부적으로 `<client> mcp add everyapi everyapi mcp` 를 실행합니다 (각
+클라이언트가 요구하는 구문으로). 이후 AI CLI 는 필요 시 `everyapi mcp` 를
+실행하여 네 개의 everyapi_* 도구 (status, topup, seller_list,
+seller_withdraw) 를 노출합니다.
+
+선택한 클라이언트의 CLI 가 PATH 에 있어야 합니다. 설치되어 있지 않으면
+오류 메시지에 설치 링크와 클라이언트 설정에 손으로 붙여넣을 수 있는
+구성 스니펫이 포함됩니다.'''
+uninstall_usage = '''everyapi mcp uninstall — AI CLI 에서 everyapi 등록 해제
+
+사용법
+  everyapi mcp uninstall [client]
+
+인자
+  client    claude, codex, gemini 중 하나. 기본값은 claude.
+
+내부적으로 `<client> mcp remove everyapi` 를 실행하여 `everyapi mcp install
+[client]` 가 수행한 등록을 취소합니다. 이후 실행 중인 서버 프로세스를
+종료하려면 클라이언트를 재시작하세요.
+
+선택한 클라이언트의 CLI 가 PATH 에 있어야 합니다. 클라이언트 설정을
+수동 편집해서 everyapi 를 등록한 경우, mcpServers 객체에서 "everyapi"
+항목을 수동으로 제거하세요.'''
+status_usage = '''everyapi mcp status — 어떤 MCP 클라이언트에 everyapi 가 등록되어 있는지 표시
+
+사용법
+  everyapi mcp status
+
+알려진 각 클라이언트 (claude / codex / gemini) 에 대해 다음 중 하나를 보고:
+  registered      — everyapi 가 이 클라이언트의 MCP 서버 목록에 등록됨
+  not registered  — 클라이언트는 설치되어 있으나 서버가 추가되지 않음
+  not on PATH     — 클라이언트 바이너리가 설치되어 있지 않음
+  (probe failed)  — 클라이언트 바이너리는 있으나 `mcp list` 실행 실패
+'''
+
+[proxy]
+start_listening = "Sanitizer 프록시가 http://%s 에서 수신 대기 중"
+start_upstream = "업스트림: %s"
+start_detectors = "활성 검출기 수: %d"
+start_point_sdk = "SDK를 http://%s 로 지정하세요 (또는 'everyapi use <tool>' 실행)."
+start_ctrl_c = "Ctrl+C 로 중지. 매핑 테이블은 메모리에만 존재합니다."
+stop_not_running = "Sanitizer 프록시가 실행 중이 아닙니다 (PID 파일 없음)."
+stop_was_not_running = "Sanitizer 프록시가 실행 중이 아니었습니다; 오래된 PID 파일을 정리했습니다."
+stop_sent_sigterm = "Sanitizer 프록시 (pid=%d) 에 SIGTERM 을 보냈습니다. 최대 3초 동안 종료 대기 중…\n"
+stop_stopped = "중지됨."
+stop_still_alive = "3초 후에도 프로세스가 살아있음 — 곧 자체 종료될 것입니다."
+status_not_running = "Sanitizer 프록시가 실행 중이 아닙니다."
+status_start_hint = "시작: everyapi proxy start"
+status_wrong_server_line1 = "포트 %s 가 응답하지만 EveryAPI sanitizer 가 아닙니다 (HTTP %d, content-type %q).\n"
+status_wrong_server_line2 = "다른 서비스가 그 포트를 점유하고 있습니다 — --listen 127.0.0.1:<port> 로 다른 포트를 선택하거나,"
+status_wrong_server_line3 = "다른 서비스를 중지하세요. macOS/Linux 에서는 'lsof -iTCP:%s -sTCP:LISTEN' 로 확인할 수 있습니다."
+status_header = "Sanitizer 프록시"
+status_raw_prefix = "Sanitizer 프록시 (raw): %s"
+detach_prompt = "프록시를 백그라운드로 실행하시겠습니까 (detached)? Yes = 실행 후 shell로 복귀; No = 이 터미널에 남아 라이브 로그 표시 (Ctrl+C 로 중지)"
+started_pid = "Sanitizer 프록시 시작됨 (pid=%d, listen=%s)."
+started_logs = "로그: %s"
+configure_header = "everyapi proxy — sanitizer 설정"
+configure_config_file = "설정 파일: %s"
+configure_builtin_prompt = "내장 검출기 — 활성화할 항목은 체크 상태로 두세요:"
+configure_existing_patterns = "기존 사용자 정의 패턴:"
+configure_add_replace_prompt = "사용자 정의 정규식을 추가 또는 교체하시겠습니까?"
+configure_pattern_name_prompt = "패턴 이름 (공백 없음)"
+configure_pattern_exists = "(패턴 %q 가 이미 존재하며 정규식은 %q — 새 값을 입력하면 덮어씁니다)"
+configure_regex_prompt = "정규식 (Go 문법)"
+configure_invalid_regex = "정규식 %q 무효: %v — 건너뜀."
+configure_replaced = "→ 패턴 %q 를 교체했습니다."
+configure_added = "→ 패턴 %q 를 추가했습니다."
+configure_add_replace_another = "또 다른 패턴을 추가/교체하시겠습니까?"
+configure_saved = "저장됨 → %s"
+configure_restart_hint_1 = "Sanitizer 프록시가 실행 중입니다. 새 설정을 반영하려면 재시작하세요:"
+configure_restart_hint_2 = "  everyapi proxy stop && everyapi proxy start --detach"
+
+[edge]
+no_nodes = "등록된 edge 노드가 없습니다."
+register_hint = "생성하려면 'everyapi edge register --name <node-name>' 를 실행하세요."
+
+[status]
+quota = "쿼터:"
+requests = "요청:"
+topup = "충전:"
+remaining_used = "$%.2f 남음   $%.2f 사용"
+
+[topup]
+before_open = "브라우저를 열기 전에, 이것이 실제 EveryAPI 대시보드인지 확인하세요."
+url_label = "URL:"
+phrase_label = "문구:"
+expires_in = "(이 세션은 약 %d 초 후 만료됩니다)"
+checks_header = "브라우저가 열린 후 두 가지를 확인하세요:"
+check_1 = "  1) 위의 페이지 URL 이 반드시 귀하의 EveryAPI 오리진에 있을 것\n     (기본은 app.everyapi.ai, 또는 셀프 호스트)."
+check_2 = "  2) 페이지 헤더에 위와 동일한 문구가 표시될 것."
+phishing_hint = "둘 중 하나라도 다르면 탭을 닫으세요 — 피싱 페이지일 수 있습니다."
+copy_url = "위의 URL 을 브라우저에 복사하세요."
+browser_opened = "브라우저를 열었습니다. 페이지의 문구가 위와 일치하는지 확인하세요."
+
+[login]
+waiting = "인증 대기 중... (Ctrl+C 로 취소)"
+waiting_with_copy = "인증 대기 중... (Ctrl+C 로 취소, 'c' 키로 URL 복사)"
+next_hint = "다음: 'everyapi status' 또는 'everyapi use claude' 를 시도하세요."
+url_copied = "URL 을 클립보드에 복사했습니다."
+url_copy_failed = "복사하지 못했습니다: %v"
+qr_hint = "이 QR 을 휴대폰 (또는 EveryAPI 에 이미 로그인된 기기) 으로 스캔하세요:"
+url_hint_with_qr = "또는 이 URL 을 수동으로 방문하세요 (코드는 링크에 포함되어 있음):"
+url_hint = "이 기기를 인증하려면 방문하세요 (코드는 링크에 포함되어 있음):"
+code_hint = "페이지가 자동 입력되지 않으면 코드를 입력하세요: %s"
+browser_opened = "브라우저를 열었습니다. 거기서 (또는 휴대폰에서) 승인하세요. 본 처리는 자동으로 완료됩니다."
+no_relay_note_1 = "참고: 귀하의 계정에는 아직 relay API key 가 없습니다. `everyapi use` 는 하나가 필요합니다"
+no_relay_note_2 = "EveryAPI 대시보드에서 생성한 뒤 'everyapi login' 을 다시 실행하세요."
+logged_in_saved = "\n%s 로 로그인했습니다. 자격 증명이 %s/credentials.json 에 저장됨\n"
+
+[logout]
+done = "로그아웃했습니다."
+
+[update]
+up_to_date = "everyapi %s — 최신 버전입니다."
+up_to_date_check = "최신 버전 (%s)"
+available = "업데이트 가능: %s → %s"
+update_available = "업데이트 가능: %s → %s"
+install_method = "설치 방법:       %s"
+whats_new = "─── 변경 사항 ───"
+no_notes = "(릴리스 노트 없음)"
+full_release = "전체 릴리스: %s"
+prerelease = "프리릴리스 실행 중: %s (최신 태그: %s)"
+nothing_to_do = "수행할 작업이 없습니다."
+dev_build_check = "dev 빌드 (commit %s); 최신 릴리스는 %s\n"
+rebuild_header = "현재 소스 트리에서 다시 빌드하려면:"
+switch_header = "릴리스 채널 바이너리로 전환하려면:"
+cant_auto = "자동 업그레이드할 수 없음 — 바이너리가 인식 가능한 Cellar/ (brew) 또는\n$GOBIN/$GOPATH/bin 경로 아래에 없습니다. 다음 중 선택하세요:\n"
+dev_build_intro = "\n현재 dev 빌드입니다 (commit %s). 최신 태그 release: %s.\n"
+rebuild_cmd = "  cd clients/cli && go build"
+switch_cmd_brew = "  brew install everyapi-ai/tap/everyapi   # macOS / Linux"
+switch_cmd_go = "  go install github.com/everyapi-ai/everyapi-ai@latest"
+
+[use]
+tool_picker = "도구 선택:"
+group_picker = "라우팅 그룹 선택:"
+yolo_prompt = "%s 을(를) 활성화하시겠습니까? (모든 안전 확인을 건너뜀)"
+launching = "%s 을 %s 에 대해 실행 중"
+launching_via = "%s 을 %s 에 대해 실행 중 → %s"
+sanitizer_warn = "경고: 새너타이저 프록시가 시작되지 않음 (%v).\n"
+fallback_direct = "직접 모드로 대체 — 트래픽이 프라이버시 필터 없이 %s 에 도달합니다.\n"
+fallback_hint = "이 메시지를 끄려면 --direct 를 사용하거나 'everyapi proxy start' 로 디버그하세요.\n\n"
+no_relay_keys = "그룹을 선택할 활성 relay API key 가 계정에 없습니다 — EveryAPI 대시보드에서 생성한 뒤 'everyapi login' 을 실행하세요"
+no_relay_key_long = '''
+계정에 사용 가능한 relay API 키가 없습니다 — `everyapi use` 에 필요합니다.
+로그인 토큰과는 별개입니다. EveryAPI dashboard (%s) 에서 API 키를 생성한 후
+'everyapi login' 을 다시 실행하세요.'''
+unknown_flag = "알 수 없는 플래그 %q (도구 플래그 앞에 `--` 를 붙이세요: `everyapi use <tool> -- %s ...`)"
+usage = "사용법: everyapi use <tool> [--group <이름>|--channel <이름>] [--direct] [-- 도구 인자...]"

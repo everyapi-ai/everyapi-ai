@@ -12,28 +12,13 @@ import (
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-const usage = `everyapi dm — direct messages with other users
-
-USAGE
-  everyapi dm <subcommand> [flags]
-
-SUBCOMMANDS
-  threads  [--page P] [--limit N]      Your DM threads (newest first)
-  contacts                              Users you've messaged or vice-versa
-  count                                 Unread DM count (scalar)
-  open <other_user_id>                  Open a thread with another user (idempotent)
-  messages <thread_id> [--after <id>] [--limit N]
-                                        Read messages in a thread
-  send <thread_id> <body>               Send a message
-  read <thread_id>                      Mark a thread as read
-`
-
 func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		cliout.Println(usage)
+		cliout.Println(i18n.T("dm.usage"))
 		if len(args) == 0 {
 			return errors.New("missing subcommand")
 		}
@@ -55,7 +40,7 @@ func Run(args []string) error {
 	case "read":
 		return runRead(args[1:])
 	default:
-		cliout.Println(usage)
+		cliout.Println(i18n.T("dm.usage"))
 		return fmt.Errorf("unknown 'dm' subcommand %q", args[0])
 	}
 }
@@ -63,7 +48,7 @@ func Run(args []string) error {
 func newClient() (*api.Client, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return nil, errors.New("not logged in — run 'everyapi login' first")
+		return nil, errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return nil, err
@@ -76,7 +61,7 @@ func classifyErr(err error) error {
 		return nil
 	}
 	if api.IsUnauthorized(err) {
-		return errors.New("your session expired — run 'everyapi login' again")
+		return errors.New(i18n.T("auth.session_expired"))
 	}
 	return err
 }
@@ -108,7 +93,7 @@ func runThreads(args []string) error {
 		return classifyErr(err)
 	}
 	if len(rows) == 0 {
-		cliout.Println("No DM threads.")
+		cliout.Println(i18n.T("dm.no_threads"))
 		return nil
 	}
 	cliout.Printf("%d thread(s) of %d total:\n", len(rows), total)
@@ -145,7 +130,7 @@ func runContacts(args []string) error {
 		return classifyErr(err)
 	}
 	if len(rows) == 0 {
-		cliout.Println("No DM contacts yet.")
+		cliout.Println(i18n.T("dm.no_contacts"))
 		return nil
 	}
 	cliout.Printf("%d contact(s):\n", len(rows))
@@ -164,7 +149,7 @@ func runCount(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("%d unread\n", n)
+	cliout.Printf(i18n.T("notify.unread_count")+"\n", n)
 	return nil
 }
 
@@ -205,7 +190,7 @@ func runMessages(args []string) error {
 		return classifyErr(err)
 	}
 	if len(rows) == 0 {
-		cliout.Println("(no messages)")
+		cliout.Println(i18n.T("dm.no_messages"))
 		return nil
 	}
 	for _, m := range rows {
@@ -239,7 +224,7 @@ func runSend(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Sent #%d at %s\n", m.ID, time.Unix(m.CreatedAt, 0).Format("2006-01-02 15:04:05"))
+	cliout.Printf(i18n.T("dm.sent_at")+"\n", m.ID, time.Unix(m.CreatedAt, 0).Format("2006-01-02 15:04:05"))
 	return nil
 }
 
@@ -255,6 +240,6 @@ func runRead(args []string) error {
 	if err := client.MarkDMRead(cliout.WithCtx(), tid); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Marked thread #%d as read.\n", tid)
+	cliout.Printf(i18n.T("dm.marked_read")+"\n", tid)
 	return nil
 }
