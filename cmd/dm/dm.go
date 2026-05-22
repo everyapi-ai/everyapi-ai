@@ -1,0 +1,260 @@
+// Package dm wires `everyapi dm …` — direct messages between
+// users in the marketplace (compensation discussions, support
+// threads, etc.). Read / open / send / messages / read.
+package dm
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"strconv"
+	"time"
+
+	"github.com/everyapi-ai/everyapi-sdk/api"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-sdk/config"
+)
+
+const usage = `everyapi dm — direct messages with other users
+
+USAGE
+  everyapi dm <subcommand> [flags]
+
+SUBCOMMANDS
+  threads  [--page P] [--limit N]      Your DM threads (newest first)
+  contacts                              Users you've messaged or vice-versa
+  count                                 Unread DM count (scalar)
+  open <other_user_id>                  Open a thread with another user (idempotent)
+  messages <thread_id> [--after <id>] [--limit N]
+                                        Read messages in a thread
+  send <thread_id> <body>               Send a message
+  read <thread_id>                      Mark a thread as read
+`
+
+func Run(args []string) error {
+	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
+		cliout.Println(usage)
+		if len(args) == 0 {
+			return errors.New("missing subcommand")
+		}
+		return nil
+	}
+	switch args[0] {
+	case "threads":
+		return runThreads(args[1:])
+	case "contacts":
+		return runContacts(args[1:])
+	case "count":
+		return runCount(args[1:])
+	case "open":
+		return runOpen(args[1:])
+	case "messages":
+		return runMessages(args[1:])
+	case "send":
+		return runSend(args[1:])
+	case "read":
+		return runRead(args[1:])
+	default:
+		cliout.Println(usage)
+		return fmt.Errorf("unknown 'dm' subcommand %q", args[0])
+	}
+}
+
+func newClient() (*api.Client, error) {
+	creds, err := config.Load()
+	if errors.Is(err, config.ErrNoCredentials) {
+		return nil, errors.New("not logged in — run 'everyapi login' first")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID), nil
+}
+
+func classifyErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	if api.IsUnauthorized(err) {
+		return errors.New("your session expired — run 'everyapi login' again")
+	}
+	return err
+}
+
+func parseInt(args []string, idx int, name string) (int, error) {
+	if len(args) <= idx {
+		return 0, fmt.Errorf("missing <%s>", name)
+	}
+	v, err := strconv.Atoi(args[idx])
+	if err != nil || v <= 0 {
+		return 0, fmt.Errorf("invalid %s %q", name, args[idx])
+	}
+	return v, nil
+}
+
+func runThreads(args []string) error {
+	fs := flag.NewFlagSet("dm threads", flag.ContinueOnError)
+	page := fs.Int("page", 0, "1-based page")
+	limit := fs.Int("limit", 20, "page size")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	client, err := newClient()
+	if err != nil {
+		return err
+	}
+	rows, total, err := client.ListDMThreads(cliout.WithCtx(), *page, *limit)
+	if err != nil {
+		return classifyErr(err)
+	}
+	if len(rows) == 0 {
+		cliout.Println("No DM threads.")
+		return nil
+	}
+	cliout.Printf("%d thread(s) of %d total:\n", len(rows), total)
+	for _, t := range rows {
+		when := time.Unix(t.LastMessageAt, 0).Format("01-02 15:04")
+		marker := " "
+		if t.UnreadCount > 0 {
+			marker = fmt.Sprintf("(%d)", t.UnreadCount)
+		}
+		preview := t.LastMessagePreview
+		if len(preview) > 80 {
+			preview = preview[:80] + "…"
+		}
+		cliout.Printf("  %s [#%d] %s with uid=%d (%s)\n",
+			marker, t.ID, when, t.OtherUserID, t.OtherUsername)
+		if preview != "" {
+			cliout.Printf("        %s\n", preview)
+		}
+	}
+	return nil
+}
+
+func runContacts(args []string) error {
+	fs := flag.NewFlagSet("dm contacts", flag.ContinueOnError)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	client, err := newClient()
+	if err != nil {
+		return err
+	}
+	rows, err := client.ListDMContacts(cliout.WithCtx())
+	if err != nil {
+		return classifyErr(err)
+	}
+	if len(rows) == 0 {
+		cliout.Println("No DM contacts yet.")
+		return nil
+	}
+	cliout.Printf("%d contact(s):\n", len(rows))
+	for _, r := range rows {
+		cliout.Printf("  uid=%d  %s\n", r.UserID, r.Username)
+	}
+	return nil
+}
+
+func runCount(args []string) error {
+	client, err := newClient()
+	if err != nil {
+		return err
+	}
+	n, err := client.DMUnreadCount(cliout.WithCtx())
+	if err != nil {
+		return classifyErr(err)
+	}
+	cliout.Printf("%d unread\n", n)
+	return nil
+}
+
+func runOpen(args []string) error {
+	uid, err := parseInt(args, 0, "other_user_id")
+	if err != nil {
+		return err
+	}
+	client, err := newClient()
+	if err != nil {
+		return err
+	}
+	t, err := client.OpenDMThread(cliout.WithCtx(), uid)
+	if err != nil {
+		return classifyErr(err)
+	}
+	cliout.Printf("Thread #%d  with uid=%d (%s)\n", t.ID, t.OtherUserID, t.OtherUsername)
+	return nil
+}
+
+func runMessages(args []string) error {
+	tid, err := parseInt(args, 0, "thread_id")
+	if err != nil {
+		return err
+	}
+	fs := flag.NewFlagSet("dm messages", flag.ContinueOnError)
+	after := fs.Int("after", 0, "message id (exclusive)")
+	limit := fs.Int("limit", 50, "page size")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	client, err := newClient()
+	if err != nil {
+		return err
+	}
+	rows, err := client.ListDMMessages(cliout.WithCtx(), tid, *after, *limit)
+	if err != nil {
+		return classifyErr(err)
+	}
+	if len(rows) == 0 {
+		cliout.Println("(no messages)")
+		return nil
+	}
+	for _, m := range rows {
+		when := time.Unix(m.CreatedAt, 0).Format("01-02 15:04")
+		marker := " "
+		if m.ReadAt == 0 {
+			marker = "•"
+		}
+		cliout.Printf("  %s [#%d] %s  uid=%d: %s\n", marker, m.ID, when, m.SenderID, m.Body)
+	}
+	return nil
+}
+
+func runSend(args []string) error {
+	tid, err := parseInt(args, 0, "thread_id")
+	if err != nil {
+		return err
+	}
+	if len(args) < 2 {
+		return errors.New("usage: everyapi dm send <thread_id> <body>")
+	}
+	body := args[1]
+	for _, extra := range args[2:] {
+		body += " " + extra
+	}
+	client, err := newClient()
+	if err != nil {
+		return err
+	}
+	m, err := client.SendDMMessage(cliout.WithCtx(), tid, body)
+	if err != nil {
+		return classifyErr(err)
+	}
+	cliout.Printf("Sent #%d at %s\n", m.ID, time.Unix(m.CreatedAt, 0).Format("2006-01-02 15:04:05"))
+	return nil
+}
+
+func runRead(args []string) error {
+	tid, err := parseInt(args, 0, "thread_id")
+	if err != nil {
+		return err
+	}
+	client, err := newClient()
+	if err != nil {
+		return err
+	}
+	if err := client.MarkDMRead(cliout.WithCtx(), tid); err != nil {
+		return classifyErr(err)
+	}
+	cliout.Printf("Marked thread #%d as read.\n", tid)
+	return nil
+}

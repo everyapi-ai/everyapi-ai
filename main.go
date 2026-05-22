@@ -19,12 +19,14 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/cmd/checkin"
 	"github.com/everyapi-ai/everyapi-ai/cmd/demand"
 	"github.com/everyapi-ai/everyapi-ai/cmd/dispute"
+	"github.com/everyapi-ai/everyapi-ai/cmd/dm"
 	"github.com/everyapi-ai/everyapi-ai/cmd/doctor"
 	"github.com/everyapi-ai/everyapi-ai/cmd/edge"
 	"github.com/everyapi-ai/everyapi-ai/cmd/events"
 	logcmd "github.com/everyapi-ai/everyapi-ai/cmd/log"
 	mcpcmd "github.com/everyapi-ai/everyapi-ai/cmd/mcp"
 	"github.com/everyapi-ai/everyapi-ai/cmd/models"
+	"github.com/everyapi-ai/everyapi-ai/cmd/notify"
 	"github.com/everyapi-ai/everyapi-ai/cmd/proxy"
 	"github.com/everyapi-ai/everyapi-ai/cmd/report"
 	"github.com/everyapi-ai/everyapi-ai/cmd/seller"
@@ -61,6 +63,8 @@ COMMANDS
   demand <sub>    Buyer-side marketplace postings (list/my/show/submit/cancel/remove)
   dispute <sub>   Open / list / inspect disputes
   report          File an abuse / TOS-violation report
+  notify <sub>    In-app notifications (list / count / read / readall)
+  dm <sub>        Direct messages (threads / open / send / messages / read)
   seller <sub>    Channel-marketplace seller commands
 __ADMIN_BLOCK__
   edge <sub>      BYO-GPU supplier agent (docker + ollama)
@@ -180,6 +184,16 @@ var commands = []command{
 		{name: "my", desc: "List your open + resolved disputes", args: []string{"my"}},
 	}},
 	{name: "report", desc: "File an abuse / TOS-violation report", run: report.Run},
+	{name: "notify", desc: "In-app notifications (list / count / read / readall)", requireLogin: true, run: notify.Run, subs: []subcommand{
+		{name: "list", desc: "Recent notifications", args: []string{"list"}},
+		{name: "count", desc: "Just the unread count", args: []string{"count"}},
+		{name: "readall", desc: "Flip every unread to read", args: []string{"readall"}},
+	}},
+	{name: "dm", desc: "Direct messages (threads / open / send / messages / read)", requireLogin: true, run: dm.Run, subs: []subcommand{
+		{name: "threads", desc: "Your DM threads", args: []string{"threads"}},
+		{name: "contacts", desc: "Users you've messaged", args: []string{"contacts"}},
+		{name: "count", desc: "Unread DM count", args: []string{"count"}},
+	}},
 	{name: "seller", desc: "Channel-marketplace seller commands", requireLogin: true, run: seller.Run, subs: []subcommand{
 		{name: "list", desc: "List the channels you've mounted", args: []string{"list"}},
 		{name: "setup", desc: "Interactive add-channel wizard (API key or OAuth: codex / claude / gemini)", args: []string{"setup"}},

@@ -1,0 +1,170 @@
+// Package notify wires `everyapi notify …` — in-app notifications:
+// list, unread count, mark one read, mark all read.
+package notify
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"strconv"
+	"time"
+
+	"github.com/everyapi-ai/everyapi-sdk/api"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-sdk/config"
+)
+
+const usage = `everyapi notify — in-app notifications
+
+USAGE
+  everyapi notify <subcommand> [flags]
+
+SUBCOMMANDS
+  list   [--unread] [--page P] [--limit N]   Recent notifications
+  count                                       Just the unread count
+  read   <id>                                 Mark one notification read
+  readall                                     Flip every unread to read
+`
+
+func Run(args []string) error {
+	if len(args) == 0 {
+		return runList(nil)
+	}
+	switch args[0] {
+	case "help", "--help", "-h":
+		cliout.Println(usage)
+		return nil
+	case "list":
+		return runList(args[1:])
+	case "count":
+		return runCount(args[1:])
+	case "read":
+		return runRead(args[1:])
+	case "readall":
+		return runReadAll(args[1:])
+	default:
+		cliout.Println(usage)
+		return fmt.Errorf("unknown 'notify' subcommand %q", args[0])
+	}
+}
+
+func newClient() (*api.Client, error) {
+	creds, err := config.Load()
+	if errors.Is(err, config.ErrNoCredentials) {
+		return nil, errors.New("not logged in — run 'everyapi login' first")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID), nil
+}
+
+func classifyErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	if api.IsUnauthorized(err) {
+		return errors.New("your session expired — run 'everyapi login' again")
+	}
+	return err
+}
+
+func runList(args []string) error {
+	fs := flag.NewFlagSet("notify list", flag.ContinueOnError)
+	unread := fs.Bool("unread", false, "only unread rows")
+	page := fs.Int("page", 0, "1-based page")
+	limit := fs.Int("limit", 20, "page size")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	client, err := newClient()
+	if err != nil {
+		return err
+	}
+	rows, total, err := client.ListNotifications(cliout.WithCtx(), *unread, *page, *limit)
+	if err != nil {
+		return classifyErr(err)
+	}
+	if len(rows) == 0 {
+		if *unread {
+			cliout.Println("No unread notifications.")
+		} else {
+			cliout.Println("No notifications.")
+		}
+		return nil
+	}
+	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)
+	for _, n := range rows {
+		when := time.Unix(n.CreatedAt, 0).Format("01-02 15:04")
+		marker := " "
+		if n.ReadAt == 0 {
+			marker = "•"
+		}
+		title := n.Title
+		if title == "" {
+			title = n.Type
+		}
+		cliout.Printf("  %s [#%d] %s  %s\n", marker, n.ID, when, title)
+		if n.Body != "" {
+			body := n.Body
+			if len(body) > 120 {
+				body = body[:120] + "…"
+			}
+			cliout.Printf("        %s\n", body)
+		}
+	}
+	return nil
+}
+
+func runCount(args []string) error {
+	fs := flag.NewFlagSet("notify count", flag.ContinueOnError)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	client, err := newClient()
+	if err != nil {
+		return err
+	}
+	n, err := client.NotificationUnreadCount(cliout.WithCtx())
+	if err != nil {
+		return classifyErr(err)
+	}
+	cliout.Printf("%d unread\n", n)
+	return nil
+}
+
+func runRead(args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: everyapi notify read <id>")
+	}
+	id, err := strconv.Atoi(args[0])
+	if err != nil || id <= 0 {
+		return fmt.Errorf("invalid id %q", args[0])
+	}
+	client, err := newClient()
+	if err != nil {
+		return err
+	}
+	if err := client.MarkNotificationRead(cliout.WithCtx(), id); err != nil {
+		return classifyErr(err)
+	}
+	cliout.Printf("Marked #%d as read.\n", id)
+	return nil
+}
+
+func runReadAll(args []string) error {
+	fs := flag.NewFlagSet("notify readall", flag.ContinueOnError)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	client, err := newClient()
+	if err != nil {
+		return err
+	}
+	n, err := client.MarkAllNotificationsRead(cliout.WithCtx())
+	if err != nil {
+		return classifyErr(err)
+	}
+	cliout.Printf("Marked %d notification(s) as read.\n", n)
+	return nil
+}
