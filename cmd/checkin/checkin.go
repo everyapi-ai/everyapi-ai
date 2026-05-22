@@ -88,22 +88,19 @@ func runStatus(args []string) error {
 		return nil
 	}
 	cliout.Printf("Reward range: %d – %d quota per day\n", stat.MinQuota, stat.MaxQuota)
-	if len(stat.Stats) == 0 {
-		cliout.Println("No check-ins in this month yet — run 'everyapi checkin' to claim today's.")
+	cliout.Printf("Lifetime: %d check-in(s) for %d quota total.\n", stat.Stats.TotalCheckins, stat.Stats.TotalQuota)
+	if stat.Stats.CheckedInToday {
+		cliout.Println("Today: already claimed.")
+	} else {
+		cliout.Println("Today: not yet claimed — run 'everyapi checkin' to grab it.")
+	}
+	if len(stat.Stats.Records) == 0 {
+		cliout.Println("No check-ins in this month yet.")
 		return nil
 	}
-	cliout.Printf("%d day(s) this month:\n", len(stat.Stats))
-	for _, row := range stat.Stats {
-		// The shape varies by deploy; surface the date and quota
-		// fields when present, dump the whole row otherwise. Future
-		// schema additions (streak, multiplier) print verbatim.
-		date, hasDate := row["checkin_date"].(string)
-		quota, hasQuota := row["quota_awarded"].(float64) // JSON numbers decode to float64
-		if hasDate && hasQuota {
-			cliout.Printf("  %s  +%d quota\n", date, int(quota))
-		} else {
-			cliout.Printf("  %v\n", row)
-		}
+	cliout.Printf("\n%d day(s) this month:\n", stat.Stats.CheckinCount)
+	for _, r := range stat.Stats.Records {
+		cliout.Printf("  %s  +%d quota\n", r.CheckinDate, r.QuotaAwarded)
 	}
 	return nil
 }
