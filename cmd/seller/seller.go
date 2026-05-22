@@ -51,6 +51,18 @@ func Run(args []string) error {
 		return sellerAddOAuth(rest)
 	case "setup":
 		return sellerSetup(rest)
+	case "update":
+		return sellerUpdate(rest)
+	case "remove":
+		return sellerRemove(rest)
+	case "refresh":
+		return sellerRefresh(rest)
+	case "sales":
+		return sellerSales(rest)
+	case "eligibility":
+		return sellerEligibility(rest)
+	case "compensation":
+		return sellerCompensation(rest)
 	default:
 		cliout.Printf("%s\n", sellerUsage)
 		return fmt.Errorf("unknown 'seller' subcommand %q", sub)
@@ -74,6 +86,16 @@ SUBCOMMANDS
   setup                             Interactive wizard: pick API key
                                     or OAuth (codex / claude / gemini),
                                     then walk through add-key / add-oauth
+  update <id> [flags]               Edit name / models / status / remark / keys
+  remove <id> [-y]                  Delete a channel (asks unless -y)
+  refresh <id>                      Rotate the OAuth credential on an
+                                    OAuth-mounted channel (codex/claude/gemini)
+  sales [--page P] [--limit N]      Recent buyer-charge rows (anonymised)
+  eligibility                       Show why you can / can't mount more channels
+  compensation submit  --upstream <p> --description <d> [--proof <url>]
+                                    File a compensation claim for an upstream outage
+  compensation list   [--status pending|approved|rejected]
+                                    List your filed claims
   help                              Show this message`
 
 // ---- seller list ---------------------------------------------------
