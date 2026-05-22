@@ -17,6 +17,8 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/cmd"
 	"github.com/everyapi-ai/everyapi-ai/cmd/admin"
 	"github.com/everyapi-ai/everyapi-ai/cmd/checkin"
+	"github.com/everyapi-ai/everyapi-ai/cmd/demand"
+	"github.com/everyapi-ai/everyapi-ai/cmd/dispute"
 	"github.com/everyapi-ai/everyapi-ai/cmd/doctor"
 	"github.com/everyapi-ai/everyapi-ai/cmd/edge"
 	"github.com/everyapi-ai/everyapi-ai/cmd/events"
@@ -24,6 +26,7 @@ import (
 	mcpcmd "github.com/everyapi-ai/everyapi-ai/cmd/mcp"
 	"github.com/everyapi-ai/everyapi-ai/cmd/models"
 	"github.com/everyapi-ai/everyapi-ai/cmd/proxy"
+	"github.com/everyapi-ai/everyapi-ai/cmd/report"
 	"github.com/everyapi-ai/everyapi-ai/cmd/seller"
 	"github.com/everyapi-ai/everyapi-ai/cmd/subscription"
 	"github.com/everyapi-ai/everyapi-ai/cmd/token"
@@ -55,6 +58,9 @@ COMMANDS
   log <sub>       Request log: list / stat / summary
   usage           Day-by-day quota usage
   models <sub>    Model catalog: list / pricing / groups
+  demand <sub>    Buyer-side marketplace postings (list/my/show/submit/cancel/remove)
+  dispute <sub>   Open / list / inspect disputes
+  report          File an abuse / TOS-violation report
   seller <sub>    Channel-marketplace seller commands
 __ADMIN_BLOCK__
   edge <sub>      BYO-GPU supplier agent (docker + ollama)
@@ -166,6 +172,14 @@ var commands = []command{
 		{name: "pricing", desc: "Per-model rate sheet", args: []string{"pricing"}},
 		{name: "groups", desc: "Routing groups your account can use", args: []string{"groups"}},
 	}},
+	{name: "demand", desc: "Buyer-side marketplace postings (list / my / show / submit / cancel / remove)", requireLogin: true, run: demand.Run, subs: []subcommand{
+		{name: "list", desc: "Public marketplace feed", args: []string{"list"}},
+		{name: "my", desc: "Demands you've posted", args: []string{"my"}},
+	}},
+	{name: "dispute", desc: "Open / list / inspect disputes", requireLogin: true, run: dispute.Run, subs: []subcommand{
+		{name: "my", desc: "List your open + resolved disputes", args: []string{"my"}},
+	}},
+	{name: "report", desc: "File an abuse / TOS-violation report", run: report.Run},
 	{name: "seller", desc: "Channel-marketplace seller commands", requireLogin: true, run: seller.Run, subs: []subcommand{
 		{name: "list", desc: "List the channels you've mounted", args: []string{"list"}},
 		{name: "setup", desc: "Interactive add-channel wizard (API key or OAuth: codex / claude / gemini)", args: []string{"setup"}},

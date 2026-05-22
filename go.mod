@@ -5,7 +5,7 @@ go 1.25.1
 require (
 	github.com/charmbracelet/bubbles v0.21.1-0.20250623103423-23b8fd6302d7
 	github.com/charmbracelet/huh v1.0.0
-	github.com/everyapi-ai/everyapi-sdk v0.1.7
+	github.com/everyapi-ai/everyapi-sdk v0.1.8
 	github.com/mdp/qrterminal/v3 v3.2.1
 	golang.org/x/term v0.13.0
 )
