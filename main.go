@@ -27,6 +27,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/cmd/seller"
 	"github.com/everyapi-ai/everyapi-ai/cmd/token"
 	usagecmd "github.com/everyapi-ai/everyapi-ai/cmd/usage"
+	usercmd "github.com/everyapi-ai/everyapi-ai/cmd/user"
 	"github.com/everyapi-ai/everyapi-ai/cmd/wallet"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
@@ -46,6 +47,7 @@ COMMANDS
   topup           Open the wallet top-up page (anti-phishing verification phrase)
   wallet <sub>    Payment history / methods / redemption keys
   checkin         Claim today's daily-grant quota
+  user <sub>      Profile / 2FA / passkey / oauth bindings / aff code
   use <tool>      Launch a third-party CLI (claude / codex / gemini) via EveryAPI
   token <sub>     Manage relay API tokens (list / show / create / update / key / revoke)
   log <sub>       Request log: list / stat / summary
@@ -134,6 +136,11 @@ var commands = []command{
 	}},
 	{name: "checkin", desc: "Claim today's daily-grant quota", requireLogin: true, run: checkin.Run, subs: []subcommand{
 		{name: "status", desc: "Show this month's check-in calendar", args: []string{"status"}},
+	}},
+	{name: "user", desc: "Profile / 2FA / passkey / oauth bindings / aff code", requireLogin: true, run: usercmd.Run, subs: []subcommand{
+		{name: "info", desc: "Rolled-up profile + security view", args: []string{"info"}},
+		{name: "2fa", desc: "2FA status", args: []string{"2fa"}},
+		{name: "aff", desc: "Show affiliate code", args: []string{"aff"}},
 	}},
 	{name: "use", desc: "Launch a third-party CLI (claude / codex / gemini) via EveryAPI", requireLogin: true, run: cmd.Use},
 	{name: "token", desc: "Manage relay API tokens (list / create / key / revoke / …)", requireLogin: true, run: token.Run, subs: []subcommand{

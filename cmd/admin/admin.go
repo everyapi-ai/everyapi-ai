@@ -38,6 +38,16 @@ func Run(args []string) error {
 	switch sub {
 	case "marketplace":
 		return adminMarketplace(rest)
+	case "user":
+		return adminUser(rest)
+	case "channel":
+		return adminChannel(rest)
+	case "log":
+		return adminLog(rest)
+	case "abuse":
+		return adminAbuse(rest)
+	case "audit":
+		return adminAudit(rest)
 	default:
 		cliout.Printf("%s\n", adminUsage)
 		return fmt.Errorf("unknown 'admin' subcommand %q", sub)
@@ -53,6 +63,21 @@ SUBCOMMANDS
   marketplace status     Print the current marketplace.enabled flag
   marketplace on         PUT /api/option/ marketplace.enabled=true  (open BYO-GPU + seller flow)
   marketplace off        PUT /api/option/ marketplace.enabled=false (close them; existing nodes keep running)
+  user search <keyword>  Fuzzy lookup over username / email / display name
+  user show <id>         Single user record
+  user list [--page P]   Paged user list
+  user manage <id> --action enable|disable|delete|promote_admin|demote_admin
+                         POST /api/user/manage — backend enforces role check
+  channel test <id>      Health-check one channel
+  channel tag <name> --enable|--disable
+                         Bulk-flip every channel carrying the tag
+  log tail [--user U] [--model M] [--channel C] [--group G] [--since W]
+                         Paged admin log search
+  abuse list [--status]  Filed reports
+  abuse show <id>        Single report
+  abuse update <id> --status X [--note N]
+                         Triage a report
+  audit [--page P]       Recent admin audit-log rows
   help                   Print this message.
 
 Auth: re-uses your 'everyapi login' token. You must be an admin on
