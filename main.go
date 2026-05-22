@@ -16,6 +16,7 @@ import (
 
 	"github.com/everyapi-ai/everyapi-ai/cmd"
 	"github.com/everyapi-ai/everyapi-ai/cmd/admin"
+	"github.com/everyapi-ai/everyapi-ai/cmd/checkin"
 	"github.com/everyapi-ai/everyapi-ai/cmd/edge"
 	logcmd "github.com/everyapi-ai/everyapi-ai/cmd/log"
 	mcpcmd "github.com/everyapi-ai/everyapi-ai/cmd/mcp"
@@ -24,6 +25,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/cmd/seller"
 	"github.com/everyapi-ai/everyapi-ai/cmd/token"
 	usagecmd "github.com/everyapi-ai/everyapi-ai/cmd/usage"
+	"github.com/everyapi-ai/everyapi-ai/cmd/wallet"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/mcp"
@@ -40,6 +42,8 @@ COMMANDS
   logout          Remove this device's credentials
   status          Show current quota, usage, and balance
   topup           Open the wallet top-up page (anti-phishing verification phrase)
+  wallet <sub>    Payment history / methods / redemption keys
+  checkin         Claim today's daily-grant quota
   use <tool>      Launch a third-party CLI (claude / codex / gemini) via EveryAPI
   token <sub>     Manage relay API tokens (list / show / create / update / key / revoke)
   log <sub>       Request log: list / stat / summary
@@ -120,6 +124,13 @@ var commands = []command{
 	{name: "logout", desc: "Remove this device's credentials", requireLogin: true, run: cmd.Logout},
 	{name: "status", desc: "Show current quota, usage, and balance", requireLogin: true, run: cmd.Status},
 	{name: "topup", desc: "Open the wallet top-up page (anti-phishing verification phrase)", requireLogin: true, run: cmd.Topup},
+	{name: "wallet", desc: "Payment history / methods / redemption keys", requireLogin: true, run: wallet.Run, subs: []subcommand{
+		{name: "history", desc: "Paginated payment history", args: []string{"history"}},
+		{name: "info", desc: "Enabled payment methods + suggested amounts", args: []string{"info"}},
+	}},
+	{name: "checkin", desc: "Claim today's daily-grant quota", requireLogin: true, run: checkin.Run, subs: []subcommand{
+		{name: "status", desc: "Show this month's check-in calendar", args: []string{"status"}},
+	}},
 	{name: "use", desc: "Launch a third-party CLI (claude / codex / gemini) via EveryAPI", requireLogin: true, run: cmd.Use},
 	{name: "token", desc: "Manage relay API tokens (list / create / key / revoke / …)", requireLogin: true, run: token.Run, subs: []subcommand{
 		// Only flag-free verbs surface in the launcher picker; the
