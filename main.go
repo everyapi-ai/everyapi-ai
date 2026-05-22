@@ -20,6 +20,7 @@ import (
 	mcpcmd "github.com/everyapi-ai/everyapi-ai/cmd/mcp"
 	"github.com/everyapi-ai/everyapi-ai/cmd/proxy"
 	"github.com/everyapi-ai/everyapi-ai/cmd/seller"
+	"github.com/everyapi-ai/everyapi-ai/cmd/token"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/mcp"
@@ -37,6 +38,7 @@ COMMANDS
   status          Show current quota, usage, and balance
   topup           Open the wallet top-up page (anti-phishing verification phrase)
   use <tool>      Launch a third-party CLI (claude / codex / gemini) via EveryAPI
+  token <sub>     Manage relay API tokens (list / show / create / update / key / revoke)
   seller <sub>    Channel-marketplace seller commands
 __ADMIN_BLOCK__
   edge <sub>      BYO-GPU supplier agent (docker + ollama)
@@ -113,6 +115,12 @@ var commands = []command{
 	{name: "status", desc: "Show current quota, usage, and balance", requireLogin: true, run: cmd.Status},
 	{name: "topup", desc: "Open the wallet top-up page (anti-phishing verification phrase)", requireLogin: true, run: cmd.Topup},
 	{name: "use", desc: "Launch a third-party CLI (claude / codex / gemini) via EveryAPI", requireLogin: true, run: cmd.Use},
+	{name: "token", desc: "Manage relay API tokens (list / create / key / revoke / …)", requireLogin: true, run: token.Run, subs: []subcommand{
+		// Only flag-free verbs surface in the launcher picker; the
+		// rest (create/update/key/revoke/enable/disable/show) need a
+		// flag or an id and stay command-line-only.
+		{name: "list", desc: "List your tokens (masked keys)", args: []string{"list"}},
+	}},
 	{name: "seller", desc: "Channel-marketplace seller commands", requireLogin: true, run: seller.Run, subs: []subcommand{
 		{name: "list", desc: "List the channels you've mounted", args: []string{"list"}},
 		{name: "setup", desc: "Interactive add-channel wizard (API key or OAuth: codex / claude / gemini)", args: []string{"setup"}},
