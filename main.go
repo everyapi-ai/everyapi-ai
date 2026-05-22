@@ -25,6 +25,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/cmd/models"
 	"github.com/everyapi-ai/everyapi-ai/cmd/proxy"
 	"github.com/everyapi-ai/everyapi-ai/cmd/seller"
+	"github.com/everyapi-ai/everyapi-ai/cmd/subscription"
 	"github.com/everyapi-ai/everyapi-ai/cmd/token"
 	usagecmd "github.com/everyapi-ai/everyapi-ai/cmd/usage"
 	usercmd "github.com/everyapi-ai/everyapi-ai/cmd/user"
@@ -48,6 +49,7 @@ COMMANDS
   wallet <sub>    Payment history / methods / redemption keys
   checkin         Claim today's daily-grant quota
   user <sub>      Profile / 2FA / passkey / oauth bindings / aff code
+  subscription <sub>  Subscription plans / self / billing preference
   use <tool>      Launch a third-party CLI (claude / codex / gemini) via EveryAPI
   token <sub>     Manage relay API tokens (list / show / create / update / key / revoke)
   log <sub>       Request log: list / stat / summary
@@ -141,6 +143,10 @@ var commands = []command{
 		{name: "info", desc: "Rolled-up profile + security view", args: []string{"info"}},
 		{name: "2fa", desc: "2FA status", args: []string{"2fa"}},
 		{name: "aff", desc: "Show affiliate code", args: []string{"aff"}},
+	}},
+	{name: "subscription", desc: "Subscription plans / self / billing preference", requireLogin: true, run: subscription.Run, subs: []subcommand{
+		{name: "plans", desc: "List enabled subscription plans", args: []string{"plans"}},
+		{name: "self", desc: "Show your subscriptions", args: []string{"self"}},
 	}},
 	{name: "use", desc: "Launch a third-party CLI (claude / codex / gemini) via EveryAPI", requireLogin: true, run: cmd.Use},
 	{name: "token", desc: "Manage relay API tokens (list / create / key / revoke / …)", requireLogin: true, run: token.Run, subs: []subcommand{
