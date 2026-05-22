@@ -17,10 +17,13 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/cmd"
 	"github.com/everyapi-ai/everyapi-ai/cmd/admin"
 	"github.com/everyapi-ai/everyapi-ai/cmd/edge"
+	logcmd "github.com/everyapi-ai/everyapi-ai/cmd/log"
 	mcpcmd "github.com/everyapi-ai/everyapi-ai/cmd/mcp"
+	"github.com/everyapi-ai/everyapi-ai/cmd/models"
 	"github.com/everyapi-ai/everyapi-ai/cmd/proxy"
 	"github.com/everyapi-ai/everyapi-ai/cmd/seller"
 	"github.com/everyapi-ai/everyapi-ai/cmd/token"
+	usagecmd "github.com/everyapi-ai/everyapi-ai/cmd/usage"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/mcp"
@@ -39,6 +42,9 @@ COMMANDS
   topup           Open the wallet top-up page (anti-phishing verification phrase)
   use <tool>      Launch a third-party CLI (claude / codex / gemini) via EveryAPI
   token <sub>     Manage relay API tokens (list / show / create / update / key / revoke)
+  log <sub>       Request log: list / stat / summary
+  usage           Day-by-day quota usage
+  models <sub>    Model catalog: list / pricing / groups
   seller <sub>    Channel-marketplace seller commands
 __ADMIN_BLOCK__
   edge <sub>      BYO-GPU supplier agent (docker + ollama)
@@ -120,6 +126,17 @@ var commands = []command{
 		// rest (create/update/key/revoke/enable/disable/show) need a
 		// flag or an id and stay command-line-only.
 		{name: "list", desc: "List your tokens (masked keys)", args: []string{"list"}},
+	}},
+	{name: "log", desc: "Request log: list / stat / summary", requireLogin: true, run: logcmd.Run, subs: []subcommand{
+		{name: "list", desc: "Recent log entries (newest first)", args: []string{"list"}},
+		{name: "stat", desc: "Quota / RPM / TPM totals for the window", args: []string{"stat"}},
+		{name: "summary", desc: "Per-model spend over the last 7d", args: []string{"summary"}},
+	}},
+	{name: "usage", desc: "Day-by-day quota usage", requireLogin: true, run: usagecmd.Run},
+	{name: "models", desc: "Model catalog: list / pricing / groups", requireLogin: true, run: models.Run, subs: []subcommand{
+		{name: "list", desc: "Print every model id your group can route to", args: []string{"list"}},
+		{name: "pricing", desc: "Per-model rate sheet", args: []string{"pricing"}},
+		{name: "groups", desc: "Routing groups your account can use", args: []string{"groups"}},
 	}},
 	{name: "seller", desc: "Channel-marketplace seller commands", requireLogin: true, run: seller.Run, subs: []subcommand{
 		{name: "list", desc: "List the channels you've mounted", args: []string{"list"}},
