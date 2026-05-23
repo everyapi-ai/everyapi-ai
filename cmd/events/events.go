@@ -14,9 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -43,7 +43,7 @@ func Run(args []string) error {
 	}
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return errors.New("not logged in — run 'everyapi login' first")
+		return errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
 		return err
@@ -63,7 +63,19 @@ func Run(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// authErr latches a 401 surfaced by the SSE stream. The SDK ends
+	// the subscription on 401 rather than reconnecting forever (see
+	// SubscribeEvents); we capture the error here and surface it as a
+	// normal command error once the stream drains, so a revoked token
+	// reads as "session expired" instead of a silent return to the
+	// menu — and we skip the "reconnecting" line, which would be a
+	// lie for a 401.
+	var authErr error
 	onErr := func(e error) {
+		if api.IsUnauthorized(e) {
+			authErr = e
+			return
+		}
 		if *quiet {
 			return
 		}
@@ -78,6 +90,12 @@ func Run(args []string) error {
 		}
 		ts := time.Now().Format("15:04:05")
 		cliout.Printf("[%s] %s  %s\n", ts, ev.Type, string(ev.Data))
+	}
+	// onErr (SDK goroutine) writes authErr strictly before the SDK
+	// closes ch on a 401; the channel close synchronises that write
+	// with this read, so the access is race-free.
+	if authErr != nil {
+		return errors.New(i18n.T("auth.session_expired"))
 	}
 	return nil
 }

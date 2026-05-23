@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -235,7 +236,7 @@ func runBrewUpgrade(dryRun bool) error {
 }
 
 func runGoInstallUpgrade(dryRun bool) error {
-	const pkg = "github.com/everyapi-ai/everyapi@latest"
+	const pkg = "github.com/everyapi-ai/everyapi-ai@latest"
 	if dryRun {
 		cliout.Printf("  go install %s\n", pkg)
 		return nil
@@ -407,10 +408,14 @@ func githubAPIError(resp *http.Response) error {
 // renderChangelog prints the release body (goreleaser's auto-
 // generated changelog) between "Update available:" and "Install
 // method:" so the user gets a preview of what they're upgrading
-// to without having to open GitHub. The body is GitHub-flavoured
-// markdown; we print it raw because the bulleted headings and
-// `(#PR)` links are already terminal-readable, and a real
-// markdown renderer would pull in a dep just for cosmetics.
+// to without having to open GitHub.
+//
+// The body is GitHub-flavoured markdown, which a terminal can't
+// render — dumped raw it shows literal "##", "**", and "```" fences.
+// cleanReleaseNotes strips those down to plain text (and drops the
+// install snippet + diff link the upgrade flow makes redundant); see
+// its doc for the exact rules. We deliberately don't pull in a
+// markdown renderer — a heavy dep for a few-line changelog box.
 //
 // Empty body — typical for backfilled releases or releases cut
 // before goreleaser's changelog block was tightened up — we just
@@ -419,15 +424,20 @@ func githubAPIError(resp *http.Response) error {
 func renderChangelog(rel *latestRelease) {
 	cliout.Println("")
 	cliout.Println(i18n.T("update.whats_new"))
-	body := strings.TrimSpace(rel.Body)
-	if body == "" {
+	lines := cleanReleaseNotes(rel.Body)
+	if len(lines) == 0 {
 		cliout.Println(i18n.T("update.no_notes"))
 	} else {
 		// Indent each line so the changelog block is visually
 		// distinct from the "Update available:" and "Install
-		// method:" lines that bracket it.
-		for _, line := range strings.Split(body, "\n") {
-			cliout.Printf("  %s\n", line)
+		// method:" lines that bracket it. Blank separators stay
+		// flush-left so the indent doesn't leave trailing spaces.
+		for _, line := range lines {
+			if line == "" {
+				cliout.Println("")
+			} else {
+				cliout.Printf("  %s\n", line)
+			}
 		}
 	}
 	if rel.HTMLURL != "" {
@@ -435,6 +445,96 @@ func renderChangelog(rel *latestRelease) {
 	}
 	cliout.Println("──────────────────")
 	cliout.Println("")
+}
+
+// Markdown constructs goreleaser actually emits in a release body.
+// Compiled once at package load; cleanReleaseNotes applies them per
+// line. Kept intentionally small — this is a plain-text reducer for a
+// known generator, not a general markdown parser.
+var (
+	mdHeadingRe    = regexp.MustCompile(`^\s*#{1,6}\s+`)           // "## Foo"  -> "Foo"
+	mdBulletRe     = regexp.MustCompile(`^(\s*)[-*+]\s+`)          // "*  x"    -> "• x"
+	mdBoldItalicRe = regexp.MustCompile(`\*\*\*(.+?)\*\*\*`)       // "***x***" -> "x"
+	mdBoldRe       = regexp.MustCompile(`\*\*(.+?)\*\*`)           // "**x**"   -> "x"
+	mdCodeRe       = regexp.MustCompile("`([^`]+)`")               // "`x`"     -> "x"
+	mdLinkRe       = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`) // "[t](u)"  -> "t (u)"
+	mdHRRe         = regexp.MustCompile(`^(-{3,}|\*{3,}|_{3,})$`)  // "---" / "***" / "___"
+)
+
+// cleanReleaseNotes turns a GitHub release body (goreleaser-generated
+// GitHub-flavoured markdown) into plain-text lines fit for a terminal.
+// The CLI can't render markdown, so dumping the body raw shows literal
+// "##", "**", "```" and horizontal-rule noise.
+//
+// Beyond de-markdowning we drop content that's redundant inside an
+// upgrade flow the CLI is about to run itself:
+//   - fenced code blocks (the "Install / upgrade" command snippet —
+//     the CLI execs brew/go right after this box)
+//   - the "Full diff" compare line (developer-facing)
+//   - horizontal rules
+//
+// Returns the cleaned lines with interior blank runs collapsed to one
+// and no leading/trailing blanks; an empty slice means "nothing worth
+// showing", which the caller renders as the no-notes fallback.
+func cleanReleaseNotes(body string) []string {
+	var out []string
+	inFence := false
+	for _, raw := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(raw)
+
+		// Fenced code block toggles. Drop the fences and everything
+		// inside — in release notes that's the install snippet the
+		// CLI supersedes by running the upgrade itself.
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			inFence = !inFence
+			continue
+		}
+		if inFence || mdHRRe.MatchString(trimmed) {
+			continue
+		}
+
+		clean := stripInlineMarkdown(strings.TrimRight(raw, " \t"))
+		ct := strings.TrimSpace(clean)
+
+		// Drop developer-facing / redundant lead-in lines (checked
+		// after stripping so "**Full diff:**" matches "Full diff").
+		low := strings.ToLower(ct)
+		if strings.HasPrefix(low, "full diff") ||
+			strings.HasPrefix(low, "install / upgrade") ||
+			strings.HasPrefix(low, "install/upgrade") {
+			continue
+		}
+
+		if ct == "" {
+			// Collapse blank runs; never lead with one.
+			if len(out) > 0 && out[len(out)-1] != "" {
+				out = append(out, "")
+			}
+			continue
+		}
+		out = append(out, clean)
+	}
+	for len(out) > 0 && out[len(out)-1] == "" {
+		out = out[:len(out)-1]
+	}
+	return out
+}
+
+// stripInlineMarkdown reduces one line's markdown to plain text. Order
+// matters: headings and bullets anchor on the line start, so they run
+// before the inline passes; and the triple-marker bold-italic pass runs
+// before the double-marker bold pass so "***x***" doesn't leave stray
+// asterisks behind. Single-marker *italic* / _italic_ is intentionally
+// left alone — stripping it would mangle snake_case and URLs for a
+// construct goreleaser changelogs don't use.
+func stripInlineMarkdown(line string) string {
+	line = mdHeadingRe.ReplaceAllString(line, "")
+	line = mdBulletRe.ReplaceAllString(line, "${1}• ")
+	line = mdBoldItalicRe.ReplaceAllString(line, "$1")
+	line = mdBoldRe.ReplaceAllString(line, "$1")
+	line = mdCodeRe.ReplaceAllString(line, "$1")
+	line = mdLinkRe.ReplaceAllString(line, "$1 ($2)")
+	return line
 }
 
 // ---- semver compare ------------------------------------------------

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -52,4 +54,94 @@ func TestRenderUsageGatedByRole(t *testing.T) {
 			_ = filepath.Join(tmp, "everyapi", "credentials.json")
 		})
 	}
+}
+
+// TestSessionRejected verifies the launcher entry probe: only a
+// definitive HTTP 401 from /api/user/self counts as "logged out".
+// A 5xx or any non-401 outcome must return false so a transient
+// backend hiccup can't wall the user behind a login screen, and
+// legacy credentials without a user_id skip the probe entirely.
+func TestSessionRejected(t *testing.T) {
+	cases := []struct {
+		name    string
+		userID  int
+		handler http.HandlerFunc
+		want    bool
+	}{
+		{
+			name:   "401 → rejected",
+			userID: 1,
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"message":"Unauthorized, invalid access token"}`))
+			},
+			want: true,
+		},
+		{
+			name:   "200 → not rejected",
+			userID: 1,
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(`{"success":true,"data":{"id":1,"username":"u"}}`))
+			},
+			want: false,
+		},
+		{
+			name:   "200 but success:false → not rejected (200 is not a 401)",
+			userID: 1,
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(`{"success":false,"message":"something else"}`))
+			},
+			want: false,
+		},
+		{
+			name:   "500 → not rejected (couldn't verify is not logged out)",
+			userID: 1,
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusInternalServerError)
+			},
+			want: false,
+		},
+		{
+			name:   "legacy creds without user_id → probe skipped",
+			userID: 0,
+			handler: func(_ http.ResponseWriter, _ *http.Request) {
+				t.Error("probe must not run for pre-user_id credentials")
+			},
+			want: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(tc.handler)
+			defer srv.Close()
+			got := sessionRejected(&config.Credentials{
+				APIBase:     srv.URL,
+				AccessToken: "tok",
+				UserID:      tc.userID,
+			})
+			if got != tc.want {
+				t.Errorf("sessionRejected = %v, want %v", got, tc.want)
+			}
+		})
+	}
+
+	// A transport failure (here: a closed server → connection
+	// refused) is the design's core promise — "couldn't verify" must
+	// NOT read as "logged out", or a network blip walls the user
+	// behind a login that also needs the network. Same classification
+	// path as a timeout: a non-*APIError error → IsUnauthorized false.
+	t.Run("connection refused → not rejected", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(
+			func(http.ResponseWriter, *http.Request) {}))
+		url := srv.URL
+		srv.Close() // close before the probe so the dial fails
+		got := sessionRejected(&config.Credentials{
+			APIBase:     url,
+			AccessToken: "tok",
+			UserID:      1,
+		})
+		if got {
+			t.Error("sessionRejected = true on a transport failure, want false")
+		}
+	})
 }

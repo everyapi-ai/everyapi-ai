@@ -1,8 +1,8 @@
 package proxy
 
 import (
-	"bytes"
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -165,21 +165,10 @@ func proxyStart(args []string) error {
 		*listen = fmt.Sprintf("127.0.0.1:%d", port)
 	}
 
-	resolvedUpstream := *upstream
-	if resolvedUpstream == "" {
-		// Pull from saved credentials so a self-hoster's local API
-		// base is respected. Fall back to the production default if
-		// the user isn't logged in yet — `everyapi proxy start` is
-		// useful even pre-login (e.g. for testing detector rules).
-		creds, err := config.Load()
-		switch {
-		case err == nil && creds.APIBase != "":
-			resolvedUpstream = creds.APIBase
-		default:
-			resolvedUpstream = config.DefaultAPIBase
-		}
-	}
-	resolvedUpstream = strings.TrimRight(resolvedUpstream, "/")
+	// Override flag wins, else saved creds (so a self-hoster's local API
+	// base is respected), else the production default — usable pre-login
+	// for testing detector rules. Trailing slash trimmed.
+	resolvedUpstream := config.ResolveAPIBase(*upstream)
 
 	if *detach {
 		return reexecDetached(*listen, resolvedUpstream, *parentPID)

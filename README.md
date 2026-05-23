@@ -1,158 +1,122 @@
+> 🌐 **English** · [简体中文](translations/README.zh-CN.md) · [日本語](translations/README.ja.md) · [한국어](translations/README.ko.md) · [Español](translations/README.es.md) · [Deutsch](translations/README.de.md) · [Français](translations/README.fr.md)
+
 # `everyapi` CLI
 
-[EveryAPI](https://everyapi.ai) AI API 网关的 buyer onboarding CLI。让任何 Claude Code / Codex / Gemini CLI **一分钟内**接到网关。
+Buyer-onboarding CLI for the [EveryAPI](https://everyapi.ai) AI API gateway. Point any Claude Code / Codex / Gemini CLI at the gateway **in under a minute**.
 
-状态：**v1 已收口** —— buyer onboarding、seller 命令（plain-key + OAuth 三家）、sanitizer proxy、QR sign-in 主路径、防钓鱼分层均已落地。仍未实现的只有 OS 级 code signing 与 platform keychain backend（见文末「这个二进制还不包含什么」）。
+Status: **core flows shipped** — buyer onboarding, seller commands (plain-key + OAuth across three providers), sanitizer proxy, QR sign-in main path, and anti-phishing layers are all in place. The only unimplemented items are OS-level code signing and a platform keychain backend (see "What this binary does NOT include yet" at the end).
 
-## 安装
-
-当前要么 clone + 自行 build，要么等 `v*` tag 后从 GitHub Release 拉二进制。
+## Installation
 
 ```bash
-git clone https://github.com/everyapi-ai/everyapi-ai
-cd everyapi-ai
-go build -o everyapi .
+brew tap everyapi-ai/tap && brew install everyapi
 ```
 
-或者直接走 Go install：
+Later upgrades — `brew update` first:
 
 ```bash
-go install github.com/everyapi-ai/everyapi-ai@latest
-# 二进制落在 $(go env GOPATH)/bin/everyapi
+brew update && brew upgrade everyapi
 ```
 
-或者 Homebrew tap（待 v* tag 推出）：
+Without `brew update`, `brew upgrade everyapi` uses the cached formula and reports "already installed" even when a newer release exists.
 
-```bash
-# 首次安装
-brew tap everyapi-ai/tap         # 一次性挂上 tap
-brew install everyapi
+## Commands
 
-# 之后升级 — 注意必须先 `brew update`
-brew update                    # 刷新 tap formula 拿到最新版本号
-brew upgrade everyapi
-```
-
-> ⚠️ **必须先 `brew update`**：单跑 `brew upgrade everyapi` 用的是本地缓存的 formula，会显示「already installed」即使 release 已经有新版。`brew update` 拉 tap repo 最新 formula 再 upgrade 才能跨版本。
->
-> Homebrew 短语法 `brew install everyapi-ai/tap/everyapi` 同样能用——它内部会替你 tap，但显式 `tap` 一次能让后续 `brew upgrade` / `brew uninstall` 不必每次都写完整 path。
-
-### 从 GitHub Release 拉二进制 — 务必校验
-
-V1 还没做 OS 级 code signing（macOS notarization / Windows Authenticode），但**每次 release 都附带 `SHA256SUMS` 文件**，下载后请校验对得上：
-
-```bash
-# Linux / macOS
-curl -LO https://github.com/everyapi-ai/everyapi-ai/releases/download/v0.1.0/everyapi_linux_amd64.tar.gz
-curl -LO https://github.com/everyapi-ai/everyapi-ai/releases/download/v0.1.0/SHA256SUMS
-sha256sum -c SHA256SUMS --ignore-missing
-# everyapi_linux_amd64.tar.gz: OK
-
-# Windows PowerShell
-$expected = (Get-Content SHA256SUMS | Select-String "everyapi_windows_amd64.zip").ToString().Split()[0]
-$actual = (Get-FileHash everyapi_windows_amd64.zip -Algorithm SHA256).Hash.ToLower()
-if ($expected -ne $actual) { throw "checksum mismatch" } else { "OK" }
-```
-
-如果 `SHA256SUMS: FAILED`，**不要解压、不要运行**，到 Issue tracker 报告 + 检查你的下载源是否被劫持。
-
-## 命令
-
-| 命令 | 作用 |
+| Command | Purpose |
 |---|---|
-| `everyapi login` | 当前设备登录 EveryAPI |
-| `everyapi logout` | 清除本设备凭证 |
-| `everyapi status` | 查看余额、使用量、配额 |
-| `everyapi topup` | 打开充值页（带反钓鱼暗号 phrase 验证） |
-| `everyapi use <tool>` | 配好 env 并 exec 进第三方 CLI（指向 EveryAPI） |
-| `everyapi seller <sub>` | Marketplace 卖家端命令（list / withdraw / add-key / setup） |
-| `everyapi edge <sub>` | BYO-GPU supplier agent 一键部署（register / start / status / logs / models / stop / update / remove） |
-| `everyapi mcp` | 作为 MCP server 跑（stdin/stdout JSON-RPC） |
-| `everyapi update` | 检查是否有新版本，打印对应安装方式的升级命令 |
-| `everyapi version` | 显示构建版本 |
-| `everyapi help` | 帮助 |
+| `everyapi login` | Sign in to EveryAPI on this device |
+| `everyapi logout` | Clear local credentials |
+| `everyapi status` | Show balance, usage, quota |
+| `everyapi topup` | Open the topup page (with anti-phishing phrase check) |
+| `everyapi use <tool>` | Set env and exec into a third-party CLI (pointed at EveryAPI) |
+| `everyapi seller <sub>` | Marketplace seller commands (list / withdraw / add-key / setup) |
+| `everyapi edge <sub>` | One-command deploy for the BYO-GPU supplier agent (register / start / status / logs / models / stop / update / remove) |
+| `everyapi mcp` | Run as an MCP server (stdin/stdout JSON-RPC) |
+| `everyapi update` | Check for new versions and print the upgrade command for your install method |
+| `everyapi version` | Show build version |
+| `everyapi help` | Help |
 
-### `everyapi use <tool>` — exec 进第三方 CLI（指向 EveryAPI 网关）
+### `everyapi use <tool>` — exec into a third-party CLI (pointed at the EveryAPI gateway)
 
-装这个 CLI 的主要理由。它把目标第三方工具的环境变量按惯例配置好，然后 exec 进去——你既有的 Claude Code / OpenAI Codex CLI / Gemini CLI **不用改任何配置**就指向了 EveryAPI 网关。
+The main reason to install this CLI. It sets the target tool's env vars per the conventions it expects, then execs into it — your existing Claude Code / OpenAI Codex CLI / Gemini CLI **needs no config change** to point at the EveryAPI gateway.
 
 ```bash
 everyapi use claude         # Claude Code → EveryAPI
 everyapi use codex          # OpenAI Codex CLI → EveryAPI
 everyapi use gemini         # Gemini CLI → EveryAPI
-everyapi use                # 无参 → 交互式选择已安装的工具
+everyapi use                # no arg → interactive picker over installed tools
 ```
 
-每个工具的 env 惯例各不相同，CLI 帮你记住：
+Each tool uses different env-var conventions; the CLI remembers them:
 
-| 工具 | 设置的环境变量 |
+| Tool | Environment variables set |
 |---|---|
-| claude | `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN` |
-| codex | `OPENAI_BASE_URL`、`OPENAI_API_KEY` |
-| gemini | `GEMINI_API_KEY`、`GOOGLE_GEMINI_BASE_URL` |
+| claude | `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` |
+| codex | `OPENAI_BASE_URL`, `OPENAI_API_KEY` |
+| gemini | `GEMINI_API_KEY`, `GOOGLE_GEMINI_BASE_URL` |
 
-不必再去查每个工具读哪个变量名、要不要拼 `/v1` 后缀、走哪种 auth header。
+No more looking up which variable name each tool reads, whether you need to append `/v1`, or which auth-header style applies.
 
-> ⚠️ **Subprocess env 安全提示**：上面这些环境变量包含你的 relay API key。第三方 CLI 的 debug / verbose 模式可能会把 env 写进日志——`everyapi use` 之前确认你打开的 debug flag 不会泄漏 `*_TOKEN` / `*_API_KEY`；分享 debug 日志前先 `sed -i 's/sk-everyapi-[A-Za-z0-9]*/REDACTED/g'`。
+> ⚠️ **Subprocess env safety note**: the env vars above contain your relay API key. Third-party CLIs in debug / verbose mode may log env — before running `everyapi use`, make sure the debug flag you turn on does not leak `*_TOKEN` / `*_API_KEY`. Before sharing debug logs, run `sed -i 's/sk-everyapi-[A-Za-z0-9]*/REDACTED/g'`.
 
-### `everyapi login` — Device Authorization Grant + QR 登录
+### `everyapi login` — Device Authorization Grant + QR sign-in
 
-走 Device Authorization Grant（RFC 8628 形态）+ docs §7-5 Layer 1 「设备到设备 QR 登录」：
+Uses Device Authorization Grant (RFC 8628 style) + docs §7-5 Layer 1 "device-to-device QR sign-in":
 
-1. CLI 创建一个 session，**渲染终端 QR + 打印短码 + URL**
-2. 用手机扫码（或在已登录 EveryAPI 的浏览器里打开 URL）——QR 里的 URL 已带 `?code=USR-789` 参数，dashboard 自动填好 code，user 只用点 Approve
-3. CLI 拿到 access token，落地到 `~/.config/everyapi/credentials.json`（mode 0600）
+1. The CLI creates a session, **renders a terminal QR + prints a short code + URL**
+2. Scan the QR with your phone (or open the URL in a browser already signed into EveryAPI) — the URL inside the QR already carries `?code=USR-789`, the dashboard auto-fills the code, and the user only needs to click Approve
+3. The CLI receives the access token and stores it at `~/.config/everyapi/credentials.json` (mode 0600)
 
 ```bash
-everyapi login                                    # 生产，默认渲染 QR + 自动开浏览器
-everyapi login --api-base http://localhost:8787   # 本地开发 / 自托管
-everyapi login --no-browser                       # 不自动开浏览器（用 QR 扫）
-everyapi login --no-qr                            # 不渲染 QR（非 UTF-8 终端 / piping）
+everyapi login                                    # production; renders QR + opens browser by default
+everyapi login --api-base http://localhost:8787   # local dev / self-hosted
+everyapi login --no-browser                       # don't auto-open the browser (scan the QR)
+everyapi login --no-qr                            # don't render the QR (non-UTF-8 terminals / piping)
 ```
 
-QR 终端渲染样例（Unicode 半块字符；约 18-20 行高）：
+Sample terminal QR rendering (Unicode half-block characters; ~18-20 rows tall):
 
 ```
 █▀▀▀▀▀█  ▀▀ ▄  █▀▀▀▀▀█
 █ ███ █  ▀▄█▀  █ ███ █
 █ ▀▀▀ █ ▄ ▀ █▀ █ ▀▀▀ █
 ▀▀▀▀▀▀▀ █▄█▄█▄ ▀▀▀▀▀▀▀
-... (实际 QR 编码 verification_uri?code=USR-789)
+... (actual QR encodes verification_uri?code=USR-789)
 ```
 
-为什么这是更强的反钓鱼路径：
+Why this is a stronger anti-phishing path:
 
-- User **不需要在新设备输密码** → 钓鱼站没机会骗 credential
-- User **不需要弹浏览器到陌生页面** → web 跳转钓鱼面消失
-- 即使 CLI 是恶意 fork 生成假 QR，扫码后的确认页是真 everyapi.ai 上的 dashboard（user 已登录设备触发），user 看到不认识的代码不会 approve
+- The user **does not enter a password on the new device** → no opportunity for a phishing site to capture credentials
+- The user **does not get redirected to an unfamiliar browser page** → web-redirect phishing surface disappears
+- Even if the CLI is a malicious fork producing a fake QR, the approval page after scanning is the real everyapi.ai dashboard (triggered from a device the user is already signed in to), and an unfamiliar code is not something a user will Approve
 
-docs §7-5 其余 layers（cert pinning / 暗号字符串 / PKCE OAuth）已各自独立 PR 落地（cert pinning 为 report-only，enforce 按产品决策不做）。
+The remaining layers of docs §7-5 (cert pinning / phrase string / PKCE OAuth) have landed in independent PRs (cert pinning is report-only; enforce was a product decision not to ship).
 
-### `everyapi seller <sub>` — marketplace 卖家端子命令
+### `everyapi seller <sub>` — marketplace seller subcommands
 
-把 dashboard 的 channel mount / 提现操作搬到 terminal，方便 scripted onboarding。挂渠道前 `seller setup` 会先查 eligibility（账号激活 / 邮箱验证 / 账号年龄 / 消费记录 / channel 上限），失败的 gate 在**输入 key 之前**就先列出来，避免用户填一通才发现提交侧 422。
+Brings dashboard channel-mount and withdrawal flows into the terminal for scripted onboarding. Before mounting a channel, `seller setup` checks eligibility (account active / email verified / account age / spend history / channel cap), and any failing gates are listed **before the user types a key** to avoid finding out via a 422 after submit.
 
 ```bash
-everyapi seller list                          # 列出已挂载的 channel
-everyapi seller withdraw                      # 把全部 pending seller 收入转入主余额
-everyapi seller withdraw --quota 1000         # 部分转账（DB 单位）
+everyapi seller list                          # list mounted channels
+everyapi seller withdraw                      # move all pending seller earnings to main balance
+everyapi seller withdraw --quota 1000         # partial transfer (DB units)
 everyapi seller add-key   --type claude --name 'my-pro' \
                         --key 'sk-ant-...' --models 'claude-3-opus,claude-3-sonnet'
 everyapi seller add-oauth codex --name 'my-chatgpt' --models 'gpt-4'
-                                            # 一键 OAuth：CLI 启动 device flow，user 在浏览器
-                                            # 输入 user_code，token 自动落 channel
+                                            # one-click OAuth: CLI starts a device flow, user enters
+                                            # the user_code in the browser, token lands on the channel
 everyapi seller add-oauth claude --name 'my-claude' --models 'claude-3-opus,claude-3-sonnet'
-                                            # paste flow：CLI 打开 Anthropic 授权页，user 把
-                                            # callback 显示的 code#state 粘回 terminal
+                                            # paste flow: CLI opens the Anthropic authorize page; user
+                                            # pastes the callback-displayed code#state back into the terminal
 everyapi seller add-oauth gemini --name 'my-gemini' --models 'gemini-1.5-pro'
-                                            # 真一键 loopback：CLI 起 random-port listener，
-                                            # Google 把 code 直接送回 CLI 无需粘贴
-everyapi seller setup                         # 交互式 wizard：先查 eligibility，再引导 add-key
+                                            # true one-click loopback: CLI starts a random-port listener,
+                                            # Google posts the code directly to the CLI — no pasting
+everyapi seller setup                         # interactive wizard: checks eligibility first, then guides add-key
 ```
 
-#### `add-key` — 多 key 备份池
+#### `add-key` — multi-key backup pool
 
-`--key` 可以重复，把 N 把等价凭证挂在同一个 channel 上作为 backup pool（B2，PRODUCT §4.5）；当主 key 401/403 时后端自动 failover 到下一把。`--key-remark` 同样可重复，按位置跟 `--key` 对齐（第 i 个 `--key-remark` 是第 i 个 `--key` 的标签，便于以后 dashboard 上识别）。OAuth blob 不能进 backup pool —— 仍只能作为单 key channel。
+`--key` can be repeated to mount N equivalent credentials on the same channel as a backup pool (B2, PRODUCT §4.5); when the primary key returns 401/403, the backend automatically fails over to the next one. `--key-remark` may also be repeated, positionally aligned with `--key` (the i-th `--key-remark` is the label for the i-th `--key`, for later dashboard identification). OAuth blobs cannot go into the backup pool — they remain single-key channels.
 
 ```
 everyapi seller add-key   --type claude --name 'claude-pool' \
@@ -161,91 +125,91 @@ everyapi seller add-key   --type claude --name 'claude-pool' \
                         --key 'sk-ant-backup'  --key-remark 'team backup'
 ```
 
-`add-key` 的 `--type` 接受 alias（`openai` / `claude` / `gemini` / `codex` / `vertex` / `aws` / `xai` / `deepseek`）或数字 id。挂载受 marketplace eligibility 限制（账号激活、邮箱已验证、消费记录、channel 数上限），CLI 在 `add-key` / `add-oauth` / `setup` 三条入口都会先查 eligibility 失败时把 checklist 列出来。
+`add-key`'s `--type` accepts aliases (`openai` / `claude` / `gemini` / `codex` / `vertex` / `aws` / `xai` / `deepseek`) or a numeric id. Mounting is subject to marketplace eligibility (account active, email verified, spend history, channel cap), and the CLI lists the failing checklist on all three entry points (`add-key` / `add-oauth` / `setup`) before doing anything else.
 
-#### `add-oauth codex` — 一键 OAuth（device flow）
+#### `add-oauth codex` — one-click OAuth (device flow)
 
-`everyapi seller add-oauth codex --name 'my-chatgpt' --models 'gpt-4'` 走 Codex / ChatGPT 的 RFC 8628-ish device authorization flow——seller**全程不接触 token 字符串**：
+`everyapi seller add-oauth codex --name 'my-chatgpt' --models 'gpt-4'` walks the Codex / ChatGPT RFC 8628-ish device authorization flow — the seller **never touches the token string**:
 
-1. CLI 调 `/api/seller/codex/device/start`，拿到一个短 `user_code` 和 `verification_uri`
-2. CLI 默认自动 open browser 到 `https://auth.openai.com/codex/device`（`--no-browser` 跳过）；user 在浏览器输入 `user_code` 完成授权
-3. CLI 轮询 `/api/seller/codex/device/poll`，授权完成后后端自动建 channel、把 OAuth token 落到 channel `key` 字段
-4. 输出 channel id + 已绑定的 ChatGPT 邮箱
+1. CLI calls `/api/seller/codex/device/start` and receives a short `user_code` and `verification_uri`
+2. CLI opens the browser by default to `https://auth.openai.com/codex/device` (skip with `--no-browser`); the user enters the `user_code` in the browser to complete authorization
+3. CLI polls `/api/seller/codex/device/poll`; once authorized, the backend creates the channel and writes the OAuth token into the channel's `key` field
+4. Output: channel id + the bound ChatGPT email
 
-授权 cookie 由进程内 `http.CookieJar` 管，不写盘——device flow state 短命且进程绑定，跟威胁模型对齐。
+Authorization cookies are managed by an in-process `http.CookieJar` (not persisted) — device-flow state is short-lived and process-bound, matching the threat model.
 
 #### `add-oauth claude` — paste-and-submit OAuth
 
-`everyapi seller add-oauth claude --name … --models …`。Anthropic OAuth provider 在他们那头把 `redirect_uri` 写死成 `https://console.anthropic.com/oauth/code/callback`，CLI 没法用 localhost listener 自动接 callback。流程：
+`everyapi seller add-oauth claude --name … --models …`. Anthropic's OAuth provider hard-codes `redirect_uri` to `https://console.anthropic.com/oauth/code/callback` on their side, so the CLI cannot use a localhost listener to receive the callback. Flow:
 
-1. CLI 调 `/api/seller/claude/oauth/start`，后端建 PKCE 对 + state，返 Anthropic 的 authorize URL
-2. CLI 默认 open browser（`--no-browser` 跳过）；user 登 Anthropic、批准
-3. Anthropic 把 user 重定向到他们 callback 页，显示一串 `<code>#<state>`
-4. **user 复制这串粘回 CLI**
-5. CLI 调 `/api/seller/claude/oauth/complete`，后端 exchange code+verifier 拿 token，mint channel
+1. CLI calls `/api/seller/claude/oauth/start`; backend creates the PKCE pair + state and returns Anthropic's authorize URL
+2. CLI opens the browser by default (skip with `--no-browser`); the user signs in to Anthropic and approves
+3. Anthropic redirects to their callback page showing a `<code>#<state>` string
+4. **User copies that string back to the CLI**
+5. CLI calls `/api/seller/claude/oauth/complete`; backend exchanges code+verifier for the token and mints the channel
 
-比 device flow 多 1 步粘贴操作，但仍比手工找 `~/.claude/auth.json` 简单太多。session cookie 在 start 时由 backend 下发，complete 必须命中同一 session——CLI 的 `http.CookieJar` 进程内管，per-invocation 隔离。
+One extra paste step vs the device flow, but still much easier than hand-finding `~/.claude/auth.json`. The session cookie is issued by the backend at start; complete must hit the same session — the CLI's `http.CookieJar` is in-process and isolated per invocation.
 
-#### `add-oauth gemini` — 真一键 loopback OAuth
+#### `add-oauth gemini` — true one-click loopback OAuth
 
-`everyapi seller add-oauth gemini --name … --models … [--no-browser] [--timeout 5m]`。Google 的 gemini-cli installed-app OAuth client 接受 `http://127.0.0.1:<port>/callback` 作为 redirect_uri，**CLI 自己起 listener 接 callback**，user 在浏览器登录后无需任何粘贴。流程：
+`everyapi seller add-oauth gemini --name … --models … [--no-browser] [--timeout 5m]`. Google's gemini-cli installed-app OAuth client accepts `http://127.0.0.1:<port>/callback` as `redirect_uri`, so **the CLI runs its own listener for the callback** — the user signs in via browser and never has to paste anything. Flow:
 
-1. CLI 在随机 ephemeral port (`127.0.0.1:0`) 起一个一次性 HTTP listener，路径固定 `/callback`
-2. CLI 调 `/api/seller/gemini/oauth/start` 带 `redirect_uri = http://127.0.0.1:<port>/callback`；backend 严格校验 redirect 是 loopback / port ≥ 1024 / scheme=http / path=/callback / 无 query/fragment/userinfo（防 SSRF + 防 redirect 劫持）
-3. CLI 默认 open browser；user 在 Google 登录 + 同意
-4. Google 把 `?code=…&state=…` 重定向到 CLI 的 listener
-5. CLI 验证 state 匹配（防 stale flow / 伪造），调 `/api/seller/gemini/oauth/complete`
-6. Backend exchange code + 同一 redirect_uri 拿 token，mint channel
+1. CLI starts a one-shot HTTP listener on a random ephemeral port (`127.0.0.1:0`), fixed path `/callback`
+2. CLI calls `/api/seller/gemini/oauth/start` with `redirect_uri = http://127.0.0.1:<port>/callback`; backend strictly validates the redirect: loopback / port ≥ 1024 / scheme=http / path=/callback / no query/fragment/userinfo (prevents SSRF + redirect hijacking)
+3. CLI opens the browser by default; the user signs in to Google and consents
+4. Google redirects with `?code=…&state=…` to the CLI's listener
+5. CLI verifies the state matches (prevents stale flows / forgery) and calls `/api/seller/gemini/oauth/complete`
+6. Backend exchanges code + same redirect_uri for the token and mints the channel
 
-跟其他两个 provider 的对比：
+Comparison with the other two providers:
 
-| Provider | 体验 | 原因 |
+| Provider | UX | Reason |
 |---|---|---|
-| `codex` | user 输 6 位 user_code 到浏览器，CLI 自动 poll | OpenAI device flow，无 redirect_uri |
-| `claude` | user 在浏览器登 + 复制 `code#state` 粘回 CLI | Anthropic 把 redirect_uri 写死成自家 callback URL |
-| `gemini` | user 在浏览器登 + 关掉 tab 即完成 | Google 接受 loopback redirect |
+| `codex` | User types a 6-digit user_code in the browser; CLI auto-polls | OpenAI device flow, no redirect_uri |
+| `claude` | User signs in via browser, copies `code#state` back to the CLI | Anthropic hard-codes redirect_uri to their own callback URL |
+| `gemini` | User signs in via browser, closes the tab, done | Google accepts loopback redirects |
 
-`--timeout` 控制最长等待时间（默认 5 分钟）。超时退出 + 干净关闭 listener。
+`--timeout` bounds the wait (default 5 minutes). On timeout the CLI exits and cleanly closes the listener.
 
-### `everyapi edge <sub>` — BYO-GPU supplier agent 一键部署
+### `everyapi edge <sub>` — one-command BYO-GPU supplier agent deploy
 
-把空闲 GPU 接入 EveryAPI 卖算力。CLI 把整套部署收口成 8 个子命令，省掉 supplier 自己抄 docker-compose / 填 `.env` / 复制 registration token 这些手动步骤：
+Onboard idle GPUs to sell compute through EveryAPI. The CLI condenses the deployment to 8 subcommands, sparing suppliers from hand-copying docker-compose, filling `.env`, or moving the registration token around:
 
 ```bash
-everyapi login                              # 复用现有登录
-everyapi edge register --name "rtx-4090"    # 调 /api/seller/edge/nodes 拿 node_id + token，落到 ~/.local/share/everyapi/edge/<id>/
-everyapi edge start                         # 自动探 NVIDIA / ROCm / Apple Silicon / CPU，docker compose up -d
+everyapi login                              # reuses existing login
+everyapi edge register --name "rtx-4090"    # calls /api/seller/edge/nodes for node_id + token, writes to ~/.local/share/everyapi/edge/<id>/
+everyapi edge start                         # auto-detects NVIDIA / ROCm / Apple Silicon / CPU, docker compose up -d
 everyapi edge models pull llama3.1:8b       # docker compose exec ollama ollama pull ...
-everyapi edge status                        # 本地 docker compose ps + dashboard 端 online/offline
-everyapi edge logs -f                       # 跟实时日志
+everyapi edge status                        # local docker compose ps + dashboard online/offline
+everyapi edge logs -f                       # tail logs
 everyapi edge update                        # docker compose pull && up -d
-everyapi edge remove                        # down -v + 删本地 dir + 调 backend DELETE
+everyapi edge remove                        # down -v + delete local dir + backend DELETE
 ```
 
-`start` 通过 `text/template` runtime 渲染 `docker-compose.yml`（**不是 embed 静态 YAML**）—— 这样 container name 按 node_id namespace，单机多 node 不互踩；GPU passthrough 按 mode 条件渲染（NVIDIA = `deploy.resources.devices` + nvidia driver；ROCm = `/dev/kfd`+`/dev/dri`+`group_add: video`；macOS = 无 ollama 容器，agent 通过 `host.docker.internal` 连本地原生 ollama）。
+`start` renders `docker-compose.yml` at runtime via `text/template` (**not from embedded static YAML**) — this lets container names be namespaced by node_id so multiple nodes on one host don't collide, and GPU passthrough is rendered conditionally by mode (NVIDIA = `deploy.resources.devices` + nvidia driver; ROCm = `/dev/kfd` + `/dev/dri` + `group_add: video`; macOS = no ollama container, the agent connects to the host's native ollama via `host.docker.internal`).
 
-凭证流：cli 用现有 `sk-everyapi-` Bearer 调 `POST /api/seller/edge/nodes` → backend 一次性返回 `registration_token`（之后 backend 只存 sha256，永不再回显）→ cli 0600 落盘到 `~/.local/share/everyapi/edge/<id>/node.json` → render 进 compose 的 `EVERYAPI_REGISTRATION_TOKEN` env。**注册 token 不会写进任何 .env 文件**（避免 supplier 误 commit）。
+Credential flow: CLI uses an existing `sk-everyapi-` Bearer to call `POST /api/seller/edge/nodes` → backend returns the `registration_token` once (subsequently the backend stores only the sha256, never re-displays) → CLI writes it 0600 to `~/.local/share/everyapi/edge/<id>/node.json` → renders into the compose `EVERYAPI_REGISTRATION_TOKEN` env. **The registration token is never written to any .env file** (so suppliers don't accidentally commit it).
 
-依赖：`docker` + `docker compose v2`（v1 EOL 不支持）。macOS 需要 `brew install ollama && brew services start ollama`（Metal 加速在 docker 容器里跑不了）。
+Requirements: `docker` + `docker compose v2` (v1 is EOL and not supported). On macOS, `brew install ollama && brew services start ollama` (Metal acceleration cannot run inside a docker container).
 
-### `everyapi topup` — 带反钓鱼暗号的充值跳转
+### `everyapi topup` — topup redirect with anti-phishing phrase
 
-`everyapi topup` 打开 dashboard 充值页，跳转前走一层 docs §7-5 Layer 3 验证：
+`everyapi topup` opens the dashboard topup page. Before redirecting, it goes through docs §7-5 Layer 3 verification:
 
-1. CLI 调 backend `POST /api/cli/jump-session`，拿一个 session id + 4-emoji 暗号串（例如 `🌊 🦊 🍕 🚀`）
-2. CLI 把 URL + 暗号都打到 terminal，提示 user "等下页面顶部要显示同样暗号"
-3. User 按 Enter，CLI 用系统浏览器打开 URL（含 `?jump_session=<id>`）
-4. Dashboard 加载时调 backend `GET /api/cli/jump-session/:id/phrase`，拿到同一个暗号串，在 page header **prominent 显示**
-5. User 视觉对比：暗号一致 → 真 EveryAPI；不一致或没显示 → 关掉 tab，可能被钓鱼
+1. CLI calls backend `POST /api/cli/jump-session` and receives a session id + a 4-emoji phrase string (e.g. `🌊 🦊 🍕 🚀`)
+2. CLI prints both the URL and the phrase to the terminal, telling the user "the same phrase should appear at the top of the page in a moment"
+3. User presses Enter; the CLI opens the URL via the system browser (with `?jump_session=<id>`)
+4. As the dashboard loads, it calls backend `GET /api/cli/jump-session/:id/phrase`, receives the same phrase, and **displays it prominently in the page header**
+5. The user does a visual compare: phrases match → genuine EveryAPI; mismatch or not displayed → close the tab, possible phishing
 
-为什么这能挡钓鱼：暗号在 backend 的内存里 keyed by random 32-hex session id；钓鱼站没 auth path 拿不到，攻击者构造的假 `wallet/topup?jump_session=<id>` 也读不到暗号。短 TTL (10 min) + single-use（dashboard 拿一次后 session 删除）进一步限制 reuse 风险。
+Why this blocks phishing: the phrase lives in backend memory keyed by a random 32-hex session id; a phishing site has no auth path to fetch it, and an attacker's forged `wallet/topup?jump_session=<id>` cannot read the phrase either. Short TTL (10 min) + single-use (the session is deleted after the dashboard fetches it once) further limit reuse risk.
 
 ```bash
-everyapi topup                    # 默认开浏览器
-everyapi topup --no-browser       # 只打 URL，手动复制
+everyapi topup                    # opens the browser by default
+everyapi topup --no-browser       # only print the URL, copy manually
 ```
 
-### `everyapi status` — 当前余额 / 使用量 / 配额
+### `everyapi status` — current balance / usage / quota
 
 ```
 $ everyapi status
@@ -256,22 +220,14 @@ $ everyapi status
   topup:     https://app.everyapi.ai/wallet
 ```
 
-### `everyapi update` — 自动跑对应安装方式的升级命令
+### `everyapi update` — run the brew upgrade automatically
 
-查 GitHub mirror 最新 release，跟当前版本比对，**自动跑对应安装方式的升级命令**——一条命令搞定，不用复制粘贴。
-
-检测逻辑（基于 `os.Executable()` resolve symlink 后的真实路径）：
-
-| 路径包含 | 检测为 | 自动执行 |
-|---|---|---|
-| `/Cellar/` | Homebrew | `brew update && brew upgrade everyapi`（两步分开跑） |
-| `$GOBIN` 或 `$GOPATH/bin` 或 `$HOME/go/bin` | `go install` | `go install github.com/everyapi-ai/everyapi-ai@latest` |
-| 其它（curl / 手工放进 PATH） | unknown | 打印手动命令 + 提醒走 SHA256 + cosign 验证（无法安全自动替换二进制） |
+Checks the latest release on the GitHub mirror, compares with the current version, and **automatically runs `brew update && brew upgrade everyapi`** — one command, no copy-paste.
 
 ```bash
 $ everyapi update
 
-Update available: v0.1.0 → v0.2.0
+Update available: v0.2.0 → v0.2.1
 Install method:   Homebrew
 
 $ brew update
@@ -279,81 +235,117 @@ $ brew update
 
 $ brew upgrade everyapi
 ==> Upgrading everyapi-ai/tap/everyapi
-  v0.1.0 -> v0.2.0
+  v0.2.0 -> v0.2.1
 ...
 
 Done. Run `everyapi version` to confirm.
 ```
 
-为什么不直接换二进制？三个原因：（1）brew / go 自己的校验链（SHA / module checksum）比我们自己在 CLI 内重做的更扎实；（2）自替换 running executable 在 Windows 平台基本是地雷区；（3）保留 README 推荐的 SHA256 + cosign 双层校验流程作为 unknown 路径下的明确 fallback。
+Why not just swap the binary directly? Homebrew's verification chain (SHA / bottle signing) is stronger than anything we'd rebuild inside the CLI, and self-replacing a running executable is a minefield on Windows.
 
-Flag：
-- `--check` —— 静默对比，已最新 exit 0 / 过时 exit 1。给 CI / cron 用：
+Flags:
+- `--check` — silent compare; exit 0 if up to date, exit 1 if outdated. For CI / cron:
   ```bash
   everyapi update --check || echo "needs upgrade"
   ```
-- `--dry-run` —— 打印将要跑的命令但不实际执行，做 inspection 用
+- `--dry-run` — print the command that would run but don't actually run it (for inspection)
 
-## 配置文件
+### `everyapi settings` — CLI preferences (language, etc.)
 
-凭证落在 `~/.config/everyapi/credentials.json`（若设置了 `$XDG_CONFIG_HOME` 则走 `$XDG_CONFIG_HOME/everyapi/`），文件模式 `0600`。由 `everyapi login` 写、其它命令读。
+The CLI ships i18n in 7 languages: English, Simplified Chinese, Japanese, Korean, Spanish, German, French — CLI strings render in the user's chosen language. Backend API errors auto-negotiate via the `Accept-Language` header and cover 8 — the same 7 plus Traditional Chinese.
 
-> ⚠️ **Token 以明文存储**。文件 mode `0600` + `$HOME` 私有路径与 `gh auth` / `aws configure` 等业界 CLI 同模式，但**对家用电脑被偷 / 恶意软件场景**，任何能读这个文件的进程都可以以你的身份调用 EveryAPI API（包括 MCP 工具，见下文 §钱路 friction step）。建议：
-> - 不在共享 / 公共机器上 `everyapi login`
-> - macOS 用户：考虑在 FileVault 启用前先 `everyapi logout`
-> - Linux 用户：开启 home-dir 加密（`ecryptfs` / LUKS）
-> - 怀疑泄漏 → `everyapi logout` 立即清除本机凭证，并到 EveryAPI dashboard rotate API key
+```bash
+$ everyapi settings                          # interactive picker: choose a language
+$ everyapi settings list                     # show current settings
+$ everyapi settings set language zh          # set directly
+$ everyapi settings set language fr          # French likewise
+$ everyapi settings reset                    # reset to default (en + LANG auto-detect)
+```
+
+**Auto-detect**: if you haven't explicitly set anything, the CLI reads env vars in the order `EVERYAPI_LANG > LC_ALL > LC_MESSAGES > LANG` on startup. A system locale of `zh_CN.UTF-8` / `ja_JP.UTF-8` / `fr_FR.UTF-8` etc. takes effect immediately — zero config.
+
+**One-shot override**:
+
+```bash
+EVERYAPI_LANG=zh everyapi status             # this one invocation shows in Chinese; not persisted
+```
+
+**Translation example** (not-logged-in error, 7 languages × same line):
+
+```
+en : Error: not logged in — run 'everyapi login' first
+zh : 错误: 未登录 — 先运行 'everyapi login'
+ja : エラー: ログインしていません — まず 'everyapi login' を実行してください
+ko : 오류: 로그인되어 있지 않습니다 — 먼저 'everyapi login' 을 실행하세요
+es : Error: no has iniciado sesión — ejecuta primero 'everyapi login'
+de : Fehler: nicht angemeldet — führe zuerst 'everyapi login' aus
+fr : Erreur: non connecté — exécutez d'abord 'everyapi login'
+```
+
+Settings live in `~/.config/everyapi/settings.json` (same directory as `credentials.json`, but mode `0644` — no secrets).
+
+**To improve translations or add a language**: see [`internal/i18n/locales/README.md`](internal/i18n/locales/README.md).
+
+## Configuration files
+
+Credentials live in `~/.config/everyapi/credentials.json` (or `$XDG_CONFIG_HOME/everyapi/` if `$XDG_CONFIG_HOME` is set), file mode `0600`. Written by `everyapi login`, read by every other command.
+
+> ⚠️ **Tokens are stored in plaintext**. File mode `0600` + private `$HOME` path matches the convention of industry CLIs like `gh auth` / `aws configure`, but **for home-machine-theft / malware threat models**, any process that can read this file can call the EveryAPI API as you (including the MCP tools — see the §money-path friction step below). Recommended:
+> - Don't `everyapi login` on shared / public machines
+> - macOS users: consider `everyapi logout` before enabling FileVault
+> - Linux users: enable home-dir encryption (`ecryptfs` / LUKS)
+> - If you suspect leakage → `everyapi logout` immediately clears local credentials, and rotate the API key from the EveryAPI dashboard
 >
-> Platform keychain backend（macOS Keychain / Windows DPAPI / Linux Secret Service）规划中，未上。
+> A platform keychain backend (macOS Keychain / Windows DPAPI / Linux Secret Service) is planned but not shipped.
 
-字段：
+Fields:
 
-- `api_base` —— EveryAPI 网关 URL。默认 `https://api.everyapi.ai`。自托管用户 / 本地开发可在 `login` 时用 `--api-base` 覆盖。
-- `access_token` —— 所有需鉴权的 API 调用使用的 bearer。
-- `relay_key` —— relay API key（`sk-everyapi-…`），用于 `everyapi use` 的子进程 env。从 `/api/token/*` 拉来、缓存于此。
-- `user_id` / `username` —— 缓存，使 `status` 在首次 API 往返前就能渲染身份行。
+- `api_base` — the EveryAPI gateway URL. Default `https://api.everyapi.ai`. Self-hosted users / local development can override with `--api-base` on `login`.
+- `access_token` — bearer used by every authenticated API call.
+- `relay_key` — relay API key (`sk-everyapi-…`) used for the subprocess env of `everyapi use`. Fetched from `/api/token/*` and cached here.
+- `user_id` / `username` — cached so `status` can render the identity line before its first API round-trip.
 
-## 开发
+## Development
 
-在 CLI 源码目录（含本 README、`go.mod`、`Makefile` 的目录）下执行：
+In the CLI source directory (the one containing this README, `go.mod`, and `Makefile`):
 
 ```bash
 go test ./...
-go run . status            # 对生产
-go run . login --api-base http://localhost:8787   # 对本地后端
+go run . status            # against production
+go run . login --api-base http://localhost:8787   # against local backend
 ```
 
-本地全平台交叉编译（跟 CI 用同一份配方）：
+Local cross-compile for all platforms (same recipe CI uses):
 
 ```bash
-make cli-release           # 产物在 dist/（5 平台 × 1 二进制 = 5 个文件）
+make cli-release           # artifacts in dist/ (5 platforms × 1 binary = 5 files)
 ```
 
-## MCP server (`everyapi mcp` 子命令)
+## MCP server (`everyapi mcp` subcommand)
 
-`everyapi` 二进制**内建** [Model Context Protocol](https://modelcontextprotocol.io) server——以子命令形式启动（`everyapi mcp` 读 stdin 写 stdout），AI agent（Claude Code / Cursor / Codex CLI 等任意 MCP client）可直接 invoke 它，**用户不必打开终端**。
+The `everyapi` binary **includes a built-in** [Model Context Protocol](https://modelcontextprotocol.io) server — exposed as a subcommand (`everyapi mcp` reads stdin and writes stdout). AI agents (Claude Code / Cursor / Codex CLI / any MCP client) can invoke it directly, **without the user opening a terminal**.
 
-> ⚠️ **MCP server 鉴权模型 + 暴露面**
+> ⚠️ **MCP server auth model + exposure surface**
 >
-> - **不开端口**：`everyapi mcp` 纯 stdio JSON-RPC，由 host CLI fork。**不监听任何 socket / TCP port**——网络层不暴露面。
-> - **直接读 `~/.config/everyapi/credentials.json`**：MCP server 没有自己的鉴权流，credentials 文件能读 = 可以以你的身份调用所有暴露的 tool。任何能以你的 user 权限跑进程的 MCP host 都拥有完全访问。
-> - **钱路 `everyapi_seller_withdraw` 有 friction step**：调用方必须传 `confirm: "yes"`，确保 AI agent 把转账动作在 UI 上 surface 给人类，避免 silent drain。其它 read-only 工具（status / topup / seller_list）无此要求。
+> - **No open ports**: `everyapi mcp` is pure stdio JSON-RPC, forked by the host CLI. It **does not listen on any socket / TCP port** — no network surface.
+> - **Reads `~/.config/everyapi/credentials.json` directly**: the MCP server has no auth flow of its own; ability to read the credentials file = ability to call every exposed tool as you. Any MCP host that can run a process as your user has full access.
+> - **Money path `everyapi_seller_withdraw` has a friction step**: callers must pass `confirm: "yes"`, ensuring the AI agent surfaces the transfer action in the UI to a human and avoids a silent drain. Other read-only tools (status / topup / seller_list) have no such requirement.
 >
-> 不信任的 MCP host 不要装。
+> Do not install MCP hosts you don't trust.
 
-### 安装
+### Installation
 
-跟 CLI 同一个 binary，装好 CLI 就能用：
+Same binary as the CLI — installing the CLI gives you the MCP server:
 
 ```bash
-make cli                                              # 本地编译，产物 ./bin/everyapi
-# 或直接 go install:
+make cli                                              # local build, produces ./bin/everyapi
+# or via go install:
 go install github.com/everyapi-ai/everyapi-ai@latest
 ```
 
-### 接入 Claude Code
+### Wiring into Claude Code
 
-`~/.claude/settings.json` 加：
+Add to `~/.claude/settings.json`:
 
 ```json
 {
@@ -366,48 +358,48 @@ go install github.com/everyapi-ai/everyapi-ai@latest
 }
 ```
 
-接入 Cursor、Codex CLI 等其它 MCP client 类似——`command` 指向 `everyapi` binary、`args: ["mcp"]`。
+Wiring into Cursor, Codex CLI, or other MCP clients is similar — point `command` at the `everyapi` binary with `args: ["mcp"]`.
 
-### 鉴权前提
+### Auth prerequisite
 
-必须先在终端跑过一次 `everyapi login`——MCP server 是后台进程，没有终端交互能力，没法自己跑 device-code 流。它直接读 `~/.config/everyapi/credentials.json`；缺则每个 tool 都返回 `isError: true` 的 "not logged in" 引导用户去 login。
+You must have run `everyapi login` in a terminal at least once — the MCP server is a background process with no terminal interaction capability, so it cannot run the device-code flow itself. It reads `~/.config/everyapi/credentials.json` directly; if missing, every tool returns a `isError: true` "not logged in" message guiding the user to log in.
 
-### v1 暴露的 tools（8 个）
+### Tools exposed in v1 (8 total)
 
-| Tool | 入参 | 作用 |
+| Tool | Input | Purpose |
 |---|---|---|
-| `everyapi_status` | 无 | 当前余额 / 已用 / 请求数 |
-| `everyapi_topup` | 无 | 返回 web 充值 URL |
-| `everyapi_seller_list` | 无 | 列出 marketplace seller channels |
-| `everyapi_seller_withdraw` | `{confirm: "yes", quota?: int}` | 把 seller_quota 转入主余额；**`confirm: "yes"` 必填**（钱路 friction） |
-| `everyapi_seller_add_oauth_codex_start` | `{name, models}` | 起 Codex / ChatGPT 设备授权流，返 `user_code` + `verification_uri` + `flow_id` |
-| `everyapi_seller_add_oauth_codex_poll` | `{flow_id}` | 查 Codex 授权状态。`pending`/`slow_down` 继续轮询；`authorized` 拿到 channel id；`expired`/`denied` 终止 |
-| `everyapi_seller_add_oauth_claude_start` | `{name, models}` | 起 Anthropic OAuth 授权流，返 `authorize_url`。User 浏览器登完会拿到 `<code>#<state>` 字符串 |
-| `everyapi_seller_add_oauth_claude_complete` | `{input}` | 把上一步 user 粘的 `<code>#<state>` 串提交完成，mint channel |
+| `everyapi_status` | none | Current balance / used / request count |
+| `everyapi_topup` | none | Returns the web topup URL |
+| `everyapi_seller_list` | none | Lists marketplace seller channels |
+| `everyapi_seller_withdraw` | `{confirm: "yes", quota?: int}` | Transfers seller_quota to main balance; **`confirm: "yes"` required** (money-path friction) |
+| `everyapi_seller_add_oauth_codex_start` | `{name, models}` | Starts the Codex / ChatGPT device authorization flow; returns `user_code` + `verification_uri` + `flow_id` |
+| `everyapi_seller_add_oauth_codex_poll` | `{flow_id}` | Checks Codex authorization status. `pending`/`slow_down` keep polling; `authorized` returns the channel id; `expired`/`denied` terminate |
+| `everyapi_seller_add_oauth_claude_start` | `{name, models}` | Starts the Anthropic OAuth flow; returns `authorize_url`. After the user signs in via browser, they receive a `<code>#<state>` string |
+| `everyapi_seller_add_oauth_claude_complete` | `{input}` | Submits the `<code>#<state>` string the user pasted in the previous step; mints the channel |
 
-**OAuth tool 使用模式**（AI agent 在对话里这么走）：
+**OAuth tool usage pattern** (how an AI agent walks through this in a conversation):
 
 ```
-User: 帮我加一个 ChatGPT Plus 卖家 channel，名字叫 my-chatgpt，models 是 gpt-4
+User: Add a ChatGPT Plus seller channel for me, name it my-chatgpt, models gpt-4
 AI    → everyapi_seller_add_oauth_codex_start({name: "my-chatgpt", models: "gpt-4"})
-       ← "去 chatgpt.com/codex 输入 USR-789，然后告诉我做完了"
-User: 浏览器输完了
+       ← "Go to chatgpt.com/codex, enter USR-789, then tell me when done"
+User: Done in the browser
 AI    → everyapi_seller_add_oauth_codex_poll({flow_id: "..."})
-       ← "status=pending，再等几秒"
-[继续轮询直到 authorized]
+       ← "status=pending, wait a few more seconds"
+[keep polling until authorized]
        ← "status=authorized — channel #314 mounted"
 
-User: 加 Claude Pro 那个，my-claude / claude-3-opus
+User: Add the Claude Pro one too, my-claude / claude-3-opus
 AI    → everyapi_seller_add_oauth_claude_start({...})
-       ← "去 [URL] 完成授权后，把 code#state 串给我"
+       ← "Go to [URL] to complete authorization, then give me the code#state string"
 User: code-abc123#state-xyz
 AI    → everyapi_seller_add_oauth_claude_complete({input: "code-abc123#state-xyz"})
        ← "Channel #315 mounted"
 ```
 
-Gemini OAuth（loopback flow）**不在 MCP 提供** —— loopback listener 跨 tool 调用生命周期不匹配。Gemini 仍走 CLI `everyapi seller add-oauth gemini`。
+Gemini OAuth (loopback flow) is **not exposed via MCP** — the loopback listener's lifetime doesn't match the cross-tool-call lifecycle. Gemini still goes through the CLI's `everyapi seller add-oauth gemini`.
 
-### 手动 smoke
+### Manual smoke test
 
 ```bash
 make cli
@@ -418,22 +410,22 @@ make cli
 EOF
 ```
 
-应该看到 3 行 JSON 响应：initialize 结果、4 个 tool 的列表、status 文本（或 not-logged-in 的 isError）。
+You should see three JSON response lines: initialize result, list of 4 tools, status text (or a not-logged-in isError).
 
-## 这个二进制还**不**包含什么
+## What this binary does NOT include yet
 
-当前**仍未实现**的（按重要性排序，后续 release 增量补，不破坏已有 v1 surface）：
+Still **unimplemented** (ordered by importance; subsequent releases will add incrementally without breaking v1 surface):
 
-- ⚠️ OS 级 code signing（macOS notarization / Windows Authenticode）——目前靠 sigstore cosign keyless + SHA256SUMS 双层校验，详见上文「从 GitHub Release 拉二进制 — 务必校验」
-- ❌ Platform keychain backend——token 仍明文存盘（mode 0600）
+- ⚠️ OS-level code signing (macOS notarization / Windows Authenticode) — for now we rely on sigstore cosign keyless + SHA256SUMS two-layer verification; both ship with every GitHub Release and Homebrew checks them automatically
+- ❌ Platform keychain backend — tokens still stored in plaintext on disk (mode 0600)
 
-原列于此、**现已落地**的（勿再当未实现）：
+Previously listed here but **now shipped** (don't treat as unimplemented):
 
-- ✅ Local sanitizer proxy —— 命令是 `everyapi proxy {start,stop,status,configure}`（不是 `everyapi start`/`everyapi configure`），引擎 + 6 内置 detector + 自定义 regex + 集成进 `everyapi use`
-- ✅ Seller OAuth onboarding 三家 provider（codex device / claude paste / gemini loopback）
-- ✅ QR sign-in 主路径 —— `login` 走 device-code **+ QR 主路径**，`--no-qr` 兜底
-- ✅ 防钓鱼分层 —— 暗号字符串（`everyapi topup`）、PKCE/state strict-check、cert pinning 均已落地；cert pinning 为 **report-only**（匹配静默 / mismatch 告警 / 永不拒连），enforce 按产品决策定格"只告警不做"
+- ✅ Local sanitizer proxy — the command is `everyapi proxy {start,stop,status,configure}` (not `everyapi start`/`everyapi configure`); engine + 6 built-in detectors + custom regex + integrated into `everyapi use`
+- ✅ Seller OAuth onboarding across all three providers (codex device / claude paste / gemini loopback)
+- ✅ QR sign-in main path — `login` uses device-code **+ QR as the main path**, with `--no-qr` as fallback
+- ✅ Anti-phishing layers — phrase string (`everyapi topup`), PKCE/state strict-check, and cert pinning have all landed; cert pinning is **report-only** (silent on match / alert on mismatch / never refuses to connect), with the product decision being "alert only, do not enforce"
 
-## 报告漏洞
+## Reporting vulnerabilities
 
-请见 [`SECURITY.md`](./SECURITY.md)。
+See [`SECURITY.md`](./SECURITY.md).

@@ -7,12 +7,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/everyapi-ai/everyapi-ai/cmd"
 	"github.com/everyapi-ai/everyapi-ai/cmd/admin"
@@ -33,6 +35,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/cmd/settings"
 	"github.com/everyapi-ai/everyapi-ai/cmd/subscription"
 	"github.com/everyapi-ai/everyapi-ai/cmd/token"
+	"github.com/everyapi-ai/everyapi-ai/cmd/upstream"
 	usagecmd "github.com/everyapi-ai/everyapi-ai/cmd/usage"
 	usercmd "github.com/everyapi-ai/everyapi-ai/cmd/user"
 	"github.com/everyapi-ai/everyapi-ai/cmd/wallet"
@@ -40,6 +43,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-ai/internal/mcp"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -151,6 +155,7 @@ var commands = []command{
 		{name: "pricing", desc: "Per-model rate sheet", args: []string{"pricing"}},
 		{name: "groups", desc: "Routing groups your account can use", args: []string{"groups"}},
 	}},
+	{name: "upstream", desc: "Upstream provider health (status-page rollup)", run: upstream.Run},
 	{name: "demand", desc: "Buyer-side marketplace postings (list / my / show / submit / cancel / remove)", requireLogin: true, run: demand.Run, subs: []subcommand{
 		{name: "list", desc: "Public marketplace feed", args: []string{"list"}},
 		{name: "my", desc: "Demands you've posted", args: []string{"my"}},
@@ -275,35 +280,50 @@ func resolveLanguage() {
 // here and re-renders the launcher — that's the "back to parent
 // level" affordance. Esc / Ctrl-C from the launcher itself exits
 // cleanly with status 0.
+//
+// The menu is rebuilt every loop iteration from the current
+// credentials, so logging in / out from inside the launcher
+// refreshes the visible rows without re-spawning the process. On
+// first render an entry probe (sessionRejected) confirms the cached
+// token still authenticates — a revoked / expired token drops the
+// menu to its logged-out shape instead of advertising commands that
+// would only 401.
 func runLauncher() error {
-	creds, _ := config.Load()
-	loggedIn := creds != nil
-	isAdmin := loggedIn && creds.IsAdmin()
-
-	var visible []command
-	var labels []string
-	maxName := 0
-	for _, c := range commands {
-		if c.adminOnly && !isAdmin {
-			continue
-		}
-		if c.requireLogin && !loggedIn {
-			continue
-		}
-		if c.hideLoggedIn && loggedIn {
-			continue
-		}
-		if len(c.name) > maxName {
-			maxName = len(c.name)
-		}
-		visible = append(visible, c)
-	}
-	for _, c := range visible {
-		labels = append(labels, fmt.Sprintf("%-*s  %s", maxName, c.name, c.desc))
-	}
-
+	// sessionDead latches once the backend definitively rejects the
+	// cached token (the entry probe below). The credentials file is
+	// left intact — `login` overwrites it — but for the rest of this
+	// launcher session we render the logged-out menu so the user
+	// isn't stuck picking commands that all fail with 401.
+	sessionDead := false
+	probed := false
 	lastSel := 0
 	for {
+		creds, _ := config.Load()
+		loggedIn := creds != nil && !sessionDead
+
+		// Entry probe: once, on the first render, only when the
+		// cached credentials still claim a live session. A definitive
+		// 401 latches sessionDead so the menu drops to logged-out; a
+		// network error / 5xx is deliberately NOT a verdict (see
+		// sessionRejected) so an offline launch keeps the cached menu.
+		if loggedIn && !probed {
+			probed = true
+			if sessionRejected(creds) {
+				sessionDead = true
+				loggedIn = false
+				fmt.Fprintln(os.Stderr, i18n.T("auth.session_expired"))
+			}
+		}
+		isAdmin := loggedIn && creds.IsAdmin()
+
+		visible, labels := launcherRows(loggedIn, isAdmin)
+		// The row set shrinks when the probe (or a logout) flips the
+		// menu to logged-out; clamp the remembered cursor so it can't
+		// index past the rebuilt slice.
+		if lastSel >= len(labels) {
+			lastSel = 0
+		}
+
 		idx, err := cliprompt.PickWithSelected(i18n.T("launcher.welcome"), labels, lastSel)
 		if err != nil {
 			if errors.Is(err, cliprompt.ErrPickCancelled) {
@@ -312,7 +332,14 @@ func runLauncher() error {
 			return err
 		}
 		lastSel = idx
-		err = dispatchInteractive(visible[idx], nil)
+		chosen := visible[idx]
+		err = dispatchInteractive(chosen, nil)
+		// A successful `login` clears the stale-session latch so the
+		// next iteration's rebuild shows the logged-in menu instead
+		// of staying stuck on the logged-out set.
+		if chosen.name == "login" && err == nil {
+			sessionDead = false
+		}
 		// Stay in the menu regardless of how the dispatched
 		// command returned. Real errors (not-logged-in,
 		// transient API failure, etc.) print to stderr and the
@@ -330,6 +357,65 @@ func runLauncher() error {
 		}
 		cliout.Println("")
 	}
+}
+
+// launcherRows builds the visible command set and their aligned
+// display labels for the given auth state. Split out of runLauncher
+// so the loop can rebuild the menu each iteration — the row set
+// changes when the user logs in / out or when the entry probe finds
+// a stale token.
+func launcherRows(loggedIn, isAdmin bool) ([]command, []string) {
+	var visible []command
+	maxName := 0
+	for _, c := range commands {
+		if c.adminOnly && !isAdmin {
+			continue
+		}
+		if c.requireLogin && !loggedIn {
+			continue
+		}
+		if c.hideLoggedIn && loggedIn {
+			continue
+		}
+		if len(c.name) > maxName {
+			maxName = len(c.name)
+		}
+		visible = append(visible, c)
+	}
+	labels := make([]string, len(visible))
+	for i, c := range visible {
+		labels[i] = fmt.Sprintf("%-*s  %s", maxName, c.name, c.desc)
+	}
+	return visible, labels
+}
+
+// launcherProbeTimeout caps the entry-probe round-trip. The SDK's
+// http.Client.Timeout is 30s — far too long to stall a menu render
+// behind. 3s clears a healthy request yet keeps an offline launch
+// responsive.
+const launcherProbeTimeout = 3 * time.Second
+
+// sessionRejected reports whether the backend DEFINITIVELY rejects
+// the cached credentials — GET /api/user/self answering HTTP 401.
+// Every other outcome (timeout, DNS failure, 5xx, success) returns
+// false: "couldn't verify" must never masquerade as "logged out",
+// or a transient blip walls the user behind a `login` that itself
+// needs the network.
+func sessionRejected(creds *config.Credentials) bool {
+	// Legacy credentials predate the user_id field. Without it the
+	// request omits the EveryAPI-User-Id header and UserAuth returns
+	// 401 "user ID not provided" — indistinguishable here from a bad
+	// token. Skip the probe: a stale logged-in menu for a pre-user_id
+	// credential beats falsely walling the user out.
+	if creds == nil || creds.UserID <= 0 {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), launcherProbeTimeout)
+	defer cancel()
+	_, err := api.New(creds.APIBase, creds.AccessToken).
+		WithUserID(creds.UserID).
+		GetSelf(ctx)
+	return api.IsUnauthorized(err)
 }
 
 // dispatchInteractive is the single entry point for "run a command

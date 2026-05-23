@@ -38,10 +38,11 @@ everyapi — EveryAPI 命令行
   user <子>       个人信息 / 2FA / passkey / OAuth 绑定 / 推广码
   subscription <子>  订阅计划 / 我的订阅 / 计费偏好
   use <工具>      通过 EveryAPI 启动第三方 CLI（claude / codex / gemini）
-  token <子>      管理 relay API token（list / show / create / update / key / revoke）
+  token <子>      管理 relay API token（list / show / create / update / key / revoke / usage）
   log <子>        请求日志：list / stat / summary
   usage           按日用量
   models <子>     模型目录：list / pricing / groups
+  upstream        上游提供商健康状态（状态页汇总）
   demand <子>     买方需求贴（list/my/show/submit/cancel/remove）
   dispute <子>    争议：开启 / 列表 / 查看
   report          举报滥用 / 违规
@@ -111,6 +112,12 @@ status_disabled = "已禁用"
 status_expired = "已过期"
 status_exhausted = "额度耗尽"
 usage_arg_id = "用法：everyapi token %s <id> [参数]"
+usage_header = "Token 用量 — %s"
+usage_remaining = "剩余"
+usage_used = "已用"
+usage_granted = "总额度"
+usage_unlimited = "无限制"
+usage_key_required = "需要提供中继密钥：everyapi token usage <sk-...>（或 --key）"
 usage = '''
 everyapi token — 管理 relay API token（应用嵌入的 key）
 
@@ -126,6 +133,7 @@ everyapi token — 管理 relay API token（应用嵌入的 key）
   enable   <id>                        启用
   disable  <id>                        禁用
   revoke   <id> [-y]                   删除 token（软删；非 -y 会询问）
+  usage    <key>                       查看某个 key 的剩余额度（无需登录）
 
 CREATE / UPDATE 参数
   --name <n>           显示名（create 必填；最长 50 字符）
@@ -493,7 +501,7 @@ everyapi dm — 与其他用户的私信
 account_header = "账户 #%d  %s  (%s)"
 passkey_use_dashboard = "(注册 / 删除需要浏览器流程 — 请使用 dashboard。)"
 passkey_none = "未注册 passkey。请在 dashboard 注册（仅浏览器流程）。"
-"2fa_disabled_msg" = "首次启用需要浏览器扫码 — 请在 dashboard 完成，然后回来管理验证码。"
+"2fa_disabled_msg" = "2FA 未启用。运行 'everyapi user 2fa enable' 开启。"
 "2fa_disabled" = "2FA 已关闭。"
 no_bindings = "无 OAuth 绑定。"
 bindings_count = "共 %d 个绑定："
@@ -509,6 +517,30 @@ passkey_registered_last_used = "Passkey 已注册。上次使用：%s"
 "2fa_backup_remaining" = "备用码剩余：%d"
 "2fa_low_hint" = "  （较少 — 可考虑 'everyapi user 2fa backup --code <新-totp>' 重新生成）"
 backup_regenerated = "已重新生成 %d 个备用码 — 请立即保存，不会再次显示："
+"2fa_enroll_intro" = "正在设置两步验证。"
+"2fa_scan_hint" = "用你的身份验证器 App 扫描此二维码（或手动输入下方密钥）："
+"2fa_secret" = "密钥：%s"
+"2fa_backup_intro" = "备用码 — 请立即保存，仅显示这一次："
+"2fa_enter_code" = "输入身份验证器中的 6 位验证码"
+"2fa_enable_need_code" = "非交互模式下必须用 --code 提供 6 位 TOTP 验证码"
+"2fa_enabled_ok" = "两步验证已启用。"
+update_no_fields = "没有要更新的内容：请用 --username 和/或 --display-name"
+update_ok = "个人信息已更新。"
+passwd_interactive_only = "修改密码需要交互式终端"
+passwd_old = "当前密码："
+passwd_new = "新密码（8–20 位）："
+passwd_confirm = "确认新密码："
+passwd_empty = "新密码不能为空"
+passwd_mismatch = "两次输入的新密码不一致"
+passwd_length = "新密码必须为 8–20 位"
+passwd_ok = "密码已修改。"
+setting_bad_type = "无效的 --type %q（可选 email | webhook | bark | gotify）"
+setting_threshold_required = "--threshold 必须大于 0"
+setting_saved = "通知设置已保存。"
+setting_none = "尚未配置通知渠道。用 'everyapi user setting --type <渠道> ...' 设置。"
+setting_header = "通知渠道：%s"
+setting_threshold = "阈值"
+setting_test_sent = "测试通知已发送 — 请查收。"
 usage = '''
 everyapi user — 个人信息 / 2FA / OAuth 绑定 / 推广码
 
@@ -518,6 +550,7 @@ everyapi user — 个人信息 / 2FA / OAuth 绑定 / 推广码
 子命令
   info                                  汇总的个人信息 + 安全视图
   2fa                                   2FA 状态（启用 / 锁定 / 备用码剩余）
+  2fa enable                            启用 2FA（二维码 + 验证码，交互式）
   2fa disable --code <6位>              关闭 2FA
   2fa backup  --code <6位>              重置备用码集合
   passkey                               Passkey 注册状态
@@ -525,10 +558,15 @@ everyapi user — 个人信息 / 2FA / OAuth 绑定 / 推广码
   oauth unbind <provider_id>            解除某个 OAuth 绑定
   aff                                   查看你的推广码
   aff reset                             重置推广码
+  update [--username U] [--display-name D]
+                                        修改用户名 / 显示名
+  passwd                                修改密码（交互输入，不回显）
+  setting [--type <渠道> ...]           查看 / 设置额度预警通知
+  setting test                          发送测试通知
 
 说明
-  2FA 首次启用（扫码）、passkey 注册、邮箱/微信验证都需要浏览器流程 —
-  请先在 dashboard 完成初始化，然后回到此处进行日常管理。
+  passkey 注册、邮箱/微信验证需要浏览器流程 — 这些请在 dashboard 完成。
+  2FA 现在可以直接用 '2fa enable' 在这里设置。
 '''
 
 [subscription]
@@ -758,3 +796,25 @@ no_relay_key_long = '''
 然后重新运行 'everyapi login'。'''
 unknown_flag = "未知 flag %q（在工具 flag 前加 `--`：`everyapi use <tool> -- %s ...`）"
 usage = "用法：everyapi use <tool> [--group <名称>|--channel <名称>] [--direct] [-- 工具参数...]"
+
+[upstream]
+none = "未配置上游提供商。"
+ind_none = "运行正常"
+ind_minor = "轻微异常"
+ind_major = "重大故障"
+ind_critical = "严重故障"
+ind_unknown = "未知"
+
+[admin.redemption]
+none = "暂无兑换码。"
+never = "永不过期"
+status_enabled = "启用"
+status_disabled = "禁用"
+status_used = "已使用"
+created = "已生成 %d 个兑换码："
+updated = "兑换码 #%d 已更新。"
+status_set = "兑换码 #%d 现在为 %s。"
+deleted = "兑换码 #%d 已删除。"
+cleared = "已删除 %d 个失效兑换码。"
+delete_confirm = "删除兑换码 #%d？此操作不可撤销。"
+clear_confirm = "删除所有已用 / 禁用 / 过期的兑换码？此操作不可撤销。"

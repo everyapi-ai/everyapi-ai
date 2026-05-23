@@ -48,6 +48,8 @@ func Run(args []string) error {
 		return adminAbuse(rest)
 	case "audit":
 		return adminAudit(rest)
+	case "redemption":
+		return adminRedemption(rest)
 	default:
 		cliout.Printf("%s\n", adminUsage)
 		return fmt.Errorf(i18n.T("common.unknown_subcommand"), "admin", sub)
@@ -78,6 +80,9 @@ SUBCOMMANDS
   abuse update <id> --status X [--note N]
                          Triage a report
   audit [--page P]       Recent admin audit-log rows
+  redemption list|search <kw>|show <id>|create --name N --quota Q [--count C] [--expires E]
+             |update <id>|status <id> enable|disable|delete <id>|clear-invalid
+                         Manage prepaid quota voucher codes (create mints + prints keys)
   help                   Print this message.
 
 Auth: re-uses your 'everyapi login' token. You must be an admin on

@@ -282,3 +282,89 @@ func testCtx(t *testing.T) context.Context {
 	t.Cleanup(cancel)
 	return ctx
 }
+
+// TestCleanReleaseNotes verifies cleanReleaseNotes turns goreleaser's
+// GitHub-flavoured-markdown body into terminal-readable plain text. The
+// CLI can't render markdown, so these cases pin the de-markdowning
+// (headings/bold/code/links/bullets) plus the noise-trimming (fenced
+// code blocks, "Full diff" line, horizontal rules) the upgrade box
+// relies on.
+func TestCleanReleaseNotes(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string // joined with "\n"
+	}{
+		{
+			name: "empty body yields nothing",
+			body: "",
+			want: "",
+		},
+		{
+			// The exact shape goreleaser emits for this repo: headings,
+			// a bullet, an HR, the Full-diff line, then a fenced
+			// install snippet. Everything but the changelog proper is
+			// noise inside an upgrade flow the CLI runs itself.
+			name: "real goreleaser body strips to changelog only",
+			body: "## Changelog\n" +
+				"### Other changes\n" +
+				"*  release: develop → main (cli #345 / #346 / #347) [skip ci]\n" +
+				"\n\n---\n\n" +
+				"**Full diff:** https://github.com/everyapi-ai/everyapi-ai/compare/backend-v0.2.32...v0.2.0\n\n" +
+				"**Install / upgrade:**\n" +
+				"```\n" +
+				"brew upgrade everyapi              # macOS / Linux (Homebrew)\n" +
+				"go install github.com/everyapi-ai/everyapi-ai@v0.2.0   # Go users\n" +
+				"everyapi update                    # already installed\n" +
+				"```",
+			want: "Changelog\n" +
+				"Other changes\n" +
+				"• release: develop → main (cli #345 / #346 / #347) [skip ci]",
+		},
+		{
+			name: "inline markdown is stripped",
+			body: "## What's new\n" +
+				"- fixed the **login** flow and the `proxy` daemon\n" +
+				"- see [the docs](https://example.com/docs) for details",
+			want: "What's new\n" +
+				"• fixed the login flow and the proxy daemon\n" +
+				"• see the docs (https://example.com/docs) for details",
+		},
+		{
+			name: "body of pure noise yields nothing",
+			body: "---\n\n```\nsome code\n```\n\n***",
+			want: "",
+		},
+		{
+			name: "interior blank lines collapse, edges trimmed",
+			body: "\n\nfirst\n\n\n\nsecond\n\n",
+			want: "first\n\nsecond",
+		},
+		{
+			// Pins the prefix drops in isolation (the real-body case
+			// covers them transitively): a reworded template that
+			// breaks this filter fails here directly. The bold markers
+			// must be stripped before the prefix check matches.
+			name: "Full diff / Install-upgrade lead-ins dropped, kept line survives",
+			body: "actual change here\n\n" +
+				"**Full diff:** https://example.com/compare/aaa...bbb\n\n" +
+				"**Install / upgrade:**",
+			want: "actual change here",
+		},
+		{
+			// Triple-marker bold-italic must not leave stray asterisks
+			// (the double-marker pass alone would turn ***x*** into *x*).
+			name: "triple-marker bold-italic strips clean",
+			body: "- bumped to ***v2*** today",
+			want: "• bumped to v2 today",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := strings.Join(cleanReleaseNotes(tc.body), "\n")
+			if got != tc.want {
+				t.Errorf("cleanReleaseNotes(%q):\n got: %q\nwant: %q", tc.body, got, tc.want)
+			}
+		})
+	}
+}

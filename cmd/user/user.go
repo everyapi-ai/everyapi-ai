@@ -13,12 +13,16 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
+	"github.com/mdp/qrterminal/v3"
+	"golang.org/x/term"
+
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -39,6 +43,12 @@ func Run(args []string) error {
 		return runPasskey(args[1:])
 	case "oauth":
 		return runOAuth(args[1:])
+	case "update":
+		return runUpdate(args[1:])
+	case "passwd":
+		return runPasswd(args[1:])
+	case "setting":
+		return runSetting(args[1:])
 	case "aff":
 		return runAff(args[1:])
 	default:
@@ -142,12 +152,14 @@ func runTwoFA(args []string) error {
 		return runTwoFAStatus(nil)
 	}
 	switch args[0] {
+	case "enable":
+		return runTwoFAEnable(args[1:])
 	case "disable":
 		return runTwoFADisable(args[1:])
 	case "backup":
 		return runTwoFABackup(args[1:])
 	case "help", "--help", "-h":
-		cliout.Println("everyapi user 2fa [disable|backup] — see 'everyapi user help'")
+		cliout.Println("everyapi user 2fa [enable|disable|backup] — see 'everyapi user help'")
 		return nil
 	default:
 		// Bare `user 2fa` (with anything else) → status
@@ -221,6 +233,66 @@ func runTwoFABackup(args []string) error {
 	for _, c := range codes {
 		cliout.Printf("  %s\n", c)
 	}
+	return nil
+}
+
+// runTwoFAEnable runs the two-step enrollment: Setup2FA mints a secret
+// + otpauth URI + backup codes (persisting a DISABLED row), we render
+// the QR / secret / backup codes, then Enable2FA flips it on once the
+// user types the 6-digit code from their authenticator. The secret and
+// backup codes are only ever written to the terminal, never logged.
+func runTwoFAEnable(args []string) error {
+	fs := flag.NewFlagSet("user 2fa enable", flag.ContinueOnError)
+	noQR := fs.Bool("no-qr", false, "skip the terminal QR; show the secret to type instead")
+	codeFlag := fs.String("code", "", "TOTP code (non-interactive: skip the prompt)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	client, err := newClient()
+	if err != nil {
+		return err
+	}
+	ctx := cliout.WithCtx()
+
+	setup, err := client.Setup2FA(ctx)
+	if err != nil {
+		return classifyErr(err)
+	}
+
+	cliout.Println(i18n.T("user.2fa_enroll_intro"))
+	cliout.Println("")
+	if !*noQR && cliprompt.IsInteractive() {
+		cliout.Println(i18n.T("user.2fa_scan_hint"))
+		cliout.Println("")
+		qrterminal.GenerateHalfBlock(setup.QRCodeData, qrterminal.L, cliout.Out)
+		cliout.Println("")
+	}
+	cliout.Printf(i18n.T("user.2fa_secret")+"\n", setup.Secret)
+	cliout.Println("")
+	cliout.Println(i18n.T("user.2fa_backup_intro"))
+	for _, bc := range setup.BackupCodes {
+		cliout.Printf("  %s\n", bc)
+	}
+	cliout.Println("")
+
+	code := strings.TrimSpace(*codeFlag)
+	if code == "" {
+		if !cliprompt.IsInteractive() {
+			return errors.New(i18n.T("user.2fa_enable_need_code"))
+		}
+		entered, err := cliprompt.Line(bufio.NewReader(os.Stdin), i18n.T("user.2fa_enter_code"), "")
+		if err != nil {
+			return err
+		}
+		code = strings.TrimSpace(entered)
+	}
+	if code == "" {
+		return errors.New(i18n.T("user.2fa_enable_need_code"))
+	}
+	if err := client.Enable2FA(ctx, code); err != nil {
+		return classifyErr(err)
+	}
+	cliout.Println(i18n.T("user.2fa_enabled_ok"))
 	return nil
 }
 
@@ -351,5 +423,191 @@ func runAff(args []string) error {
 		return classifyErr(err)
 	}
 	cliout.Printf(i18n.T("user.aff_code")+"\n", code)
+	return nil
+}
+
+// --- update / passwd ------------------------------------------
+
+// runUpdate edits the profile fields the generic PUT /api/user/self
+// branch honors: username and display name. Password lives in its own
+// `passwd` verb so the original-password prompt stays out of argv.
+func runUpdate(args []string) error {
+	fs := flag.NewFlagSet("user update", flag.ContinueOnError)
+	username := fs.String("username", "", "new username (max 20 chars)")
+	displayName := fs.String("display-name", "", "new display name (max 20 chars)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *username == "" && *displayName == "" {
+		return errors.New(i18n.T("user.update_no_fields"))
+	}
+	client, err := newClient()
+	if err != nil {
+		return err
+	}
+	if err := client.UpdateProfile(cliout.WithCtx(), api.UpdateProfileRequest{
+		Username:    strings.TrimSpace(*username),
+		DisplayName: strings.TrimSpace(*displayName),
+	}); err != nil {
+		return classifyErr(err)
+	}
+	cliout.Println(i18n.T("user.update_ok"))
+	return nil
+}
+
+// runPasswd changes the account password. Both the current and the new
+// password are read with echo off (golang.org/x/term) so they never
+// land in the scrollback or a shell history. The backend verifies the
+// current password before applying the change.
+func runPasswd(args []string) error {
+	fs := flag.NewFlagSet("user passwd", flag.ContinueOnError)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if !cliprompt.IsInteractive() {
+		return errors.New(i18n.T("user.passwd_interactive_only"))
+	}
+	oldPw, err := readSecret(i18n.T("user.passwd_old"))
+	if err != nil {
+		return err
+	}
+	newPw, err := readSecret(i18n.T("user.passwd_new"))
+	if err != nil {
+		return err
+	}
+	confirm, err := readSecret(i18n.T("user.passwd_confirm"))
+	if err != nil {
+		return err
+	}
+	if newPw == "" {
+		return errors.New(i18n.T("user.passwd_empty"))
+	}
+	if newPw != confirm {
+		return errors.New(i18n.T("user.passwd_mismatch"))
+	}
+	if len(newPw) < 8 || len(newPw) > 20 {
+		return errors.New(i18n.T("user.passwd_length"))
+	}
+	client, err := newClient()
+	if err != nil {
+		return err
+	}
+	if err := client.UpdateProfile(cliout.WithCtx(), api.UpdateProfileRequest{
+		Password:         newPw,
+		OriginalPassword: oldPw,
+	}); err != nil {
+		return classifyErr(err)
+	}
+	cliout.Println(i18n.T("user.passwd_ok"))
+	return nil
+}
+
+// readSecret prompts and reads one line with terminal echo disabled.
+func readSecret(prompt string) (string, error) {
+	fmt.Fprint(cliout.Out, prompt+" ")
+	b, err := term.ReadPassword(int(os.Stdin.Fd()))
+	cliout.Println("")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(b)), nil
+}
+
+// --- setting (quota-warning notifications) --------------------
+
+// runSetting shows or updates the quota-warning notification channel.
+// Bare `user setting` prints the current config; `user setting test`
+// fires a test message; `user setting --type <ch> ...` rewrites it.
+//
+// The backend rebuilds the whole setting blob on each write, so this
+// relies on the server-side fix that preserves the non-notify fields
+// (sidebar / language / seller-mode / marketplace opt-in).
+func runSetting(args []string) error {
+	if len(args) > 0 && args[0] == "test" {
+		return runSettingTest(args[1:])
+	}
+	fs := flag.NewFlagSet("user setting", flag.ContinueOnError)
+	notifyType := fs.String("type", "", "channel: email | webhook | bark | gotify")
+	threshold := fs.Float64("threshold", 0, "quota-warning threshold (must be > 0)")
+	email := fs.String("email", "", "notification email (type=email)")
+	webhookURL := fs.String("webhook-url", "", "webhook URL (type=webhook)")
+	webhookSecret := fs.String("webhook-secret", "", "webhook secret (type=webhook, optional)")
+	barkURL := fs.String("bark-url", "", "Bark URL (type=bark)")
+	gotifyURL := fs.String("gotify-url", "", "Gotify URL (type=gotify)")
+	gotifyToken := fs.String("gotify-token", "", "Gotify token (type=gotify)")
+	gotifyPriority := fs.Int("gotify-priority", 5, "Gotify priority 0-10 (type=gotify)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	client, err := newClient()
+	if err != nil {
+		return err
+	}
+	// No --type → show the current config.
+	if *notifyType == "" {
+		return showSetting(client)
+	}
+	switch *notifyType {
+	case "email", "webhook", "bark", "gotify":
+	default:
+		return fmt.Errorf(i18n.T("user.setting_bad_type"), *notifyType)
+	}
+	if *threshold <= 0 {
+		return errors.New(i18n.T("user.setting_threshold_required"))
+	}
+	if err := client.UpdateNotifySetting(cliout.WithCtx(), api.NotifySettingRequest{
+		NotifyType:            *notifyType,
+		QuotaWarningThreshold: *threshold,
+		NotificationEmail:     strings.TrimSpace(*email),
+		WebhookURL:            strings.TrimSpace(*webhookURL),
+		WebhookSecret:         *webhookSecret,
+		BarkURL:               strings.TrimSpace(*barkURL),
+		GotifyURL:             strings.TrimSpace(*gotifyURL),
+		GotifyToken:           strings.TrimSpace(*gotifyToken),
+		GotifyPriority:        *gotifyPriority,
+	}); err != nil {
+		return classifyErr(err)
+	}
+	cliout.Println(i18n.T("user.setting_saved"))
+	return nil
+}
+
+func showSetting(client *api.Client) error {
+	v, err := client.GetNotifySetting(cliout.WithCtx())
+	if err != nil {
+		return classifyErr(err)
+	}
+	if v.NotifyType == "" {
+		cliout.Println(i18n.T("user.setting_none"))
+		return nil
+	}
+	cliout.Printf(i18n.T("user.setting_header")+"\n", v.NotifyType)
+	cliout.Printf("  %-12s %g\n", i18n.T("user.setting_threshold"), v.QuotaWarningThreshold)
+	switch v.NotifyType {
+	case "email":
+		cliout.Printf("  %-12s %s\n", "email", v.NotificationEmail)
+	case "webhook":
+		cliout.Printf("  %-12s %s\n", "webhook", v.WebhookURL)
+	case "bark":
+		cliout.Printf("  %-12s %s\n", "bark", v.BarkURL)
+	case "gotify":
+		cliout.Printf("  %-12s %s\n", "gotify", v.GotifyURL)
+	}
+	return nil
+}
+
+func runSettingTest(args []string) error {
+	fs := flag.NewFlagSet("user setting test", flag.ContinueOnError)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	client, err := newClient()
+	if err != nil {
+		return err
+	}
+	if err := client.TestNotification(cliout.WithCtx()); err != nil {
+		return classifyErr(err)
+	}
+	cliout.Println(i18n.T("user.setting_test_sent"))
 	return nil
 }

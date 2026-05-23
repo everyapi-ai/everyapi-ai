@@ -50,10 +50,11 @@ COMMANDS
   user <sub>      Profile / 2FA / passkey / oauth bindings / aff code
   subscription <sub>  Subscription plans / self / billing preference
   use <tool>      Launch a third-party CLI (claude / codex / gemini) via EveryAPI
-  token <sub>     Manage relay API tokens (list / show / create / update / key / revoke)
+  token <sub>     Manage relay API tokens (list / show / create / update / key / revoke / usage)
   log <sub>       Request log: list / stat / summary
   usage           Day-by-day quota usage
   models <sub>    Model catalog: list / pricing / groups
+  upstream        Upstream provider health (status-page rollup)
   demand <sub>    Buyer-side marketplace postings (list/my/show/submit/cancel/remove)
   dispute <sub>   Open / list / inspect disputes
   report          File an abuse / TOS-violation report
@@ -123,6 +124,12 @@ status_disabled = "disabled"
 status_expired = "expired"
 status_exhausted = "exhausted"
 usage_arg_id = "usage: everyapi token %s <id> [flags]"
+usage_header = "Token usage — %s"
+usage_remaining = "remaining"
+usage_used = "used"
+usage_granted = "granted"
+usage_unlimited = "unlimited"
+usage_key_required = "a relay key is required: everyapi token usage <sk-...> (or --key)"
 usage = '''
 everyapi token — manage relay API tokens (the keys your apps embed)
 
@@ -138,6 +145,7 @@ SUBCOMMANDS
   enable   <id>                        Flip status to enabled
   disable  <id>                        Flip status to disabled
   revoke   <id> [-y]                   Delete a token (soft-delete; asks unless -y)
+  usage    <key>                       Show a key's remaining quota (no login needed)
 
 CREATE / UPDATE FLAGS
   --name <n>           Display name (required for create; max 50 chars)
@@ -507,7 +515,7 @@ SUBCOMMANDS
 account_header = "Account #%d  %s  (%s)"
 passkey_use_dashboard = "(Register / delete are browser flows — use the dashboard.)"
 passkey_none = "No passkey registered. Register one in the dashboard (browser-only flow)."
-"2fa_disabled_msg" = "Setup is a browser flow (QR scan) — use the dashboard, then come back to manage codes."
+"2fa_disabled_msg" = "2FA is off. Turn it on with 'everyapi user 2fa enable'."
 "2fa_disabled" = "2FA disabled."
 no_bindings = "No OAuth bindings."
 bindings_count = "%d binding(s):"
@@ -523,6 +531,30 @@ passkey_registered_last_used = "Passkey registered. Last used: %s"
 "2fa_backup_remaining" = "Backup codes remaining: %d"
 "2fa_low_hint" = "  (low — consider 'everyapi user 2fa backup --code <new-totp>' to regenerate)"
 backup_regenerated = "Regenerated %d backup codes — save these now, they won't be shown again:"
+"2fa_enroll_intro" = "Setting up two-factor authentication."
+"2fa_scan_hint" = "Scan this QR with your authenticator app (or enter the secret below manually):"
+"2fa_secret" = "Secret: %s"
+"2fa_backup_intro" = "Backup codes — store these now, they're shown only once:"
+"2fa_enter_code" = "Enter the 6-digit code from your authenticator"
+"2fa_enable_need_code" = "a 6-digit TOTP code is required (--code) in non-interactive mode"
+"2fa_enabled_ok" = "Two-factor authentication is now enabled."
+update_no_fields = "nothing to update: pass --username and/or --display-name"
+update_ok = "Profile updated."
+passwd_interactive_only = "password change needs an interactive terminal"
+passwd_old = "Current password:"
+passwd_new = "New password (8–20 chars):"
+passwd_confirm = "Confirm new password:"
+passwd_empty = "new password cannot be empty"
+passwd_mismatch = "the two new passwords don't match"
+passwd_length = "new password must be 8–20 characters"
+passwd_ok = "Password changed."
+setting_bad_type = "invalid --type %q (use email | webhook | bark | gotify)"
+setting_threshold_required = "--threshold must be > 0"
+setting_saved = "Notification settings saved."
+setting_none = "No notification channel configured. Set one with 'everyapi user setting --type <ch> ...'."
+setting_header = "Notification channel: %s"
+setting_threshold = "threshold"
+setting_test_sent = "Test notification sent — check your channel."
 usage = '''
 everyapi user — profile / 2FA / OAuth bindings / aff code
 
@@ -532,6 +564,7 @@ USAGE
 SUBCOMMANDS
   info                                  Rolled-up profile + security view
   2fa                                   2FA status (enabled / locked / backup codes remaining)
+  2fa enable                            Enroll in 2FA (QR + code, interactive)
   2fa disable --code <6-digits>         Turn 2FA off
   2fa backup  --code <6-digits>         Rotate the backup-code set
   passkey                               Passkey registration status
@@ -539,11 +572,16 @@ SUBCOMMANDS
   oauth unbind <provider_id>            Remove one OAuth binding
   aff                                   Show your affiliate code
   aff reset                             Rotate the affiliate code
+  update [--username U] [--display-name D]
+                                        Edit your username / display name
+  passwd                                Change password (prompts, echo off)
+  setting [--type <ch> ...]             Show or set quota-warning notifications
+  setting test                          Send a test notification
 
 NOTE
-  2FA setup (QR scan), passkey registration, and email/wechat
-  verification all need a browser flow — use the dashboard for
-  the initial setup, then come back here for ongoing management.
+  Passkey registration and email/wechat verification need a
+  browser flow — use the dashboard for those. 2FA can be set up
+  right here with '2fa enable'.
 '''
 
 [subscription]
@@ -777,3 +815,25 @@ and it's separate from your login token. Create an API key in the
 EveryAPI dashboard (%s), then run 'everyapi login' again.'''
 unknown_flag = "unknown flag %q (use `--` before tool flags: `everyapi use <tool> -- %s ...`)"
 usage = "usage: everyapi use <tool> [--group <name>|--channel <name>] [--direct] [-- tool args...]"
+
+[upstream]
+none = "No upstream providers configured."
+ind_none = "operational"
+ind_minor = "minor issues"
+ind_major = "major outage"
+ind_critical = "critical outage"
+ind_unknown = "unknown"
+
+[admin.redemption]
+none = "No redemption codes."
+never = "never"
+status_enabled = "enabled"
+status_disabled = "disabled"
+status_used = "used"
+created = "Minted %d code(s):"
+updated = "Redemption #%d updated."
+status_set = "Redemption #%d is now %s."
+deleted = "Redemption #%d deleted."
+cleared = "Deleted %d invalid code(s)."
+delete_confirm = "Delete redemption #%d? This cannot be undone."
+clear_confirm = "Delete ALL used / disabled / expired codes? This cannot be undone."

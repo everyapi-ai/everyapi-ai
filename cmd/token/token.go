@@ -17,10 +17,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -52,6 +52,8 @@ func Run(args []string) error {
 		return runSetStatus(args[1:], api.TokenStatusDisabled)
 	case "revoke":
 		return runRevoke(args[1:])
+	case "usage":
+		return runUsage(args[1:])
 	default:
 		cliout.Println(i18n.T("token.usage"))
 		return fmt.Errorf(i18n.T("common.unknown_subcommand"), "token", args[0])
@@ -220,6 +222,62 @@ func runKey(args []string) error {
 	return nil
 }
 
+// --- usage ------------------------------------------------------------
+
+// runUsage queries GET /api/usage/token for one relay key. Unlike every
+// other token verb this authenticates with the KEY ITSELF, so it works
+// WITHOUT `everyapi login`: a bare key-holder (CI, a key handed down by
+// someone else) can check remaining quota by passing the key directly.
+func runUsage(args []string) error {
+	fs := flag.NewFlagSet("token usage", flag.ContinueOnError)
+	keyFlag := fs.String("key", "", "relay key to query (sk-…); or pass it as the first argument")
+	baseFlag := fs.String("base", "", "gateway base URL (default: your logged-in gateway, else the public gateway)")
+
+	// Accept both `token usage <key>` and `token usage --key <key>`.
+	// A leading non-flag arg is taken as the key before flag parsing.
+	rest := args
+	key := ""
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		key = args[0]
+		rest = args[1:]
+	}
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	if *keyFlag != "" {
+		key = *keyFlag
+	}
+	if key == "" {
+		return errors.New(i18n.T("token.usage_key_required"))
+	}
+
+	// Resolve the gateway: explicit --base wins, else the logged-in
+	// gateway, else the public default. Works without login by design.
+	u, err := api.New(config.ResolveAPIBase(*baseFlag), key).GetTokenUsage(cliout.WithCtx())
+	if err != nil {
+		return classifyErr(err)
+	}
+
+	cliout.Printf(i18n.T("token.usage_header")+"\n", u.Name)
+	if u.UnlimitedQuota {
+		cliout.Printf("  %-12s %s\n", i18n.T("token.usage_remaining"), i18n.T("token.usage_unlimited"))
+	} else {
+		cliout.Printf("  %-12s %d\n", i18n.T("token.usage_remaining"), u.TotalAvailable)
+		cliout.Printf("  %-12s %d\n", i18n.T("token.usage_granted"), u.TotalGranted)
+	}
+	cliout.Printf("  %-12s %d\n", i18n.T("token.usage_used"), u.TotalUsed)
+	cliout.Printf("  %-12s %s\n", i18n.T("token.label.expires"), expiresLabel(u.ExpiresAt))
+	if u.ModelLimitsEnabled && len(u.ModelLimits) > 0 {
+		ms := make([]string, 0, len(u.ModelLimits))
+		for m := range u.ModelLimits {
+			ms = append(ms, m)
+		}
+		sort.Strings(ms)
+		cliout.Printf("  %-12s %s\n", i18n.T("token.label.models"), strings.Join(ms, ", "))
+	}
+	return nil
+}
+
 // --- create / update --------------------------------------------------
 
 // tokenFlags binds the flags shared by create / update onto a flag.
@@ -227,15 +285,15 @@ func runKey(args []string) error {
 // update we need that distinction so an omitted flag preserves the
 // stored value instead of zeroing it.
 type tokenFlags struct {
-	name        string
-	group       string
-	unlimited   bool
-	quota       int
-	expires     string
-	models      string
-	ip          string
-	crossGroup  bool
-	seen        map[string]bool
+	name       string
+	group      string
+	unlimited  bool
+	quota      int
+	expires    string
+	models     string
+	ip         string
+	crossGroup bool
+	seen       map[string]bool
 }
 
 func (tf *tokenFlags) bind(fs *flag.FlagSet) {
