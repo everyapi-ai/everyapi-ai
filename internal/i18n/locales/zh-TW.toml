@@ -1,0 +1,830 @@
+# 繁體中文（台灣）翻譯。
+#
+# 新增 key：必須同時在 en.toml 加。這裡缺失會回退到 en.toml，
+# 兩邊都缺會回傳 key 本身（開發期肉眼可見地失敗）。
+
+[auth]
+not_logged_in = "尚未登入 — 先執行 'everyapi login'"
+session_expired = "登入已過期 — 重新執行 'everyapi login'"
+
+[common]
+canceled = "已取消。"
+error_prefix = "錯誤"
+missing_subcommand = "缺少子命令（試試 '%s help'）"
+unknown_subcommand = "未知的 '%s' 子命令 %q"
+pick_subcommand = "%s — 選一個子命令："
+browser_open_failed = "無法自動開啟瀏覽器 — 請複製上方 URL。"
+browser_open_failed_qr = "無法自動開啟瀏覽器 — 請掃描 QR code 或複製上方 URL。"
+open_browser_now = "現在開啟瀏覽器？"
+aborted_by_user = "使用者已取消"
+cancelled_nothing_submitted = "已取消 — 未提交任何內容。"
+rows_of_total = "共 %d 行，總計 %d 行："
+
+[launcher]
+welcome = "everyapi — 選一個命令："
+usage = '''
+everyapi — EveryAPI 命令列
+
+用法
+  everyapi <命令> [參數]
+
+命令
+  login           登入此裝置到 EveryAPI
+  logout          清除本裝置憑證
+  status          顯示目前額度、用量與餘額
+  topup           開啟錢包儲值頁（反釣魚校驗短語）
+  wallet <子>     儲值紀錄 / 付款方式 / 兌換碼
+  checkin         領取今日簽到額度
+  user <子>       個人資訊 / 2FA / passkey / OAuth 綁定 / 推廣碼
+  subscription <子>  訂閱方案 / 我的訂閱 / 計費偏好
+  use <工具>      透過 EveryAPI 啟動第三方 CLI（claude / codex / gemini）
+  token <子>      管理 relay API token（list / show / create / update / key / revoke / usage）
+  log <子>        請求日誌：list / stat / summary
+  usage           按日用量
+  models <子>     模型目錄：list / pricing / groups
+  upstream        上游供應商健康狀態（狀態頁彙總）
+  perf            按模型效能（成功率 / 延遲 / 吞吐）
+  demand <子>     買方需求貼（list/my/show/submit/cancel/remove）
+  dispute <子>    爭議：開啟 / 列表 / 查看
+  report          檢舉濫用 / 違規
+  notify <子>     站內通知（list / count / read / readall）
+  dm <子>         私訊（threads / open / send / messages / read）
+  seller <子>     賣方頻道市集命令
+__ADMIN_BLOCK__
+  edge <子>       自帶 GPU 供應商代理（docker + ollama）
+  proxy <子>      本機去敏代理（SDK 請求隱私過濾）
+  mcp [子]        AI CLI 的 MCP 伺服器（Claude Code / Codex / Gemini）
+  doctor          本機自我檢查（憑證、閘道、代理、工具）
+  events          訂閱即時事件串流（SSE）
+  settings        查看 / 修改 CLI 偏好（語言等）
+  update          檢查並安裝新版本
+  version         印出建置版本
+  help            顯示本說明
+
+執行 'everyapi <命令> help' 查看子命令詳情與參數
+（如 'everyapi seller help'、'everyapi edge help'）。
+'''
+usage_admin_block = '''  admin <子>      維運命令（需要管理員角色）
+'''
+
+[settings]
+saved = "設定已儲存。"
+lang_invalid = "語言不支援，可選"
+current = "目前設定"
+lang_label = "語言"
+file_at = "設定檔："
+reset_confirm = "重置所有 CLI 設定為預設值？"
+unknown_key = "未知設定項 %q"
+usage_get = "用法：everyapi settings get <key>"
+usage_set = "用法：everyapi settings set <key> <值>"
+default_label = "（預設：%s）"
+usage = '''
+everyapi settings — 查看 / 修改 CLI 偏好
+
+用法
+  everyapi settings                        顯示目前設定（list 的別名）
+  everyapi settings list                   顯示目前設定
+  everyapi settings get <key>              印出單項設定
+  everyapi settings set <key> <value>      更新設定
+  everyapi settings reset                  清空所有設定（恢復預設值）
+
+KEY
+  language                                 en | zh | zh-TW | ja | ko | es | de | fr
+
+設定檔是 'everyapi settings list' 印出的路徑上的純 JSON。可手動編輯；
+CLI 下次啟動時會重新讀取。
+'''
+
+[token]
+no_tokens = "尚無 token。執行 'everyapi token create --name <名稱>' 建立。"
+count = "共 %d 個 token："
+full_keys_hint = "\n查看完整 key：'everyapi token key <id>'。"
+created = "Token 已建立。執行 'everyapi token list' 查看 id，再 'everyapi token key <id>' 取得明文。"
+updated = "Token #%d 已更新（狀態：%s）。"
+status_changed = "Token #%d 目前狀態：%s。"
+revoked = "Token #%d 已撤銷。"
+revoke_confirm = "撤銷 token #%d %q？使用此 key 的應用程式將開始收到 401。"
+update_no_flags = "未指定更新欄位：至少傳一個 flag（參見 'everyapi token update -h'）"
+name_required = "'token create' 必須傳 --name"
+invalid_id = "無效的 token id %q（必須是正整數）"
+usage_revoke = "用法：everyapi token revoke <id> [-y]"
+status_enabled = "已啟用"
+status_disabled = "已停用"
+status_expired = "已過期"
+status_exhausted = "額度耗盡"
+usage_arg_id = "用法：everyapi token %s <id> [參數]"
+usage_header = "Token 用量 — %s"
+usage_remaining = "剩餘"
+usage_used = "已用"
+usage_granted = "總額度"
+usage_unlimited = "無限制"
+usage_key_required = "需要提供中繼金鑰：everyapi token usage <sk-...>（或 --key）"
+usage = '''
+everyapi token — 管理 relay API token（應用程式嵌入的 key）
+
+用法
+  everyapi token <子命令> [參數]
+
+子命令
+  list                                 列出你的 token（key 已去敏）
+  show     <id>                        查看某個 token 的詳情
+  key      <id>                        印出完整明文 key
+  create   --name <n> [參數]           新建 token
+  update   <id> [參數]                 編輯 token 欄位（不傳則保留原值）
+  enable   <id>                        啟用
+  disable  <id>                        停用
+  revoke   <id> [-y]                   刪除 token（軟刪；非 -y 會詢問）
+  usage    <key>                       查看某個 key 的剩餘額度（無需登入）
+
+CREATE / UPDATE 參數
+  --name <n>           顯示名（create 必填；最長 50 字元）
+  --group <g>          路由分組（預設 "" = 自動）
+  --unlimited          無額度上限（覆寫 --quota）
+  --quota <int>        剩餘額度（按閘道單位；見 'everyapi status'）
+  --expires <when>     "never"（create 預設）或絕對 Unix 秒
+  --models <a,b,c>     限制為這些模型 id 的 CSV（不傳 / 空 → 全部）
+  --ip <cidr,cidr>     IP 白名單（不傳 → 不限制）
+  --cross-group        允許自動路由跨分組重試
+
+範例
+  everyapi token list
+  everyapi token create --name prod --unlimited
+  everyapi token create --name byteplus-only --quota 1000000 --group byteplus
+  everyapi token update 42 --name renamed
+  everyapi token disable 42
+  everyapi token key 42                  （印出 sk-everyapi-…）
+  everyapi token revoke 42 -y
+'''
+
+[token.label]
+id = "Token #%d"
+name = "名稱："
+key = "key："
+key_masked = "%s（已去敏）"
+status = "狀態："
+group = "分組："
+created = "建立時間："
+last_used = "上次使用："
+expires = "過期時間："
+quota = "額度："
+unlimited = "無限制（已用 %d）"
+quota_split = "剩餘 %d / 已用 %d"
+models = "模型："
+all = "（全部）"
+allow_ips = "允許 IP："
+any = "（任意）"
+cross_group = "跨分組重試："
+pinned_ch = "綁定頻道："
+auto = "（自動）"
+expires_never = "永不"
+
+[log]
+no_rows = "未比對到日誌行。"
+no_spend = "該時間窗內無消費紀錄。"
+usage = '''
+everyapi log — 你的請求日誌
+
+用法
+  everyapi log <子命令> [參數]
+
+子命令
+  list    [參數]    最近的日誌條目（最新在前，預設 20 行）
+  stat    [參數]    時間窗內的 quota / RPM / TPM 彙總
+  summary [參數]    最近 7 天的按模型消費（或 --since/--until）
+
+通用參數
+  --token  <名稱>         按 token 顯示名過濾
+  --model  <名稱>         按模型過濾
+  --group  <名稱>         按路由分組過濾
+  --since  <窗口|ts>      時間窗起點：1h / 24h / 7d / 30d，或絕對 Unix 秒
+  --until  <ts>           時間窗結束（預設：目前時刻）
+
+LIST 專用參數
+  --limit  <int>          頁大小（預設 20，上限由伺服器端強制）
+  --page   <int>          1 起的頁碼
+  --request-id <id>       鎖定單個上游 request id
+  --type   <int>          日誌類型過濾（如 2=消費；詳見後端常數）
+'''
+
+[log.label]
+rows_window = "%d 行（共 %d 行）："
+per_model_hdr = "按模型消費 %s → %s"
+window = "時間窗：%s → %s"
+open = "（無界）"
+
+[usage]
+no_rows = "該時間窗無用量紀錄。"
+day_by_day = "按日用量（%d 天）："
+per_model = "按模型用量（共 %d 個模型）："
+
+[models]
+no_models = "你的分組無可路由模型。請聯絡管理員啟用。"
+count = "可用 %d 個模型："
+no_pricing = "無比對的定價紀錄。"
+no_groups = "你的帳戶無可用路由分組。"
+usage = '''
+everyapi models — 你帳戶可見的模型目錄
+
+用法
+  everyapi models <子命令> [參數]
+
+子命令
+  list                       印出你的分組可路由到的所有模型 id
+  pricing [--model <m>]      按模型的費率表（可過濾）
+  groups                     你帳戶可用的路由分組
+'''
+
+[wallet]
+no_topups = "無儲值紀錄。"
+redeemed = "兌換成功：增加 %d 額度。"
+usage_redeem = "用法：everyapi wallet redeem <key>"
+usage = '''
+everyapi wallet — 儲值紀錄、付款方式、兌換碼
+
+用法
+  everyapi wallet <子命令> [參數]
+
+子命令
+  history [--limit N] [--page P] [--keyword K]   分頁查看儲值紀錄
+  info                                            已啟用的付款方式、最低儲值、選項
+  redeem <key>                                    使用儲值碼 / 兌換碼
+
+說明
+  實際付款（Stripe / Creem / Waffo / EPay）請使用 'everyapi topup' —
+  它會在 dashboard 開啟帶反釣魚校驗短語的頁面。卡片付款必須走瀏覽器，
+  因為銀行卡收單在帶外完成。
+'''
+
+[wallet.label]
+payment_methods = "付款方式："
+none_enabled = "（未啟用任何付款方式 — 管理員需至少設定一種）"
+feature_flags = "功能開關："
+min_topup = "最低儲值額度：%d"
+suggested = "建議金額：%s"
+discount_tiers = "折扣階梯："
+
+[checkin]
+success = "簽到成功：取得 %d 額度（日期 %s）。"
+disabled = "此執行個體未啟用簽到功能。"
+no_records = "本月尚無簽到紀錄。"
+lifetime = "累計：簽到 %d 次，共取得 %d 額度。"
+reward_range = "獎勵範圍：每天 %d – %d 額度"
+today_claimed = "今日：已簽到。"
+today_unclaimed = "今日：未簽到 — 執行 'everyapi checkin' 領取。"
+month_days = "\n本月簽到 %d 天："
+usage = '''
+everyapi checkin — 每日簽到領取額度
+
+用法
+  everyapi checkin                       領取今日獎勵（'claim' 的別名）
+  everyapi checkin claim                 領取今日獎勵（明確動詞）
+  everyapi checkin status [--month YYYY-MM]
+                                         查看歷史簽到行事曆
+'''
+
+[seller]
+no_channels = "尚未掛載任何 seller 頻道。"
+setup_hint = "使用 'everyapi seller setup'（精靈）或 'everyapi seller add-key'（命令列）。"
+list_count = "共 %d 個 seller 頻道："
+channel_updated = "頻道 #%d 已更新。"
+channel_removed = "頻道 #%d 已刪除。"
+remove_confirm = "刪除 seller 頻道 #%d %q？路由到這裡的 buyer 會立即失敗。"
+refresh_done = "頻道 #%d (%s) 憑證已重新整理。"
+no_sales = "尚無銷售 — buyer 僅在頻道啟用並可被探索後才會路由。"
+eligible_yes = "✓ 可掛載 seller 頻道。"
+eligible_no = "✗ 尚未符合掛載條件。"
+compensation_filed = "賠付申請已提交（id=%d, 狀態=%s, 建議上限=%d）。"
+compensation_admin_review = "管理員會審核；執行 'everyapi seller compensation list' 查看進度。"
+compensation_no_claims = "無賠付申請。"
+usage_update = "用法：everyapi seller update <id> [--name 名稱] [--models 模型] [--status 1|2] [--remark 備註] [--test-model 模型]"
+update_no_flags = "未指定更新欄位：至少傳一個 flag"
+usage_remove = "用法：everyapi seller remove <id> [-y]"
+usage_refresh = "用法：everyapi seller refresh <id>"
+usage_compensation = "用法：everyapi seller compensation {submit|list} [參數]"
+usage_compensation_help = "everyapi seller compensation {submit|list} — 提交 / 查看賠付申請"
+withdraw_nothing = "無可提領金額 — 你的賣方餘額為 $0。"
+withdraw_done = "已從賣方餘額轉出 $%.2f 到主餘額。\n"
+withdraw_check_url = "查看：%s/wallet\n"
+eligibility_header = "Marketplace 資格："
+eligibility_marketplace_enabled = "  %s marketplace 已啟用"
+eligibility_account_active = "  %s 帳戶處於啟用狀態"
+eligibility_email_verified = "  %s 電子郵件已驗證"
+eligibility_account_age = "  %s 帳戶已存在 ≥ %d 天"
+eligibility_has_consume_log = "  %s 至少有一筆成功消費紀錄"
+eligibility_under_cap = "  %s 未超出頻道上限（%d / %d）"
+eligibility_check_failed = "Marketplace 資格校驗失敗。請修復上方未勾選項後重試。"
+dashboard_url_line = "Dashboard：%s/seller/channels"
+not_eligible_error = "無資格掛載 seller 頻道"
+mounted_with_pool = "已掛載頻道 #%d（%s，type=%s）%s。\n"
+key_backup_pool = "（含 %d 個備份 key）"
+mounted_status_hint = "狀態：已啟用。執行 'everyapi seller list' 查看，或前往 dashboard。"
+requirements_not_met = "尚未符合掛載條件。請先修復上方未通過項再重試。"
+mounting_new_channel = "正在掛載新頻道。按 Esc / Ctrl+C 取消。"
+method_picker_label = "認證方式"
+method_api_key = "API key             — 貼上上游 vendor key（openai / anthropic 等）"
+method_codex_oauth = "Codex / ChatGPT OAuth — 綁定 ChatGPT Plus 訂閱（device flow，無需貼上 token）"
+method_claude_oauth = "Claude OAuth        — 綁定 Anthropic Claude 訂閱（瀏覽器一次貼上）"
+method_gemini_oauth = "Gemini OAuth        — 綁定 Google Gemini 帳號（全程一鍵）"
+prompt_upstream_type = "上游類型"
+prompt_channel_name = "頻道名稱"
+prompt_models = "模型清單（逗號分隔）"
+prompt_internal_remark = "內部備註（可選）"
+about_to_mount = "即將掛載：%s / type=%s / models=%s%s"
+about_to_mount_oauth = "即將透過 %s OAuth 掛載：%s / models=%s"
+submit_prompt = "提交？"
+oauth_blob_in_backup_1 = "看起來像 OAuth/JSON 憑證 blob。"
+oauth_blob_in_backup_2 = "OAuth 憑證不能與其他 key 組合到備份池 — 它必須是頻道上的唯一 key。"
+oauth_blob_in_backup_3 = "請改填一般 API key，或按 Ctrl-C 中止後只用 OAuth blob 重新執行。"
+prompt_upstream_key = "上游 API key"
+prompt_backup_key = "備份 key #%d"
+prompt_remark_for_key = "key #%d 的備註（可選）"
+prompt_add_another_backup = "再新增一個備份 key？"
+oauth_usage = '''everyapi seller add-oauth — 透過 provider 的 OAuth 流程掛載頻道
+
+用法
+  everyapi seller add-oauth <provider> [參數]
+
+PROVIDERS
+  codex     Codex / ChatGPT 訂閱（RFC 8628 device flow）
+  claude    Anthropic Claude（瀏覽器回呼 OAuth）
+  gemini    Google Gemini（瀏覽器回呼 OAuth）
+
+公共參數
+  --name <n>      頻道顯示名（必填）
+  --models <m>    本頻道服務的模型清單，逗號分隔（必填）
+  --no-browser    不自動開啟校驗 URL
+
+執行 'everyapi seller add-oauth <provider> --help' 查看具體參數。
+'''
+oauth_use_provider_help = "用法：everyapi seller add-oauth <provider> [參數]\nproviders: codex, claude, gemini"
+oauth_unknown_provider = "未知 provider %q — 支援：codex, claude, gemini"
+oauth_chatgpt_redirect = "provider %q 是 ChatGPT Plus — 上游與 codex 相同。請使用 `everyapi seller add-oauth codex`"
+oauth_missing_flags = "缺少必填參數：%s"
+oauth_codex_intro = "綁定 Codex / ChatGPT 訂閱，請前往以下 URL 並輸入 code："
+oauth_browser_approve = "瀏覽器已開啟。請在瀏覽器中授權完成；本機將自動繼續。"
+oauth_waiting_auth = "等待授權中……"
+oauth_codex_timeout = "code 在你授權前已過期 — 請重新執行 'everyapi seller add-oauth codex'"
+oauth_denied = "瀏覽器中拒絕了授權"
+oauth_email_unknown = "（token 未暴露帳戶電子郵件）"
+oauth_mounted_with_email = "\n已掛載頻道 #%d（%s，type=codex，account=%s）。\n"
+oauth_status_visit = "狀態：已啟用。執行 'everyapi seller list' 查看，或前往 %s/seller/channels。\n"
+oauth_claude_intro = "綁定 Anthropic Claude 訂閱："
+oauth_claude_step_1 = "  1) 在瀏覽器中開啟此 URL（或在 --no-browser 時手動複製）：\n     %s\n"
+oauth_claude_step_2 = "  2) 登入並核准連線。"
+oauth_claude_step_3a = "  3) Anthropic 的回呼頁面會顯示一串類似 `<code>#<state>` 的字串。"
+oauth_claude_step_3b = "     複製該字串並貼到下方。"
+oauth_browser_opened = "瀏覽器已開啟。"
+oauth_paste_string = "貼上授權字串"
+oauth_mounted_claude = "\n已掛載頻道 #%d（%s，type=claude）。\n"
+oauth_token_expires = "Token 過期時間：%s（屆時之前會自動重新整理）。\n"
+oauth_gemini_intro = "綁定 Google Gemini 帳號，請在此登入："
+oauth_browser_sign_in = "瀏覽器已開啟。請在瀏覽器中登入；本機將自動繼續。"
+oauth_waiting_redirect = "等待 127.0.0.1:%d 上的回呼中（逾時 %s）……\n"
+oauth_callback_no_code = "OAuth 回呼未帶授權 code"
+oauth_state_mismatch = "OAuth state 不符（收到 %q，預期 %q）— 請重新執行該命令"
+oauth_mounted_gemini = "\n已掛載頻道 #%d（%s，type=gemini）。\n"
+gates_header = "Gates："
+gate_marketplace_enabled = "  marketplace_enabled : %v"
+gate_account_active = "  account_active      : %v"
+gate_email_verified = "  email_verified      : %v"
+gate_account_age_ok = "  account_age_ok      : %v（最少 %d 天）"
+gate_has_consume_log = "  has_consume_log     : %v"
+gate_under_cap = "  under_cap           : %v（已掛載 %d / %d）"
+compensation_upstream_required = "--upstream 是必填項"
+compensation_description_required = "--description 是必填項"
+claims_total = "共 %d 個申請，總計 %d 個："
+sales_page_total = "  本頁合計：charge=%d  take=%d"
+refresh_account_label = "  帳戶：%s"
+refresh_expires_label = "  過期時間：%s"
+refresh_last_refresh_label = "  上次重新整理：%s"
+invalid_channel_id = "無效的頻道 id %q"
+channel_not_found = "頻道 #%d 不在你已掛載的頻道中"
+oauth_only_refresh = "頻道 #%d (type=%s) 不是 OAuth 頻道 — refresh 僅適用於 codex / claude / gemini"
+unknown_compensation_sub = "未知的 compensation 子命令 %q"
+unknown_channel_type = "未知的頻道類型 %q — 可選: %s, 或數字 id"
+
+[demand]
+no_rows = "無需求。"
+posted = "需求 #%d 已發布（狀態=%s）。"
+cancelled = "需求 #%d 已取消。"
+removed = "需求 #%d 已刪除。"
+remove_confirm = "永久刪除需求 #%d？"
+usage = '''
+everyapi demand — 買方需求貼
+
+用法
+  everyapi demand <子命令> [參數]
+
+子命令
+  list   [--state open|closed] [--page P] [--limit N]
+                                  公共市集需求流
+  my     [--page P] [--limit N]   你發布過的需求
+  show   <id>                     查看單筆需求詳情
+  submit --title <標題> --model <模型> --max-price <usd_per_M> [--est <tokens>]
+         [--description <描述>] [--expires <unix_s>] [--require-oauth]
+                                  發布新需求
+  cancel <id>                     取消你的某筆需求
+  remove <id> [-y]                刪除需求（非 -y 會詢問）
+'''
+
+[dispute]
+no_rows = "無爭議。"
+opened = "爭議 #%d 已發起（狀態=%s）。"
+usage = '''
+everyapi dispute — 發起 / 列出 / 查看爭議
+
+用法
+  everyapi dispute <子命令> [參數]
+
+子命令
+  submit --counterparty <uid> --type <類型> --target-kind <種類> --target <id> --description <描述> [--amount <額度>]
+                                       發起爭議
+  my     [--page P] [--limit N]        列出你的進行中 + 已結案爭議
+  show   <id>                          查看單筆爭議詳情
+'''
+
+[report]
+filed = "檢舉已提交。Abuse 團隊會透過你填寫的電子郵件跟進。"
+usage = '''
+everyapi report — 提交濫用 / 違反 TOS 檢舉
+
+用法
+  everyapi report --email <電子郵件> --category <類別> --target-type <類型> --description <描述>
+                  [--target-id <id>] [--evidence <url>]
+
+說明
+  公共端點 — 未登入也可呼叫。已登入時伺服器端會擷取 reporter user_id 便於跟進。
+'''
+
+[notify]
+no_rows = "無通知。"
+no_unread = "無未讀通知。"
+unread_count = "%d 則未讀"
+marked_read = "已標記 #%d 為已讀。"
+marked_all = "已標記 %d 則通知為已讀。"
+usage = '''
+everyapi notify — 站內通知
+
+用法
+  everyapi notify <子命令> [參數]
+
+子命令
+  list   [--unread] [--page P] [--limit N]   最近的通知
+  count                                       僅回傳未讀數量
+  read   <id>                                 將單則通知標為已讀
+  readall                                     將所有未讀全部標為已讀
+'''
+
+[dm]
+no_threads = "無私訊對話。"
+no_contacts = "尚無私訊聯絡人。"
+no_messages = "（無訊息）"
+sent_at = "已傳送 #%d（%s）"
+marked_read = "對話 #%d 已標記為已讀。"
+usage = '''
+everyapi dm — 與其他使用者的私訊
+
+用法
+  everyapi dm <子命令> [參數]
+
+子命令
+  threads  [--page P] [--limit N]      你的私訊對話（最新在前）
+  contacts                              和你互傳過私訊的使用者
+  count                                 未讀私訊數（數字）
+  open <對方_使用者_id>                 與某使用者開啟對話（冪等）
+  messages <對話_id> [--after <id>] [--limit N]
+                                        讀取對話中的訊息
+  send <對話_id> <內容>                 傳送訊息
+  read <對話_id>                        將對話標為已讀
+'''
+
+[user]
+account_header = "帳戶 #%d  %s  (%s)"
+passkey_use_dashboard = "(註冊 / 刪除需要瀏覽器流程 — 請使用 dashboard。)"
+passkey_none = "未註冊 passkey。請在 dashboard 註冊（僅瀏覽器流程）。"
+"2fa_disabled_msg" = "2FA 未啟用。執行 'everyapi user 2fa enable' 開啟。"
+"2fa_disabled" = "2FA 已關閉。"
+no_bindings = "無 OAuth 綁定。"
+bindings_count = "共 %d 個綁定："
+unbound = "已解除綁定提供商 #%d。"
+unbind_confirm = "解除綁定 OAuth 提供商 #%d？解除綁定後將無法透過此提供商登入，直到重新綁定。"
+aff_code = "推廣碼：%s"
+aff_new = "新推廣碼：%s"
+aff_rotated_warning = "嵌入舊推廣碼的連結將不再歸屬給你。"
+aff_transfer_usage = "用法：everyapi user aff transfer <數量> [-y]"
+aff_transfer_bad_amount = "無效數量 %q（必須是正整數，單位為閘道額度）"
+aff_transfer_confirm = "把 $%.2f（%d 個額度）從推廣返佣轉入主餘額？"
+aff_transfer_ok = "已轉入 $%.2f 到主餘額。"
+oauth_usage = "用法：everyapi user oauth {list|unbind <provider_id>}"
+passkey_dashboard_gated = "passkey 狀態受 dashboard session cookie 限制 — 請透過網頁 UI 管理 passkey"
+passkey_registered_last_used = "Passkey 已註冊。上次使用：%s"
+"2fa_status" = "2FA：啟用=%v 鎖定=%v"
+"2fa_backup_remaining" = "備用碼剩餘：%d"
+"2fa_low_hint" = "  （較少 — 可考慮 'everyapi user 2fa backup --code <新-totp>' 重新產生）"
+backup_regenerated = "已重新產生 %d 個備用碼 — 請立即儲存，不會再次顯示："
+"2fa_enroll_intro" = "正在設定兩步驟驗證。"
+"2fa_scan_hint" = "用你的驗證器 App 掃描此 QR code（或手動輸入下方密鑰）："
+"2fa_secret" = "密鑰：%s"
+"2fa_backup_intro" = "備用碼 — 請立即儲存，僅顯示這一次："
+"2fa_enter_code" = "輸入驗證器中的 6 位驗證碼"
+"2fa_enable_need_code" = "非互動模式下必須用 --code 提供 6 位 TOTP 驗證碼"
+"2fa_enabled_ok" = "兩步驟驗證已啟用。"
+update_no_fields = "沒有要更新的內容：請用 --username 和/或 --display-name"
+update_ok = "個人資訊已更新。"
+passwd_interactive_only = "修改密碼需要互動式終端機"
+passwd_old = "目前密碼："
+passwd_new = "新密碼（8–20 位）："
+passwd_confirm = "確認新密碼："
+passwd_empty = "新密碼不能為空"
+passwd_mismatch = "兩次輸入的新密碼不一致"
+passwd_length = "新密碼必須為 8–20 位"
+passwd_ok = "密碼已修改。"
+setting_bad_type = "無效的 --type %q（可選 email | webhook | bark | gotify）"
+setting_threshold_required = "--threshold 必須大於 0"
+setting_saved = "通知設定已儲存。"
+setting_none = "尚未設定通知頻道。用 'everyapi user setting --type <頻道> ...' 設定。"
+setting_header = "通知頻道：%s"
+setting_threshold = "閾值"
+setting_test_sent = "測試通知已傳送 — 請查收。"
+usage = '''
+everyapi user — 個人資訊 / 2FA / OAuth 綁定 / 推廣碼
+
+用法
+  everyapi user <子命令> [參數]
+
+子命令
+  info                                  彙總的個人資訊 + 安全檢視
+  2fa                                   2FA 狀態（啟用 / 鎖定 / 備用碼剩餘）
+  2fa enable                            啟用 2FA（QR code + 驗證碼，互動式）
+  2fa disable --code <6位>              關閉 2FA
+  2fa backup  --code <6位>              重置備用碼集合
+  passkey                               Passkey 註冊狀態
+  oauth list                            已綁定的 OAuth 提供商
+  oauth unbind <provider_id>            解除某個 OAuth 綁定
+  aff                                   查看你的推廣碼
+  aff reset                             重置推廣碼
+  aff transfer <數量> [-y]              把推廣返佣轉入主餘額
+  update [--username U] [--display-name D]
+                                        修改使用者名稱 / 顯示名
+  passwd                                修改密碼（互動輸入，不回顯）
+  setting [--type <頻道> ...]           查看 / 設定額度預警通知
+  setting test                          傳送測試通知
+
+說明
+  passkey 註冊、電子郵件/微信驗證需要瀏覽器流程 — 這些請在 dashboard 完成。
+  2FA 現在可以直接用 '2fa enable' 在這裡設定。
+'''
+
+[subscription]
+no_plans = "無可用訂閱方案。"
+plans_count = "共 %d 個方案："
+preference_updated = "計費偏好已更新為 %q。"
+current_preference = "目前計費偏好：%s"
+set_hint = "使用 --set <value> 修改。未知值會被後端正規化到預設值。"
+usage = '''
+everyapi subscription — 訂閱方案 / 我的訂閱 / 計費偏好
+
+用法
+  everyapi subscription <子命令> [參數]
+
+子命令
+  plans                            列出已啟用的訂閱方案
+  self                             查看你的目前與歷史訂閱
+  preference --set <值>            更新計費偏好
+                                   （常用："topup" / "subscription" / "subscription_first"）
+                                   後端會將未知值正規化。
+
+說明
+  購買方案仍是瀏覽器流程 — 使用 'everyapi topup' 開啟帶反釣魚校驗的
+  dashboard 錢包頁。
+'''
+
+[admin.user]
+no_matches = "無比對。"
+deleted = "使用者 #%d 已刪除。"
+delete_confirm = "刪除使用者 #%d？此操作具有破壞性且不可恢復。"
+action_applied = "admin user manage：操作 %q 已套用到使用者 #%d"
+
+[admin.abuse]
+no_reports = "無檢舉。"
+
+[admin.audit]
+no_rows = "無稽核日誌。"
+
+[admin.marketplace]
+status_unset = "marketplace.enabled：<未設定>（後端預設：false）\n"
+status_set = "marketplace.enabled：%s\n"
+no_change = "marketplace.enabled：已是 %s — 無變更\n"
+changed = "marketplace.enabled：%s → %s\n"
+
+[doctor.section]
+account = "帳戶"
+gateway = "閘道"
+tools = "PATH 上的工具"
+
+[doctor.result]
+failed = "結果：存在失敗項。"
+warned = "結果：通過但有警告。"
+green = "結果：全部通過。"
+
+[doctor]
+tally = "(通過=%d 警告=%d 失敗=%d)"
+usage = '''
+everyapi doctor — 自我檢查（憑證、閘道、淨化器、工具）
+
+用法
+  everyapi doctor
+'''
+
+[events]
+connected = "已連線。開始接收事件（Ctrl-C 停止）…"
+transport_err = "[傳輸] %s — 正在重新連線"
+
+[mcp.status]
+count = "已知 %d 個 MCP 用戶端："
+registered_count = "%d / %d 已註冊。"
+state_registered = "已註冊"
+state_not_registered = "未註冊"
+state_not_installed = "PATH 上未安裝"
+state_probe_failed = "（探測失敗）"
+run_install_hint = "執行 'everyapi mcp install %s'"
+
+[mcp]
+install_usage = '''everyapi mcp install — 將 everyapi 註冊為 AI CLI 的 MCP 伺服器
+
+用法
+  everyapi mcp install [client]
+
+參數
+  client    可選 claude、codex、gemini。預設 claude。
+
+底層執行 `<client> mcp add everyapi everyapi mcp`（按對應用戶端要求的語法）。
+完成後，AI CLI 會按需啟動 `everyapi mcp`，向其暴露四個 everyapi_* 工具
+（status、topup、seller_list、seller_withdraw）。
+
+要求所選用戶端的 CLI 在 PATH 中。若未安裝，錯誤訊息會包含安裝連結和一段
+可手動貼到用戶端設定的片段。'''
+uninstall_usage = '''everyapi mcp uninstall — 從 AI CLI 中卸載 everyapi
+
+用法
+  everyapi mcp uninstall [client]
+
+參數
+  client    可選 claude、codex、gemini。預設 claude。
+
+底層執行 `<client> mcp remove everyapi`，撤銷 `everyapi mcp install [client]`
+所做的註冊。卸載後需重啟用戶端以結束已執行的伺服器行程。
+
+要求所選用戶端的 CLI 在 PATH 中。若你曾手動編輯用戶端設定註冊 everyapi，
+請手動從 mcpServers 中刪除 "everyapi" 條目。'''
+status_usage = '''everyapi mcp status — 顯示哪些 MCP 用戶端已註冊 everyapi
+
+用法
+  everyapi mcp status
+
+對每個已知用戶端（claude / codex / gemini）輸出以下狀態之一：
+  registered      — everyapi 已寫入該用戶端的 MCP 伺服器清單
+  not registered  — 用戶端已安裝但尚未新增該伺服器
+  not on PATH     — 用戶端二進位檔未安裝
+  (probe failed)  — 用戶端存在但 `mcp list` 執行失敗
+'''
+
+[proxy]
+start_listening = "去敏代理監聽於 http://%s"
+start_upstream = "上游：%s"
+start_detectors = "已啟用偵測器數量：%d"
+start_point_sdk = "將 SDK 指向 http://%s（或執行 'everyapi use <tool>'）。"
+start_ctrl_c = "按 Ctrl+C 停止。對應表僅常駐在記憶體中。"
+stop_not_running = "去敏代理未執行（無 PID 檔）。"
+stop_was_not_running = "去敏代理未執行；已清理過期 PID 檔。"
+stop_sent_sigterm = "已向去敏代理傳送 SIGTERM（pid=%d）。等待最多 3 秒以讓其結束……\n"
+stop_stopped = "已停止。"
+stop_still_alive = "3 秒後行程仍在執行 — 它應該會自行結束。"
+status_not_running = "去敏代理未執行。"
+status_start_hint = "啟動方式：everyapi proxy start"
+status_wrong_server_line1 = "連接埠 %s 有回應，但不是 EveryAPI 去敏代理（HTTP %d，content-type %q）。\n"
+status_wrong_server_line2 = "連接埠被其他服務佔用 — 用 --listen 127.0.0.1:<port> 換一個連接埠，"
+status_wrong_server_line3 = "或停掉那個服務。在 macOS/Linux 上 'lsof -iTCP:%s -sTCP:LISTEN' 可定位它。"
+status_header = "去敏代理"
+status_raw_prefix = "去敏代理（原始）：%s"
+detach_prompt = "在背景執行代理（detached）？Yes = 執行後回到 shell；No = 留在目前終端機查看即時日誌（Ctrl+C 停止）"
+started_pid = "去敏代理已啟動（pid=%d，listen=%s）。"
+started_logs = "日誌：%s"
+configure_header = "everyapi proxy — 去敏設定"
+configure_config_file = "設定檔：%s"
+configure_builtin_prompt = "內建偵測器 — 保留你想啟用的項打勾："
+configure_existing_patterns = "已有自訂規則："
+configure_add_replace_prompt = "新增或取代自訂正規表示式？"
+configure_pattern_name_prompt = "規則名稱（無空格）"
+configure_pattern_exists = "（規則 %q 已存在，正規表示式為 %q — 輸入新值將覆寫）"
+configure_regex_prompt = "正規表示式（Go 語法）"
+configure_invalid_regex = "正規表示式 %q 無效：%v — 已略過。"
+configure_replaced = "→ 已取代規則 %q。"
+configure_added = "→ 已新增規則 %q。"
+configure_add_replace_another = "再新增或取代一條？"
+configure_saved = "已儲存 → %s"
+configure_restart_hint_1 = "已有去敏代理在執行。重啟才能載入新設定："
+configure_restart_hint_2 = "  everyapi proxy stop && everyapi proxy start --detach"
+
+[edge]
+no_nodes = "未註冊任何 edge 節點。"
+register_hint = "執行 'everyapi edge register --name <node-name>' 建立一個。"
+
+[status]
+quota = "額度："
+requests = "請求數："
+topup = "儲值："
+remaining_used = "剩餘 $%.2f   已用 $%.2f"
+
+[topup]
+before_open = "開啟瀏覽器前，請確認這是真實的 EveryAPI dashboard。"
+url_label = "URL："
+phrase_label = "校驗短語："
+expires_in = "（此工作階段約 %d 秒後過期）"
+checks_header = "瀏覽器開啟後請確認以下兩點："
+check_1 = "  1) 上方 URL 必須在你的 EveryAPI 來源站\n     （預設 app.everyapi.ai，或你的自架網域）。"
+check_2 = "  2) 頁面頂部展示的校驗短語必須與上方一致。"
+phishing_hint = "若任一不符，請立即關閉頁面 — 你可能正面對一個釣魚頁面。"
+copy_url = "請將上方 URL 複製到瀏覽器開啟。"
+browser_opened = "瀏覽器已開啟。請核對頁面上的校驗短語與上方一致。"
+
+[login]
+waiting = "等待授權中…（Ctrl+C 取消）"
+waiting_with_copy = "等待授權中…（Ctrl+C 取消，按 'c' 複製 URL）"
+next_hint = "下一步：試試 'everyapi status' 或 'everyapi use claude'。"
+url_copied = "URL 已複製到剪貼簿。"
+url_copy_failed = "複製失敗：%v"
+qr_hint = "用手機（或任意已登入 EveryAPI 的裝置）掃描 QR code："
+url_hint_with_qr = "或手動前往此 URL（驗證碼已內建）："
+url_hint = "授權此裝置，請前往（驗證碼已內建）："
+code_hint = "若頁面未自動填入，請輸入驗證碼：%s"
+browser_opened = "瀏覽器已開啟。請在瀏覽器或手機端完成授權；本機將自動繼續。"
+no_relay_note_1 = "提示：你的帳戶尚未建立 relay API key。`everyapi use` 需要一個"
+no_relay_note_2 = "EveryAPI dashboard，然後再次執行 'everyapi login'。"
+logged_in_saved = "\n已以 %s 登入。憑證已儲存到 %s/credentials.json\n"
+
+[logout]
+done = "已登出。"
+
+[update]
+up_to_date = "everyapi %s — 已是最新。"
+up_to_date_check = "已是最新（%s）"
+available = "可更新：%s → %s"
+update_available = "可更新：%s → %s"
+install_method = "安裝方式：       %s"
+whats_new = "─── 更新內容 ───"
+no_notes = "（無 release notes）"
+full_release = "完整 release：%s"
+prerelease = "目前執行預先發行版：%s（最新 tag：%s）"
+nothing_to_do = "無需更新。"
+dev_build_check = "dev 建置（commit %s）；最新 release 為 %s\n"
+rebuild_header = "若要從目前原始碼重新建置："
+switch_header = "若要切換到 release 通道的二進位檔："
+cant_auto = "無法自動升級 — 目前二進位檔不在 Cellar/（brew）或\n$GOBIN/$GOPATH/bin 已識別的路徑下。請任選一種方式：\n"
+dev_build_intro = "\n目前為 dev 建置（commit %s）。最新 tag release：%s。\n"
+rebuild_cmd = "  cd clients/cli && go build"
+switch_cmd_brew = "  brew install everyapi-ai/tap/everyapi   # macOS / Linux"
+switch_cmd_go = "  go install github.com/everyapi-ai/everyapi-ai@latest"
+
+[use]
+tool_picker = "選一個工具："
+group_picker = "選一個路由分組："
+yolo_prompt = "啟用 %s？（將略過所有安全確認）"
+launching = "正在啟動 %s，目標 %s"
+launching_via = "正在啟動 %s，目標 %s → %s"
+sanitizer_warn = "警告：去敏代理未能啟動（%v）。\n"
+fallback_direct = "已回退到直連模式 — 流量將直接抵達 %s，不經過隱私過濾。\n"
+fallback_hint = "傳入 --direct 可關閉此提示；或執行 'everyapi proxy start' 排查。\n\n"
+no_relay_keys = "你的帳戶沒有可用的 relay API key 用於選擇分組 — 請到 EveryAPI dashboard 建立，再執行 'everyapi login'"
+no_relay_key_long = '''
+帳戶上沒有可用的 relay API key — `everyapi use` 需要它，
+它與你的登入 token 是分開的。請在 EveryAPI dashboard (%s) 建立一個 API key，
+然後重新執行 'everyapi login'。'''
+unknown_flag = "未知 flag %q（在工具 flag 前加 `--`：`everyapi use <tool> -- %s ...`）"
+usage = "用法：everyapi use <tool> [--group <名稱>|--channel <名稱>] [--direct] [-- 工具參數...]"
+
+[upstream]
+none = "未設定上游供應商。"
+ind_none = "運行正常"
+ind_minor = "輕微異常"
+ind_major = "重大故障"
+ind_critical = "嚴重故障"
+ind_unknown = "未知"
+
+[admin.redemption]
+none = "尚無兌換碼。"
+never = "永不過期"
+status_enabled = "啟用"
+status_disabled = "停用"
+status_used = "已使用"
+created = "已產生 %d 個兌換碼："
+updated = "兌換碼 #%d 已更新。"
+status_set = "兌換碼 #%d 現在為 %s。"
+deleted = "兌換碼 #%d 已刪除。"
+cleared = "已刪除 %d 個失效兌換碼。"
+delete_confirm = "刪除兌換碼 #%d？此操作不可撤銷。"
+clear_confirm = "刪除所有已用 / 停用 / 過期的兌換碼？此操作不可撤銷。"
+
+[perf]
+none = "尚無效能資料。"
+header = "按模型效能（最近 %d 小時，按使用量排序）："

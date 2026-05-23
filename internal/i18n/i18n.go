@@ -23,8 +23,8 @@
 //   - key exists in current lang        → that translation
 //   - key missing in current, en has it → en value (degradation)
 //   - key absent everywhere             → the key itself (developer
-//                                          sees it in code review or
-//                                          first manual smoke)
+//     sees it in code review or
+//     first manual smoke)
 package i18n
 
 import (
@@ -48,13 +48,14 @@ const (
 	// {lang}.toml under ./locales (loader picks them up at init) plus a
 	// matching const here only if Go code needs to reference the new
 	// tag by name. The loader doesn't require it.
-	LangEn = "en"
-	LangZh = "zh"
-	LangJa = "ja"
-	LangKo = "ko"
-	LangEs = "es"
-	LangDe = "de"
-	LangFr = "fr"
+	LangEn   = "en"
+	LangZh   = "zh"
+	LangZhTW = "zh-TW"
+	LangJa   = "ja"
+	LangKo   = "ko"
+	LangEs   = "es"
+	LangDe   = "de"
+	LangFr   = "fr"
 )
 
 // locales is the loaded table: lang → flat dotted-key → string.
@@ -143,11 +144,23 @@ func DetectFromEnv() string {
 
 // normalize collapses an IETF tag (en_US.UTF-8, zh_CN, zh-Hant,
 // ja_JP.UTF-8, ko_KR, es_MX, de_DE, fr_FR) to the bare language
-// subtag we support. Anything we don't recognise returns "" so the
+// subtag we support. Traditional-Chinese tags (zh-TW / zh-Hant /
+// zh-HK / zh-MO) map to zh-TW; every other zh* falls back to
+// Simplified zh. Anything we don't recognise returns "" so the
 // caller can apply its own default.
 func normalize(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
+	// libc locale tags use "_" (zh_TW.UTF-8); IETF tags use "-"
+	// (zh-TW). Fold "_" to "-" so both forms hit the same prefix —
+	// otherwise zh_TW from $LANG would slip past the zh-tw case and
+	// be mis-detected as Simplified.
+	s = strings.ReplaceAll(s, "_", "-")
 	switch {
+	// These Traditional cases MUST stay above the bare "zh" case below:
+	// "zh-tw" etc. also have prefix "zh", so the switch's first-match
+	// order is load-bearing.
+	case strings.HasPrefix(s, "zh-tw"), strings.HasPrefix(s, "zh-hant"), strings.HasPrefix(s, "zh-hk"), strings.HasPrefix(s, "zh-mo"):
+		return LangZhTW
 	case strings.HasPrefix(s, "zh"):
 		return LangZh
 	case strings.HasPrefix(s, "en"):

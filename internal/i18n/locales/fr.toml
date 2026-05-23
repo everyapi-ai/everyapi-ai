@@ -53,10 +53,12 @@ COMMANDES
   user <sub>      Profil / 2FA / passkey / liaisons OAuth / code d'affiliation
   subscription <sub>  Plans d'abonnement / mon compte / préférence de facturation
   use <outil>     Lancer un CLI tiers (claude / codex / gemini) via EveryAPI
-  token <sub>     Gérer les tokens de relais (list / show / create / update / key / revoke)
+  token <sub>     Gérer les tokens de relais (list / show / create / update / key / revoke / usage)
   log <sub>       Journal des requêtes : list / stat / summary
   usage           Utilisation de quota jour par jour
   models <sub>    Catalogue de modèles : list / pricing / groups
+  upstream        Santé des fournisseurs upstream (synthèse de la page d'état)
+  perf            Performance par modèle (taux de succès / latence / débit)
   demand <sub>    Annonces marketplace côté acheteur (list/my/show/submit/cancel/remove)
   dispute <sub>   Ouvrir / lister / consulter des litiges
   report          Déposer un signalement d'abus / violation des CGU
@@ -102,7 +104,7 @@ UTILISATION
   everyapi settings reset                  Effacer tous les paramètres (retour aux défauts)
 
 CLÉS
-  language                                 en | zh | ja | ko | es | de | fr
+  language                                 en | zh | zh-TW | ja | ko | es | de | fr
 
 Le fichier de paramètres est un JSON simple au chemin que
 'everyapi settings list' affiche. L'édition manuelle est OK ; le CLI
@@ -127,6 +129,12 @@ status_disabled = "désactivé"
 status_expired = "expiré"
 status_exhausted = "épuisé"
 usage_arg_id = "utilisation : everyapi token %s <id> [options]"
+usage_header = "Utilisation du token — %s"
+usage_remaining = "restant"
+usage_used = "utilisé"
+usage_granted = "accordé"
+usage_unlimited = "illimité"
+usage_key_required = "une clé de relais est requise : everyapi token usage <sk-...> (ou --key)"
 usage = '''
 everyapi token — gérer les tokens de relais (les clés intégrées à vos apps)
 
@@ -142,6 +150,7 @@ SOUS-COMMANDES
   enable   <id>                        Passer le statut à activé
   disable  <id>                        Passer le statut à désactivé
   revoke   <id> [-y]                   Supprimer un token (soft-delete ; demande sauf avec -y)
+  usage    <key>                       Afficher le quota restant d'une clé (sans connexion)
 
 OPTIONS CREATE / UPDATE
   --name <n>           Nom affiché (requis à la création ; max 50 caractères)
@@ -512,7 +521,7 @@ SOUS-COMMANDES
 account_header = "Compte #%d  %s  (%s)"
 passkey_use_dashboard = "(Enregistrement / suppression sont des flux navigateur — utilisez le dashboard.)"
 passkey_none = "Aucune passkey enregistrée. Enregistrez-en une dans le dashboard (flux navigateur uniquement)."
-"2fa_disabled_msg" = "La configuration est un flux navigateur (scan QR) — utilisez le dashboard, puis revenez ici pour gérer les codes."
+"2fa_disabled_msg" = "La 2FA est désactivée. Activez-la avec 'everyapi user 2fa enable'."
 "2fa_disabled" = "2FA désactivée."
 no_bindings = "Aucune liaison OAuth."
 bindings_count = "%d liaison(s) :"
@@ -521,6 +530,10 @@ unbind_confirm = "Délier le fournisseur OAuth #%d ? Vous ne pourrez plus vous c
 aff_code = "Code d'affiliation : %s"
 aff_new = "Nouveau code d'affiliation : %s"
 aff_rotated_warning = "Les liens contenant le code précédent ne vous créditeront plus."
+aff_transfer_usage = "utilisation : everyapi user aff transfer <montant> [-y]"
+aff_transfer_bad_amount = "montant invalide %q (doit être un entier positif, en unités de quota gateway)"
+aff_transfer_confirm = "Transférer $%.2f (%d unités) des récompenses d'affiliation vers votre solde principal ?"
+aff_transfer_ok = "Transféré $%.2f vers votre solde principal."
 oauth_usage = "Utilisation : everyapi user oauth {list|unbind <provider_id>}"
 passkey_dashboard_gated = "le statut passkey dépend du cookie de session du dashboard — utilisez l'UI web pour gérer les passkeys"
 passkey_registered_last_used = "Passkey enregistrée. Dernière utilisation : %s"
@@ -528,6 +541,30 @@ passkey_registered_last_used = "Passkey enregistrée. Dernière utilisation : %s
 "2fa_backup_remaining" = "Codes de sauvegarde restants : %d"
 "2fa_low_hint" = "  (bas — envisagez 'everyapi user 2fa backup --code <new-totp>' pour régénérer)"
 backup_regenerated = "%d codes de sauvegarde régénérés — enregistrez-les maintenant, ils ne seront plus affichés :"
+"2fa_enroll_intro" = "Configuration de l'authentification à deux facteurs."
+"2fa_scan_hint" = "Scannez ce QR avec votre application d'authentification (ou saisissez le secret ci-dessous manuellement) :"
+"2fa_secret" = "Secret : %s"
+"2fa_backup_intro" = "Codes de sauvegarde — enregistrez-les maintenant, ils ne sont affichés qu'une fois :"
+"2fa_enter_code" = "Saisissez le code à 6 chiffres de votre authentificateur"
+"2fa_enable_need_code" = "un code TOTP à 6 chiffres est requis (--code) en mode non interactif"
+"2fa_enabled_ok" = "L'authentification à deux facteurs est maintenant activée."
+update_no_fields = "rien à mettre à jour : passez --username et/ou --display-name"
+update_ok = "Profil mis à jour."
+passwd_interactive_only = "le changement de mot de passe nécessite un terminal interactif"
+passwd_old = "Mot de passe actuel :"
+passwd_new = "Nouveau mot de passe (8–20 caractères) :"
+passwd_confirm = "Confirmez le nouveau mot de passe :"
+passwd_empty = "le nouveau mot de passe ne peut pas être vide"
+passwd_mismatch = "les deux nouveaux mots de passe ne correspondent pas"
+passwd_length = "le nouveau mot de passe doit faire 8–20 caractères"
+passwd_ok = "Mot de passe modifié."
+setting_bad_type = "--type %q invalide (utilisez email | webhook | bark | gotify)"
+setting_threshold_required = "--threshold doit être > 0"
+setting_saved = "Paramètres de notification enregistrés."
+setting_none = "Aucun canal de notification configuré. Définissez-en un avec 'everyapi user setting --type <ch> ...'."
+setting_header = "Canal de notification : %s"
+setting_threshold = "seuil"
+setting_test_sent = "Notification de test envoyée — vérifiez votre canal."
 usage = '''
 everyapi user — profil / 2FA / liaisons OAuth / code d'affiliation
 
@@ -537,6 +574,7 @@ UTILISATION
 SOUS-COMMANDES
   info                                  Vue consolidée profil + sécurité
   2fa                                   Statut 2FA (activée / verrouillée / codes de secours restants)
+  2fa enable                            Activer la 2FA (QR + code, interactif)
   2fa disable --code <6 chiffres>       Désactiver la 2FA
   2fa backup  --code <6 chiffres>       Régénérer l'ensemble des codes de secours
   passkey                               Statut d'enregistrement passkey
@@ -544,12 +582,17 @@ SOUS-COMMANDES
   oauth unbind <provider_id>            Retirer une liaison OAuth
   aff                                   Afficher votre code d'affiliation
   aff reset                             Régénérer le code d'affiliation
+  aff transfer <montant> [-y]           Transférer les récompenses d'affiliation vers le solde principal
+  update [--username U] [--display-name D]
+                                        Modifier votre nom d'utilisateur / nom affiché
+  passwd                                Changer le mot de passe (invites, sans écho)
+  setting [--type <ch> ...]             Afficher ou définir les notifications d'alerte de quota
+  setting test                          Envoyer une notification de test
 
 NOTE
-  La configuration 2FA (scan QR), l'enregistrement passkey et la
-  vérification email/wechat nécessitent tous un flux navigateur —
-  utilisez le dashboard pour la configuration initiale, puis revenez
-  ici pour la gestion courante.
+  L'enregistrement passkey et la vérification email/wechat nécessitent
+  un flux navigateur — utilisez le dashboard pour cela. La 2FA peut être
+  configurée directement ici avec '2fa enable'.
 '''
 
 [subscription]
@@ -785,3 +828,29 @@ elle est distincte du jeton de connexion. Créez une clé API dans le
 tableau de bord EveryAPI (%s), puis relancez 'everyapi login'.'''
 unknown_flag = "flag inconnu %q (utilisez `--` avant les flags de l'outil : `everyapi use <tool> -- %s ...`)"
 usage = "utilisation : everyapi use <tool> [--group <nom>|--channel <nom>] [--direct] [-- arguments de l'outil...]"
+
+[upstream]
+none = "Aucun fournisseur upstream configuré."
+ind_none = "opérationnel"
+ind_minor = "problèmes mineurs"
+ind_major = "panne majeure"
+ind_critical = "panne critique"
+ind_unknown = "inconnu"
+
+[admin.redemption]
+none = "Aucun code d'échange."
+never = "jamais"
+status_enabled = "activé"
+status_disabled = "désactivé"
+status_used = "utilisé"
+created = "%d code(s) généré(s) :"
+updated = "Échange #%d mis à jour."
+status_set = "L'échange #%d est maintenant %s."
+deleted = "Échange #%d supprimé."
+cleared = "%d code(s) invalide(s) supprimé(s)."
+delete_confirm = "Supprimer l'échange #%d ? Cette action est irréversible."
+clear_confirm = "Supprimer TOUS les codes utilisés / désactivés / expirés ? Cette action est irréversible."
+
+[perf]
+none = "Aucune donnée de performance pour l'instant."
+header = "Performance par modèle (dernières %dh, les plus utilisés en premier) :"

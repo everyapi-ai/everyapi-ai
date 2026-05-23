@@ -29,6 +29,7 @@ import (
 	mcpcmd "github.com/everyapi-ai/everyapi-ai/cmd/mcp"
 	"github.com/everyapi-ai/everyapi-ai/cmd/models"
 	"github.com/everyapi-ai/everyapi-ai/cmd/notify"
+	"github.com/everyapi-ai/everyapi-ai/cmd/perf"
 	"github.com/everyapi-ai/everyapi-ai/cmd/proxy"
 	"github.com/everyapi-ai/everyapi-ai/cmd/report"
 	"github.com/everyapi-ai/everyapi-ai/cmd/seller"
@@ -156,6 +157,7 @@ var commands = []command{
 		{name: "groups", desc: "Routing groups your account can use", args: []string{"groups"}},
 	}},
 	{name: "upstream", desc: "Upstream provider health (status-page rollup)", run: upstream.Run},
+	{name: "perf", desc: "Per-model performance (success rate / latency / throughput)", run: perf.Run},
 	{name: "demand", desc: "Buyer-side marketplace postings (list / my / show / submit / cancel / remove)", requireLogin: true, run: demand.Run, subs: []subcommand{
 		{name: "list", desc: "Public marketplace feed", args: []string{"list"}},
 		{name: "my", desc: "Demands you've posted", args: []string{"my"}},

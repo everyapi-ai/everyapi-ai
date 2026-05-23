@@ -52,10 +52,12 @@ BEFEHLE
   user <Sub>      Profil / 2FA / Passkey / OAuth-Bindungen / Affiliate-Code
   subscription <Sub>  Abopläne / eigene Abos / Abrechnungspräferenz
   use <Tool>      Drittanbieter-CLI über EveryAPI starten (claude / codex / gemini)
-  token <Sub>     Relay-API-Tokens verwalten (list / show / create / update / key / revoke)
+  token <Sub>     Relay-API-Tokens verwalten (list / show / create / update / key / revoke / usage)
   log <Sub>       Anfrage-Log: list / stat / summary
   usage           Tag-für-Tag Quota-Nutzung
   models <Sub>    Modellkatalog: list / pricing / groups
+  upstream        Zustand der Upstream-Anbieter (Status-Page-Zusammenfassung)
+  perf            Performance pro Modell (Erfolgsrate / Latenz / Durchsatz)
   demand <Sub>    Käuferseitige Marketplace-Einträge (list/my/show/submit/cancel/remove)
   dispute <Sub>   Streitfälle öffnen / auflisten / einsehen
   report          Missbrauchs- / TOS-Verstoß-Meldung einreichen
@@ -101,7 +103,7 @@ VERWENDUNG
   everyapi settings reset                  Alle Einstellungen löschen (zurück auf Standard)
 
 SCHLÜSSEL
-  language                                 en | zh | ja | ko | es | de | fr
+  language                                 en | zh | zh-TW | ja | ko | es | de | fr
 
 Die Einstellungsdatei ist einfaches JSON unter dem Pfad, den
 'everyapi settings list' anzeigt. Manuelles Bearbeiten ist in Ordnung;
@@ -126,6 +128,12 @@ status_disabled = "deaktiviert"
 status_expired = "abgelaufen"
 status_exhausted = "aufgebraucht"
 usage_arg_id = "Verwendung: everyapi token %s <id> [Optionen]"
+usage_header = "Token-Nutzung — %s"
+usage_remaining = "verbleibend"
+usage_used = "verwendet"
+usage_granted = "zugeteilt"
+usage_unlimited = "unbegrenzt"
+usage_key_required = "ein Relay-API-Key ist erforderlich: everyapi token usage <sk-...> (oder --key)"
 usage = '''
 everyapi token — Relay-API-Tokens verwalten (die Schlüssel, die deine Apps einbetten)
 
@@ -141,6 +149,7 @@ UNTERBEFEHLE
   enable   <id>                        Status auf aktiviert setzen
   disable  <id>                        Status auf deaktiviert setzen
   revoke   <id> [-y]                   Token löschen (soft-delete; fragt ohne -y)
+  usage    <key>                       Verbleibende Quota eines Keys anzeigen (kein Login nötig)
 
 CREATE / UPDATE OPTIONEN
   --name <n>           Anzeigename (bei create erforderlich; max. 50 Zeichen)
@@ -511,7 +520,7 @@ UNTERBEFEHLE
 account_header = "Konto #%d  %s  (%s)"
 passkey_use_dashboard = "(Registrieren / Löschen sind Browser-Flows — verwende das Dashboard.)"
 passkey_none = "Kein Passkey registriert. Registriere einen im Dashboard (nur Browser-Flow)."
-"2fa_disabled_msg" = "Die Einrichtung ist ein Browser-Flow (QR-Scan) — verwende das Dashboard und komm danach zurück, um Codes zu verwalten."
+"2fa_disabled_msg" = "2FA ist aus. Aktiviere es mit 'everyapi user 2fa enable'."
 "2fa_disabled" = "2FA deaktiviert."
 no_bindings = "Keine OAuth-Bindungen."
 bindings_count = "%d Bindung(en):"
@@ -520,6 +529,10 @@ unbind_confirm = "OAuth-Anbieter #%d entbinden? Du kannst dich nicht über diese
 aff_code = "Affiliate-Code: %s"
 aff_new = "Neuer Affiliate-Code: %s"
 aff_rotated_warning = "Links, die den vorherigen Code enthalten, schreiben dich nicht mehr gut."
+aff_transfer_usage = "Verwendung: everyapi user aff transfer <Betrag> [-y]"
+aff_transfer_bad_amount = "ungültiger Betrag %q (muss eine positive ganze Zahl in Gateway-Quota-Einheiten sein)"
+aff_transfer_confirm = "$%.2f (%d Einheiten) von den Affiliate-Belohnungen auf dein Hauptsaldo übertragen?"
+aff_transfer_ok = "$%.2f auf dein Hauptsaldo übertragen."
 oauth_usage = "Verwendung: everyapi user oauth {list|unbind <provider_id>}"
 passkey_dashboard_gated = "Passkey-Status ist an das Dashboard-Session-Cookie gebunden — nutze die Web-UI für die Passkey-Verwaltung"
 passkey_registered_last_used = "Passkey registriert. Zuletzt verwendet: %s"
@@ -527,6 +540,30 @@ passkey_registered_last_used = "Passkey registriert. Zuletzt verwendet: %s"
 "2fa_backup_remaining" = "Verbleibende Backup-Codes: %d"
 "2fa_low_hint" = "  (niedrig — erwäge 'everyapi user 2fa backup --code <new-totp>' zum Regenerieren)"
 backup_regenerated = "%d Backup-Codes regeneriert — speichere sie jetzt, sie werden nicht erneut angezeigt:"
+"2fa_enroll_intro" = "Zwei-Faktor-Authentifizierung wird eingerichtet."
+"2fa_scan_hint" = "Scanne diesen QR-Code mit deiner Authenticator-App (oder gib das Secret unten manuell ein):"
+"2fa_secret" = "Secret: %s"
+"2fa_backup_intro" = "Backup-Codes — speichere sie jetzt, sie werden nur einmal angezeigt:"
+"2fa_enter_code" = "Gib den 6-stelligen Code aus deiner Authenticator-App ein"
+"2fa_enable_need_code" = "im nicht-interaktiven Modus ist ein 6-stelliger TOTP-Code (--code) erforderlich"
+"2fa_enabled_ok" = "Die Zwei-Faktor-Authentifizierung ist jetzt aktiviert."
+update_no_fields = "nichts zu aktualisieren: übergib --username und/oder --display-name"
+update_ok = "Profil aktualisiert."
+passwd_interactive_only = "Passwortänderung erfordert ein interaktives Terminal"
+passwd_old = "Aktuelles Passwort:"
+passwd_new = "Neues Passwort (8–20 Zeichen):"
+passwd_confirm = "Neues Passwort bestätigen:"
+passwd_empty = "neues Passwort darf nicht leer sein"
+passwd_mismatch = "die beiden neuen Passwörter stimmen nicht überein"
+passwd_length = "neues Passwort muss 8–20 Zeichen lang sein"
+passwd_ok = "Passwort geändert."
+setting_bad_type = "ungültiger --type %q (verwende email | webhook | bark | gotify)"
+setting_threshold_required = "--threshold muss > 0 sein"
+setting_saved = "Benachrichtigungseinstellungen gespeichert."
+setting_none = "Kein Benachrichtigungskanal konfiguriert. Lege einen mit 'everyapi user setting --type <ch> ...' fest."
+setting_header = "Benachrichtigungskanal: %s"
+setting_threshold = "Schwellwert"
+setting_test_sent = "Test-Benachrichtigung gesendet — prüfe deinen Kanal."
 usage = '''
 everyapi user — Profil / 2FA / OAuth-Bindungen / Affiliate-Code
 
@@ -536,6 +573,7 @@ VERWENDUNG
 UNTERBEFEHLE
   info                                  Zusammengefasste Profil- und Sicherheitsansicht
   2fa                                   2FA-Status (aktiviert / gesperrt / verbleibende Backup-Codes)
+  2fa enable                            2FA einrichten (QR + Code, interaktiv)
   2fa disable --code <6-stellig>        2FA ausschalten
   2fa backup  --code <6-stellig>        Backup-Code-Satz neu erzeugen
   passkey                               Passkey-Registrierungsstatus
@@ -543,12 +581,17 @@ UNTERBEFEHLE
   oauth unbind <provider_id>            Eine OAuth-Bindung entfernen
   aff                                   Deinen Affiliate-Code anzeigen
   aff reset                             Affiliate-Code neu erzeugen
+  aff transfer <amount> [-y]            Affiliate-Belohnungen ins Hauptsaldo überführen
+  update [--username U] [--display-name D]
+                                        Benutzernamen / Anzeigenamen bearbeiten
+  passwd                                Passwort ändern (Eingabeaufforderung, ohne Echo)
+  setting [--type <ch> ...]             Quota-Warn-Benachrichtigungen anzeigen oder setzen
+  setting test                          Eine Test-Benachrichtigung senden
 
 HINWEIS
-  2FA-Einrichtung (QR-Scan), Passkey-Registrierung und E-Mail-/Wechat-
-  Verifizierung benötigen alle einen Browser-Flow — nutze das Dashboard
-  für die Ersteinrichtung und komm danach hierher für die laufende
-  Verwaltung.
+  Passkey-Registrierung und E-Mail-/Wechat-Verifizierung benötigen einen
+  Browser-Flow — nutze dafür das Dashboard. 2FA kann direkt hier mit
+  '2fa enable' eingerichtet werden.
 '''
 
 [subscription]
@@ -783,3 +826,29 @@ unabhängig vom Login-Token. Erstelle einen API-Schlüssel im
 EveryAPI-Dashboard (%s) und führe dann 'everyapi login' erneut aus.'''
 unknown_flag = "unbekanntes Flag %q (verwende `--` vor Tool-Flags: `everyapi use <tool> -- %s ...`)"
 usage = "Verwendung: everyapi use <tool> [--group <Name>|--channel <Name>] [--direct] [-- Tool-Argumente...]"
+
+[upstream]
+none = "Keine Upstream-Anbieter konfiguriert."
+ind_none = "betriebsbereit"
+ind_minor = "kleinere Probleme"
+ind_major = "schwere Störung"
+ind_critical = "kritische Störung"
+ind_unknown = "unbekannt"
+
+[admin.redemption]
+none = "Keine Einlöse-Codes."
+never = "nie"
+status_enabled = "aktiviert"
+status_disabled = "deaktiviert"
+status_used = "verwendet"
+created = "%d Code(s) erzeugt:"
+updated = "Einlöse-Code #%d aktualisiert."
+status_set = "Einlöse-Code #%d ist jetzt %s."
+deleted = "Einlöse-Code #%d gelöscht."
+cleared = "%d ungültige(n) Code(s) gelöscht."
+delete_confirm = "Einlöse-Code #%d löschen? Dies kann nicht rückgängig gemacht werden."
+clear_confirm = "ALLE verwendeten / deaktivierten / abgelaufenen Codes löschen? Dies kann nicht rückgängig gemacht werden."
+
+[perf]
+none = "Noch keine Performance-Daten."
+header = "Performance pro Modell (letzte %dh, meistgenutzte zuerst):"

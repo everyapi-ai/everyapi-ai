@@ -418,11 +418,67 @@ func runAff(args []string) error {
 		cliout.Println(i18n.T("user.aff_rotated_warning"))
 		return nil
 	}
+	if len(args) > 0 && args[0] == "transfer" {
+		return runAffTransfer(client, args[1:])
+	}
 	code, err := client.GetAffCode(cliout.WithCtx())
 	if err != nil {
 		return classifyErr(err)
 	}
 	cliout.Printf(i18n.T("user.aff_code")+"\n", code)
+	return nil
+}
+
+// runAffTransfer moves affiliate-reward quota into the main balance —
+// the affiliate-side mirror of `seller withdraw`. Amount is the first
+// positional arg (gateway quota units); -y skips the confirm.
+func runAffTransfer(client *api.Client, args []string) error {
+	// Accept the amount and the confirm-skip flag in any order — the only
+	// flag here is -y (with --y / --yes aliases, matching `seller`), so
+	// splitting it from the positional amount by hand keeps both
+	// `aff transfer -y 1000` and `aff transfer 1000 -y` working (stdlib
+	// flag would mis-read the amount-first form's trailing flag).
+	yes := false
+	var positional []string
+	for _, a := range args {
+		if a == "-y" || a == "--y" || a == "--yes" {
+			yes = true
+			continue
+		}
+		positional = append(positional, a)
+	}
+	if len(positional) == 0 {
+		return errors.New(i18n.T("user.aff_transfer_usage"))
+	}
+	amount, err := strconv.Atoi(positional[0])
+	if err != nil || amount <= 0 {
+		return fmt.Errorf(i18n.T("user.aff_transfer_bad_amount"), positional[0])
+	}
+	// Render the amount in USD (like `seller withdraw` / `status`) so the
+	// confirm + result speak the same units as the rest of the CLI — a
+	// user typing too small an amount sees "$0.00" and backs out instead
+	// of bouncing off the backend's $1 minimum. perUnit is a free
+	// /api/status round-trip; fall back to raw DB units on the rare
+	// failure rather than blocking the transfer.
+	perUnit := 1.0
+	if status, sErr := client.GetStatus(cliout.WithCtx()); sErr == nil && status.QuotaPerUnit > 0 {
+		perUnit = status.QuotaPerUnit
+	}
+	usd := float64(amount) / perUnit
+	if !yes && cliprompt.IsInteractive() {
+		ok, err := cliprompt.YesNo(bufio.NewReader(os.Stdin), fmt.Sprintf(i18n.T("user.aff_transfer_confirm"), usd, amount), false)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			cliout.Println(i18n.T("common.canceled"))
+			return nil
+		}
+	}
+	if err := client.TransferAffQuota(cliout.WithCtx(), amount); err != nil {
+		return classifyErr(err)
+	}
+	cliout.Printf(i18n.T("user.aff_transfer_ok")+"\n", usd)
 	return nil
 }
 

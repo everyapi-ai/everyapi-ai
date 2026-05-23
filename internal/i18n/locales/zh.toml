@@ -43,6 +43,7 @@ everyapi — EveryAPI 命令行
   usage           按日用量
   models <子>     模型目录：list / pricing / groups
   upstream        上游提供商健康状态（状态页汇总）
+  perf            按模型性能（成功率 / 时延 / 吞吐）
   demand <子>     买方需求贴（list/my/show/submit/cancel/remove）
   dispute <子>    争议：开启 / 列表 / 查看
   report          举报滥用 / 违规
@@ -88,7 +89,7 @@ everyapi settings — 查看 / 修改 CLI 偏好
   everyapi settings reset                  清空所有设置（恢复默认值）
 
 KEY
-  language                                 en | zh | ja | ko | es | de | fr
+  language                                 en | zh | zh-TW | ja | ko | es | de | fr
 
 设置文件是 'everyapi settings list' 打印的路径上的纯 JSON。可手动编辑；
 CLI 下次启动时会重新读取。
@@ -510,6 +511,10 @@ unbind_confirm = "解绑 OAuth 提供商 #%d？解绑后将无法通过此提供
 aff_code = "推广码：%s"
 aff_new = "新推广码：%s"
 aff_rotated_warning = "嵌入旧推广码的链接将不再归属给你。"
+aff_transfer_usage = "用法：everyapi user aff transfer <数量> [-y]"
+aff_transfer_bad_amount = "无效数量 %q（必须是正整数，单位为网关额度）"
+aff_transfer_confirm = "把 $%.2f（%d 个额度）从推广返佣转入主余额？"
+aff_transfer_ok = "已转入 $%.2f 到主余额。"
 oauth_usage = "用法：everyapi user oauth {list|unbind <provider_id>}"
 passkey_dashboard_gated = "passkey 状态受 dashboard session cookie 限制 — 请通过网页 UI 管理 passkey"
 passkey_registered_last_used = "Passkey 已注册。上次使用：%s"
@@ -558,6 +563,7 @@ everyapi user — 个人信息 / 2FA / OAuth 绑定 / 推广码
   oauth unbind <provider_id>            解除某个 OAuth 绑定
   aff                                   查看你的推广码
   aff reset                             重置推广码
+  aff transfer <数量> [-y]              把推广返佣转入主余额
   update [--username U] [--display-name D]
                                         修改用户名 / 显示名
   passwd                                修改密码（交互输入，不回显）
@@ -818,3 +824,7 @@ deleted = "兑换码 #%d 已删除。"
 cleared = "已删除 %d 个失效兑换码。"
 delete_confirm = "删除兑换码 #%d？此操作不可撤销。"
 clear_confirm = "删除所有已用 / 禁用 / 过期的兑换码？此操作不可撤销。"
+
+[perf]
+none = "暂无性能数据。"
+header = "按模型性能（最近 %d 小时，按使用量排序）："

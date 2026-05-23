@@ -55,6 +55,7 @@ COMMANDS
   usage           Day-by-day quota usage
   models <sub>    Model catalog: list / pricing / groups
   upstream        Upstream provider health (status-page rollup)
+  perf            Per-model performance (success rate / latency / throughput)
   demand <sub>    Buyer-side marketplace postings (list/my/show/submit/cancel/remove)
   dispute <sub>   Open / list / inspect disputes
   report          File an abuse / TOS-violation report
@@ -100,7 +101,7 @@ USAGE
   everyapi settings reset                  Clear all settings (back to defaults)
 
 KEYS
-  language                                 en | zh | ja | ko | es | de | fr
+  language                                 en | zh | zh-TW | ja | ko | es | de | fr
 
 The settings file is plain JSON at the path 'everyapi settings list'
 prints. Hand-editing is fine; the CLI re-reads on next invocation.
@@ -524,6 +525,10 @@ unbind_confirm = "Unbind OAuth provider #%d? You won't be able to log in via thi
 aff_code = "Affiliate code: %s"
 aff_new = "New affiliate code: %s"
 aff_rotated_warning = "Any links embedding the previous code no longer credit you."
+aff_transfer_usage = "usage: everyapi user aff transfer <amount> [-y]"
+aff_transfer_bad_amount = "invalid amount %q (must be a positive integer, in gateway quota units)"
+aff_transfer_confirm = "Transfer $%.2f (%d units) from affiliate rewards to your main balance?"
+aff_transfer_ok = "Transferred $%.2f to your main balance."
 oauth_usage = "Usage: everyapi user oauth {list|unbind <provider_id>}"
 passkey_dashboard_gated = "passkey status is gated on the dashboard session cookie — use the web UI for passkey management"
 passkey_registered_last_used = "Passkey registered. Last used: %s"
@@ -572,6 +577,7 @@ SUBCOMMANDS
   oauth unbind <provider_id>            Remove one OAuth binding
   aff                                   Show your affiliate code
   aff reset                             Rotate the affiliate code
+  aff transfer <amount> [-y]            Move affiliate rewards into main balance
   update [--username U] [--display-name D]
                                         Edit your username / display name
   passwd                                Change password (prompts, echo off)
@@ -837,3 +843,7 @@ deleted = "Redemption #%d deleted."
 cleared = "Deleted %d invalid code(s)."
 delete_confirm = "Delete redemption #%d? This cannot be undone."
 clear_confirm = "Delete ALL used / disabled / expired codes? This cannot be undone."
+
+[perf]
+none = "No performance data yet."
+header = "Per-model performance (last %dh, most-used first):"

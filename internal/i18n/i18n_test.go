@@ -1,6 +1,11 @@
 package i18n
 
-import "testing"
+import (
+	"regexp"
+	"slices"
+	"strings"
+	"testing"
+)
 
 func TestNormalize(t *testing.T) {
 	cases := []struct {
@@ -13,8 +18,12 @@ func TestNormalize(t *testing.T) {
 		{"en-GB", LangEn},
 		{"zh", LangZh},
 		{"zh_CN", LangZh},
-		{"zh-Hant", LangZh},
-		{"ZH_TW.UTF-8", LangZh},
+		{"zh-CN", LangZh},
+		// Traditional-Chinese tags map to zh-TW, not Simplified zh.
+		{"zh-Hant", LangZhTW},
+		{"zh-TW", LangZhTW},
+		{"zh-HK", LangZhTW},
+		{"ZH_TW.UTF-8", LangZhTW},
 		{"ja", LangJa},
 		{"ja_JP.UTF-8", LangJa},
 		{"ko", LangKo},
@@ -133,9 +142,98 @@ func TestSupportedLanguages(t *testing.T) {
 	for _, l := range langs {
 		seen[l] = true
 	}
-	for _, want := range []string{LangEn, LangZh, LangJa, LangKo, LangEs, LangDe, LangFr} {
+	for _, want := range []string{LangEn, LangZh, LangZhTW, LangJa, LangKo, LangEs, LangDe, LangFr} {
 		if !seen[want] {
 			t.Errorf("missing %q in supported languages: %v", want, langs)
+		}
+	}
+}
+
+// localePlaceholderRe extracts printf verbs (%s %d %q %.2f %dh, plus
+// explicit-index forms like %[2]s) from a format string.
+var localePlaceholderRe = regexp.MustCompile(`%(\[\d+\])?[-#0-9.]*[a-zA-Z]`)
+
+// localePlaceholderIndexRe strips the explicit %[N] argument index.
+var localePlaceholderIndexRe = regexp.MustCompile(`\[\d+\]`)
+
+// localePlaceholders returns the SORTED MULTISET of printf verbs in s,
+// with explicit %[N] indices stripped. Both choices are deliberate:
+// reordering args via %[2]s is a legal, README-recommended way to fit a
+// language's word order, so the parity check compares which verbs appear
+// (and how many), not their position — otherwise a correctly-reordered
+// translation would spuriously fail. Literal %% is dropped first so it
+// isn't mistaken for a verb.
+func localePlaceholders(s string) []string {
+	s = strings.ReplaceAll(s, "%%", "")
+	raw := localePlaceholderRe.FindAllString(s, -1)
+	out := make([]string, len(raw))
+	for i, p := range raw {
+		out[i] = localePlaceholderIndexRe.ReplaceAllString(p, "")
+	}
+	slices.Sort(out)
+	return out
+}
+
+// TestLocaleParity is the dev-time guard against locale drift: every
+// shipped locale must carry the SAME key set as en, with the same
+// format placeholders (count + order) per key. Runtime still degrades
+// gracefully — T() falls back to en for a missing key — but that
+// fallback is exactly what let the secondary locales silently drift 54
+// keys behind before this test existed. Rule: add a key to en.toml →
+// add it to every locale, with identical %-verbs in identical order
+// (Go's printf is positional, so reordering verbs silently corrupts
+// output unless done via explicit %[N] indices — which the placeholder
+// check tolerates by comparing the index-stripped multiset).
+//
+// Do NOT add t.Parallel() here: TestT_Translation mutates the shared
+// package-level `locales` map (it injects an en-only fixture key), and
+// a parallel run could observe that key and report it missing from
+// every other locale.
+func TestLocaleParity(t *testing.T) {
+	en, ok := locales[LangEn]
+	if !ok {
+		t.Fatal("en locale not loaded")
+	}
+	for lang, tbl := range locales {
+		if lang == LangEn {
+			continue
+		}
+		for k, ev := range en {
+			tv, ok := tbl[k]
+			if !ok {
+				t.Errorf("%s: missing key %q (present in en)", lang, k)
+				continue
+			}
+			if ep, tp := localePlaceholders(ev), localePlaceholders(tv); !slices.Equal(ep, tp) {
+				t.Errorf("%s: key %q placeholder mismatch: en %v vs %v", lang, k, ep, tp)
+			}
+		}
+		for k := range tbl {
+			if _, ok := en[k]; !ok {
+				t.Errorf("%s: extra key %q (not in en)", lang, k)
+			}
+		}
+	}
+}
+
+func TestLocalePlaceholders(t *testing.T) {
+	cases := []struct {
+		in   string
+		want []string
+	}{
+		{"%s contains %d", []string{"%d", "%s"}},
+		// Explicit-index reordering must yield the same multiset as the
+		// un-indexed source — reordering args for grammar is legal and
+		// must not trip the parity check.
+		{"%[2]s 含 %[1]d 個", []string{"%d", "%s"}},
+		{"%d%% done", []string{"%d"}}, // literal %% is not a verb
+		{"100%% complete", nil},
+		{"%.2f / %5.1f%%", []string{"%.2f", "%5.1f"}},
+		{"no verbs here", nil},
+	}
+	for _, c := range cases {
+		if got := localePlaceholders(c.in); !slices.Equal(got, c.want) {
+			t.Errorf("localePlaceholders(%q) = %v, want %v", c.in, got, c.want)
 		}
 	}
 }

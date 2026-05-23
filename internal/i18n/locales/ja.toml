@@ -48,10 +48,12 @@ everyapi — EveryAPI CLI
   user <sub>      プロフィール / 2FA / passkey / OAuth 連携 / アフィリエイトコード
   subscription <sub>  サブスクリプションプラン / 自分の契約 / 課金設定
   use <tool>      EveryAPI 経由でサードパーティ CLI を起動 (claude / codex / gemini)
-  token <sub>     リレー API トークン管理 (list / show / create / update / key / revoke)
+  token <sub>     リレー API トークン管理 (list / show / create / update / key / revoke / usage)
   log <sub>       リクエストログ: list / stat / summary
   usage           日別のクォータ使用量
   models <sub>    モデルカタログ: list / pricing / groups
+  upstream        上流プロバイダの稼働状況 (ステータスページ集計)
+  perf            モデル別パフォーマンス (成功率 / レイテンシ / スループット)
   demand <sub>    バイヤー側マーケットプレイス投稿 (list/my/show/submit/cancel/remove)
   dispute <sub>   ディスピュート: 起票 / 一覧 / 詳細
   report          不正利用 / 規約違反を報告
@@ -97,7 +99,7 @@ everyapi settings — CLI 設定の表示 / 変更
   everyapi settings reset                  すべての設定をクリア（デフォルトに戻す）
 
 キー
-  language                                 en | zh | ja | ko | es | de | fr
+  language                                 en | zh | zh-TW | ja | ko | es | de | fr
 
 設定ファイルは 'everyapi settings list' が表示するパスのプレーン JSON
 です。手動編集も可能で、CLI は次回起動時に読み直します。
@@ -121,6 +123,12 @@ status_disabled = "無効"
 status_expired = "期限切れ"
 status_exhausted = "枠を使い切り"
 usage_arg_id = "使用法: everyapi token %s <id> [フラグ]"
+usage_header = "Token 使用量 — %s"
+usage_remaining = "残り"
+usage_used = "使用済み"
+usage_granted = "付与合計"
+usage_unlimited = "無制限"
+usage_key_required = "リレーキーが必要です: everyapi token usage <sk-...>（または --key）"
 usage = '''
 everyapi token — リレー API トークン管理（アプリに埋め込むキー）
 
@@ -136,6 +144,7 @@ everyapi token — リレー API トークン管理（アプリに埋め込む�
   enable   <id>                        状態を有効に切り替え
   disable  <id>                        状態を無効に切り替え
   revoke   <id> [-y]                   トークンを削除（ソフトデリート、-y なしで確認）
+  usage    <key>                       キーの残りクォータを表示（ログイン不要）
 
 CREATE / UPDATE フラグ
   --name <n>           表示名 (create で必須、最大 50 文字)
@@ -505,7 +514,7 @@ everyapi dm — 他ユーザーとのダイレクトメッセージ
 account_header = "アカウント #%d  %s  (%s)"
 passkey_use_dashboard = "(登録 / 削除はブラウザ操作です — ダッシュボードを使ってください。)"
 passkey_none = "登録された passkey はありません。ダッシュボードで登録してください (ブラウザのみ)。"
-"2fa_disabled_msg" = "セットアップはブラウザ操作 (QR スキャン) — ダッシュボードで初期設定後、ここでコード管理を行ってください。"
+"2fa_disabled_msg" = "2FA は無効です。'everyapi user 2fa enable' で有効にできます。"
 "2fa_disabled" = "2FA は無効です。"
 no_bindings = "OAuth 連携はありません。"
 bindings_count = "%d 件の連携:"
@@ -514,6 +523,10 @@ unbind_confirm = "OAuth プロバイダ #%d の連携を解除しますか？再
 aff_code = "アフィリエイトコード: %s"
 aff_new = "新しいアフィリエイトコード: %s"
 aff_rotated_warning = "以前のコードを埋め込んだリンクは、もう報酬対象になりません。"
+aff_transfer_usage = "使用法: everyapi user aff transfer <amount> [-y]"
+aff_transfer_bad_amount = "無効な金額 %q（正の整数、ゲートウェイのクォータ単位である必要があります）"
+aff_transfer_confirm = "アフィリエイト報酬からメイン残高へ $%.2f（%d 単位）を振り替えますか？"
+aff_transfer_ok = "メイン残高へ $%.2f を振り替えました。"
 oauth_usage = "使い方: everyapi user oauth {list|unbind <provider_id>}"
 passkey_dashboard_gated = "passkey ステータスは dashboard session cookie に依存します — passkey 管理は Web UI を使ってください"
 passkey_registered_last_used = "Passkey 登録済み。最終使用: %s"
@@ -521,6 +534,30 @@ passkey_registered_last_used = "Passkey 登録済み。最終使用: %s"
 "2fa_backup_remaining" = "バックアップコード残り: %d"
 "2fa_low_hint" = "  （残り少 — 'everyapi user 2fa backup --code <new-totp>' で再生成を検討）"
 backup_regenerated = "%d 個のバックアップコードを再生成しました — 今すぐ保存してください。再表示されません:"
+"2fa_enroll_intro" = "二要素認証をセットアップします。"
+"2fa_scan_hint" = "認証アプリでこの QR をスキャンしてください（または下のシークレットを手動で入力）:"
+"2fa_secret" = "シークレット: %s"
+"2fa_backup_intro" = "バックアップコード — 今すぐ保存してください。表示は一度だけです:"
+"2fa_enter_code" = "認証アプリの 6 桁のコードを入力してください"
+"2fa_enable_need_code" = "非対話モードでは 6 桁の TOTP コード（--code）が必要です"
+"2fa_enabled_ok" = "二要素認証が有効になりました。"
+update_no_fields = "更新する項目がありません: --username および/または --display-name を指定してください"
+update_ok = "プロフィールを更新しました。"
+passwd_interactive_only = "パスワード変更には対話型ターミナルが必要です"
+passwd_old = "現在のパスワード:"
+passwd_new = "新しいパスワード（8–20 文字）:"
+passwd_confirm = "新しいパスワードの確認:"
+passwd_empty = "新しいパスワードを空にはできません"
+passwd_mismatch = "2 つの新しいパスワードが一致しません"
+passwd_length = "新しいパスワードは 8–20 文字である必要があります"
+passwd_ok = "パスワードを変更しました。"
+setting_bad_type = "無効な --type %q（email | webhook | bark | gotify を指定）"
+setting_threshold_required = "--threshold は 0 より大きい値である必要があります"
+setting_saved = "通知設定を保存しました。"
+setting_none = "通知チャネルが設定されていません。'everyapi user setting --type <ch> ...' で設定してください。"
+setting_header = "通知チャネル: %s"
+setting_threshold = "しきい値"
+setting_test_sent = "テスト通知を送信しました — チャネルを確認してください。"
 usage = '''
 everyapi user — プロフィール / 2FA / OAuth 連携 / アフィリエイトコード
 
@@ -530,6 +567,7 @@ everyapi user — プロフィール / 2FA / OAuth 連携 / アフィリエイ�
 サブコマンド
   info                                  プロフィール + セキュリティの統合ビュー
   2fa                                   2FA 状態 (有効 / ロック / 残りバックアップコード)
+  2fa enable                            2FA を登録 (QR + コード、対話式)
   2fa disable --code <6 桁>             2FA を無効化
   2fa backup  --code <6 桁>             バックアップコード一式を再生成
   passkey                               Passkey 登録状態
@@ -537,11 +575,17 @@ everyapi user — プロフィール / 2FA / OAuth 連携 / アフィリエイ�
   oauth unbind <provider_id>            OAuth 連携を解除
   aff                                   アフィリエイトコードを表示
   aff reset                             アフィリエイトコードを再生成
+  aff transfer <amount> [-y]            アフィリエイト報酬をメイン残高へ移動
+  update [--username U] [--display-name D]
+                                        ユーザー名 / 表示名を編集
+  passwd                                パスワードを変更 (プロンプト、入力非表示)
+  setting [--type <ch> ...]             クォータ警告通知の表示 / 設定
+  setting test                          テスト通知を送信
 
 注意
-  2FA セットアップ (QR スキャン)、passkey 登録、メール / WeChat 検証は
-  すべてブラウザ操作が必要です。ダッシュボードで初期設定後、ここで
-  日常的な管理を行ってください。
+  Passkey 登録とメール / WeChat 検証はブラウザ操作が必要です — それらは
+  ダッシュボードを使ってください。2FA は '2fa enable' でここから設定
+  できます。
 '''
 
 [subscription]
@@ -774,3 +818,29 @@ no_relay_key_long = '''
 'everyapi login' を再度実行してください。'''
 unknown_flag = "不明なフラグ %q (ツールフラグの前に `--` を付けてください: `everyapi use <tool> -- %s ...`)"
 usage = "使用法: everyapi use <tool> [--group <名前>|--channel <名前>] [--direct] [-- ツール引数...]"
+
+[upstream]
+none = "上流プロバイダが設定されていません。"
+ind_none = "正常稼働"
+ind_minor = "軽微な問題"
+ind_major = "大規模障害"
+ind_critical = "重大障害"
+ind_unknown = "不明"
+
+[admin.redemption]
+none = "引換コードはありません。"
+never = "期限なし"
+status_enabled = "有効"
+status_disabled = "無効"
+status_used = "使用済み"
+created = "%d 個の引換コードを生成しました:"
+updated = "引換コード #%d を更新しました。"
+status_set = "引換コード #%d は現在 %s です。"
+deleted = "引換コード #%d を削除しました。"
+cleared = "%d 個の無効な引換コードを削除しました。"
+delete_confirm = "引換コード #%d を削除しますか？この操作は取り消せません。"
+clear_confirm = "使用済み / 無効 / 期限切れの引換コードをすべて削除しますか？この操作は取り消せません。"
+
+[perf]
+none = "パフォーマンスデータがまだありません。"
+header = "モデル別パフォーマンス（直近 %dh、使用量の多い順）:"
