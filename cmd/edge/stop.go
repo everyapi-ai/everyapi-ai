@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 func edgeStop(args []string) error {
@@ -27,10 +28,10 @@ func edgeStop(args []string) error {
 	if err != nil {
 		return err
 	}
-	cliout.Printf("→ docker compose down (node #%d)\n", nodeID)
+	cliout.Printf(i18n.T("edge.stop.down"), nodeID)
 	if err := runComposeCmd(dir, projectFor(nodeID), "down"); err != nil {
-		return fmt.Errorf("docker compose down failed: %w", err)
+		return fmt.Errorf(i18n.T("edge.stop.down_failed"), err)
 	}
-	cliout.Println("✓ Stopped. Run 'everyapi edge start' to bring it back online.")
+	cliout.Println(i18n.T("edge.stop.stopped"))
 	return nil
 }

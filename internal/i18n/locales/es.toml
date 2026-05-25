@@ -866,6 +866,174 @@ configure_restart_hint_2 = "  everyapi proxy stop && everyapi proxy start --deta
 [edge]
 no_nodes = "No hay nodos edge registrados."
 register_hint = "Ejecuta 'everyapi edge register --name <nombre>' para crear uno."
+no_active_node = "no hay nodo edge activo — ejecuta primero 'everyapi edge register'"
+active_file_malformed = "el archivo de nodo activo está mal formado: %s"
+
+[edge.usage]
+missing_subcommand = "falta el subcomando (prueba 'everyapi edge help')"
+unknown_subcommand = "subcomando 'edge' desconocido %q"
+text = """everyapi edge — agente proveedor BYO-GPU
+
+USO
+  everyapi edge <subcomando> [opciones]
+
+SUBCOMANDOS
+  register [--name N] [--country CC]
+        Crea un nodo + token de registro en el backend de EveryAPI y los
+        guarda en ~/.local/share/everyapi/edge/<node-id>/. Reutiliza tu
+        sesión de cli (sin pegar otro token).
+
+  list   (alias: ls)
+        Muestra todos los nodos que posee el usuario conectado en el
+        backend actual, con api_base e id de cuenta arriba — útil cuando
+        el panel del vendedor no muestra nada y quieres confirmar con qué
+        backend / cuenta habla realmente la CLI.
+
+  start  [--mode auto|nvidia|rocm|macos|cpu] [--node ID] [--gateway URL]
+        Detecta el hardware GPU, genera docker-compose.yml en el workdir
+        del nodo y luego 'docker compose up -d'. La primera vez descarga
+        las imágenes de ollama + agent. --mode auto es el valor por
+        defecto (nvidia-smi → nvidia, rocminfo → rocm, Darwin arm64 →
+        macos, en otro caso → cpu).
+
+  status [--node ID]
+        Muestra 'docker compose ps' junto a la vista del nodo en el panel
+        (en línea / fuera de línea / pausado, última conexión, modelos
+        actuales).
+
+  stop   [--node ID]                 docker compose down
+  logs   [-f|--follow] [--node ID]   docker compose logs
+  update [--node ID]                 docker compose pull && up -d
+  remove [--node ID] [--keep-backend]
+        docker compose down -v + elimina el workdir local. También llama a
+        DELETE /api/seller/edge/nodes/<id> en el backend a menos que se
+        use --keep-backend (útil al reasignar un nodo a otra máquina).
+
+  models list  [--node ID]
+  models pull  <model> [--node ID]
+  models rm    <model> [--node ID]
+        Envuelve 'docker compose exec ollama ollama <op>'.
+
+  help
+        Imprime este mensaje.
+
+PRIMERA EJECUCIÓN
+  $ everyapi login                    # si aún no lo hiciste
+  $ everyapi edge register --name "rtx-4090-tokyo"
+  $ everyapi edge start
+  $ everyapi edge models pull llama3.1:8b
+
+REQUISITOS
+  - docker + docker compose v2 en el PATH
+  - Linux/Windows: NVIDIA Container Toolkit (para el modo nvidia) o
+    ROCm 5.7+ (para el modo rocm)
+  - macOS (Apple Silicon): 'brew install ollama && brew services start
+    ollama' nativo — la aceleración Metal no está disponible vía docker
+"""
+
+[edge.field]
+status = "estado:"
+last_seen = "última conex.:"
+agent_ver = "ver. agent:"
+models = "modelos:"
+hardware = "hardware:"
+channel = "canal:"
+user = "usuario:"
+
+[edge.register]
+name_required = "--name es obligatorio (p. ej. --name 'rtx-4090-tokyo')"
+name_prompt = "Nombre del nodo (p. ej. rtx-4090-tokyo)"
+persist_meta_failed = "no se pudieron guardar los metadatos del nodo: %w"
+set_active_failed = "no se pudo fijar el nodo activo: %w"
+registered = "✓ Nodo #%d (%s) registrado\n"
+saved = "✓ Token + metadatos guardados en %s\n"
+set_active = "✓ Fijado como nodo activo\n"
+next = "\nSiguiente: everyapi edge start\n"
+no_local_data = "no hay datos locales para el nodo %d — ¿ejecutaste 'everyapi edge register' en otra máquina?"
+decode_failed = "no se pudo decodificar node.json: %w"
+
+[edge.start]
+mode = "→ Modo: %s%s\n"
+wrote = "→ Escrito %s\n"
+macos_hint = "ℹ el modo macOS asume que ollama corre de forma nativa en :11434. Si no es así:\n"
+macos_hint_cmd = "  brew install ollama && brew services start ollama\n"
+pull = "→ docker compose pull"
+pull_failed = "falló docker compose pull: %w"
+up = "→ docker compose up -d"
+up_failed = "falló docker compose up: %w"
+persist_mode_warn = "⚠ no se pudo guardar el modo resuelto (%v); 'edge update' puede volver a detectarlo\n"
+started = "\n✓ Iniciado. El panel debería mostrar el nodo #%d como 'online' en ~30s.\n"
+hint_status = "  everyapi edge status   — ver estado\n"
+hint_logs = "  everyapi edge logs -f  — seguir los logs del agent\n"
+hint_models = "  everyapi edge models pull llama3.1:8b   — instalar un modelo\n"
+desc_operator_set = " (fijado por el operador)"
+desc_nvidia = " (detectado: nvidia-smi reporta una GPU)"
+desc_rocm = " (detectado: rocminfo en el PATH)"
+desc_macos = " (detectado: Darwin arm64; ollama debe estar en el host)"
+desc_cpu = " (sin GPU detectada — el rendimiento de chat será bajo; los embeddings siguen funcionando)"
+
+[edge.status]
+node = "Nodo #%d"
+lookup_failed = "  (falló la consulta al backend: %v)\n"
+last_seen_line = "  %-12s%s (hace %s)\n"
+hardware_line = "  %-12s%s × %d (%dGB VRAM)\n"
+docker_unavailable = "\n(docker no disponible localmente — omitiendo `docker compose ps`)\n"
+local_containers = "\nContenedores locales (`docker compose ps`):"
+ps_failed = "falló docker compose ps: %w"
+paused_suffix = " (pausado por el vendedor)"
+
+[edge.stop]
+down = "→ docker compose down (nodo #%d)\n"
+down_failed = "falló docker compose down: %w"
+stopped = "✓ Detenido. Ejecuta 'everyapi edge start' para volver a ponerlo en línea."
+
+[edge.update]
+pull = "→ docker compose pull (nodo #%d)\n"
+pull_failed = "falló docker compose pull: %w"
+up = "→ docker compose up -d"
+up_failed = "falló docker compose up: %w"
+updated = "✓ Actualizado. Ejecuta 'everyapi edge status' para comprobar que tomó la nueva imagen."
+
+[edge.remove]
+confirm_summary = "¿Eliminar el nodo edge #%d?"
+detail_base = "Los datos locales del nodo #%d se eliminarán"
+detail_with_backend = " Y se eliminará la fila del nodo en el backend."
+detail_keep_backend = "; la fila del nodo en el backend se conservará."
+aborted = "cancelado"
+down = "→ docker compose down -v (nodo #%d)\n"
+down_failed = "⚠ falló docker compose down (%v) — continuando de todos modos\n"
+docker_unavailable = "(docker no disponible; omitiendo `docker compose down`)\n"
+delete_row_failed = "no se pudo eliminar la fila del nodo en el backend: %w"
+row_deleted = "✓ Fila del nodo %d eliminada del backend\n"
+workdir_failed = "⚠ no se pudo eliminar el workdir local %s (%v) — límpialo manualmente\n"
+workdir_removed = "✓ Workdir local %s eliminado\n"
+clear_active_failed = "⚠ no se pudo borrar el puntero del nodo activo (%v)\n"
+done = "Listo."
+
+[edge.models]
+usage = "uso: everyapi edge models {list | pull <model> | rm <model>} [--node ID]"
+pick_action = "edge models — elige una acción:"
+pick_list = "list  — muestra los modelos instalados en el nodo activo"
+pick_pull = "pull  — descarga un modelo en ollama"
+pick_rm = "rm    — elimina un modelo de ollama"
+unknown_subcommand = "subcomando 'edge models' desconocido %q (se esperaba: list | pull | rm)"
+usage_op = "uso: everyapi edge models %s <model>"
+model_prompt = "Modelo (p. ej. llama3.1:8b)"
+macos_native = "el modo macOS usa ollama nativo (sin contenedor) — ejecuta 'ollama %s' directamente en el host"
+
+[edge.detect]
+invalid_mode = "--mode debe ser uno de: auto, nvidia, rocm, macos, cpu"
+
+[edge.docker]
+not_found = "docker no encontrado en el PATH. Instala Docker Desktop o docker.io y vuelve a intentarlo — https://docs.docker.com/engine/install/"
+compose_v2_missing = "docker compose v2 no disponible (%w). Instala el plugin compose — https://docs.docker.com/compose/install/.\n%s"
+
+[edge.compose]
+write_failed = "error al escribir compose: %w"
+
+[edge.list]
+last_seen_line = "  %-12shace %s\n"
+active_marker = "'*' marca el nodo activo (usado por start/stop/status/logs por defecto)."
 
 [status]
 quota = "cuota:"

@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 // ensureDocker verifies the supplier's machine has both the docker CLI
@@ -16,14 +18,14 @@ import (
 // fragile for a CLI to attempt).
 func ensureDocker() error {
 	if _, err := exec.LookPath("docker"); err != nil {
-		return errors.New("docker not found on PATH. Install Docker Desktop or docker.io and try again — https://docs.docker.com/engine/install/")
+		return errors.New(i18n.T("edge.docker.not_found"))
 	}
 	// `docker compose version` returns exit 0 + a version string when
 	// v2 is installed. v1 (the standalone `docker-compose` binary) is
 	// EOL'd and we don't try to support it.
 	cmd := exec.Command("docker", "compose", "version")
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("docker compose v2 not available (%w). Install the compose plugin — https://docs.docker.com/compose/install/.\n%s",
+		return fmt.Errorf(i18n.T("edge.docker.compose_v2_missing"),
 			err, strings.TrimSpace(string(out)))
 	}
 	return nil

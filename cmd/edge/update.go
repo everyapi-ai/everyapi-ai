@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 func edgeUpdate(args []string) error {
@@ -28,14 +29,14 @@ func edgeUpdate(args []string) error {
 		return err
 	}
 
-	cliout.Printf("→ docker compose pull (node #%d)\n", nodeID)
+	cliout.Printf(i18n.T("edge.update.pull"), nodeID)
 	if err := runComposeCmd(dir, projectFor(nodeID), "pull"); err != nil {
-		return fmt.Errorf("docker compose pull failed: %w", err)
+		return fmt.Errorf(i18n.T("edge.update.pull_failed"), err)
 	}
-	cliout.Println("→ docker compose up -d")
+	cliout.Println(i18n.T("edge.update.up"))
 	if err := runComposeCmd(dir, projectFor(nodeID), "up", "-d"); err != nil {
-		return fmt.Errorf("docker compose up failed: %w", err)
+		return fmt.Errorf(i18n.T("edge.update.up_failed"), err)
 	}
-	cliout.Println("✓ Updated. Run 'everyapi edge status' to check it picked up the new image.")
+	cliout.Println(i18n.T("edge.update.updated"))
 	return nil
 }

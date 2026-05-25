@@ -855,6 +855,173 @@ configure_restart_hint_2 = "  everyapi proxy stop && everyapi proxy start --deta
 [edge]
 no_nodes = "등록된 edge 노드가 없습니다."
 register_hint = "생성하려면 'everyapi edge register --name <node-name>' 를 실행하세요."
+no_active_node = "활성 edge 노드가 없습니다 — 먼저 'everyapi edge register' 를 실행하세요"
+active_file_malformed = "활성 노드 파일 형식이 잘못되었습니다: %s"
+
+[edge.usage]
+missing_subcommand = "서브커맨드가 없습니다 ('everyapi edge help' 를 시도하세요)"
+unknown_subcommand = "알 수 없는 'edge' 서브커맨드 %q"
+text = """everyapi edge — BYO-GPU 공급자 에이전트
+
+사용법
+  everyapi edge <서브커맨드> [플래그]
+
+서브커맨드
+  register [--name N] [--country CC]
+        EveryAPI 백엔드에 노드 + 등록 토큰을 생성하고
+        ~/.local/share/everyapi/edge/<node-id>/ 에 저장합니다. cli
+        로그인을 재사용합니다 (별도 토큰 붙여넣기 불필요).
+
+  list   (별칭: ls)
+        현재 백엔드에서 로그인한 사용자가 소유한 모든 노드를 출력하며,
+        상단에 api_base 와 계정 id 를 표시합니다 — 셀러 대시보드에
+        아무것도 표시되지 않을 때 CLI 가 실제로 어떤 백엔드 / 계정에
+        연결되어 있는지 확인하는 데 유용합니다.
+
+  start  [--mode auto|nvidia|rocm|macos|cpu] [--node ID] [--gateway URL]
+        GPU 하드웨어를 감지하고 노드의 workdir 에 docker-compose.yml 을
+        생성한 다음 'docker compose up -d' 를 실행합니다. 처음에는
+        ollama + agent 이미지를 받습니다. 기본값은 --mode auto
+        (nvidia-smi → nvidia, rocminfo → rocm, Darwin arm64 → macos,
+        그 외 → cpu).
+
+  status [--node ID]
+        대시보드의 노드 보기 (온라인 / 오프라인 / 일시중지, 마지막 접속,
+        현재 모델) 옆에 'docker compose ps' 를 표시합니다.
+
+  stop   [--node ID]                 docker compose down
+  logs   [-f|--follow] [--node ID]   docker compose logs
+  update [--node ID]                 docker compose pull && up -d
+  remove [--node ID] [--keep-backend]
+        docker compose down -v + 로컬 workdir 삭제. --keep-backend 가
+        설정되지 않으면 백엔드의 DELETE /api/seller/edge/nodes/<id> 도
+        호출합니다 (노드를 다른 머신으로 옮길 때 유용).
+
+  models list  [--node ID]
+  models pull  <model> [--node ID]
+  models rm    <model> [--node ID]
+        'docker compose exec ollama ollama <op>' 를 래핑합니다.
+
+  help
+        이 메시지를 출력합니다.
+
+첫 실행
+  $ everyapi login                    # 아직 안 했다면
+  $ everyapi edge register --name "rtx-4090-tokyo"
+  $ everyapi edge start
+  $ everyapi edge models pull llama3.1:8b
+
+요구 사항
+  - PATH 에 docker + docker compose v2
+  - Linux/Windows: NVIDIA Container Toolkit (nvidia 모드) 또는
+    ROCm 5.7+ (rocm 모드)
+  - macOS (Apple Silicon): 네이티브 'brew install ollama && brew services
+    start ollama' — Metal 가속은 docker 를 통해 사용할 수 없습니다
+"""
+
+[edge.field]
+status = "상태:"
+last_seen = "마지막 접속:"
+agent_ver = "agent 버전:"
+models = "모델:"
+hardware = "하드웨어:"
+channel = "채널:"
+user = "사용자:"
+
+[edge.register]
+name_required = "--name 은 필수입니다 (예: --name 'rtx-4090-tokyo')"
+name_prompt = "노드 이름 (예: rtx-4090-tokyo)"
+persist_meta_failed = "노드 메타데이터 저장 실패: %w"
+set_active_failed = "활성 노드 설정 실패: %w"
+registered = "✓ 노드 #%d (%s) 를 등록했습니다\n"
+saved = "✓ 토큰 + 메타데이터를 %s 에 저장했습니다\n"
+set_active = "✓ 활성 노드로 설정했습니다\n"
+next = "\n다음: everyapi edge start\n"
+no_local_data = "노드 %d 의 로컬 데이터가 없습니다 — 'everyapi edge register' 를 다른 머신에서 실행했나요?"
+decode_failed = "node.json 디코딩 실패: %w"
+
+[edge.start]
+mode = "→ 모드: %s%s\n"
+wrote = "→ %s 작성됨\n"
+macos_hint = "ℹ macOS 모드는 ollama 가 호스트의 :11434 에서 네이티브로 실행 중이라고 가정합니다. 아직이라면:\n"
+macos_hint_cmd = "  brew install ollama && brew services start ollama\n"
+pull = "→ docker compose pull"
+pull_failed = "docker compose pull 실패: %w"
+up = "→ docker compose up -d"
+up_failed = "docker compose up 실패: %w"
+persist_mode_warn = "⚠ 확인된 모드를 저장하지 못했습니다 (%v); 'edge update' 가 다시 감지할 수 있습니다\n"
+started = "\n✓ 시작되었습니다. 대시보드는 약 30초 이내에 노드 #%d 를 'online' 으로 표시할 것입니다.\n"
+hint_status = "  everyapi edge status   — 상태 확인\n"
+hint_logs = "  everyapi edge logs -f  — agent 로그 추적\n"
+hint_models = "  everyapi edge models pull llama3.1:8b   — 모델 설치\n"
+desc_operator_set = " (운영자 지정)"
+desc_nvidia = " (감지됨: nvidia-smi 가 GPU 를 보고함)"
+desc_rocm = " (감지됨: PATH 에 rocminfo)"
+desc_macos = " (감지됨: Darwin arm64; ollama 는 호스트에 있어야 함)"
+desc_cpu = " (GPU 미감지 — 채팅 처리량이 낮습니다; 임베딩은 계속 작동)"
+
+[edge.status]
+node = "노드 #%d"
+lookup_failed = "  (백엔드 조회 실패: %v)\n"
+last_seen_line = "  %-12s%s (%s 전)\n"
+hardware_line = "  %-12s%s × %d (%dGB VRAM)\n"
+docker_unavailable = "\n(로컬에 docker 없음 — `docker compose ps` 건너뜀)\n"
+local_containers = "\n로컬 컨테이너 (`docker compose ps`):"
+ps_failed = "docker compose ps 실패: %w"
+paused_suffix = " (셀러가 일시중지함)"
+
+[edge.stop]
+down = "→ docker compose down (노드 #%d)\n"
+down_failed = "docker compose down 실패: %w"
+stopped = "✓ 중지되었습니다. 다시 온라인으로 만들려면 'everyapi edge start' 를 실행하세요."
+
+[edge.update]
+pull = "→ docker compose pull (노드 #%d)\n"
+pull_failed = "docker compose pull 실패: %w"
+up = "→ docker compose up -d"
+up_failed = "docker compose up 실패: %w"
+updated = "✓ 업데이트되었습니다. 새 이미지를 받았는지 'everyapi edge status' 로 확인하세요."
+
+[edge.remove]
+confirm_summary = "edge 노드 #%d 를 제거할까요?"
+detail_base = "노드 #%d 의 로컬 데이터가 삭제됩니다"
+detail_with_backend = " 그리고 백엔드의 노드 행도 제거됩니다."
+detail_keep_backend = "; 백엔드의 노드 행은 유지됩니다."
+aborted = "중단됨"
+down = "→ docker compose down -v (노드 #%d)\n"
+down_failed = "⚠ docker compose down 실패 (%v) — 계속 진행합니다\n"
+docker_unavailable = "(docker 사용 불가; `docker compose down` 건너뜀)\n"
+delete_row_failed = "백엔드 노드 행 삭제 실패: %w"
+row_deleted = "✓ 백엔드 노드 행 %d 삭제됨\n"
+workdir_failed = "⚠ 로컬 workdir %s 를 제거하지 못했습니다 (%v) — 수동으로 정리하세요\n"
+workdir_removed = "✓ 로컬 workdir %s 제거됨\n"
+clear_active_failed = "⚠ 활성 노드 포인터를 지우지 못했습니다 (%v)\n"
+done = "완료."
+
+[edge.models]
+usage = "사용법: everyapi edge models {list | pull <model> | rm <model>} [--node ID]"
+pick_action = "edge models — 작업 선택:"
+pick_list = "list  — 활성 노드에 설치된 모델 표시"
+pick_pull = "pull  — 모델을 ollama 로 다운로드"
+pick_rm = "rm    — ollama 에서 모델 제거"
+unknown_subcommand = "알 수 없는 'edge models' 서브커맨드 %q (예상: list | pull | rm)"
+usage_op = "사용법: everyapi edge models %s <model>"
+model_prompt = "모델 (예: llama3.1:8b)"
+macos_native = "macOS 모드는 네이티브 ollama 를 사용합니다 (컨테이너 없음) — 호스트에서 직접 'ollama %s' 를 실행하세요"
+
+[edge.detect]
+invalid_mode = "--mode 는 다음 중 하나여야 합니다: auto, nvidia, rocm, macos, cpu"
+
+[edge.docker]
+not_found = "PATH 에 docker 가 없습니다. Docker Desktop 또는 docker.io 를 설치한 후 다시 시도하세요 — https://docs.docker.com/engine/install/"
+compose_v2_missing = "docker compose v2 를 사용할 수 없습니다 (%w). compose 플러그인을 설치하세요 — https://docs.docker.com/compose/install/.\n%s"
+
+[edge.compose]
+write_failed = "compose 작성 실패: %w"
+
+[edge.list]
+last_seen_line = "  %-12s%s 전\n"
+active_marker = "'*' 는 활성 노드를 표시합니다 (기본적으로 start/stop/status/logs 가 사용)."
 
 [status]
 quota = "쿼터:"

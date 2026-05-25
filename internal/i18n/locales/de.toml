@@ -864,6 +864,174 @@ configure_restart_hint_2 = "  everyapi proxy stop && everyapi proxy start --deta
 [edge]
 no_nodes = "Keine Edge-Knoten registriert."
 register_hint = "Erstelle einen mit 'everyapi edge register --name <Knoten-Name>'."
+no_active_node = "kein aktiver Edge-Knoten — führe zuerst 'everyapi edge register' aus"
+active_file_malformed = "Datei des aktiven Knotens ist fehlerhaft: %s"
+
+[edge.usage]
+missing_subcommand = "Unterbefehl fehlt (versuche 'everyapi edge help')"
+unknown_subcommand = "unbekannter 'edge'-Unterbefehl %q"
+text = """everyapi edge — BYO-GPU-Anbieter-Agent
+
+VERWENDUNG
+  everyapi edge <Unterbefehl> [Optionen]
+
+UNTERBEFEHLE
+  register [--name N] [--country CC]
+        Legt im EveryAPI-Backend einen Knoten + Registrierungstoken an und
+        speichert sie unter ~/.local/share/everyapi/edge/<node-id>/.
+        Nutzt deinen cli-Login wieder (kein separates Einfügen des Tokens).
+
+  list   (Alias: ls)
+        Zeigt alle Knoten des angemeldeten Nutzers im aktuellen Backend,
+        mit api_base und Konto-id oben — praktisch, wenn das
+        Verkäufer-Dashboard nichts anzeigt und du prüfen willst, mit
+        welchem Backend / Konto die CLI tatsächlich spricht.
+
+  start  [--mode auto|nvidia|rocm|macos|cpu] [--node ID] [--gateway URL]
+        Erkennt die GPU-Hardware, erzeugt docker-compose.yml im workdir des
+        Knotens und führt dann 'docker compose up -d' aus. Beim ersten Mal
+        werden die Images ollama + agent geladen. --mode auto ist die
+        Vorgabe (nvidia-smi → nvidia, rocminfo → rocm, Darwin arm64 →
+        macos, sonst → cpu).
+
+  status [--node ID]
+        Zeigt 'docker compose ps' neben der Knotenansicht des Dashboards
+        (online / offline / pausiert, zuletzt gesehen, aktuelle Modelle).
+
+  stop   [--node ID]                 docker compose down
+  logs   [-f|--follow] [--node ID]   docker compose logs
+  update [--node ID]                 docker compose pull && up -d
+  remove [--node ID] [--keep-backend]
+        docker compose down -v + löscht das lokale workdir. Ruft außerdem
+        DELETE /api/seller/edge/nodes/<id> im Backend auf, sofern nicht
+        --keep-backend gesetzt ist (nützlich, wenn ein Knoten auf eine
+        andere Maschine umgezogen wird).
+
+  models list  [--node ID]
+  models pull  <model> [--node ID]
+  models rm    <model> [--node ID]
+        Kapselt 'docker compose exec ollama ollama <op>'.
+
+  help
+        Gibt diese Meldung aus.
+
+ERSTER START
+  $ everyapi login                    # falls noch nicht
+  $ everyapi edge register --name "rtx-4090-tokyo"
+  $ everyapi edge start
+  $ everyapi edge models pull llama3.1:8b
+
+VORAUSSETZUNGEN
+  - docker + docker compose v2 im PATH
+  - Linux/Windows: NVIDIA Container Toolkit (für den nvidia-Modus) ODER
+    ROCm 5.7+ (für den rocm-Modus)
+  - macOS (Apple Silicon): natives 'brew install ollama && brew services
+    start ollama' — Metal-Beschleunigung ist über docker nicht verfügbar
+"""
+
+[edge.field]
+status = "Status:"
+last_seen = "zuletzt:"
+agent_ver = "agent-Ver.:"
+models = "Modelle:"
+hardware = "Hardware:"
+channel = "Kanal:"
+user = "Nutzer:"
+
+[edge.register]
+name_required = "--name ist erforderlich (z. B. --name 'rtx-4090-tokyo')"
+name_prompt = "Knotenname (z. B. rtx-4090-tokyo)"
+persist_meta_failed = "Knoten-Metadaten konnten nicht gespeichert werden: %w"
+set_active_failed = "aktiver Knoten konnte nicht gesetzt werden: %w"
+registered = "✓ Knoten #%d (%s) registriert\n"
+saved = "✓ Token + Metadaten gespeichert unter %s\n"
+set_active = "✓ Als aktiver Knoten gesetzt\n"
+next = "\nWeiter: everyapi edge start\n"
+no_local_data = "keine lokalen Daten für Knoten %d — wurde 'everyapi edge register' auf einer anderen Maschine ausgeführt?"
+decode_failed = "node.json konnte nicht dekodiert werden: %w"
+
+[edge.start]
+mode = "→ Modus: %s%s\n"
+wrote = "→ %s geschrieben\n"
+macos_hint = "ℹ Der macOS-Modus setzt voraus, dass ollama nativ auf :11434 läuft. Falls noch nicht:\n"
+macos_hint_cmd = "  brew install ollama && brew services start ollama\n"
+pull = "→ docker compose pull"
+pull_failed = "docker compose pull fehlgeschlagen: %w"
+up = "→ docker compose up -d"
+up_failed = "docker compose up fehlgeschlagen: %w"
+persist_mode_warn = "⚠ Aufgelöster Modus konnte nicht gespeichert werden (%v); 'edge update' erkennt ihn evtl. neu\n"
+started = "\n✓ Gestartet. Das Dashboard sollte Knoten #%d innerhalb von ~30s als 'online' anzeigen.\n"
+hint_status = "  everyapi edge status   — Status prüfen\n"
+hint_logs = "  everyapi edge logs -f  — agent-Logs verfolgen\n"
+hint_models = "  everyapi edge models pull llama3.1:8b   — ein Modell installieren\n"
+desc_operator_set = " (vom Betreiber gesetzt)"
+desc_nvidia = " (erkannt: nvidia-smi meldet eine GPU)"
+desc_rocm = " (erkannt: rocminfo im PATH)"
+desc_macos = " (erkannt: Darwin arm64; ollama muss auf dem Host laufen)"
+desc_cpu = " (keine GPU erkannt — Chat-Durchsatz wird gering sein; Embeddings funktionieren weiterhin)"
+
+[edge.status]
+node = "Knoten #%d"
+lookup_failed = "  (Backend-Abfrage fehlgeschlagen: %v)\n"
+last_seen_line = "  %-12s%s (vor %s)\n"
+hardware_line = "  %-12s%s × %d (%dGB VRAM)\n"
+docker_unavailable = "\n(docker lokal nicht verfügbar — `docker compose ps` wird übersprungen)\n"
+local_containers = "\nLokale Container (`docker compose ps`):"
+ps_failed = "docker compose ps fehlgeschlagen: %w"
+paused_suffix = " (vom Verkäufer pausiert)"
+
+[edge.stop]
+down = "→ docker compose down (Knoten #%d)\n"
+down_failed = "docker compose down fehlgeschlagen: %w"
+stopped = "✓ Gestoppt. Führe 'everyapi edge start' aus, um ihn wieder online zu bringen."
+
+[edge.update]
+pull = "→ docker compose pull (Knoten #%d)\n"
+pull_failed = "docker compose pull fehlgeschlagen: %w"
+up = "→ docker compose up -d"
+up_failed = "docker compose up fehlgeschlagen: %w"
+updated = "✓ Aktualisiert. Führe 'everyapi edge status' aus, um zu prüfen, ob das neue Image übernommen wurde."
+
+[edge.remove]
+confirm_summary = "Edge-Knoten #%d entfernen?"
+detail_base = "Lokale Daten für Knoten #%d werden gelöscht"
+detail_with_backend = " UND die Knotenzeile im Backend wird entfernt."
+detail_keep_backend = "; die Knotenzeile im Backend bleibt erhalten."
+aborted = "abgebrochen"
+down = "→ docker compose down -v (Knoten #%d)\n"
+down_failed = "⚠ docker compose down fehlgeschlagen (%v) — wird trotzdem fortgesetzt\n"
+docker_unavailable = "(docker nicht verfügbar; `docker compose down` wird übersprungen)\n"
+delete_row_failed = "Knotenzeile im Backend konnte nicht gelöscht werden: %w"
+row_deleted = "✓ Backend-Knotenzeile %d gelöscht\n"
+workdir_failed = "⚠ lokales workdir %s konnte nicht entfernt werden (%v) — manuell aufräumen\n"
+workdir_removed = "✓ Lokales workdir %s entfernt\n"
+clear_active_failed = "⚠ Zeiger auf aktiven Knoten konnte nicht gelöscht werden (%v)\n"
+done = "Fertig."
+
+[edge.models]
+usage = "Verwendung: everyapi edge models {list | pull <model> | rm <model>} [--node ID]"
+pick_action = "edge models — wähle eine Aktion:"
+pick_list = "list  — auf dem aktiven Knoten installierte Modelle anzeigen"
+pick_pull = "pull  — ein Modell in ollama herunterladen"
+pick_rm = "rm    — ein Modell aus ollama entfernen"
+unknown_subcommand = "unbekannter 'edge models'-Unterbefehl %q (erwartet: list | pull | rm)"
+usage_op = "Verwendung: everyapi edge models %s <model>"
+model_prompt = "Modell (z. B. llama3.1:8b)"
+macos_native = "der macOS-Modus nutzt natives ollama (kein Container) — führe 'ollama %s' direkt auf dem Host aus"
+
+[edge.detect]
+invalid_mode = "--mode muss eines davon sein: auto, nvidia, rocm, macos, cpu"
+
+[edge.docker]
+not_found = "docker im PATH nicht gefunden. Installiere Docker Desktop oder docker.io und versuche es erneut — https://docs.docker.com/engine/install/"
+compose_v2_missing = "docker compose v2 nicht verfügbar (%w). Installiere das compose-Plugin — https://docs.docker.com/compose/install/.\n%s"
+
+[edge.compose]
+write_failed = "compose konnte nicht geschrieben werden: %w"
+
+[edge.list]
+last_seen_line = "  %-12svor %s\n"
+active_marker = "'*' markiert den aktiven Knoten (wird standardmäßig von start/stop/status/logs genutzt)."
 
 [status]
 quota = "Quota:"

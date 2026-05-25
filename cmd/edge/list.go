@@ -33,9 +33,9 @@ func edgeList(args []string) error {
 	// below so the colon column lines up across the whole output.
 	cliout.Printf("%-12s%s\n", "api_base:", creds.APIBase)
 	if creds.Username != "" {
-		cliout.Printf("%-12s%s (id=%d)\n\n", "user:", creds.Username, creds.UserID)
+		cliout.Printf("%-12s%s (id=%d)\n\n", i18n.T("edge.field.user"), creds.Username, creds.UserID)
 	} else {
-		cliout.Printf("%-12sid=%d\n\n", "user:", creds.UserID)
+		cliout.Printf("%-12sid=%d\n\n", i18n.T("edge.field.user"), creds.UserID)
 	}
 
 	nodes, err := client.ListEdgeNodes(cliout.WithCtx())
@@ -60,19 +60,19 @@ func edgeList(args []string) error {
 			marker = "* "
 		}
 		cliout.Printf("%s#%d %s\n", marker, n.ID, n.Name)
-		cliout.Printf("  %-12s%s%s\n", "status:", n.Status, pauseSuffix(n.Paused))
+		cliout.Printf("  %-12s%s%s\n", i18n.T("edge.field.status"), n.Status, pauseSuffix(n.Paused))
 		if n.ChannelID != nil {
-			cliout.Printf("  %-12s%d\n", "channel:", *n.ChannelID)
+			cliout.Printf("  %-12s%d\n", i18n.T("edge.field.channel"), *n.ChannelID)
 		}
 		if n.LastSeenAt > 0 {
-			cliout.Printf("  %-12s%s ago\n", "last seen:",
+			cliout.Printf(i18n.T("edge.list.last_seen_line"), i18n.T("edge.field.last_seen"),
 				formatDuration(time.Since(time.Unix(n.LastSeenAt, 0))))
 		}
 		if len(n.Models) > 0 {
-			cliout.Printf("  %-12s%s\n", "models:", strings.Join(n.Models, ", "))
+			cliout.Printf("  %-12s%s\n", i18n.T("edge.field.models"), strings.Join(n.Models, ", "))
 		}
 	}
 	cliout.Println("")
-	cliout.Println("'*' marks the active node (used by start/stop/status/logs by default).")
+	cliout.Println(i18n.T("edge.list.active_marker"))
 	return nil
 }

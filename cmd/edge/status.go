@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 func edgeStatus(args []string) error {
@@ -29,25 +30,25 @@ func edgeStatus(args []string) error {
 		return err
 	}
 	remote, rErr := client.GetEdgeNode(cliout.WithCtx(), nodeID)
-	cliout.Printf("Node #%d", nodeID)
+	cliout.Printf(i18n.T("edge.status.node"), nodeID)
 	if rErr != nil {
-		cliout.Printf("  (backend lookup failed: %v)\n", rErr)
+		cliout.Printf(i18n.T("edge.status.lookup_failed"), rErr)
 	} else {
 		cliout.Printf(" — %s\n", remote.Name)
-		cliout.Printf("  %-12s%s%s\n", "status:", remote.Status, pauseSuffix(remote.Paused))
+		cliout.Printf("  %-12s%s%s\n", i18n.T("edge.field.status"), remote.Status, pauseSuffix(remote.Paused))
 		if remote.LastSeenAt > 0 {
-			cliout.Printf("  %-12s%s (%s ago)\n", "last seen:",
+			cliout.Printf(i18n.T("edge.status.last_seen_line"), i18n.T("edge.field.last_seen"),
 				time.Unix(remote.LastSeenAt, 0).Format(time.RFC3339),
 				formatDuration(time.Since(time.Unix(remote.LastSeenAt, 0))))
 		}
 		if remote.AgentVer != "" {
-			cliout.Printf("  %-12s%s\n", "agent ver:", remote.AgentVer)
+			cliout.Printf("  %-12s%s\n", i18n.T("edge.field.agent_ver"), remote.AgentVer)
 		}
 		if len(remote.Models) > 0 {
-			cliout.Printf("  %-12s%s\n", "models:", strings.Join(remote.Models, ", "))
+			cliout.Printf("  %-12s%s\n", i18n.T("edge.field.models"), strings.Join(remote.Models, ", "))
 		}
 		if remote.Hardware != nil && remote.Hardware.GPUModel != "" {
-			cliout.Printf("  %-12s%s × %d (%dGB VRAM)\n", "hardware:",
+			cliout.Printf(i18n.T("edge.status.hardware_line"), i18n.T("edge.field.hardware"),
 				remote.Hardware.GPUModel, max1(remote.Hardware.GPUCount), remote.Hardware.VRAMGB)
 		}
 	}
@@ -55,23 +56,23 @@ func edgeStatus(args []string) error {
 	// Local docker view — only attempt if docker is on PATH; quietly
 	// skip otherwise (a seller's main machine could be cli-only).
 	if err := ensureDocker(); err != nil {
-		cliout.Printf("\n(docker not available locally — skipping `docker compose ps`)\n")
+		cliout.Printf("%s", i18n.T("edge.status.docker_unavailable"))
 		return nil
 	}
 	dir, err := nodeDir(nodeID)
 	if err != nil {
 		return err
 	}
-	cliout.Println("\nLocal containers (`docker compose ps`):")
+	cliout.Println(i18n.T("edge.status.local_containers"))
 	if err := runComposeCmd(dir, projectFor(nodeID), "ps"); err != nil {
-		return fmt.Errorf("docker compose ps failed: %w", err)
+		return fmt.Errorf(i18n.T("edge.status.ps_failed"), err)
 	}
 	return nil
 }
 
 func pauseSuffix(p bool) string {
 	if p {
-		return " (paused by seller)"
+		return i18n.T("edge.status.paused_suffix")
 	}
 	return ""
 }

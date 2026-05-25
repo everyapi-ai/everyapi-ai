@@ -859,6 +859,173 @@ configure_restart_hint_2 = "  everyapi proxy stop && everyapi proxy start --deta
 [edge]
 no_nodes = "No edge nodes registered."
 register_hint = "Run 'everyapi edge register --name <node-name>' to create one."
+no_active_node = "no active edge node — run 'everyapi edge register' first"
+active_file_malformed = "active node file is malformed: %s"
+
+[edge.usage]
+missing_subcommand = "missing subcommand (try 'everyapi edge help')"
+unknown_subcommand = "unknown 'edge' subcommand %q"
+text = """everyapi edge — BYO-GPU supplier agent
+
+USAGE
+  everyapi edge <subcommand> [flags]
+
+SUBCOMMANDS
+  register [--name N] [--country CC]
+        Mint a node + registration token on the EveryAPI backend, persist
+        them to ~/.local/share/everyapi/edge/<node-id>/. Reuses your
+        cli login (no separate token paste).
+
+  list   (alias: ls)
+        Print every node the signed-in user owns on the current backend,
+        with api_base and account id at the top — handy when the seller
+        dashboard shows nothing and you want to confirm which backend /
+        account the CLI is actually talking to.
+
+  start  [--mode auto|nvidia|rocm|macos|cpu] [--node ID] [--gateway URL]
+        Detect GPU hardware, render docker-compose.yml into the node's
+        workdir, then 'docker compose up -d'. Pulls ollama + agent images
+        the first time. --mode auto is the default (nvidia-smi → nvidia,
+        rocminfo → rocm, Darwin arm64 → macos, otherwise → cpu).
+
+  status [--node ID]
+        Show 'docker compose ps' next to the dashboard's view of the
+        node (online / offline / paused, last seen, current models).
+
+  stop   [--node ID]                 docker compose down
+  logs   [-f|--follow] [--node ID]   docker compose logs
+  update [--node ID]                 docker compose pull && up -d
+  remove [--node ID] [--keep-backend]
+        docker compose down -v + delete the local workdir. Also calls
+        DELETE /api/seller/edge/nodes/<id> on the backend unless
+        --keep-backend is set (useful when re-pointing a node at a
+        different machine).
+
+  models list  [--node ID]
+  models pull  <model> [--node ID]
+  models rm    <model> [--node ID]
+        Wraps 'docker compose exec ollama ollama <op>'.
+
+  help
+        Print this message.
+
+FIRST RUN
+  $ everyapi login                    # if not already
+  $ everyapi edge register --name "rtx-4090-tokyo"
+  $ everyapi edge start
+  $ everyapi edge models pull llama3.1:8b
+
+REQUIREMENTS
+  - docker + docker compose v2 on PATH
+  - Linux/Windows: NVIDIA Container Toolkit (for nvidia mode) OR
+    ROCm 5.7+ (for rocm mode)
+  - macOS (Apple Silicon): native 'brew install ollama && brew services
+    start ollama' — Metal acceleration isn't available through docker
+"""
+
+[edge.field]
+status = "status:"
+last_seen = "last seen:"
+agent_ver = "agent ver:"
+models = "models:"
+hardware = "hardware:"
+channel = "channel:"
+user = "user:"
+
+[edge.register]
+name_required = "--name is required (e.g. --name 'rtx-4090-tokyo')"
+name_prompt = "Node name (e.g. rtx-4090-tokyo)"
+persist_meta_failed = "persist node metadata: %w"
+set_active_failed = "set active node: %w"
+registered = "✓ Registered node #%d (%s)\n"
+saved = "✓ Token + metadata saved to %s\n"
+set_active = "✓ Set as active node\n"
+next = "\nNext: everyapi edge start\n"
+no_local_data = "no local data for node %d — was 'everyapi edge register' run on a different machine?"
+decode_failed = "decode node.json: %w"
+
+[edge.start]
+mode = "→ Mode: %s%s\n"
+wrote = "→ Wrote %s\n"
+macos_hint = "ℹ macOS mode assumes ollama is running natively on :11434. If you haven't:\n"
+macos_hint_cmd = "  brew install ollama && brew services start ollama\n"
+pull = "→ docker compose pull"
+pull_failed = "docker compose pull failed: %w"
+up = "→ docker compose up -d"
+up_failed = "docker compose up failed: %w"
+persist_mode_warn = "⚠ couldn't persist resolved mode (%v); 'edge update' may re-detect\n"
+started = "\n✓ Started. Dashboard should show node #%d as 'online' within ~30s.\n"
+hint_status = "  everyapi edge status   — check state\n"
+hint_logs = "  everyapi edge logs -f  — tail agent logs\n"
+hint_models = "  everyapi edge models pull llama3.1:8b   — install a model\n"
+desc_operator_set = " (operator-set)"
+desc_nvidia = " (detected: nvidia-smi reports a GPU)"
+desc_rocm = " (detected: rocminfo on PATH)"
+desc_macos = " (detected: Darwin arm64; ollama must be on the host)"
+desc_cpu = " (no GPU detected — chat throughput will be low; embeddings still work)"
+
+[edge.status]
+node = "Node #%d"
+lookup_failed = "  (backend lookup failed: %v)\n"
+last_seen_line = "  %-12s%s (%s ago)\n"
+hardware_line = "  %-12s%s × %d (%dGB VRAM)\n"
+docker_unavailable = "\n(docker not available locally — skipping `docker compose ps`)\n"
+local_containers = "\nLocal containers (`docker compose ps`):"
+ps_failed = "docker compose ps failed: %w"
+paused_suffix = " (paused by seller)"
+
+[edge.stop]
+down = "→ docker compose down (node #%d)\n"
+down_failed = "docker compose down failed: %w"
+stopped = "✓ Stopped. Run 'everyapi edge start' to bring it back online."
+
+[edge.update]
+pull = "→ docker compose pull (node #%d)\n"
+pull_failed = "docker compose pull failed: %w"
+up = "→ docker compose up -d"
+up_failed = "docker compose up failed: %w"
+updated = "✓ Updated. Run 'everyapi edge status' to check it picked up the new image."
+
+[edge.remove]
+confirm_summary = "Remove edge node #%d?"
+detail_base = "Local data for node #%d will be deleted"
+detail_with_backend = " AND the backend node row will be removed."
+detail_keep_backend = "; the backend node row will be kept."
+aborted = "aborted"
+down = "→ docker compose down -v (node #%d)\n"
+down_failed = "⚠ docker compose down failed (%v) — continuing anyway\n"
+docker_unavailable = "(docker not available; skipping `docker compose down`)\n"
+delete_row_failed = "delete backend node row: %w"
+row_deleted = "✓ Backend node row %d deleted\n"
+workdir_failed = "⚠ couldn't remove local workdir %s (%v) — clean up manually\n"
+workdir_removed = "✓ Removed local workdir %s\n"
+clear_active_failed = "⚠ couldn't clear active-node pointer (%v)\n"
+done = "Done."
+
+[edge.models]
+usage = "usage: everyapi edge models {list | pull <model> | rm <model>} [--node ID]"
+pick_action = "edge models — pick an action:"
+pick_list = "list  — show models installed on the active node"
+pick_pull = "pull  — download a model into ollama"
+pick_rm = "rm    — remove a model from ollama"
+unknown_subcommand = "unknown 'edge models' subcommand %q (expected: list | pull | rm)"
+usage_op = "usage: everyapi edge models %s <model>"
+model_prompt = "Model (e.g. llama3.1:8b)"
+macos_native = "macOS mode uses native ollama (no container) — run 'ollama %s' directly on the host"
+
+[edge.detect]
+invalid_mode = "--mode must be one of: auto, nvidia, rocm, macos, cpu"
+
+[edge.docker]
+not_found = "docker not found on PATH. Install Docker Desktop or docker.io and try again — https://docs.docker.com/engine/install/"
+compose_v2_missing = "docker compose v2 not available (%w). Install the compose plugin — https://docs.docker.com/compose/install/.\n%s"
+
+[edge.compose]
+write_failed = "write compose: %w"
+
+[edge.list]
+last_seen_line = "  %-12s%s ago\n"
+active_marker = "'*' marks the active node (used by start/stop/status/logs by default)."
 
 [status]
 quota = "quota:"

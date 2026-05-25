@@ -856,6 +856,174 @@ configure_restart_hint_2 = "  everyapi proxy stop && everyapi proxy start --deta
 [edge]
 no_nodes = "登録された edge ノードはありません。"
 register_hint = "作成するには 'everyapi edge register --name <node-name>' を実行してください。"
+no_active_node = "アクティブな edge ノードがありません — まず 'everyapi edge register' を実行してください"
+active_file_malformed = "アクティブノードファイルが不正です: %s"
+
+[edge.usage]
+missing_subcommand = "サブコマンドがありません（'everyapi edge help' を試してください）"
+unknown_subcommand = "不明な 'edge' サブコマンド %q"
+text = """everyapi edge — BYO-GPU サプライヤーエージェント
+
+使い方
+  everyapi edge <サブコマンド> [フラグ]
+
+サブコマンド
+  register [--name N] [--country CC]
+        EveryAPI バックエンドにノード + 登録トークンを作成し、
+        ~/.local/share/everyapi/edge/<node-id>/ に保存します。cli の
+        ログインを再利用します（トークンの貼り付けは不要）。
+
+  list   (エイリアス: ls)
+        現在のバックエンドでログインユーザーが所有するすべてのノードを
+        表示し、先頭に api_base とアカウント id を出します — セラー
+        ダッシュボードが何も表示しないとき、CLI が実際にどのバックエンド /
+        アカウントに接続しているか確認するのに便利です。
+
+  start  [--mode auto|nvidia|rocm|macos|cpu] [--node ID] [--gateway URL]
+        GPU ハードウェアを検出し、ノードの workdir に docker-compose.yml を
+        生成して 'docker compose up -d' します。初回は ollama + agent
+        イメージを取得します。既定は --mode auto（nvidia-smi → nvidia、
+        rocminfo → rocm、Darwin arm64 → macos、それ以外 → cpu）。
+
+  status [--node ID]
+        ダッシュボードのノードビュー（オンライン / オフライン / 一時停止、
+        最終接続、現在のモデル）の隣に 'docker compose ps' を表示します。
+
+  stop   [--node ID]                 docker compose down
+  logs   [-f|--follow] [--node ID]   docker compose logs
+  update [--node ID]                 docker compose pull && up -d
+  remove [--node ID] [--keep-backend]
+        docker compose down -v + ローカル workdir を削除します。
+        --keep-backend を指定しない限り、バックエンドの
+        DELETE /api/seller/edge/nodes/<id> も呼びます（ノードを別の
+        マシンに付け替えるときに便利）。
+
+  models list  [--node ID]
+  models pull  <model> [--node ID]
+  models rm    <model> [--node ID]
+        'docker compose exec ollama ollama <op>' をラップします。
+
+  help
+        このメッセージを表示します。
+
+初回実行
+  $ everyapi login                    # まだの場合
+  $ everyapi edge register --name "rtx-4090-tokyo"
+  $ everyapi edge start
+  $ everyapi edge models pull llama3.1:8b
+
+要件
+  - PATH 上に docker + docker compose v2
+  - Linux/Windows: NVIDIA Container Toolkit（nvidia モード）または
+    ROCm 5.7+（rocm モード）
+  - macOS（Apple Silicon）: ネイティブの 'brew install ollama && brew
+    services start ollama' — Metal アクセラレーションは docker 経由では
+    使えません
+"""
+
+[edge.field]
+status = "状態:"
+last_seen = "最終接続:"
+agent_ver = "agent バージョン:"
+models = "モデル:"
+hardware = "ハードウェア:"
+channel = "チャネル:"
+user = "ユーザー:"
+
+[edge.register]
+name_required = "--name は必須です（例: --name 'rtx-4090-tokyo'）"
+name_prompt = "ノード名（例: rtx-4090-tokyo）"
+persist_meta_failed = "ノードのメタデータ保存に失敗: %w"
+set_active_failed = "アクティブノードの設定に失敗: %w"
+registered = "✓ ノード #%d（%s）を登録しました\n"
+saved = "✓ トークン + メタデータを %s に保存しました\n"
+set_active = "✓ アクティブノードに設定しました\n"
+next = "\n次へ: everyapi edge start\n"
+no_local_data = "ノード %d のローカルデータがありません — 'everyapi edge register' を別のマシンで実行しましたか?"
+decode_failed = "node.json のデコードに失敗: %w"
+
+[edge.start]
+mode = "→ モード: %s%s\n"
+wrote = "→ %s を書き込みました\n"
+macos_hint = "ℹ macOS モードは ollama がホストの :11434 でネイティブ実行中であることを前提とします。まだの場合:\n"
+macos_hint_cmd = "  brew install ollama && brew services start ollama\n"
+pull = "→ docker compose pull"
+pull_failed = "docker compose pull に失敗: %w"
+up = "→ docker compose up -d"
+up_failed = "docker compose up に失敗: %w"
+persist_mode_warn = "⚠ 解決済みモードを保存できませんでした（%v）。'edge update' が再検出する可能性があります\n"
+started = "\n✓ 起動しました。ダッシュボードは約 30 秒以内にノード #%d を 'online' と表示するはずです。\n"
+hint_status = "  everyapi edge status   — 状態を確認\n"
+hint_logs = "  everyapi edge logs -f  — agent ログを追跡\n"
+hint_models = "  everyapi edge models pull llama3.1:8b   — モデルをインストール\n"
+desc_operator_set = "（オペレーター指定）"
+desc_nvidia = "（検出: nvidia-smi が GPU を報告）"
+desc_rocm = "（検出: PATH 上に rocminfo）"
+desc_macos = "（検出: Darwin arm64; ollama はホスト上にある必要があります）"
+desc_cpu = "（GPU 未検出 — チャットのスループットは低くなります。埋め込みは利用可能）"
+
+[edge.status]
+node = "ノード #%d"
+lookup_failed = "  （バックエンド照会に失敗: %v）\n"
+last_seen_line = "  %-12s%s（%s 前）\n"
+hardware_line = "  %-12s%s × %d（%dGB VRAM）\n"
+docker_unavailable = "\n（ローカルに docker がありません — `docker compose ps` をスキップ）\n"
+local_containers = "\nローカルコンテナ（`docker compose ps`）:"
+ps_failed = "docker compose ps に失敗: %w"
+paused_suffix = "（セラーにより一時停止中）"
+
+[edge.stop]
+down = "→ docker compose down（ノード #%d）\n"
+down_failed = "docker compose down に失敗: %w"
+stopped = "✓ 停止しました。再びオンラインにするには 'everyapi edge start' を実行してください。"
+
+[edge.update]
+pull = "→ docker compose pull（ノード #%d）\n"
+pull_failed = "docker compose pull に失敗: %w"
+up = "→ docker compose up -d"
+up_failed = "docker compose up に失敗: %w"
+updated = "✓ 更新しました。新しいイメージを取得したか 'everyapi edge status' で確認してください。"
+
+[edge.remove]
+confirm_summary = "edge ノード #%d を削除しますか?"
+detail_base = "ノード #%d のローカルデータが削除されます"
+detail_with_backend = "。さらにバックエンドのノード行も削除されます。"
+detail_keep_backend = "。バックエンドのノード行は保持されます。"
+aborted = "中止しました"
+down = "→ docker compose down -v（ノード #%d）\n"
+down_failed = "⚠ docker compose down に失敗（%v）— このまま続行します\n"
+docker_unavailable = "（docker が利用できません。`docker compose down` をスキップ）\n"
+delete_row_failed = "バックエンドのノード行の削除に失敗: %w"
+row_deleted = "✓ バックエンドのノード行 %d を削除しました\n"
+workdir_failed = "⚠ ローカル workdir %s を削除できませんでした（%v）— 手動で削除してください\n"
+workdir_removed = "✓ ローカル workdir %s を削除しました\n"
+clear_active_failed = "⚠ アクティブノードのポインタをクリアできませんでした（%v）\n"
+done = "完了。"
+
+[edge.models]
+usage = "使い方: everyapi edge models {list | pull <model> | rm <model>} [--node ID]"
+pick_action = "edge models — アクションを選択:"
+pick_list = "list  — アクティブノードにインストール済みのモデルを表示"
+pick_pull = "pull  — モデルを ollama にダウンロード"
+pick_rm = "rm    — ollama からモデルを削除"
+unknown_subcommand = "不明な 'edge models' サブコマンド %q（list | pull | rm のいずれか）"
+usage_op = "使い方: everyapi edge models %s <model>"
+model_prompt = "モデル（例: llama3.1:8b）"
+macos_native = "macOS モードはネイティブの ollama を使用します（コンテナなし）— ホスト上で直接 'ollama %s' を実行してください"
+
+[edge.detect]
+invalid_mode = "--mode は次のいずれかである必要があります: auto, nvidia, rocm, macos, cpu"
+
+[edge.docker]
+not_found = "PATH 上に docker が見つかりません。Docker Desktop または docker.io をインストールして再試行してください — https://docs.docker.com/engine/install/"
+compose_v2_missing = "docker compose v2 が利用できません（%w）。compose プラグインをインストールしてください — https://docs.docker.com/compose/install/。\n%s"
+
+[edge.compose]
+write_failed = "compose の書き込みに失敗: %w"
+
+[edge.list]
+last_seen_line = "  %-12s%s 前\n"
+active_marker = "'*' はアクティブノードを示します（既定で start/stop/status/logs が使用）。"
 
 [status]
 quota = "クォータ:"

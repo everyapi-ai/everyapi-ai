@@ -1,12 +1,13 @@
 package edge
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 // nodeMeta is what we persist alongside each node's workdir. The
@@ -61,7 +62,16 @@ func nodeDir(id int) (string, error) {
 // activeNodeID reads ~/.config/everyapi/edge/active and parses the
 // stored node id. Returns ErrNoActiveNode if the file is missing —
 // caller can render a helpful "register first" message.
-var errNoActiveNode = errors.New("no active edge node — run 'everyapi edge register' first")
+//
+// errNoActiveNode is a sentinel (callers compare with errors.Is); its
+// message is translated lazily at render time via Error() so the
+// language picked at print time wins, not the one active at package
+// init.
+type noActiveNodeErr struct{}
+
+func (noActiveNodeErr) Error() string { return i18n.T("edge.no_active_node") }
+
+var errNoActiveNode error = noActiveNodeErr{}
 
 func activeNodeID() (int, error) {
 	cfg, err := configRoot()
@@ -77,7 +87,7 @@ func activeNodeID() (int, error) {
 	}
 	id, err := strconv.Atoi(strings.TrimSpace(string(b)))
 	if err != nil || id <= 0 {
-		return 0, fmt.Errorf("active node file is malformed: %s", string(b))
+		return 0, fmt.Errorf(i18n.T("edge.active_file_malformed"), string(b))
 	}
 	return id, nil
 }

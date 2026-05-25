@@ -9,6 +9,7 @@ import (
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 func edgeRemove(args []string) error {
@@ -26,12 +27,12 @@ func edgeRemove(args []string) error {
 	}
 
 	if !*yes {
-		summary := fmt.Sprintf("Remove edge node #%d?", nodeID)
-		detail := fmt.Sprintf("Local data for node #%d will be deleted", nodeID)
+		summary := fmt.Sprintf(i18n.T("edge.remove.confirm_summary"), nodeID)
+		detail := fmt.Sprintf(i18n.T("edge.remove.detail_base"), nodeID)
 		if !*keepBackend {
-			detail += " AND the backend node row will be removed."
+			detail += i18n.T("edge.remove.detail_with_backend")
 		} else {
-			detail += "; the backend node row will be kept."
+			detail += i18n.T("edge.remove.detail_keep_backend")
 		}
 		cliout.Println(detail)
 		confirmed, err := cliprompt.YesNo(bufio.NewReader(os.Stdin), summary, false)
@@ -39,7 +40,7 @@ func edgeRemove(args []string) error {
 			return err
 		}
 		if !confirmed {
-			return errors.New("aborted")
+			return errors.New(i18n.T("edge.remove.aborted"))
 		}
 	}
 
@@ -49,13 +50,13 @@ func edgeRemove(args []string) error {
 	if dockerErr := ensureDocker(); dockerErr == nil {
 		dir, dirErr := nodeDir(nodeID)
 		if dirErr == nil {
-			cliout.Printf("→ docker compose down -v (node #%d)\n", nodeID)
+			cliout.Printf(i18n.T("edge.remove.down"), nodeID)
 			if err := runComposeCmd(dir, projectFor(nodeID), "down", "-v"); err != nil {
-				cliout.Printf("⚠ docker compose down failed (%v) — continuing anyway\n", err)
+				cliout.Printf(i18n.T("edge.remove.down_failed"), err)
 			}
 		}
 	} else {
-		cliout.Printf("(docker not available; skipping `docker compose down`)\n")
+		cliout.Printf("%s", i18n.T("edge.remove.docker_unavailable"))
 	}
 
 	if !*keepBackend {
@@ -64,22 +65,22 @@ func edgeRemove(args []string) error {
 			return err
 		}
 		if err := client.DeleteEdgeNode(cliout.WithCtx(), nodeID); err != nil {
-			return fmt.Errorf("delete backend node row: %w", err)
+			return fmt.Errorf(i18n.T("edge.remove.delete_row_failed"), err)
 		}
-		cliout.Printf("✓ Backend node row %d deleted\n", nodeID)
+		cliout.Printf(i18n.T("edge.remove.row_deleted"), nodeID)
 	}
 
 	dir, err := nodeDir(nodeID)
 	if err == nil {
 		if rmErr := os.RemoveAll(dir); rmErr != nil {
-			cliout.Printf("⚠ couldn't remove local workdir %s (%v) — clean up manually\n", dir, rmErr)
+			cliout.Printf(i18n.T("edge.remove.workdir_failed"), dir, rmErr)
 		} else {
-			cliout.Printf("✓ Removed local workdir %s\n", dir)
+			cliout.Printf(i18n.T("edge.remove.workdir_removed"), dir)
 		}
 	}
 	if err := clearActiveNodeID(nodeID); err != nil {
-		cliout.Printf("⚠ couldn't clear active-node pointer (%v)\n", err)
+		cliout.Printf(i18n.T("edge.remove.clear_active_failed"), err)
 	}
-	cliout.Println("Done.")
+	cliout.Println(i18n.T("edge.remove.done"))
 	return nil
 }

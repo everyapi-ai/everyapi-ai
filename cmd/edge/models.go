@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 func edgeModels(args []string) error {
@@ -17,14 +18,14 @@ func edgeModels(args []string) error {
 	// rather than a silent prompt hang.
 	if len(args) == 0 {
 		if !cliprompt.IsInteractive() {
-			return errors.New("usage: everyapi edge models {list | pull <model> | rm <model>} [--node ID]")
+			return errors.New(i18n.T("edge.models.usage"))
 		}
 		actions := []string{"list", "pull", "rm"}
-		idx, err := cliprompt.Pick("edge models — pick an action:",
+		idx, err := cliprompt.Pick(i18n.T("edge.models.pick_action"),
 			[]string{
-				"list  — show models installed on the active node",
-				"pull  — download a model into ollama",
-				"rm    — remove a model from ollama",
+				i18n.T("edge.models.pick_list"),
+				i18n.T("edge.models.pick_pull"),
+				i18n.T("edge.models.pick_rm"),
 			})
 		if err != nil {
 			return err
@@ -63,7 +64,7 @@ func edgeModels(args []string) error {
 		}
 		return execOllama(*nodeFlag, "rm", model)
 	default:
-		return fmt.Errorf("unknown 'edge models' subcommand %q (expected: list | pull | rm)", sub)
+		return fmt.Errorf(i18n.T("edge.models.unknown_subcommand"), sub)
 	}
 }
 
@@ -77,10 +78,10 @@ func resolveModelArg(op string, rest []string) (string, []string, error) {
 		return rest[0], rest[1:], nil
 	}
 	if !cliprompt.IsInteractive() {
-		return "", nil, fmt.Errorf("usage: everyapi edge models %s <model>", op)
+		return "", nil, fmt.Errorf(i18n.T("edge.models.usage_op"), op)
 	}
 	in := bufio.NewReader(os.Stdin)
-	v, err := cliprompt.Line(in, "Model (e.g. llama3.1:8b)", "")
+	v, err := cliprompt.Line(in, i18n.T("edge.models.model_prompt"), "")
 	if err != nil {
 		return "", nil, err
 	}
@@ -104,7 +105,7 @@ func execOllama(explicitNode int, ollamaArgs ...string) error {
 		return err
 	}
 	if meta.Mode == ModeMacOS {
-		return fmt.Errorf("macOS mode uses native ollama (no container) — run 'ollama %s' directly on the host",
+		return fmt.Errorf(i18n.T("edge.models.macos_native"),
 			strings.Join(ollamaArgs, " "))
 	}
 	dir, err := nodeDir(nodeID)

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"os/exec"
 	"runtime"
+
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 // Mode is the inferred (or operator-overridden) hardware/OS profile.
@@ -72,7 +74,7 @@ func parseMode(s string) (Mode, error) {
 	case "cpu":
 		return ModeCPU, nil
 	default:
-		return "", errors.New("--mode must be one of: auto, nvidia, rocm, macos, cpu")
+		return "", errors.New(i18n.T("edge.detect.invalid_mode"))
 	}
 }
 

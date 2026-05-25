@@ -840,6 +840,172 @@ configure_restart_hint_2 = "  everyapi proxy stop && everyapi proxy start --deta
 [edge]
 no_nodes = "未註冊任何 edge 節點。"
 register_hint = "執行 'everyapi edge register --name <node-name>' 建立一個。"
+no_active_node = "沒有作用中的 edge 節點 —— 請先執行 'everyapi edge register'"
+active_file_malformed = "作用中節點檔案格式有誤：%s"
+
+[edge.usage]
+missing_subcommand = "缺少子命令（試試 'everyapi edge help'）"
+unknown_subcommand = "未知的 'edge' 子命令 %q"
+text = """everyapi edge —— BYO-GPU 供給方代理
+
+用法
+  everyapi edge <子命令> [參數]
+
+子命令
+  register [--name N] [--country CC]
+        在 EveryAPI 後端建立一個節點 + 註冊權杖，並持久化到
+        ~/.local/share/everyapi/edge/<node-id>/。複用你的 cli 登入
+        （無需單獨貼上權杖）。
+
+  list   (別名：ls)
+        列出目前後端上登入使用者擁有的所有節點，頂部顯示 api_base 和帳戶
+        id —— 當賣家面板什麼都不顯示、你想確認 CLI 實際連的是哪個後端 /
+        帳戶時很有用。
+
+  start  [--mode auto|nvidia|rocm|macos|cpu] [--node ID] [--gateway URL]
+        偵測 GPU 硬體，把 docker-compose.yml 算繪到節點 workdir，然後
+        'docker compose up -d'。首次執行會拉取 ollama + agent 映像檔。
+        預設 --mode auto（nvidia-smi → nvidia，rocminfo → rocm，
+        Darwin arm64 → macos，否則 → cpu）。
+
+  status [--node ID]
+        在面板視圖旁顯示 'docker compose ps'（線上 / 離線 / 已暫停、
+        最後在線時間、目前模型）。
+
+  stop   [--node ID]                 docker compose down
+  logs   [-f|--follow] [--node ID]   docker compose logs
+  update [--node ID]                 docker compose pull && up -d
+  remove [--node ID] [--keep-backend]
+        docker compose down -v + 刪除本機 workdir。除非設定
+        --keep-backend，否則還會呼叫後端的
+        DELETE /api/seller/edge/nodes/<id>（在把節點重新指向另一台機器
+        時很有用）。
+
+  models list  [--node ID]
+  models pull  <model> [--node ID]
+  models rm    <model> [--node ID]
+        封裝 'docker compose exec ollama ollama <op>'。
+
+  help
+        印出本說明。
+
+首次執行
+  $ everyapi login                    # 如果還沒登入
+  $ everyapi edge register --name "rtx-4090-tokyo"
+  $ everyapi edge start
+  $ everyapi edge models pull llama3.1:8b
+
+環境需求
+  - PATH 上需有 docker + docker compose v2
+  - Linux/Windows：NVIDIA Container Toolkit（nvidia 模式）或
+    ROCm 5.7+（rocm 模式）
+  - macOS（Apple Silicon）：原生 'brew install ollama && brew services
+    start ollama' —— Metal 加速無法透過 docker 使用
+"""
+
+[edge.field]
+status = "狀態："
+last_seen = "最後在線："
+agent_ver = "agent 版本："
+models = "模型："
+hardware = "硬體："
+channel = "通道："
+user = "使用者："
+
+[edge.register]
+name_required = "必須指定 --name（例如 --name 'rtx-4090-tokyo'）"
+name_prompt = "節點名稱（例如 rtx-4090-tokyo）"
+persist_meta_failed = "持久化節點中繼資料失敗：%w"
+set_active_failed = "設定作用中節點失敗：%w"
+registered = "✓ 已註冊節點 #%d（%s）\n"
+saved = "✓ 權杖 + 中繼資料已儲存到 %s\n"
+set_active = "✓ 已設為作用中節點\n"
+next = "\n下一步：everyapi edge start\n"
+no_local_data = "節點 %d 沒有本機資料 —— 'everyapi edge register' 是不是在另一台機器上執行的？"
+decode_failed = "解析 node.json 失敗：%w"
+
+[edge.start]
+mode = "→ 模式：%s%s\n"
+wrote = "→ 已寫入 %s\n"
+macos_hint = "ℹ macOS 模式假定 ollama 已在本機 :11434 原生執行。如果還沒有：\n"
+macos_hint_cmd = "  brew install ollama && brew services start ollama\n"
+pull = "→ docker compose pull"
+pull_failed = "docker compose pull 失敗：%w"
+up = "→ docker compose up -d"
+up_failed = "docker compose up 失敗：%w"
+persist_mode_warn = "⚠ 無法持久化已解析的模式（%v）；'edge update' 可能會重新偵測\n"
+started = "\n✓ 已啟動。面板應在約 30 秒內顯示節點 #%d 為 'online'。\n"
+hint_status = "  everyapi edge status   —— 查看狀態\n"
+hint_logs = "  everyapi edge logs -f  —— 跟蹤 agent 記錄\n"
+hint_models = "  everyapi edge models pull llama3.1:8b   —— 安裝一個模型\n"
+desc_operator_set = "（操作者指定）"
+desc_nvidia = "（偵測到：nvidia-smi 回報了 GPU）"
+desc_rocm = "（偵測到：PATH 上有 rocminfo）"
+desc_macos = "（偵測到：Darwin arm64；ollama 必須在主機上）"
+desc_cpu = "（未偵測到 GPU —— 對話吞吐會很低；嵌入仍可用）"
+
+[edge.status]
+node = "節點 #%d"
+lookup_failed = "  （後端查詢失敗：%v）\n"
+last_seen_line = "  %-12s%s（%s 前）\n"
+hardware_line = "  %-12s%s × %d（%dGB VRAM）\n"
+docker_unavailable = "\n（本機無 docker —— 跳過 `docker compose ps`）\n"
+local_containers = "\n本機容器（`docker compose ps`）："
+ps_failed = "docker compose ps 失敗：%w"
+paused_suffix = "（已被賣家暫停）"
+
+[edge.stop]
+down = "→ docker compose down（節點 #%d）\n"
+down_failed = "docker compose down 失敗：%w"
+stopped = "✓ 已停止。執行 'everyapi edge start' 讓它重新上線。"
+
+[edge.update]
+pull = "→ docker compose pull（節點 #%d）\n"
+pull_failed = "docker compose pull 失敗：%w"
+up = "→ docker compose up -d"
+up_failed = "docker compose up 失敗：%w"
+updated = "✓ 已更新。執行 'everyapi edge status' 確認它已用上新映像檔。"
+
+[edge.remove]
+confirm_summary = "移除 edge 節點 #%d？"
+detail_base = "節點 #%d 的本機資料將被刪除"
+detail_with_backend = "，且後端的節點記錄也會被移除。"
+detail_keep_backend = "；後端的節點記錄會保留。"
+aborted = "已取消"
+down = "→ docker compose down -v（節點 #%d）\n"
+down_failed = "⚠ docker compose down 失敗（%v）—— 仍繼續\n"
+docker_unavailable = "（無 docker；跳過 `docker compose down`）\n"
+delete_row_failed = "刪除後端節點記錄失敗：%w"
+row_deleted = "✓ 已刪除後端節點記錄 %d\n"
+workdir_failed = "⚠ 無法移除本機 workdir %s（%v）—— 請手動清理\n"
+workdir_removed = "✓ 已移除本機 workdir %s\n"
+clear_active_failed = "⚠ 無法清除作用中節點指標（%v）\n"
+done = "完成。"
+
+[edge.models]
+usage = "用法：everyapi edge models {list | pull <model> | rm <model>} [--node ID]"
+pick_action = "edge models —— 選擇一個操作："
+pick_list = "list  —— 顯示作用中節點上已安裝的模型"
+pick_pull = "pull  —— 下載一個模型到 ollama"
+pick_rm = "rm    —— 從 ollama 移除一個模型"
+unknown_subcommand = "未知的 'edge models' 子命令 %q（應為：list | pull | rm）"
+usage_op = "用法：everyapi edge models %s <model>"
+model_prompt = "模型（例如 llama3.1:8b）"
+macos_native = "macOS 模式使用原生 ollama（無容器）—— 請直接在主機上執行 'ollama %s'"
+
+[edge.detect]
+invalid_mode = "--mode 必須是以下之一：auto、nvidia、rocm、macos、cpu"
+
+[edge.docker]
+not_found = "PATH 上找不到 docker。請安裝 Docker Desktop 或 docker.io 後重試 —— https://docs.docker.com/engine/install/"
+compose_v2_missing = "docker compose v2 不可用（%w）。請安裝 compose 外掛 —— https://docs.docker.com/compose/install/。\n%s"
+
+[edge.compose]
+write_failed = "寫入 compose 失敗：%w"
+
+[edge.list]
+last_seen_line = "  %-12s%s 前\n"
+active_marker = "'*' 標記作用中節點（start/stop/status/logs 預設使用它）。"
 
 [status]
 quota = "額度："

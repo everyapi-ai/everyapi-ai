@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"text/template"
+
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 // composeTemplate is the canonical docker-compose.yml for an edge node.
@@ -170,7 +172,7 @@ func writeCompose(dir string, d composeData) (string, error) {
 	}
 	path := filepath.Join(dir, "docker-compose.yml")
 	if err := os.WriteFile(path, out, 0o600); err != nil {
-		return "", fmt.Errorf("write compose: %w", err)
+		return "", fmt.Errorf(i18n.T("edge.compose.write_failed"), err)
 	}
 	return path, nil
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 func edgeStart(args []string) error {
@@ -39,7 +40,7 @@ func edgeStart(args []string) error {
 		return err
 	}
 	resolved := resolveMode(mode)
-	cliout.Printf("→ Mode: %s%s\n", resolved, modeDescription(resolved, mode == ModeAuto))
+	cliout.Printf(i18n.T("edge.start.mode"), resolved, modeDescription(resolved, mode == ModeAuto))
 
 	gateway := *gatewayFlag
 	if gateway == "" {
@@ -63,24 +64,24 @@ func edgeStart(args []string) error {
 	if err != nil {
 		return err
 	}
-	cliout.Printf("→ Wrote %s\n", composePath)
+	cliout.Printf(i18n.T("edge.start.wrote"), composePath)
 
 	if resolved == ModeMacOS {
 		// Native ollama hint — don't BLOCK on it (advanced users may
 		// run ollama via brew + custom port / a non-default install
 		// path), but flag the dependency so a typical macOS user
 		// doesn't get a baffling 'connection refused' a step later.
-		cliout.Printf("ℹ macOS mode assumes ollama is running natively on :11434. If you haven't:\n")
-		cliout.Printf("  brew install ollama && brew services start ollama\n")
+		cliout.Printf("%s", i18n.T("edge.start.macos_hint"))
+		cliout.Printf("%s", i18n.T("edge.start.macos_hint_cmd"))
 	}
 
-	cliout.Println("→ docker compose pull")
+	cliout.Println(i18n.T("edge.start.pull"))
 	if err := runComposeCmd(dir, projectFor(nodeID), "pull"); err != nil {
-		return fmt.Errorf("docker compose pull failed: %w", err)
+		return fmt.Errorf(i18n.T("edge.start.pull_failed"), err)
 	}
-	cliout.Println("→ docker compose up -d")
+	cliout.Println(i18n.T("edge.start.up"))
 	if err := runComposeCmd(dir, projectFor(nodeID), "up", "-d"); err != nil {
-		return fmt.Errorf("docker compose up failed: %w", err)
+		return fmt.Errorf(i18n.T("edge.start.up_failed"), err)
 	}
 
 	// Persist the resolved mode so `status` / `update` / `remove` know
@@ -89,29 +90,29 @@ func edgeStart(args []string) error {
 	// containers, so we warn instead of fail.
 	meta.Mode = resolved
 	if err := saveNodeMeta(nodeID, meta); err != nil {
-		cliout.Printf("⚠ couldn't persist resolved mode (%v); 'edge update' may re-detect\n", err)
+		cliout.Printf(i18n.T("edge.start.persist_mode_warn"), err)
 	}
 
-	cliout.Printf("\n✓ Started. Dashboard should show node #%d as 'online' within ~30s.\n", nodeID)
-	cliout.Printf("  everyapi edge status   — check state\n")
-	cliout.Printf("  everyapi edge logs -f  — tail agent logs\n")
-	cliout.Printf("  everyapi edge models pull llama3.1:8b   — install a model\n")
+	cliout.Printf(i18n.T("edge.start.started"), nodeID)
+	cliout.Printf("%s", i18n.T("edge.start.hint_status"))
+	cliout.Printf("%s", i18n.T("edge.start.hint_logs"))
+	cliout.Printf("%s", i18n.T("edge.start.hint_models"))
 	return nil
 }
 
 func modeDescription(m Mode, fromAuto bool) string {
 	if !fromAuto {
-		return " (operator-set)"
+		return i18n.T("edge.start.desc_operator_set")
 	}
 	switch m {
 	case ModeNVIDIA:
-		return " (detected: nvidia-smi reports a GPU)"
+		return i18n.T("edge.start.desc_nvidia")
 	case ModeROCm:
-		return " (detected: rocminfo on PATH)"
+		return i18n.T("edge.start.desc_rocm")
 	case ModeMacOS:
-		return " (detected: Darwin arm64; ollama must be on the host)"
+		return i18n.T("edge.start.desc_macos")
 	case ModeCPU:
-		return " (no GPU detected — chat throughput will be low; embeddings still work)"
+		return i18n.T("edge.start.desc_cpu")
 	default:
 		return ""
 	}

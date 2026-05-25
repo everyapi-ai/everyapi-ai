@@ -14,6 +14,7 @@ import (
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 func edgeRegister(args []string) error {
@@ -30,10 +31,10 @@ func edgeRegister(args []string) error {
 		// (CI / piped) keep the original "--name is required"
 		// error so scripted invocations stay deterministic.
 		if !cliprompt.IsInteractive() {
-			return errors.New("--name is required (e.g. --name 'rtx-4090-tokyo')")
+			return errors.New(i18n.T("edge.register.name_required"))
 		}
 		in := bufio.NewReader(os.Stdin)
-		v, perr := cliprompt.Line(in, "Node name (e.g. rtx-4090-tokyo)", "")
+		v, perr := cliprompt.Line(in, i18n.T("edge.register.name_prompt"), "")
 		if perr != nil {
 			return perr
 		}
@@ -74,16 +75,16 @@ func edgeRegister(args []string) error {
 	metaPath := filepath.Join(dir, "node.json")
 	mb, _ := json.MarshalIndent(meta, "", "  ")
 	if err := os.WriteFile(metaPath, mb, 0o600); err != nil {
-		return fmt.Errorf("persist node metadata: %w", err)
+		return fmt.Errorf(i18n.T("edge.register.persist_meta_failed"), err)
 	}
 	if err := setActiveNodeID(reg.Node.ID); err != nil {
-		return fmt.Errorf("set active node: %w", err)
+		return fmt.Errorf(i18n.T("edge.register.set_active_failed"), err)
 	}
 
-	cliout.Printf("✓ Registered node #%d (%s)\n", reg.Node.ID, reg.Node.Name)
-	cliout.Printf("✓ Token + metadata saved to %s\n", metaPath)
-	cliout.Printf("✓ Set as active node\n")
-	cliout.Printf("\nNext: everyapi edge start\n")
+	cliout.Printf(i18n.T("edge.register.registered"), reg.Node.ID, reg.Node.Name)
+	cliout.Printf(i18n.T("edge.register.saved"), metaPath)
+	cliout.Printf("%s", i18n.T("edge.register.set_active"))
+	cliout.Printf("%s", i18n.T("edge.register.next"))
 	return nil
 }
 
@@ -110,13 +111,13 @@ func loadNodeMeta(id int) (*nodeMeta, error) {
 	b, err := os.ReadFile(filepath.Join(dir, "node.json"))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("no local data for node %d — was 'everyapi edge register' run on a different machine?", id)
+			return nil, fmt.Errorf(i18n.T("edge.register.no_local_data"), id)
 		}
 		return nil, err
 	}
 	var meta nodeMeta
 	if err := json.Unmarshal(b, &meta); err != nil {
-		return nil, fmt.Errorf("decode node.json: %w", err)
+		return nil, fmt.Errorf(i18n.T("edge.register.decode_failed"), err)
 	}
 	return &meta, nil
 }
