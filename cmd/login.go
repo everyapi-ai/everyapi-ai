@@ -13,10 +13,11 @@ import (
 	"github.com/mdp/qrterminal/v3"
 	"golang.org/x/term"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/internal/style"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -78,11 +79,11 @@ func Login(args []string) error {
 	} else {
 		cliout.Println(i18n.T("login.url_hint"))
 	}
-	cliout.Printf("\n    %s\n\n", prefilledURL)
+	cliout.Printf("\n    %s\n\n", style.Bold(prefilledURL))
 	// Surface the bare user_code too in case the dashboard fails to
 	// pre-fill (older /cli/auth deploys, query-stripping middlebox,
 	// user pasted the URL into a tool that drops query strings).
-	cliout.Printf(i18n.T("login.code_hint")+"\n\n", start.UserCode)
+	cliout.Printf(i18n.T("login.code_hint")+"\n\n", style.Bold(start.UserCode))
 
 	if !*noBrowser {
 		if err := cliprompt.OpenBrowser(prefilledURL); err == nil {
@@ -171,7 +172,7 @@ func Login(args []string) error {
 	}
 
 	dir, _ := config.ConfigDir()
-	cliout.Printf(i18n.T("login.logged_in_saved"), res.Username, dir)
+	cliout.Printf(i18n.T("login.logged_in_saved"), style.Bold(res.Username), dir)
 
 	// Resolve the relay API key now (and cache it) so `everyapi use`
 	// works on first try. The access token alone can't relay — it's

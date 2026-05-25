@@ -360,7 +360,7 @@ SUBCOMMANDS
 
 [wallet]
 no_topups = "No topups recorded."
-redeemed = "Redeemed: +%d quota credited."
+redeemed = "Redeemed: +**%d** quota credited."
 usage_redeem = "usage: everyapi wallet redeem <key>"
 usage = '''
 everyapi wallet — payment history, methods, redemption keys

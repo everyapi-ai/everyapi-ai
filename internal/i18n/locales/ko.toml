@@ -358,7 +358,7 @@ everyapi models — 계정에서 보이는 모델 카탈로그
 
 [wallet]
 no_topups = "충전 기록이 없습니다."
-redeemed = "교환 성공: +%d 쿼터 적립."
+redeemed = "교환 성공: +**%d** 쿼터 적립."
 usage_redeem = "사용법: everyapi wallet redeem <key>"
 usage = '''
 everyapi wallet — 결제 내역, 결제 수단, 교환 키

@@ -358,7 +358,7 @@ everyapi models — アカウントから参照できるモデルカタログ
 
 [wallet]
 no_topups = "入金記録がありません。"
-redeemed = "引き換え成功: +%d クォータを付与しました。"
+redeemed = "引き換え成功: +**%d** クォータを付与しました。"
 usage_redeem = "使用法: everyapi wallet redeem <key>"
 usage = '''
 everyapi wallet — 支払い履歴、支払い方法、引換キー

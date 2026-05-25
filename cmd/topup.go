@@ -8,10 +8,11 @@ import (
 	"io"
 	"os"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/internal/style"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -60,8 +61,8 @@ func Topup(args []string) error {
 	cliout.Println("")
 	cliout.Println(i18n.T("topup.before_open"))
 	cliout.Println("")
-	cliout.Printf("  %-8s %s\n", i18n.T("topup.url_label"), jumpURL)
-	cliout.Printf("  %-8s %s\n", i18n.T("topup.phrase_label"), res.VerificationPhrase)
+	cliout.Printf("  %-8s %s\n", i18n.T("topup.url_label"), style.Bold(jumpURL))
+	cliout.Printf("  %-8s %s\n", i18n.T("topup.phrase_label"), style.Bold(res.VerificationPhrase))
 	if res.ExpiresIn > 0 {
 		cliout.Printf("  "+i18n.T("topup.expires_in")+"\n", res.ExpiresIn)
 	}

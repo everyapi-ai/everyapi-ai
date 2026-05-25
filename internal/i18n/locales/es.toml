@@ -365,7 +365,7 @@ SUBCOMANDOS
 
 [wallet]
 no_topups = "No hay recargas registradas."
-redeemed = "Canjeado: +%d cuota acreditada."
+redeemed = "Canjeado: +**%d** cuota acreditada."
 usage_redeem = "uso: everyapi wallet redeem <key>"
 usage = '''
 everyapi wallet — historial de pagos, métodos, claves de canje

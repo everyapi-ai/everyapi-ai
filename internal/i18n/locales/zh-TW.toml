@@ -348,7 +348,7 @@ everyapi models — 你帳戶可見的模型目錄
 
 [wallet]
 no_topups = "無儲值紀錄。"
-redeemed = "兌換成功：增加 %d 額度。"
+redeemed = "兌換成功：增加 **%d** 額度。"
 usage_redeem = "用法：everyapi wallet redeem <key>"
 usage = '''
 everyapi wallet — 儲值紀錄、付款方式、兌換碼

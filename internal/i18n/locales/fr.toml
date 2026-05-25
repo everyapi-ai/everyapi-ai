@@ -364,7 +364,7 @@ SOUS-COMMANDES
 
 [wallet]
 no_topups = "Aucun rechargement enregistré."
-redeemed = "Échangé : +%d quota crédité."
+redeemed = "Échangé : +**%d** quota crédité."
 usage_redeem = "utilisation : everyapi wallet redeem <key>"
 usage = '''
 everyapi wallet — historique de paiements, méthodes, clés d'échange
