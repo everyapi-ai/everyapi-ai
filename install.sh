@@ -341,19 +341,26 @@ if [ -z "$ARTIFACT_LINE" ]; then
   exit 1
 fi
 
-(
-  cd "$TMP_DIR"
-  if command -v sha256sum >/dev/null 2>&1; then
-    echo "$ARTIFACT_LINE" | sha256sum -c --status
-  else
-    # macOS / BSD shasum. -a 256 selects SHA-256; -c reads the same
-    # "HASH  FILENAME" format sha256sum emits.
-    echo "$ARTIFACT_LINE" | shasum -a 256 -c --status
-  fi
-) || {
+# Compute the digest ourselves and string-compare, rather than piping
+# the checksum line to `sha256sum -c` / `shasum -c`. The `-c` checkfile
+# mode is a portability minefield: GNU coreutils, Apple's native BSD
+# /sbin/sha256sum (shipped since macOS 26), busybox, and perl shasum
+# each accept different flags. In particular `--status` is GNU-only —
+# Apple's tool rejects it, prints "usage: sha256sum [-bctwz] …" and
+# exits non-zero, which the old code misread as a checksum mismatch and
+# aborted a perfectly good download. Every one of these tools, however,
+# prints "HASH␣␣FILENAME" when simply handed a file, so taking the first
+# whitespace field is universally safe.
+EXPECTED=$(printf '%s\n' "$ARTIFACT_LINE" | awk '{print $1}')
+if command -v sha256sum >/dev/null 2>&1; then
+  ACTUAL=$(sha256sum "$TMP_DIR/$TARBALL" | awk '{print $1}')
+else
+  ACTUAL=$(shasum -a 256 "$TMP_DIR/$TARBALL" | awk '{print $1}')
+fi
+if [ "$EXPECTED" != "$ACTUAL" ]; then
   err "SHA256 mismatch — refusing to install a tampered or corrupt binary"
   exit 1
-}
+fi
 ok "SHA256 verified"
 
 # ----- Verify cosign signature (best-effort or required) ---------------------
