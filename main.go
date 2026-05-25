@@ -44,6 +44,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-ai/internal/mcp"
+	"github.com/everyapi-ai/everyapi-ai/internal/style"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -370,6 +371,18 @@ func runLauncher() error {
 	}
 }
 
+// nameCell right-pads name to width w with PLAIN spaces, then bolds
+// only the name text. Padding stays outside the bold span so the ANSI
+// bytes never enter the %-*s-style width math — column alignment holds
+// in the picker. Command names are ASCII, so len == display width.
+func nameCell(name string, w int) string {
+	pad := ""
+	if w > len(name) {
+		pad = strings.Repeat(" ", w-len(name))
+	}
+	return style.Bold(name) + pad
+}
+
 // launcherRows builds the visible command set and their aligned
 // display labels for the given auth state. Split out of runLauncher
 // so the loop can rebuild the menu each iteration — the row set
@@ -395,7 +408,7 @@ func launcherRows(loggedIn, isAdmin bool) ([]command, []string) {
 	}
 	labels := make([]string, len(visible))
 	for i, c := range visible {
-		labels[i] = fmt.Sprintf("%-*s  %s", maxName, c.name, commandDesc(c))
+		labels[i] = nameCell(c.name, maxName) + "  " + commandDesc(c)
 	}
 	return visible, labels
 }
@@ -410,9 +423,9 @@ func launcherRows(loggedIn, isAdmin bool) ([]command, []string) {
 func commandDesc(c command) string {
 	key := "launcher.desc." + c.name
 	if v := i18n.T(key); v != key {
-		return v
+		return style.Emph(v)
 	}
-	return c.desc
+	return style.Emph(c.desc)
 }
 
 // subcommandDesc is the sub-picker equivalent of commandDesc. The
@@ -435,9 +448,9 @@ func subcommandDesc(parent string, s subcommand) string {
 	}
 	key := "launcher.subs." + parent + "." + slug
 	if v := i18n.T(key); v != key {
-		return v
+		return style.Emph(v)
 	}
-	return s.desc
+	return style.Emph(s.desc)
 }
 
 // launcherProbeTimeout caps the entry-probe round-trip. The SDK's
@@ -504,7 +517,7 @@ func runSubPicker(c command) error {
 	}
 	labels := make([]string, len(c.subs))
 	for i, s := range c.subs {
-		labels[i] = fmt.Sprintf("%-*s  %s", maxName, s.name, subcommandDesc(c.name, s))
+		labels[i] = nameCell(s.name, maxName) + "  " + subcommandDesc(c.name, s)
 	}
 	prompt := fmt.Sprintf(i18n.T("common.pick_subcommand"), c.name)
 	lastSel := 0

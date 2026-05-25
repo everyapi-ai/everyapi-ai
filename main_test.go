@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -53,6 +56,27 @@ func TestRenderUsageGatedByRole(t *testing.T) {
 			// Sanity: file location used.
 			_ = filepath.Join(tmp, "everyapi", "credentials.json")
 		})
+	}
+}
+
+func TestNameCell_BoldAfterPadding(t *testing.T) {
+	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
+
+	// Plain profile: exact width, no escapes — alignment preserved.
+	lipgloss.SetColorProfile(termenv.Ascii)
+	if got := nameCell("login", 8); got != "login   " {
+		t.Fatalf("plain: want %q, got %q", "login   ", got)
+	}
+
+	// Styled profile: trailing pad stays plain spaces (alignment math
+	// never sees ANSI); the name carries the bold SGR.
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	got := nameCell("login", 8)
+	if !strings.HasSuffix(got, "   ") {
+		t.Fatalf("styled: want 3 trailing spaces, got %q", got)
+	}
+	if !strings.Contains(got, "\x1b[1m") {
+		t.Fatalf("styled: want bold name, got %q", got)
 	}
 }
 
