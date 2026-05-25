@@ -41,76 +41,76 @@ USAGE
   everyapi <command> [flags]
 
 COMMANDS
-  login           Authenticate this device with EveryAPI
-  logout          Remove this device's credentials
-  status          Show current quota, usage, and balance
-  topup           Open the wallet top-up page (anti-phishing verification phrase)
-  wallet <sub>    Payment history / methods / redemption keys
-  checkin         Claim today's daily-grant quota
-  user <sub>      Profile / 2FA / passkey / oauth bindings / aff code
-  subscription <sub>  Subscription plans / self / billing preference
-  use <tool>      Launch a third-party CLI (claude / codex / gemini) via EveryAPI
-  token <sub>     Manage relay API tokens (list / show / create / update / key / revoke / usage)
-  log <sub>       Request log: list / stat / summary
-  usage           Day-by-day quota usage
-  models <sub>    Model catalog: list / pricing / groups
-  upstream        Upstream provider health (status-page rollup)
-  perf            Per-model performance (success rate / latency / throughput)
-  demand <sub>    Buyer-side marketplace postings (list/my/show/submit/cancel/remove)
-  dispute <sub>   Open / list / inspect disputes
-  report          File an abuse / TOS-violation report
-  notify <sub>    In-app notifications (list / count / read / readall)
-  dm <sub>        Direct messages (threads / open / send / messages / read)
-  seller <sub>    Channel-marketplace seller commands
+  **login**           Authenticate this **device** with EveryAPI
+  **logout**          Remove this device's **credentials**
+  **status**          Show current **quota**, usage, and balance
+  **topup**           Open the wallet **top-up** page (anti-phishing verification phrase)
+  **wallet** <sub>    **Payment** history / methods / redemption keys
+  **checkin**         Claim today's **daily-grant** quota
+  **user** <sub>      **Profile** / 2FA / passkey / oauth bindings / aff code
+  **subscription** <sub>  **Subscription** plans / self / billing preference
+  **use** <tool>      Launch a **third-party CLI** (claude / codex / gemini) via EveryAPI
+  **token** <sub>     Manage relay **API tokens** (list / show / create / update / key / revoke / usage)
+  **log** <sub>       **Request log**: list / stat / summary
+  **usage**           **Day-by-day** quota usage
+  **models** <sub>    **Model catalog**: list / pricing / groups
+  **upstream**        Upstream **provider health** (status-page rollup)
+  **perf**            Per-model **performance** (success rate / latency / throughput)
+  **demand** <sub>    Buyer-side **marketplace** postings (list / my / show / submit / cancel / remove)
+  **dispute** <sub>   Open / list / inspect **disputes**
+  **report**          File an **abuse / TOS-violation** report
+  **notify** <sub>    In-app **notifications** (list / count / read / readall)
+  **dm** <sub>        **Direct messages** (threads / open / send / messages / read)
+  **seller** <sub>    **Channel-marketplace** seller commands
 __ADMIN_BLOCK__
-  edge <sub>      BYO-GPU supplier agent (docker + ollama)
-  proxy <sub>     Local sanitizer proxy (privacy filter for SDK requests)
-  mcp [sub]       MCP server for AI CLIs (Claude Code / Codex / Gemini)
-  doctor          Self-check (creds, gateway, sanitizer, tools)
-  events          Subscribe to the live event stream (SSE)
-  settings        View / change CLI preferences (language, …)
-  update          Check for a newer release and run the matching upgrade
-  version         Print the build version
-  help            Show this message
+  **edge** <sub>      **BYO-GPU** supplier agent (docker + ollama)
+  **proxy** <sub>     Local **sanitizer proxy** (privacy filter for SDK requests)
+  **mcp** [sub]       **MCP server** for AI CLIs (Claude Code / Codex / Gemini)
+  **doctor**          **Self-check** (creds, gateway, sanitizer, tools)
+  **events**          Subscribe to the **live event stream** (SSE)
+  **settings**        View / change **CLI preferences** (language, …)
+  **update**          Check for a **newer release** and run the matching upgrade
+  **version**         Print the **build version**
+  **help**            Show this message
 
 Run 'everyapi <command> help' for subcommand details and flags
 (e.g. 'everyapi seller help', 'everyapi edge help').
 '''
-usage_admin_block = '''  admin <sub>     Operator commands (admin role required)
+usage_admin_block = '''  **admin** <sub>     **Operator** commands (admin role required)
 '''
 
 [launcher.desc]
-login = "Authenticate this device with EveryAPI"
-logout = "Remove this device's credentials"
-status = "Show current quota, usage, and balance"
-topup = "Open the wallet top-up page (anti-phishing verification phrase)"
-wallet = "Payment history / methods / redemption keys"
-checkin = "Claim today's daily-grant quota"
-user = "Profile / 2FA / passkey / oauth bindings / aff code"
-subscription = "Subscription plans / self / billing preference"
-use = "Launch a third-party CLI (claude / codex / gemini) via EveryAPI"
-token = "Manage relay API tokens (list / create / key / revoke / …)"
-log = "Request log: list / stat / summary"
-usage = "Day-by-day quota usage"
-models = "Model catalog: list / pricing / groups"
-upstream = "Upstream provider health (status-page rollup)"
-perf = "Per-model performance (success rate / latency / throughput)"
-demand = "Buyer-side marketplace postings (list / my / show / submit / cancel / remove)"
-dispute = "Open / list / inspect disputes"
-report = "File an abuse / TOS-violation report"
-notify = "In-app notifications (list / count / read / readall)"
-dm = "Direct messages (threads / open / send / messages / read)"
-seller = "Channel-marketplace seller commands"
-edge = "BYO-GPU supplier agent (docker + ollama)"
-admin = "Operator commands (admin role required)"
-proxy = "Local sanitizer proxy (privacy filter for SDK requests)"
-mcp = "MCP server for AI CLIs (Claude Code / Codex / Gemini)"
-doctor = "Self-check (creds, gateway, sanitizer, tools)"
-events = "Subscribe to the live event stream (SSE)"
-settings = "View / change CLI preferences (language, …)"
-update = "Check for a newer release and run the matching upgrade"
-uninstall = "Remove everyapi state and binary from this machine"
-version = "Print the build version"
+login = "Authenticate this **device** with EveryAPI"
+logout = "Remove this device's **credentials**"
+status = "Show current **quota**, usage, and balance"
+topup = "Open the wallet **top-up** page (anti-phishing verification phrase)"
+wallet = "**Payment** history / methods / redemption keys"
+checkin = "Claim today's **daily-grant** quota"
+user = "**Profile** / 2FA / passkey / oauth bindings / aff code"
+subscription = "**Subscription** plans / self / billing preference"
+use = "Launch a **third-party CLI** (claude / codex / gemini) via EveryAPI"
+token = "Manage relay **API tokens** (list / create / key / revoke / …)"
+log = "**Request log**: list / stat / summary"
+usage = "**Day-by-day** quota usage"
+models = "**Model catalog**: list / pricing / groups"
+upstream = "Upstream **provider health** (status-page rollup)"
+perf = "Per-model **performance** (success rate / latency / throughput)"
+demand = "Buyer-side **marketplace** postings (list / my / show / submit / cancel / remove)"
+dispute = "Open / list / inspect **disputes**"
+report = "File an **abuse / TOS-violation** report"
+notify = "In-app **notifications** (list / count / read / readall)"
+dm = "**Direct messages** (threads / open / send / messages / read)"
+seller = "**Channel-marketplace** seller commands"
+edge = "**BYO-GPU** supplier agent (docker + ollama)"
+admin = "**Operator** commands (admin role required)"
+proxy = "Local **sanitizer proxy** (privacy filter for SDK requests)"
+mcp = "**MCP server** for AI CLIs (Claude Code / Codex / Gemini)"
+doctor = "**Self-check** (creds, gateway, sanitizer, tools)"
+events = "Subscribe to the **live event stream** (SSE)"
+settings = "View / change **CLI preferences** (language, …)"
+update = "Check for a **newer release** and run the matching upgrade"
+uninstall = "Remove everyapi **state and binary** from this machine"
+version = "Print the **build version**"
 
 [launcher.subs.wallet]
 history = "Paginated payment history"
@@ -254,11 +254,11 @@ SUBCOMMANDS
   show     <id>                        Show one token in detail
   key      <id>                        Print the full plaintext key
   create   --name <n> [flags]          Mint a new token
-  update   <id> [flags]                Edit a token's fields (omit a flag → keep current)
+  **update**   <id> [flags]                Edit a token's fields (omit a flag → keep current)
   enable   <id>                        Flip status to enabled
   disable  <id>                        Flip status to disabled
   revoke   <id> [-y]                   Delete a token (soft-delete; asks unless -y)
-  usage    <key>                       Show a key's remaining quota (no login needed)
+  **usage**    <key>                       Show a key's remaining quota (no login needed)
 
 CREATE / UPDATE FLAGS
   --name <n>           Display name (required for create; max 50 chars)
@@ -690,7 +690,7 @@ SUBCOMMANDS
   aff                                   Show your affiliate code
   aff reset                             Rotate the affiliate code
   aff transfer <amount> [-y]            Move affiliate rewards into main balance
-  update [--username U] [--display-name D]
+  **update** [--username U] [--display-name D]
                                         Edit your username / display name
   passwd                                Change password (prompts, echo off)
   setting [--type <ch> ...]             Show or set quota-warning notifications

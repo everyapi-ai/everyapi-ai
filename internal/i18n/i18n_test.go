@@ -216,6 +216,21 @@ func TestLocaleParity(t *testing.T) {
 	}
 }
 
+// TestLocaleMarkersBalanced ensures every locale value has an even
+// number of ** emphasis markers. An unclosed marker would bold the rest
+// of the string on a styled terminal, or leave a stray ** when piped.
+// Presence of markers is NOT required (locales are marked incrementally),
+// only balance.
+func TestLocaleMarkersBalanced(t *testing.T) {
+	for lang, tbl := range locales {
+		for key, val := range tbl {
+			if strings.Count(val, "**")%2 != 0 {
+				t.Errorf("%s/%s has an odd number of ** markers: %q", lang, key, val)
+			}
+		}
+	}
+}
+
 func TestLocalePlaceholders(t *testing.T) {
 	cases := []struct {
 		in   string
