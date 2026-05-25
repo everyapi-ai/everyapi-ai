@@ -187,10 +187,15 @@ const (
 //                         60/hour rate-limit bucket. The changelog
 //                         body (API-only) is the manual `update`
 //                         flow's concern, not the silent check's.
+//   - promptFn          — the update picker. A var so a test can
+//                         assert MaybePromptUpdate REACHED the prompt
+//                         (e.g. the launcher path) without a TTY; the
+//                         real cliprompt.Pick blocks on absent input.
 var (
 	isInteractiveFn  = cliprompt.IsInteractive
 	resolveVersionFn = version.Resolve
 	fetchLatestTagFn = fetchLatestTag
+	promptFn         = cliprompt.Pick
 )
 
 // MaybePromptUpdate runs the auto-update check before the user's
@@ -356,7 +361,7 @@ func handleUpdatePrompt(currentVer string, cache *updateCheckCache) bool {
 		choiceLater:  i18n.T("update.choice_later"),
 		choiceSkip:   i18n.T("update.choice_skip"),
 	}
-	idx, err := cliprompt.Pick(title, choices)
+	idx, err := promptFn(title, choices)
 	if err != nil {
 		// Esc / Ctrl-C / unknown selection — treat as "later". The
 		// cooldown stamp above ensures we don't loop the prompt.

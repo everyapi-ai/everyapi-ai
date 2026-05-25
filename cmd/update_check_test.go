@@ -40,6 +40,16 @@ func withVersion(t *testing.T, ver string) {
 	t.Cleanup(func() { resolveVersionFn = orig })
 }
 
+// withPrompt swaps the update picker so a test can observe whether
+// MaybePromptUpdate reached the prompt, and choose a deterministic
+// answer, without a TTY (the real cliprompt.Pick would block).
+func withPrompt(t *testing.T, fn func(string, []string) (int, error)) {
+	t.Helper()
+	orig := promptFn
+	promptFn = fn
+	t.Cleanup(func() { promptFn = orig })
+}
+
 // TestUpdateCheckCache_RoundTrip writes a cache file, reads it back,
 // and verifies every field survives. Guards against future struct
 // renames silently dropping a field — same shape as the credentials
@@ -489,5 +499,48 @@ func TestPromptChoiceConstants(t *testing.T) {
 	if choiceUpdate != 0 || choiceLater != 1 || choiceSkip != 2 {
 		t.Fatalf("choice indices drifted: update=%d later=%d skip=%d",
 			choiceUpdate, choiceLater, choiceSkip)
+	}
+}
+
+// TestMaybePromptUpdate_LauncherPathPrompts is the regression test for
+// the launcher gap (#374): the bare-`everyapi` entry point dispatches
+// with commandName "", which must NOT be treated as a skip command, so
+// a user who only ever picks from the menu still sees an available
+// update. With a fresh cache advertising a newer release, the empty
+// commandName has to walk all the way into the prompt.
+//
+// A fresh cache (recent CheckedAt) means the fetcher must NOT run — the
+// stub fails loud if it does, pinning the "don't re-poll a fresh cache"
+// contract on this path too.
+func TestMaybePromptUpdate_LauncherPathPrompts(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("EVERYAPI_NO_UPDATE_CHECK", "")
+	withInteractive(t, true)
+	withVersion(t, "v0.2.7") // installed
+	withFetcher(t, func(ctx context.Context) (string, error) {
+		t.Error("fresh cache should not trigger a fetch on the launcher path")
+		return "", errors.New("must not be called")
+	})
+
+	if err := saveUpdateCheckCache(&updateCheckCache{
+		CheckedAt:     time.Now().Add(-1 * time.Hour).Unix(), // fresh: no refetch
+		LatestVersion: "v0.2.8",                              // newer than installed
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	prompted := false
+	withPrompt(t, func(title string, choices []string) (int, error) {
+		prompted = true
+		return choiceLater, nil // "remind me later" — don't run an upgrade
+	})
+
+	skip := MaybePromptUpdate("") // "" == bare-launcher dispatch
+	if !prompted {
+		t.Error(`launcher path (commandName "") did not reach the update prompt for a newer release`)
+	}
+	if skip {
+		t.Error(`"remind me later" must leave the launcher running (skipOriginal=false)`)
 	}
 }
