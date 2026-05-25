@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
+	"github.com/everyapi-ai/everyapi-ai/internal/styletest"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -60,16 +61,18 @@ func TestRenderUsageGatedByRole(t *testing.T) {
 }
 
 func TestNameCell_BoldAfterPadding(t *testing.T) {
-	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
-
 	// Plain profile: exact width, no escapes — alignment preserved.
-	lipgloss.SetColorProfile(termenv.Ascii)
+	styletest.WithColorProfile(t, termenv.Ascii)
 	if got := nameCell("login", 8); got != "login   " {
 		t.Fatalf("plain: want %q, got %q", "login   ", got)
 	}
 
 	// Styled profile: trailing pad stays plain spaces (alignment math
-	// never sees ANSI); the name carries the bold SGR.
+	// never sees ANSI); the name carries the bold SGR. Bare
+	// SetColorProfile mid-test is fine — the cleanup registered by
+	// WithColorProfile above still wins on teardown and restores the
+	// original profile. A second WithColorProfile call would also work
+	// (LIFO cleanup), just reads more verbose.
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	got := nameCell("login", 8)
 	if !strings.HasSuffix(got, "   ") {
@@ -81,8 +84,7 @@ func TestNameCell_BoldAfterPadding(t *testing.T) {
 }
 
 func TestRenderUsage_StripsMarkersWhenUnstyled(t *testing.T) {
-	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
-	lipgloss.SetColorProfile(termenv.Ascii)
+	styletest.WithColorProfile(t, termenv.Ascii)
 	if out := renderUsage(); strings.Contains(out, "**") {
 		t.Fatalf("usage must not leak ** markers when unstyled:\n%s", out)
 	}

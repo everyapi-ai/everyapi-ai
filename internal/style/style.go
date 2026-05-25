@@ -38,6 +38,20 @@ func Bold(s string) string {
 // Emph converts **bold** markers in s to bold text, and strips the
 // markers to plain text when styling is unavailable. Apply to any
 // user-facing string whose keywords are marked with **…**.
+//
+// IMPORTANT — emphasis is opt-in PER CALL SITE, not per locale key.
+// `Emph` is currently wired into the launcher / help rendering path
+// (renderUsage, commandDesc, subcommandDesc, and the nameCell-via-
+// Bold pickers). i18n keys rendered through OTHER paths (e.g.
+// `update.notice` in cmd/update_check.go is formatted via
+// `fmt.Sprintf(i18n.T(...), ...)` with no Emph pass) will surface
+// `**` as literal asterisks if marked.
+//
+// Adding `**…**` to a locale value WITHOUT also routing the call site
+// through `Emph` is the failure mode. TestLocaleMarkersBalanced
+// guards marker balance but cannot detect "marked key not routed
+// through Emph" — that needs reviewer attention at the call site
+// when introducing emphasis to a new key family.
 func Emph(s string) string {
 	return emphMarkerRe.ReplaceAllStringFunc(s, func(m string) string {
 		return Bold(m[len("**") : len(m)-len("**")])

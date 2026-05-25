@@ -8,13 +8,12 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/style"
+	"github.com/everyapi-ai/everyapi-ai/internal/styletest"
 )
 
 func TestEmph_StyledVsPlain(t *testing.T) {
-	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
-
 	// Styling ON: marker becomes bold ANSI, markers gone.
-	lipgloss.SetColorProfile(termenv.TrueColor)
+	styletest.WithColorProfile(t, termenv.TrueColor)
 	got := style.Emph("Show current **quota**, usage")
 	if !strings.Contains(got, "\x1b[1m") {
 		t.Fatalf("want bold SGR, got %q", got)
@@ -23,7 +22,11 @@ func TestEmph_StyledVsPlain(t *testing.T) {
 		t.Fatalf("markers must be consumed, got %q", got)
 	}
 
-	// Styling OFF (pipe / NO_COLOR / dumb): plain text, markers stripped.
+	// Styling OFF (pipe / NO_COLOR / dumb): plain text, markers
+	// stripped. Bare SetColorProfile mid-test is fine — the cleanup
+	// registered by WithColorProfile above still wins on teardown and
+	// restores the original profile. A second WithColorProfile call
+	// would also work (LIFO cleanup), just reads more verbose.
 	lipgloss.SetColorProfile(termenv.Ascii)
 	if got := style.Emph("Show current **quota**, usage"); got != "Show current quota, usage" {
 		t.Fatalf("want stripped plain text, got %q", got)
@@ -31,8 +34,7 @@ func TestEmph_StyledVsPlain(t *testing.T) {
 }
 
 func TestBold_PlainWhenUnstyled(t *testing.T) {
-	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
-	lipgloss.SetColorProfile(termenv.Ascii)
+	styletest.WithColorProfile(t, termenv.Ascii)
 	if got := style.Bold("login"); got != "login" {
 		t.Fatalf("want %q, got %q", "login", got)
 	}
