@@ -80,6 +80,14 @@ func TestNameCell_BoldAfterPadding(t *testing.T) {
 	}
 }
 
+func TestRenderUsage_StripsMarkersWhenUnstyled(t *testing.T) {
+	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
+	lipgloss.SetColorProfile(termenv.Ascii)
+	if out := renderUsage(); strings.Contains(out, "**") {
+		t.Fatalf("usage must not leak ** markers when unstyled:\n%s", out)
+	}
+}
+
 // TestSessionRejected verifies the launcher entry probe: only a
 // definitive HTTP 401 from /api/user/self counts as "logged out".
 // A 5xx or any non-401 outcome must return false so a transient

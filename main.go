@@ -238,10 +238,15 @@ func renderUsage() string {
 	base := i18n.T("launcher.usage")
 	adminBlock := i18n.T("launcher.usage_admin_block")
 	creds, err := config.Load()
+	var out string
 	if err != nil || !creds.IsAdmin() {
-		return strings.Replace(base, adminBlockSentinel, "", 1)
+		out = strings.Replace(base, adminBlockSentinel, "", 1)
+	} else {
+		out = strings.Replace(base, adminBlockSentinel, adminBlock, 1)
 	}
-	return strings.Replace(base, adminBlockSentinel, adminBlock, 1)
+	// **keyword** markers in the usage blob render bold on a styled
+	// terminal and strip to plain text when piped / NO_COLOR.
+	return style.Emph(out)
 }
 
 // lookup resolves a CLI-typed name (incl. aliases) to its command.
