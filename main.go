@@ -565,6 +565,16 @@ func main() {
 
 	if len(os.Args) < 2 {
 		if cliprompt.IsInteractive() {
+			// The bare-`everyapi` launcher is the primary interactive
+			// surface — a user who only ever types `everyapi` and picks
+			// from the menu would otherwise never reach the auto-update
+			// check (it only fronts explicit-command dispatch below).
+			// Empty commandName is intentional: it isn't in
+			// updateCheckSkipCommands, so the check runs. "Update now"
+			// returns true → we ran the upgrade, skip the launcher.
+			if cmd.MaybePromptUpdate("") {
+				return
+			}
 			if err := runLauncher(); err != nil {
 				fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), err)
 				os.Exit(1)

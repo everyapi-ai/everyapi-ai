@@ -20,13 +20,13 @@ func withInteractive(t *testing.T, v bool) {
 	t.Cleanup(func() { isInteractiveFn = orig })
 }
 
-// withFetcher replaces fetchLatestReleaseFn so refresh code paths
+// withFetcher replaces fetchLatestTagFn so refresh code paths
 // don't escape the test sandbox to hit the real GitHub API.
-func withFetcher(t *testing.T, fn func(context.Context) (*latestRelease, error)) {
+func withFetcher(t *testing.T, fn func(context.Context) (string, error)) {
 	t.Helper()
-	orig := fetchLatestReleaseFn
-	fetchLatestReleaseFn = fn
-	t.Cleanup(func() { fetchLatestReleaseFn = orig })
+	orig := fetchLatestTagFn
+	fetchLatestTagFn = fn
+	t.Cleanup(func() { fetchLatestTagFn = orig })
 }
 
 // withVersion plants a real-looking semver so MaybePromptUpdate
@@ -131,8 +131,8 @@ func TestRefreshUpdateCheckCacheSync_CarryForwardsCooldown(t *testing.T) {
 		LatestVersion:  "v0.2.2",
 		LastPromptedAt: priorPrompted,
 	}
-	withFetcher(t, func(ctx context.Context) (*latestRelease, error) {
-		return &latestRelease{Tag: "v0.2.3"}, nil
+	withFetcher(t, func(ctx context.Context) (string, error) {
+		return "v0.2.3", nil
 	})
 
 	got := refreshUpdateCheckCacheSync(prev)
@@ -160,8 +160,8 @@ func TestRefreshUpdateCheckCacheSync_ClearsStaleSkip(t *testing.T) {
 		LatestVersion:  "v0.2.2",
 		SkippedVersion: "v0.2.2",
 	}
-	withFetcher(t, func(ctx context.Context) (*latestRelease, error) {
-		return &latestRelease{Tag: "v0.2.3"}, nil
+	withFetcher(t, func(ctx context.Context) (string, error) {
+		return "v0.2.3", nil
 	})
 
 	got := refreshUpdateCheckCacheSync(prev)
@@ -186,8 +186,8 @@ func TestRefreshUpdateCheckCacheSync_PreservesSkipOnSameTag(t *testing.T) {
 		LatestVersion:  "v0.2.2",
 		SkippedVersion: "v0.2.2",
 	}
-	withFetcher(t, func(ctx context.Context) (*latestRelease, error) {
-		return &latestRelease{Tag: "v0.2.2"}, nil
+	withFetcher(t, func(ctx context.Context) (string, error) {
+		return "v0.2.2", nil
 	})
 
 	got := refreshUpdateCheckCacheSync(prev)
@@ -212,8 +212,8 @@ func TestRefreshUpdateCheckCacheSync_FailureWritesMarker(t *testing.T) {
 		CheckedAt:     time.Now().Add(-26 * time.Hour).Unix(),
 		LatestVersion: "v0.2.2",
 	}
-	withFetcher(t, func(ctx context.Context) (*latestRelease, error) {
-		return nil, errors.New("simulated offline")
+	withFetcher(t, func(ctx context.Context) (string, error) {
+		return "", errors.New("simulated offline")
 	})
 
 	got := refreshUpdateCheckCacheSync(prev)
@@ -250,8 +250,8 @@ func TestRefreshUpdateCheckCacheSync_FailureWithNoPrior(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 
-	withFetcher(t, func(ctx context.Context) (*latestRelease, error) {
-		return nil, errors.New("simulated offline")
+	withFetcher(t, func(ctx context.Context) (string, error) {
+		return "", errors.New("simulated offline")
 	})
 
 	got := refreshUpdateCheckCacheSync(nil)
@@ -278,9 +278,9 @@ func TestMaybePromptUpdate_GuardChain(t *testing.T) {
 		withInteractive(t, false)
 		// Fetcher should NOT be called — non-TTY skips before the
 		// refresh path. Fail loud if it is.
-		withFetcher(t, func(ctx context.Context) (*latestRelease, error) {
+		withFetcher(t, func(ctx context.Context) (string, error) {
 			t.Error("fetch should not run when non-TTY")
-			return nil, errors.New("must not be called")
+			return "", errors.New("must not be called")
 		})
 		if MaybePromptUpdate("status") {
 			t.Error("non-TTY should never skip-original")
@@ -292,9 +292,9 @@ func TestMaybePromptUpdate_GuardChain(t *testing.T) {
 		t.Setenv("XDG_CONFIG_HOME", tmp)
 		t.Setenv("EVERYAPI_NO_UPDATE_CHECK", "1")
 		withInteractive(t, true)
-		withFetcher(t, func(ctx context.Context) (*latestRelease, error) {
+		withFetcher(t, func(ctx context.Context) (string, error) {
 			t.Error("fetch should not run when env opt-out is set")
-			return nil, errors.New("must not be called")
+			return "", errors.New("must not be called")
 		})
 		if MaybePromptUpdate("status") {
 			t.Error("env opt-out should skip the check")
@@ -306,9 +306,9 @@ func TestMaybePromptUpdate_GuardChain(t *testing.T) {
 		t.Setenv("XDG_CONFIG_HOME", tmp)
 		t.Setenv("EVERYAPI_NO_UPDATE_CHECK", "")
 		withInteractive(t, true)
-		withFetcher(t, func(ctx context.Context) (*latestRelease, error) {
+		withFetcher(t, func(ctx context.Context) (string, error) {
 			t.Error("fetch should not run for skip-list commands")
-			return nil, errors.New("must not be called")
+			return "", errors.New("must not be called")
 		})
 		for _, name := range []string{"update", "version", "--version", "-v", "mcp", "help", "--help", "-h"} {
 			if MaybePromptUpdate(name) {
@@ -327,9 +327,9 @@ func TestMaybePromptUpdate_DevBuildShortCircuits(t *testing.T) {
 	t.Setenv("EVERYAPI_NO_UPDATE_CHECK", "")
 	withInteractive(t, true)
 	withVersion(t, "dev")
-	withFetcher(t, func(ctx context.Context) (*latestRelease, error) {
+	withFetcher(t, func(ctx context.Context) (string, error) {
 		t.Error("dev build should never reach the fetcher")
-		return nil, errors.New("must not be called")
+		return "", errors.New("must not be called")
 	})
 	if MaybePromptUpdate("status") {
 		t.Error("dev build should never skip-original")
@@ -360,9 +360,9 @@ func TestMaybePromptUpdate_FailureBackoff(t *testing.T) {
 	}
 
 	fetcherCalled := false
-	withFetcher(t, func(ctx context.Context) (*latestRelease, error) {
+	withFetcher(t, func(ctx context.Context) (string, error) {
 		fetcherCalled = true
-		return &latestRelease{Tag: "v9.9.9"}, nil
+		return "v9.9.9", nil
 	})
 
 	_ = MaybePromptUpdate("status")
@@ -391,9 +391,9 @@ func TestMaybePromptUpdate_FailureBackoffExpired(t *testing.T) {
 	}
 
 	fetcherCalled := false
-	withFetcher(t, func(ctx context.Context) (*latestRelease, error) {
+	withFetcher(t, func(ctx context.Context) (string, error) {
 		fetcherCalled = true
-		return &latestRelease{Tag: "v9.9.9"}, nil
+		return "v9.9.9", nil
 	})
 
 	_ = MaybePromptUpdate("status")
@@ -423,9 +423,9 @@ func TestMaybePromptUpdate_FreshCacheSkipsFetch(t *testing.T) {
 	}
 
 	fetcherCalled := false
-	withFetcher(t, func(ctx context.Context) (*latestRelease, error) {
+	withFetcher(t, func(ctx context.Context) (string, error) {
 		fetcherCalled = true
-		return &latestRelease{Tag: "v9.9.9"}, nil
+		return "v9.9.9", nil
 	})
 
 	_ = MaybePromptUpdate("status")

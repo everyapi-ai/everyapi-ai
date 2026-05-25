@@ -68,16 +68,16 @@ func Update(args []string) error {
 	ctx, cancel := context.WithTimeout(cliout.WithCtx(), 10*time.Second)
 	defer cancel()
 
-	// fetchLatestRelease also pulls the body so the outdated
-	// branch below can render the changelog before handing off
-	// to brew / go install. --check and dev-build paths only
-	// look at .Tag — the extra body payload is the cost of not
-	// branching on which fields the caller needs.
-	rel, err := fetchLatestRelease(ctx)
+	// Resolve the latest tag via the github.com redirect, NOT the
+	// api.github.com JSON endpoint: the redirect isn't subject to the
+	// 60-req/hour unauthenticated API rate limit, so `update` keeps
+	// working on a shared NAT whose API bucket is already drained by
+	// other users behind the same IP. The changelog body is API-only
+	// and fetched best-effort in the outdated branch below.
+	latest, err := fetchLatestTag(ctx)
 	if err != nil {
 		return fmt.Errorf("check latest version: %w", err)
 	}
-	latest := rel.Tag
 
 	ver, commit := version.Resolve()
 
@@ -126,7 +126,7 @@ func Update(args []string) error {
 	// cmp < 0: outdated. Pick a method based on where the binary lives.
 	method := detectInstallMethod()
 	cliout.Printf("\n"+i18n.T("update.update_available")+"\n", ver, latest)
-	renderChangelog(rel)
+	renderChangelog(changelogRelease(ctx, latest))
 	cliout.Printf(i18n.T("update.install_method")+"\n\n", method)
 
 	switch method {
@@ -302,6 +302,41 @@ func guessBinaryPath() string {
 // server URL. Production callers never reassign.
 var latestReleasePollURL = "https://api.github.com/repos/everyapi-ai/everyapi-ai/releases/latest"
 
+// latestReleaseRedirectURL is the github.com (NOT api.github.com)
+// "latest release" web endpoint. A GET returns a 302 whose Location
+// header points at .../releases/tag/<tag>. Crucially this redirect is
+// NOT subject to the api.github.com 60-req/hour unauthenticated rate
+// limit, so the silent pre-command auto-check and `update`'s version
+// compare can poll it freely even when the API bucket is exhausted by
+// other users on a shared NAT. The cost: it yields only the tag, so
+// the changelog body still comes from fetchLatestRelease (API),
+// called best-effort.
+// var, not const, so update_test.go can point it at an httptest
+// server. Production callers never reassign.
+var latestReleaseRedirectURL = "https://github.com/everyapi-ai/everyapi-ai/releases/latest"
+
+// releaseTagURL builds the canonical release-page URL for a tag.
+// Used as the HTMLURL fallback when the API body fetch is skipped /
+// rate-limited, so the user still gets a link to the release notes.
+func releaseTagURL(tag string) string {
+	return "https://github.com/everyapi-ai/everyapi-ai/releases/tag/" + tag
+}
+
+// changelogRelease resolves the release whose body renderChangelog
+// shows in the outdated branch. The body lives only behind the
+// rate-limited API (fetchLatestRelease); best-effort here means a
+// drained bucket — or any API error — degrades to a body-less release
+// whose HTMLURL is derived from the tag, so renderChangelog falls
+// through to its "no notes — see <url>" path instead of the whole
+// upgrade aborting. Pulled out of Update so the fallback is unit-
+// testable without execing brew / go install.
+func changelogRelease(ctx context.Context, tag string) *latestRelease {
+	if rel, err := fetchLatestRelease(ctx); err == nil {
+		return rel
+	}
+	return &latestRelease{Tag: tag, HTMLURL: releaseTagURL(tag)}
+}
+
 // errNoReleaseYet surfaces when the mirror's Releases endpoint is
 // empty (pre-v0.1.0 state, or a brand-new install pre-first-release).
 // Distinct sentinel so the caller can print "no releases yet" rather
@@ -376,6 +411,65 @@ func fetchLatestRelease(ctx context.Context) (*latestRelease, error) {
 		return nil, errNoReleaseYet
 	}
 	return &latestRelease{Tag: tag, Body: payload.Body, HTMLURL: payload.HTMLURL}, nil
+}
+
+// fetchLatestTag resolves the latest release tag via the github.com
+// redirect (latestReleaseRedirectURL) — the rate-limit-safe path that
+// never touches api.github.com. Returns errNoReleaseYet when the repo
+// has no published release (the redirect lands on the releases index
+// or 404s instead of a /releases/tag/<tag> URL).
+//
+// Used by both the manual `update` flow (for the version compare) and
+// the silent auto-check, so neither pays the API's 60/hour bucket for
+// the cheap "what's the latest version" question.
+func fetchLatestTag(ctx context.Context) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", latestReleaseRedirectURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "everyapi-cli/"+version.Version)
+	// Don't follow the redirect — the tag is in the Location header of
+	// the 302 itself; following it would fetch the full HTML release
+	// page for nothing.
+	//
+	// This assumes a SINGLE hop: github.com answers /releases/latest
+	// with one 302 straight to /releases/tag/<tag> (verified). If
+	// GitHub ever inserts an intermediate redirect (scheme / host
+	// normalization), we'd read that hop's Location, miss the
+	// /releases/tag/ marker, and fall through to errNoReleaseYet —
+	// `update` then reports "no release yet" (not a wrong version) and
+	// the auto-check backs off. Acceptable; not worth chasing N hops
+	// for a path GitHub serves in one.
+	hc := &http.Client{
+		Timeout: 10 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := hc.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return "", errNoReleaseYet
+	}
+	loc := resp.Header.Get("Location")
+	if resp.StatusCode/100 != 3 || loc == "" {
+		return "", fmt.Errorf("github releases redirect returned %d", resp.StatusCode)
+	}
+	const marker = "/releases/tag/"
+	i := strings.LastIndex(loc, marker)
+	if i < 0 {
+		// Redirected somewhere without a tag (e.g. the releases index)
+		// — the repo has no published release yet.
+		return "", errNoReleaseYet
+	}
+	tag := strings.Trim(strings.TrimSpace(loc[i+len(marker):]), "/")
+	if tag == "" {
+		return "", errNoReleaseYet
+	}
+	return tag, nil
 }
 
 // firstNonEmpty returns the first non-empty string argument. Used

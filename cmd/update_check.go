@@ -178,13 +178,19 @@ const (
 //                         tests that need to exercise the cache /
 //                         refresh / prompt paths swap in a real-
 //                         looking semver string.
-//   - fetchLatestReleaseFn — swaps the live GitHub poll for a stub
-//                         so the refresh path doesn't escape the
-//                         test sandbox.
+//   - fetchLatestTagFn  — swaps the live GitHub poll for a stub so
+//                         the refresh path doesn't escape the test
+//                         sandbox. The auto-check only needs the tag
+//                         (to compare + cache), so it routes through
+//                         fetchLatestTag — the github.com redirect
+//                         that never spends the api.github.com
+//                         60/hour rate-limit bucket. The changelog
+//                         body (API-only) is the manual `update`
+//                         flow's concern, not the silent check's.
 var (
-	isInteractiveFn      = cliprompt.IsInteractive
-	resolveVersionFn     = version.Resolve
-	fetchLatestReleaseFn = fetchLatestRelease
+	isInteractiveFn  = cliprompt.IsInteractive
+	resolveVersionFn = version.Resolve
+	fetchLatestTagFn = fetchLatestTag
 )
 
 // MaybePromptUpdate runs the auto-update check before the user's
@@ -287,7 +293,7 @@ func updatePromptable(currentVer string, cache *updateCheckCache) bool {
 func refreshUpdateCheckCacheSync(prev *updateCheckCache) *updateCheckCache {
 	ctx, cancel := context.WithTimeout(context.Background(), updateRefreshTimeout)
 	defer cancel()
-	rel, err := fetchLatestReleaseFn(ctx)
+	tag, err := fetchLatestTagFn(ctx)
 	now := time.Now().Unix()
 
 	if err != nil {
@@ -307,7 +313,7 @@ func refreshUpdateCheckCacheSync(prev *updateCheckCache) *updateCheckCache {
 	c := &updateCheckCache{
 		CheckedAt:          now,
 		LastFetchAttemptAt: now,
-		LatestVersion:      rel.Tag,
+		LatestVersion:      tag,
 	}
 	if prev != nil {
 		// Carry forward the per-version skip and the last-prompted
@@ -316,7 +322,7 @@ func refreshUpdateCheckCacheSync(prev *updateCheckCache) *updateCheckCache {
 		// version gets its own prompt — explicit SkippedVersion match
 		// against the *new* tag.
 		c.LastPromptedAt = prev.LastPromptedAt
-		if prev.SkippedVersion != "" && prev.SkippedVersion == rel.Tag {
+		if prev.SkippedVersion != "" && prev.SkippedVersion == tag {
 			c.SkippedVersion = prev.SkippedVersion
 		}
 	}

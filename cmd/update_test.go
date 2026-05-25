@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -367,4 +368,110 @@ func TestCleanReleaseNotes(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestFetchLatestTag pins the github.com redirect parsing — the
+// rate-limit-safe tag lookup that backs both `update` and the silent
+// auto-check. The whole point of routing through the redirect is to
+// avoid the api.github.com 60/hour bucket, so the cases that matter
+// are: a normal 302 → tag, a missing/indexed redirect → errNoReleaseYet
+// (no published release), a 404 → errNoReleaseYet, and a non-redirect
+// status → hard error. A regression here silently reintroduces the
+// rate-limited API path's failure mode.
+func TestFetchLatestTag(t *testing.T) {
+	cases := []struct {
+		name        string
+		status      int
+		location    string
+		wantTag     string
+		wantErr     error
+		wantHardErr bool // expect a non-nil error that is NOT errNoReleaseYet
+	}{
+		{name: "302 with tag", status: 302, location: "https://github.com/everyapi-ai/everyapi-ai/releases/tag/v0.2.6", wantTag: "v0.2.6"},
+		{name: "302 with trailing slash", status: 302, location: "https://github.com/x/y/releases/tag/v1.2.3/", wantTag: "v1.2.3"},
+		{name: "302 to releases index (no release yet)", status: 302, location: "https://github.com/x/y/releases", wantErr: errNoReleaseYet},
+		{name: "404 (no release yet)", status: 404, wantErr: errNoReleaseYet},
+		{name: "unexpected 200", status: 200, wantHardErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.location != "" {
+					w.Header().Set("Location", tc.location)
+				}
+				w.WriteHeader(tc.status)
+			}))
+			defer srv.Close()
+			swapRedirectURL(t, srv.URL+"/releases/latest")
+
+			tag, err := fetchLatestTag(testCtx(t))
+			switch {
+			case tc.wantTag != "":
+				if err != nil {
+					t.Fatalf("fetchLatestTag: unexpected error %v", err)
+				}
+				if tag != tc.wantTag {
+					t.Errorf("tag = %q, want %q", tag, tc.wantTag)
+				}
+			case tc.wantErr != nil:
+				if !errors.Is(err, tc.wantErr) {
+					t.Errorf("err = %v, want %v", err, tc.wantErr)
+				}
+			case tc.wantHardErr:
+				if err == nil || errors.Is(err, errNoReleaseYet) {
+					t.Errorf("err = %v, want a generic non-errNoReleaseYet error", err)
+				}
+			}
+		})
+	}
+}
+
+// TestChangelogRelease covers the best-effort changelog resolution in
+// the outdated `update` branch: a working API yields the real release
+// body; a drained / erroring API degrades to a body-less release whose
+// link is derived from the tag (so renderChangelog still shows a URL
+// rather than the upgrade aborting).
+func TestChangelogRelease(t *testing.T) {
+	t.Run("API ok -> real release with body", func(t *testing.T) {
+		srv := newReleaseTestServer(func(r *http.Request) (int, string) {
+			return 200, `{"tag_name":"v0.2.6","body":"notes here","html_url":"https://example.test/r/v0.2.6"}`
+		})
+		defer srv.Close()
+		swapPollURL(t, srv.URL+"/releases/latest")
+
+		rel := changelogRelease(testCtx(t), "v0.2.6")
+		if rel.Body != "notes here" {
+			t.Errorf("Body = %q, want the API body", rel.Body)
+		}
+		if rel.HTMLURL != "https://example.test/r/v0.2.6" {
+			t.Errorf("HTMLURL = %q, want the API url", rel.HTMLURL)
+		}
+	})
+
+	t.Run("API rate-limited -> tag-derived fallback, no body", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-RateLimit-Remaining", "0")
+			w.WriteHeader(403)
+		}))
+		defer srv.Close()
+		swapPollURL(t, srv.URL+"/releases/latest")
+
+		rel := changelogRelease(testCtx(t), "v0.2.6")
+		if rel.Tag != "v0.2.6" {
+			t.Errorf("Tag = %q, want v0.2.6", rel.Tag)
+		}
+		if rel.Body != "" {
+			t.Errorf("Body = %q, want empty on API failure", rel.Body)
+		}
+		if rel.HTMLURL != releaseTagURL("v0.2.6") {
+			t.Errorf("HTMLURL = %q, want %q", rel.HTMLURL, releaseTagURL("v0.2.6"))
+		}
+	})
+}
+
+func swapRedirectURL(t *testing.T, url string) {
+	t.Helper()
+	prev := latestReleaseRedirectURL
+	latestReleaseRedirectURL = url
+	t.Cleanup(func() { latestReleaseRedirectURL = prev })
 }
