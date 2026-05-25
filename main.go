@@ -62,6 +62,14 @@ type command struct {
 	// the static `usage` block — kept in sync by review, not code:
 	// the usage block targets the piped / -h reader and the
 	// launcher targets the interactive picker.
+	//
+	// IMPORTANT: this is the FALLBACK string for commandDesc(). The
+	// authoritative copy for the launcher picker lives in i18n under
+	// `launcher.desc.<name>` (en.toml mirrors this field; other
+	// locales translate). If you edit `desc` here, edit `en.toml`'s
+	// entry too — otherwise English users see the i18n value (stale)
+	// while non-English locales unaffected. The locale-parity test
+	// will not catch value drift, only key drift.
 	desc string
 	// adminOnly hides the row from the launcher when the cached
 	// credential isn't an admin user. Mirrors the admin block's
@@ -386,9 +394,49 @@ func launcherRows(loggedIn, isAdmin bool) ([]command, []string) {
 	}
 	labels := make([]string, len(visible))
 	for i, c := range visible {
-		labels[i] = fmt.Sprintf("%-*s  %s", maxName, c.name, c.desc)
+		labels[i] = fmt.Sprintf("%-*s  %s", maxName, c.name, commandDesc(c))
 	}
 	return visible, labels
+}
+
+// commandDesc resolves the launcher row's description. Looks up
+// `launcher.desc.<name>` in the current locale's table; falls back to
+// the hardcoded English `c.desc` when the key is missing (i18n.T
+// returns the bare key in that case — using it directly would print
+// "launcher.desc.login" to the user). The struct field stays the
+// source of truth for the English copy; this helper just plumbs the
+// translated variant through when one exists.
+func commandDesc(c command) string {
+	key := "launcher.desc." + c.name
+	if v := i18n.T(key); v != key {
+		return v
+	}
+	return c.desc
+}
+
+// subcommandDesc is the sub-picker equivalent of commandDesc. The
+// key is the PARENT's name + the sub-row's args joined with
+// underscores (so admin's "marketplace status" becomes
+// `launcher.subs.admin.marketplace_status`), because the sub `name`
+// field is a display string that may contain spaces — args is the
+// stable identifier.
+//
+// The `slug == ""` branch is defensive: every current subcommand in
+// the registry sets a non-empty args slice, but a future entry that
+// only wires up a `run` function with no args (e.g. a top-level
+// shortcut row) would otherwise generate a `launcher.subs.X.` key
+// with a trailing dot. Falling back to a space-stripped name keeps
+// the resulting key human-readable.
+func subcommandDesc(parent string, s subcommand) string {
+	slug := strings.Join(s.args, "_")
+	if slug == "" {
+		slug = strings.ReplaceAll(s.name, " ", "_")
+	}
+	key := "launcher.subs." + parent + "." + slug
+	if v := i18n.T(key); v != key {
+		return v
+	}
+	return s.desc
 }
 
 // launcherProbeTimeout caps the entry-probe round-trip. The SDK's
@@ -455,7 +503,7 @@ func runSubPicker(c command) error {
 	}
 	labels := make([]string, len(c.subs))
 	for i, s := range c.subs {
-		labels[i] = fmt.Sprintf("%-*s  %s", maxName, s.name, s.desc)
+		labels[i] = fmt.Sprintf("%-*s  %s", maxName, s.name, subcommandDesc(c.name, s))
 	}
 	prompt := fmt.Sprintf(i18n.T("common.pick_subcommand"), c.name)
 	lastSel := 0
@@ -519,6 +567,16 @@ func main() {
 	if !ok {
 		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s", name, renderUsage())
 		os.Exit(2)
+	}
+
+	// Auto-update check: cached-only, interactive-only. If a newer
+	// release is cached and the user picks "update now", we run the
+	// upgrade and skip the original command (an old binary running
+	// right after a brew upgrade kicked off is asking for trouble).
+	// "Later" / "skip this version" / non-TTY / dev build / opt-out
+	// env all fall through to the original command unchanged.
+	if cmd.MaybePromptUpdate(name) {
+		return
 	}
 
 	err := dispatchInteractive(c, args)

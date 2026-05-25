@@ -67,6 +67,117 @@ __ADMIN_BLOCK__
 usage_admin_block = '''  admin <子>      維運命令（需要管理員角色）
 '''
 
+[launcher.desc]
+login = "登入此裝置到 EveryAPI"
+logout = "清除本裝置憑證"
+status = "顯示目前額度、用量與餘額"
+topup = "開啟錢包儲值頁（反釣魚校驗短語）"
+wallet = "儲值紀錄 / 付款方式 / 兌換碼"
+checkin = "領取今日簽到額度"
+user = "個人資訊 / 2FA / passkey / OAuth 綁定 / 推廣碼"
+subscription = "訂閱方案 / 我的訂閱 / 計費偏好"
+use = "透過 EveryAPI 啟動第三方 CLI（claude / codex / gemini）"
+token = "管理 relay API token（list / create / key / revoke / …）"
+log = "請求日誌：list / stat / summary"
+usage = "按日額度用量"
+models = "模型目錄：list / pricing / groups"
+upstream = "上游供應商健康狀態（狀態頁彙總）"
+perf = "按模型效能（成功率 / 延遲 / 吞吐）"
+demand = "買方需求貼（list / my / show / submit / cancel / remove）"
+dispute = "爭議：開啟 / 列表 / 查看"
+report = "檢舉濫用 / 違規"
+notify = "站內通知（list / count / read / readall）"
+dm = "私訊（threads / open / send / messages / read）"
+seller = "賣方頻道市集命令"
+edge = "自帶 GPU 供應商代理（docker + ollama）"
+admin = "維運命令（需要管理員角色）"
+proxy = "本機去敏代理（SDK 請求隱私過濾）"
+mcp = "AI CLI 的 MCP 伺服器（Claude Code / Codex / Gemini）"
+doctor = "本機自我檢查（憑證、閘道、代理、工具）"
+events = "訂閱即時事件串流（SSE）"
+settings = "查看 / 修改 CLI 偏好（語言等）"
+update = "檢查新版本並執行對應的升級"
+version = "印出建置版本"
+
+[launcher.subs.wallet]
+history = "分頁查看儲值紀錄"
+info = "可用付款方式及建議金額"
+
+[launcher.subs.checkin]
+claim = "領取今日獎勵"
+status = "本月簽到日曆"
+
+[launcher.subs.user]
+info = "彙總的個人資訊 + 安全視圖"
+"2fa" = "2FA 狀態"
+aff = "顯示推廣碼"
+
+[launcher.subs.subscription]
+plans = "列出已啟用的訂閱方案"
+self = "查看你的訂閱"
+
+[launcher.subs.token]
+list = "列出你的 token（key 已遮蔽）"
+
+[launcher.subs.log]
+list = "最近的日誌條目（按時間倒序）"
+stat = "時間窗內的額度 / RPM / TPM 彙總"
+summary = "近 7 天按模型的消耗彙總"
+
+[launcher.subs.models]
+list = "你所在分組可路由的全部模型 id"
+pricing = "按模型的費率表"
+groups = "你的帳號可用的路由分組"
+
+[launcher.subs.demand]
+list = "公開需求貼資訊流"
+my = "你發布的需求貼"
+
+[launcher.subs.dispute]
+my = "你的已開啟 + 已解決的爭議"
+
+[launcher.subs.notify]
+list = "最近的通知"
+count = "僅統計未讀數"
+readall = "把所有未讀標記為已讀"
+
+[launcher.subs.dm]
+threads = "你的私訊會話"
+contacts = "你私訊過的使用者"
+count = "未讀私訊數"
+
+[launcher.subs.seller]
+list = "列出你已掛載的頻道"
+setup = "新增頻道精靈（API key 或 OAuth：codex / claude / gemini）"
+withdraw = "將賣方待結算餘額轉入主餘額"
+
+[launcher.subs.edge]
+register = "把目前機器註冊為 edge 節點（會詢問名稱）"
+list = "列出目前後端的所有節點"
+status = "docker compose ps + 目前節點的看板視圖"
+start = "偵測硬體並 docker compose up"
+stop = "docker compose down"
+logs = "docker compose logs"
+models = "在目前節點列出 / pull / remove ollama 模型"
+update = "docker compose pull && up"
+remove = "移除目前節點 + 刪除後端記錄"
+
+[launcher.subs.admin]
+marketplace_status = "查看 marketplace.enabled 開關"
+marketplace_on = "開啟市集"
+marketplace_off = "關閉市集"
+
+[launcher.subs.proxy]
+start = "啟動去敏代理（會詢問背景 / 前景）"
+stop = "停止執行中的代理（使用 PID 檔）"
+status = "顯示執行統計"
+configure = "互動式偵測器 + 自訂模式設定"
+
+[launcher.subs.mcp]
+install = "自動註冊 everyapi 為 MCP 伺服器（預設：claude）"
+uninstall = "移除 MCP 註冊"
+status = "查看哪些 MCP 客戶端註冊了 everyapi"
+
 [settings]
 saved = "設定已儲存。"
 lang_invalid = "語言不支援，可選"
@@ -785,6 +896,11 @@ dev_build_intro = "\n目前為 dev 建置（commit %s）。最新 tag release：
 rebuild_cmd = "  cd clients/cli && go build"
 switch_cmd_brew = "  brew install everyapi-ai/tap/everyapi   # macOS / Linux"
 switch_cmd_go = "  go install github.com/everyapi-ai/everyapi-ai@latest"
+notice = "偵測到 everyapi 新版本：%s → %s"
+choice_prompt = "請選擇："
+choice_yes = "立即更新"
+choice_later = "稍後提醒"
+choice_skip = "跳過此版本"
 
 [use]
 tool_picker = "選一個工具："

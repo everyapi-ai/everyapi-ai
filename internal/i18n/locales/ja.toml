@@ -77,6 +77,117 @@ __ADMIN_BLOCK__
 usage_admin_block = '''  admin <sub>     運用コマンド（admin ロールが必要）
 '''
 
+[launcher.desc]
+login = "この端末を EveryAPI に認証"
+logout = "この端末の認証情報を削除"
+status = "現在のクォータ、使用量、残高を表示"
+topup = "ウォレット入金ページを開く（フィッシング対策フレーズあり）"
+wallet = "支払い履歴 / 支払い方法 / 引換キー"
+checkin = "本日のデイリー付与クォータを受領"
+user = "プロフィール / 2FA / passkey / OAuth 連携 / アフィリエイトコード"
+subscription = "サブスクリプションプラン / 自分の契約 / 課金設定"
+use = "EveryAPI 経由でサードパーティ CLI を起動 (claude / codex / gemini)"
+token = "リレー API トークン管理 (list / create / key / revoke / …)"
+log = "リクエストログ: list / stat / summary"
+usage = "日別のクォータ使用量"
+models = "モデルカタログ: list / pricing / groups"
+upstream = "上流プロバイダの稼働状況 (ステータスページ集計)"
+perf = "モデル別パフォーマンス (成功率 / レイテンシ / スループット)"
+demand = "バイヤー側マーケットプレイス投稿 (list / my / show / submit / cancel / remove)"
+dispute = "ディスピュート: 起票 / 一覧 / 詳細"
+report = "不正利用 / 規約違反を報告"
+notify = "アプリ内通知 (list / count / read / readall)"
+dm = "ダイレクトメッセージ (threads / open / send / messages / read)"
+seller = "チャネルマーケットプレイスのセラー向けコマンド"
+edge = "BYO-GPU サプライヤーエージェント (docker + ollama)"
+admin = "運用コマンド（admin ロールが必要）"
+proxy = "ローカルサニタイザプロキシ (SDK リクエストのプライバシーフィルタ)"
+mcp = "AI CLI 向け MCP サーバー (Claude Code / Codex / Gemini)"
+doctor = "セルフチェック（認証情報、ゲートウェイ、サニタイザ、ツール）"
+events = "ライブイベントストリームを購読 (SSE)"
+settings = "CLI 設定を表示 / 変更（言語など）"
+update = "新しいリリースを確認し、対応するアップグレードを実行"
+version = "ビルドバージョンを表示"
+
+[launcher.subs.wallet]
+history = "ページネーション付きの支払い履歴"
+info = "有効な支払い方法と推奨金額"
+
+[launcher.subs.checkin]
+claim = "本日の報酬を受領"
+status = "今月のチェックイン カレンダー"
+
+[launcher.subs.user]
+info = "プロフィール + セキュリティの集約ビュー"
+"2fa" = "2FA の状態"
+aff = "アフィリエイトコードを表示"
+
+[launcher.subs.subscription]
+plans = "有効なサブスクリプションプラン一覧"
+self = "自分のサブスクリプションを表示"
+
+[launcher.subs.token]
+list = "自分のトークン一覧（キーはマスク表示）"
+
+[launcher.subs.log]
+list = "最近のログエントリ（新しい順）"
+stat = "期間内のクォータ / RPM / TPM 集計"
+summary = "直近 7 日のモデル別消費サマリ"
+
+[launcher.subs.models]
+list = "あなたのグループがルーティング可能な全モデル ID"
+pricing = "モデル別のレート表"
+groups = "あなたのアカウントで利用可能なルーティング グループ"
+
+[launcher.subs.demand]
+list = "公開マーケットプレイスのフィード"
+my = "自分が投稿した需要"
+
+[launcher.subs.dispute]
+my = "自分の未解決 + 解決済みディスピュート"
+
+[launcher.subs.notify]
+list = "最近の通知"
+count = "未読件数のみ"
+readall = "すべての未読を既読にする"
+
+[launcher.subs.dm]
+threads = "自分の DM スレッド"
+contacts = "DM したことのあるユーザー"
+count = "未読 DM 件数"
+
+[launcher.subs.seller]
+list = "マウント済みチャネル一覧"
+setup = "チャネル追加ウィザード (API key または OAuth: codex / claude / gemini)"
+withdraw = "セラー未払い残高をメイン残高に振替"
+
+[launcher.subs.edge]
+register = "この端末を edge ノードとして登録（名前を尋ねます）"
+list = "現在のバックエンドのノード一覧"
+status = "docker compose ps + 現在のノードのダッシュボード ビュー"
+start = "ハードウェア検出 + docker compose up"
+stop = "docker compose down"
+logs = "docker compose logs"
+models = "現在のノードで ollama モデルを list / pull / remove"
+update = "docker compose pull && up"
+remove = "現在のノードを削除 + バックエンドの行を削除"
+
+[launcher.subs.admin]
+marketplace_status = "marketplace.enabled フラグを表示"
+marketplace_on = "マーケットプレイスを開く"
+marketplace_off = "マーケットプレイスを閉じる"
+
+[launcher.subs.proxy]
+start = "サニタイザプロキシを実行（背景 / 前景を尋ねます）"
+stop = "実行中のプロキシを停止（PID ファイル使用）"
+status = "実行統計を表示"
+configure = "インタラクティブな検出器 + カスタムパターンの設定"
+
+[launcher.subs.mcp]
+install = "everyapi を MCP サーバーとして自動登録（既定: claude）"
+uninstall = "MCP 登録を削除"
+status = "everyapi が登録されている MCP クライアントを表示"
+
 [settings]
 saved = "設定を保存しました。"
 lang_invalid = "サポートされていない言語です。利用可能"
@@ -801,6 +912,11 @@ dev_build_intro = "\nこれは dev ビルドです（commit %s）。最新のタ
 rebuild_cmd = "  cd clients/cli && go build"
 switch_cmd_brew = "  brew install everyapi-ai/tap/everyapi   # macOS / Linux"
 switch_cmd_go = "  go install github.com/everyapi-ai/everyapi-ai@latest"
+notice = "everyapi の新しいバージョンがあります: %s → %s"
+choice_prompt = "操作を選択してください:"
+choice_yes = "今すぐ更新"
+choice_later = "後で通知"
+choice_skip = "このバージョンをスキップ"
 
 [use]
 tool_picker = "ツールを選択:"

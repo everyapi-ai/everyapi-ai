@@ -83,6 +83,117 @@ Ejecuta 'everyapi <comando> help' para ver detalles y opciones de subcomandos
 usage_admin_block = '''  admin <sub>     Comandos de operador (requiere rol admin)
 '''
 
+[launcher.desc]
+login = "Autenticar este dispositivo con EveryAPI"
+logout = "Eliminar las credenciales de este dispositivo"
+status = "Mostrar cuota, uso y saldo actuales"
+topup = "Abrir la página de recarga (con frase anti-phishing)"
+wallet = "Historial de pagos / métodos / claves de canje"
+checkin = "Reclamar la cuota diaria de hoy"
+user = "Perfil / 2FA / passkey / vínculos OAuth / código de afiliado"
+subscription = "Planes de suscripción / mi cuenta / preferencia de facturación"
+use = "Iniciar un CLI de terceros (claude / codex / gemini) vía EveryAPI"
+token = "Gestionar tokens de relay (list / create / key / revoke / …)"
+log = "Registro de peticiones: list / stat / summary"
+usage = "Uso de cuota por día"
+models = "Catálogo de modelos: list / pricing / groups"
+upstream = "Salud de los proveedores upstream (resumen de status-page)"
+perf = "Rendimiento por modelo (tasa de éxito / latencia / throughput)"
+demand = "Publicaciones del marketplace del lado comprador (list / my / show / submit / cancel / remove)"
+dispute = "Abrir / listar / inspeccionar disputas"
+report = "Presentar un reporte de abuso / violación de TOS"
+notify = "Notificaciones en la app (list / count / read / readall)"
+dm = "Mensajes directos (threads / open / send / messages / read)"
+seller = "Comandos de vendedor del marketplace de canales"
+edge = "Agente proveedor BYO-GPU (docker + ollama)"
+admin = "Comandos de operador (requiere rol admin)"
+proxy = "Proxy sanitizador local (filtro de privacidad para peticiones SDK)"
+mcp = "Servidor MCP para CLIs de IA (Claude Code / Codex / Gemini)"
+doctor = "Auto-chequeo (credenciales, gateway, sanitizador, herramientas)"
+events = "Suscribirse al stream de eventos en vivo (SSE)"
+settings = "Ver / cambiar preferencias del CLI (idioma, …)"
+update = "Buscar una versión más nueva y ejecutar la actualización correspondiente"
+version = "Imprimir la versión del build"
+
+[launcher.subs.wallet]
+history = "Historial de pagos paginado"
+info = "Métodos de pago activos + montos sugeridos"
+
+[launcher.subs.checkin]
+claim = "Reclamar la recompensa de hoy"
+status = "Mostrar el calendario de check-in de este mes"
+
+[launcher.subs.user]
+info = "Vista consolidada de perfil + seguridad"
+"2fa" = "Estado de 2FA"
+aff = "Mostrar el código de afiliado"
+
+[launcher.subs.subscription]
+plans = "Listar los planes de suscripción activos"
+self = "Mostrar tus suscripciones"
+
+[launcher.subs.token]
+list = "Listar tus tokens (claves enmascaradas)"
+
+[launcher.subs.log]
+list = "Entradas de log recientes (más recientes primero)"
+stat = "Totales de cuota / RPM / TPM para la ventana"
+summary = "Gasto por modelo de los últimos 7 días"
+
+[launcher.subs.models]
+list = "Mostrar todos los model id a los que tu grupo puede enrutar"
+pricing = "Tarifa por modelo"
+groups = "Grupos de enrutamiento que tu cuenta puede usar"
+
+[launcher.subs.demand]
+list = "Feed público del marketplace"
+my = "Demandas que has publicado"
+
+[launcher.subs.dispute]
+my = "Listar tus disputas abiertas + resueltas"
+
+[launcher.subs.notify]
+list = "Notificaciones recientes"
+count = "Solo el conteo de no leídas"
+readall = "Marcar todas las no leídas como leídas"
+
+[launcher.subs.dm]
+threads = "Tus hilos de DM"
+contacts = "Usuarios a los que has enviado mensajes"
+count = "Conteo de DM no leídos"
+
+[launcher.subs.seller]
+list = "Listar los canales que has montado"
+setup = "Asistente interactivo para agregar canal (API key u OAuth: codex / claude / gemini)"
+withdraw = "Transferir ganancias pendientes del vendedor al saldo principal"
+
+[launcher.subs.edge]
+register = "Registrar esta máquina como nodo edge (pregunta el nombre)"
+list = "Listar nodos en el backend activo"
+status = "docker compose ps + vista de dashboard del nodo activo"
+start = "Detectar hardware + docker compose up"
+stop = "docker compose down"
+logs = "docker compose logs"
+models = "Listar / pull / remove modelos ollama en el nodo activo"
+update = "docker compose pull && up"
+remove = "Quitar el nodo activo + eliminar la fila del backend"
+
+[launcher.subs.admin]
+marketplace_status = "Mostrar el flag marketplace.enabled"
+marketplace_on = "Abrir el marketplace"
+marketplace_off = "Cerrar el marketplace"
+
+[launcher.subs.proxy]
+start = "Ejecutar el proxy sanitizador (pregunta entre background y foreground)"
+stop = "Detener el proxy en ejecución (usa el archivo PID)"
+status = "Mostrar estadísticas de ejecución"
+configure = "Detector interactivo + configuración de patrones personalizados"
+
+[launcher.subs.mcp]
+install = "Registrar automáticamente everyapi como servidor MCP (por defecto: claude)"
+uninstall = "Eliminar el registro de MCP"
+status = "Mostrar qué clientes MCP tienen registrado everyapi"
+
 [settings]
 saved = "Configuración guardada."
 lang_invalid = "idioma no válido; soportados"
@@ -811,6 +922,11 @@ dev_build_intro = "\nEstás en un build dev (commit %s). Último release etiquet
 rebuild_cmd = "  cd clients/cli && go build"
 switch_cmd_brew = "  brew install everyapi-ai/tap/everyapi   # macOS / Linux"
 switch_cmd_go = "  go install github.com/everyapi-ai/everyapi-ai@latest"
+notice = "Hay una nueva versión de everyapi disponible: %s → %s"
+choice_prompt = "¿Qué deseas hacer?"
+choice_yes = "Actualizar ahora"
+choice_later = "Recordar más tarde"
+choice_skip = "Omitir esta versión"
 
 [use]
 tool_picker = "Elige una herramienta:"

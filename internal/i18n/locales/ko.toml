@@ -77,6 +77,117 @@ __ADMIN_BLOCK__
 usage_admin_block = '''  admin <sub>     운영 명령 (admin 역할 필요)
 '''
 
+[launcher.desc]
+login = "이 기기를 EveryAPI 에 인증"
+logout = "이 기기의 인증 정보 삭제"
+status = "현재 쿼터, 사용량, 잔액 표시"
+topup = "지갑 충전 페이지 열기 (피싱 방지 검증 문구 포함)"
+wallet = "결제 내역 / 결제 수단 / 교환 키"
+checkin = "오늘의 데일리 쿼터 수령"
+user = "프로필 / 2FA / passkey / OAuth 연동 / 추천 코드"
+subscription = "구독 플랜 / 내 구독 / 결제 설정"
+use = "EveryAPI 를 통해 서드파티 CLI 실행 (claude / codex / gemini)"
+token = "릴레이 API 토큰 관리 (list / create / key / revoke / …)"
+log = "요청 로그: list / stat / summary"
+usage = "일별 쿼터 사용량"
+models = "모델 카탈로그: list / pricing / groups"
+upstream = "업스트림 제공자 상태 (상태 페이지 집계)"
+perf = "모델별 성능 (성공률 / 지연 / 처리량)"
+demand = "바이어 측 마켓플레이스 게시 (list / my / show / submit / cancel / remove)"
+dispute = "분쟁: 제기 / 목록 / 조회"
+report = "어뷰즈 / TOS 위반 신고"
+notify = "앱 내 알림 (list / count / read / readall)"
+dm = "다이렉트 메시지 (threads / open / send / messages / read)"
+seller = "채널 마켓플레이스 셀러 명령"
+edge = "BYO-GPU 공급자 에이전트 (docker + ollama)"
+admin = "운영 명령 (admin 역할 필요)"
+proxy = "로컬 새너타이저 프록시 (SDK 요청 프라이버시 필터)"
+mcp = "AI CLI 용 MCP 서버 (Claude Code / Codex / Gemini)"
+doctor = "자가 진단 (인증 정보, 게이트웨이, 새너타이저, 도구)"
+events = "라이브 이벤트 스트림 구독 (SSE)"
+settings = "CLI 환경설정 조회 / 변경 (언어 등)"
+update = "새 릴리스 확인 후 해당 업그레이드 실행"
+version = "빌드 버전 출력"
+
+[launcher.subs.wallet]
+history = "페이지네이션된 결제 내역"
+info = "사용 가능한 결제 수단 + 권장 금액"
+
+[launcher.subs.checkin]
+claim = "오늘의 보상 수령"
+status = "이번 달 체크인 캘린더 표시"
+
+[launcher.subs.user]
+info = "프로필 + 보안 통합 보기"
+"2fa" = "2FA 상태"
+aff = "추천 코드 표시"
+
+[launcher.subs.subscription]
+plans = "사용 가능한 구독 플랜 목록"
+self = "내 구독 표시"
+
+[launcher.subs.token]
+list = "내 토큰 목록 (키 마스킹)"
+
+[launcher.subs.log]
+list = "최근 로그 항목 (최신순)"
+stat = "기간 내 쿼터 / RPM / TPM 합계"
+summary = "최근 7일간 모델별 소비"
+
+[launcher.subs.models]
+list = "내 그룹이 라우팅 가능한 모든 모델 ID"
+pricing = "모델별 요금표"
+groups = "내 계정이 사용 가능한 라우팅 그룹"
+
+[launcher.subs.demand]
+list = "공개 마켓플레이스 피드"
+my = "내가 게시한 수요"
+
+[launcher.subs.dispute]
+my = "내 열림 + 해결된 분쟁"
+
+[launcher.subs.notify]
+list = "최근 알림"
+count = "읽지 않은 개수만"
+readall = "모든 미읽음을 읽음으로 표시"
+
+[launcher.subs.dm]
+threads = "내 DM 스레드"
+contacts = "메시지를 보낸 사용자"
+count = "읽지 않은 DM 개수"
+
+[launcher.subs.seller]
+list = "마운트된 채널 목록"
+setup = "채널 추가 마법사 (API key 또는 OAuth: codex / claude / gemini)"
+withdraw = "셀러 미정산 잔액을 메인 잔액으로 이체"
+
+[launcher.subs.edge]
+register = "이 기기를 edge 노드로 등록 (이름을 묻습니다)"
+list = "현재 백엔드의 노드 목록"
+status = "docker compose ps + 현재 노드의 대시보드 보기"
+start = "하드웨어 감지 + docker compose up"
+stop = "docker compose down"
+logs = "docker compose logs"
+models = "현재 노드에서 ollama 모델 list / pull / remove"
+update = "docker compose pull && up"
+remove = "현재 노드 제거 + 백엔드 행 삭제"
+
+[launcher.subs.admin]
+marketplace_status = "marketplace.enabled 플래그 표시"
+marketplace_on = "마켓플레이스 열기"
+marketplace_off = "마켓플레이스 닫기"
+
+[launcher.subs.proxy]
+start = "새너타이저 프록시 실행 (백그라운드 / 포그라운드 묻기)"
+stop = "실행 중인 프록시 중지 (PID 파일 사용)"
+status = "실행 통계 표시"
+configure = "인터랙티브 감지기 + 사용자 정의 패턴 설정"
+
+[launcher.subs.mcp]
+install = "everyapi 를 MCP 서버로 자동 등록 (기본값: claude)"
+uninstall = "MCP 등록 제거"
+status = "어느 MCP 클라이언트에 everyapi 가 등록됐는지 표시"
+
 [settings]
 saved = "설정을 저장했습니다."
 lang_invalid = "지원되지 않는 언어입니다. 지원 언어"
@@ -800,6 +911,11 @@ dev_build_intro = "\n현재 dev 빌드입니다 (commit %s). 최신 태그 relea
 rebuild_cmd = "  cd clients/cli && go build"
 switch_cmd_brew = "  brew install everyapi-ai/tap/everyapi   # macOS / Linux"
 switch_cmd_go = "  go install github.com/everyapi-ai/everyapi-ai@latest"
+notice = "everyapi의 새 버전을 사용할 수 있습니다: %s → %s"
+choice_prompt = "어떻게 하시겠습니까?"
+choice_yes = "지금 업데이트"
+choice_later = "나중에 알림"
+choice_skip = "이 버전 건너뛰기"
 
 [use]
 tool_picker = "도구 선택:"

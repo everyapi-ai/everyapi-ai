@@ -79,6 +79,117 @@ Run 'everyapi <command> help' for subcommand details and flags
 usage_admin_block = '''  admin <sub>     Operator commands (admin role required)
 '''
 
+[launcher.desc]
+login = "Authenticate this device with EveryAPI"
+logout = "Remove this device's credentials"
+status = "Show current quota, usage, and balance"
+topup = "Open the wallet top-up page (anti-phishing verification phrase)"
+wallet = "Payment history / methods / redemption keys"
+checkin = "Claim today's daily-grant quota"
+user = "Profile / 2FA / passkey / oauth bindings / aff code"
+subscription = "Subscription plans / self / billing preference"
+use = "Launch a third-party CLI (claude / codex / gemini) via EveryAPI"
+token = "Manage relay API tokens (list / create / key / revoke / …)"
+log = "Request log: list / stat / summary"
+usage = "Day-by-day quota usage"
+models = "Model catalog: list / pricing / groups"
+upstream = "Upstream provider health (status-page rollup)"
+perf = "Per-model performance (success rate / latency / throughput)"
+demand = "Buyer-side marketplace postings (list / my / show / submit / cancel / remove)"
+dispute = "Open / list / inspect disputes"
+report = "File an abuse / TOS-violation report"
+notify = "In-app notifications (list / count / read / readall)"
+dm = "Direct messages (threads / open / send / messages / read)"
+seller = "Channel-marketplace seller commands"
+edge = "BYO-GPU supplier agent (docker + ollama)"
+admin = "Operator commands (admin role required)"
+proxy = "Local sanitizer proxy (privacy filter for SDK requests)"
+mcp = "MCP server for AI CLIs (Claude Code / Codex / Gemini)"
+doctor = "Self-check (creds, gateway, sanitizer, tools)"
+events = "Subscribe to the live event stream (SSE)"
+settings = "View / change CLI preferences (language, …)"
+update = "Check for a newer release and run the matching upgrade"
+version = "Print the build version"
+
+[launcher.subs.wallet]
+history = "Paginated payment history"
+info = "Enabled payment methods + suggested amounts"
+
+[launcher.subs.checkin]
+claim = "Claim today's reward"
+status = "Show this month's check-in calendar"
+
+[launcher.subs.user]
+info = "Rolled-up profile + security view"
+"2fa" = "2FA status"
+aff = "Show affiliate code"
+
+[launcher.subs.subscription]
+plans = "List enabled subscription plans"
+self = "Show your subscriptions"
+
+[launcher.subs.token]
+list = "List your tokens (masked keys)"
+
+[launcher.subs.log]
+list = "Recent log entries (newest first)"
+stat = "Quota / RPM / TPM totals for the window"
+summary = "Per-model spend over the last 7d"
+
+[launcher.subs.models]
+list = "Print every model id your group can route to"
+pricing = "Per-model rate sheet"
+groups = "Routing groups your account can use"
+
+[launcher.subs.demand]
+list = "Public marketplace feed"
+my = "Demands you've posted"
+
+[launcher.subs.dispute]
+my = "List your open + resolved disputes"
+
+[launcher.subs.notify]
+list = "Recent notifications"
+count = "Just the unread count"
+readall = "Flip every unread to read"
+
+[launcher.subs.dm]
+threads = "Your DM threads"
+contacts = "Users you've messaged"
+count = "Unread DM count"
+
+[launcher.subs.seller]
+list = "List the channels you've mounted"
+setup = "Interactive add-channel wizard (API key or OAuth: codex / claude / gemini)"
+withdraw = "Transfer pending seller earnings to main balance"
+
+[launcher.subs.edge]
+register = "Register this machine as an edge node (prompts for name)"
+list = "List nodes on the active backend"
+status = "docker compose ps + dashboard view of the active node"
+start = "Detect hardware + docker compose up"
+stop = "docker compose down"
+logs = "docker compose logs"
+models = "List / pull / remove ollama models on the active node"
+update = "docker compose pull && up"
+remove = "Remove the active node + delete backend row"
+
+[launcher.subs.admin]
+marketplace_status = "Show marketplace.enabled flag"
+marketplace_on = "Open the marketplace"
+marketplace_off = "Close the marketplace"
+
+[launcher.subs.proxy]
+start = "Run the sanitizer proxy (asks background vs foreground)"
+stop = "Stop the running proxy (uses PID file)"
+status = "Show running stats"
+configure = "Interactive detector + custom-pattern setup"
+
+[launcher.subs.mcp]
+install = "Auto-register everyapi as an MCP server (default: claude)"
+uninstall = "Remove the MCP registration"
+status = "Show which MCP clients have everyapi registered"
+
 [settings]
 saved = "Settings saved."
 lang_invalid = "invalid language; supported"
@@ -804,6 +915,11 @@ dev_build_intro = "\nYou're on a dev build (commit %s). Latest tagged release: %
 rebuild_cmd = "  cd clients/cli && go build"
 switch_cmd_brew = "  brew install everyapi-ai/tap/everyapi   # macOS / Linux"
 switch_cmd_go = "  go install github.com/everyapi-ai/everyapi-ai@latest"
+notice = "A new version of everyapi is available: %s → %s"
+choice_prompt = "What would you like to do?"
+choice_yes = "Update now"
+choice_later = "Remind me later"
+choice_skip = "Skip this version"
 
 [use]
 tool_picker = "Pick a tool:"
