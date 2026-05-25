@@ -107,6 +107,7 @@ doctor = "자가 진단 (인증 정보, 게이트웨이, 새너타이저, 도구
 events = "라이브 이벤트 스트림 구독 (SSE)"
 settings = "CLI 환경설정 조회 / 변경 (언어 등)"
 update = "새 릴리스 확인 후 해당 업그레이드 실행"
+uninstall = "이 머신에서 everyapi 상태와 바이너리 제거"
 version = "빌드 버전 출력"
 
 [launcher.subs.wallet]
@@ -1122,6 +1123,25 @@ deleted = "교환 코드 #%d 을 삭제했습니다."
 cleared = "유효하지 않은 코드 %d 개를 삭제했습니다."
 delete_confirm = "교환 코드 #%d 을 삭제하시겠습니까? 되돌릴 수 없습니다."
 clear_confirm = "사용됨 / 비활성화 / 만료된 코드를 모두 삭제하시겠습니까? 되돌릴 수 없습니다."
+
+[uninstall]
+plan_header = "The following will be removed:"
+plan_proxy_running = "sanitizer proxy is running — will be stopped first"
+plan_remove_marker = "[-]"
+plan_keep_marker = "[ ]"
+plan_already_gone = "already gone"
+plan_keep_reason_flag = "kept by flag"
+plan_keep_reason_brew = "managed by Homebrew — see hint below"
+plan_binary_unknown = "<binary path could not be resolved>"
+dry_run_footer = "Dry run — nothing was changed. Re-run without --dry-run to delete."
+confirm = "Proceed with uninstall?"
+aborted = "Uninstall cancelled."
+proxy_stop_failed = "failed to stop proxy (continuing anyway)"
+removed_marker = "[✓]"
+hint_brew_header = "Homebrew manages the binary. Finish with:"
+hint_brew_untap_note = "optional — removes the tap repo"
+hint_binary_unknown = "Couldn't resolve the binary path — remove it by hand."
+done = "Uninstall complete."
 
 [perf]
 none = "아직 성능 데이터가 없습니다."

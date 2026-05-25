@@ -216,6 +216,7 @@ var commands = []command{
 	{name: "events", desc: "Subscribe to the live event stream (SSE)", requireLogin: true, run: events.Run},
 	{name: "settings", desc: "View / change CLI preferences (language, …)", run: settings.Run},
 	{name: "update", desc: "Check for a newer release and run the matching upgrade", run: cmd.Update},
+	{name: "uninstall", desc: "Remove everyapi state and binary from this machine", run: cmd.Uninstall},
 	{name: "version", aliases: []string{"--version", "-v"}, desc: "Print the build version", run: cmd.Version},
 }
 

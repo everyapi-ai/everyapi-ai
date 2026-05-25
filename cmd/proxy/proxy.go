@@ -435,6 +435,20 @@ func pidFilePath() (string, error) {
 // callers can fall back to the default port. Splitting on whitespace
 // (rather than JSON-encoding) keeps the read path Sscanf-trivial and
 // the file `cat`-friendly for ops debugging.
+// IsRunning reports whether a sanitizer proxy we can actually signal
+// is up — the pid file exists AND the process it points at is alive.
+// A bare pid-file check would lie when the previous proxy crashed
+// without cleanup; callers (`everyapi uninstall`'s plan-render block)
+// rely on this returning false for stale-pid leftovers so the
+// confirmation text isn't misleading.
+func IsRunning() bool {
+	pid, _, ok := readPIDFile()
+	if !ok {
+		return false
+	}
+	return processAlive(pid)
+}
+
 func readPIDFile() (pid int, listen string, ok bool) {
 	path, err := pidFilePath()
 	if err != nil {

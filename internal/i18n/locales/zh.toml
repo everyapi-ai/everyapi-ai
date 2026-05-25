@@ -97,6 +97,7 @@ doctor = "本机自检（凭证、网关、代理、工具）"
 events = "订阅实时事件流（SSE）"
 settings = "查看 / 修改 CLI 偏好（语言等）"
 update = "检查新版本并执行匹配的升级"
+uninstall = "从此机器移除 everyapi 状态和二进制"
 version = "打印构建版本"
 
 [launcher.subs.wallet]
@@ -1106,6 +1107,25 @@ deleted = "兑换码 #%d 已删除。"
 cleared = "已删除 %d 个失效兑换码。"
 delete_confirm = "删除兑换码 #%d？此操作不可撤销。"
 clear_confirm = "删除所有已用 / 禁用 / 过期的兑换码？此操作不可撤销。"
+
+[uninstall]
+plan_header = "将移除以下内容："
+plan_proxy_running = "Sanitizer 代理正在运行 — 将先停止"
+plan_remove_marker = "[-]"
+plan_keep_marker = "[ ]"
+plan_already_gone = "已不存在"
+plan_keep_reason_flag = "由标志保留"
+plan_keep_reason_brew = "由 Homebrew 管理 — 见下方提示"
+plan_binary_unknown = "<无法解析二进制路径>"
+dry_run_footer = "干跑 — 未做任何更改。去掉 --dry-run 再次执行以删除。"
+confirm = "继续卸载？"
+aborted = "已取消卸载。"
+proxy_stop_failed = "停止代理失败（继续执行）"
+removed_marker = "[✓]"
+hint_brew_header = "Homebrew 管理着二进制。请用以下命令完成："
+hint_brew_untap_note = "可选 — 同时移除 tap 仓库"
+hint_binary_unknown = "无法解析二进制路径 — 请手动移除。"
+done = "卸载完成。"
 
 [perf]
 none = "暂无性能数据。"

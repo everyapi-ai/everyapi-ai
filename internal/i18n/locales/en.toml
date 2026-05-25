@@ -109,6 +109,7 @@ doctor = "Self-check (creds, gateway, sanitizer, tools)"
 events = "Subscribe to the live event stream (SSE)"
 settings = "View / change CLI preferences (language, …)"
 update = "Check for a newer release and run the matching upgrade"
+uninstall = "Remove everyapi state and binary from this machine"
 version = "Print the build version"
 
 [launcher.subs.wallet]
@@ -1126,6 +1127,25 @@ deleted = "Redemption #%d deleted."
 cleared = "Deleted %d invalid code(s)."
 delete_confirm = "Delete redemption #%d? This cannot be undone."
 clear_confirm = "Delete ALL used / disabled / expired codes? This cannot be undone."
+
+[uninstall]
+plan_header = "The following will be removed:"
+plan_proxy_running = "sanitizer proxy is running — will be stopped first"
+plan_remove_marker = "[-]"
+plan_keep_marker = "[ ]"
+plan_already_gone = "already gone"
+plan_keep_reason_flag = "kept by flag"
+plan_keep_reason_brew = "managed by Homebrew — see hint below"
+plan_binary_unknown = "<binary path could not be resolved>"
+dry_run_footer = "Dry run — nothing was changed. Re-run without --dry-run to delete."
+confirm = "Proceed with uninstall?"
+aborted = "Uninstall cancelled."
+proxy_stop_failed = "failed to stop proxy (continuing anyway)"
+removed_marker = "[✓]"
+hint_brew_header = "Homebrew manages the binary. Finish with:"
+hint_brew_untap_note = "optional — removes the tap repo"
+hint_binary_unknown = "Couldn't resolve the binary path — remove it by hand."
+done = "Uninstall complete."
 
 [perf]
 none = "No performance data yet."

@@ -107,6 +107,7 @@ doctor = "セルフチェック（認証情報、ゲートウェイ、サニタ�
 events = "ライブイベントストリームを購読 (SSE)"
 settings = "CLI 設定を表示 / 変更（言語など）"
 update = "新しいリリースを確認し、対応するアップグレードを実行"
+uninstall = "このマシンから everyapi の状態とバイナリを削除"
 version = "ビルドバージョンを表示"
 
 [launcher.subs.wallet]
@@ -1124,6 +1125,25 @@ deleted = "引換コード #%d を削除しました。"
 cleared = "%d 個の無効な引換コードを削除しました。"
 delete_confirm = "引換コード #%d を削除しますか？この操作は取り消せません。"
 clear_confirm = "使用済み / 無効 / 期限切れの引換コードをすべて削除しますか？この操作は取り消せません。"
+
+[uninstall]
+plan_header = "以下を削除します："
+plan_proxy_running = "Sanitizer プロキシが実行中 — 先に停止します"
+plan_remove_marker = "[-]"
+plan_keep_marker = "[ ]"
+plan_already_gone = "すでに存在しません"
+plan_keep_reason_flag = "フラグにより保持"
+plan_keep_reason_brew = "Homebrew が管理 — 下記のヒント参照"
+plan_binary_unknown = "<バイナリパスを解決できません>"
+dry_run_footer = "ドライラン — 何も変更されていません。--dry-run を外して再実行で削除します。"
+confirm = "アンインストールを実行しますか？"
+aborted = "アンインストールをキャンセルしました。"
+proxy_stop_failed = "プロキシの停止に失敗（続行します）"
+removed_marker = "[✓]"
+hint_brew_header = "Homebrew がバイナリを管理しています。以下で仕上げてください："
+hint_brew_untap_note = "オプション — tap リポジトリも削除します"
+hint_binary_unknown = "バイナリパスを解決できません — 手動で削除してください。"
+done = "アンインストールが完了しました。"
 
 [perf]
 none = "パフォーマンスデータがまだありません。"

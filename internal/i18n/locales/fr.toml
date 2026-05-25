@@ -112,6 +112,7 @@ doctor = "Auto-vérification (identifiants, gateway, sanitizer, outils)"
 events = "S'abonner au flux d'événements en direct (SSE)"
 settings = "Voir / modifier les préférences du CLI (langue, …)"
 update = "Vérifier une version plus récente et lancer la mise à niveau correspondante"
+uninstall = "Supprimer l'état everyapi et le binaire de cette machine"
 version = "Afficher la version du build"
 
 [launcher.subs.wallet]
@@ -1135,6 +1136,25 @@ deleted = "Échange #%d supprimé."
 cleared = "%d code(s) invalide(s) supprimé(s)."
 delete_confirm = "Supprimer l'échange #%d ? Cette action est irréversible."
 clear_confirm = "Supprimer TOUS les codes utilisés / désactivés / expirés ? Cette action est irréversible."
+
+[uninstall]
+plan_header = "The following will be removed:"
+plan_proxy_running = "sanitizer proxy is running — will be stopped first"
+plan_remove_marker = "[-]"
+plan_keep_marker = "[ ]"
+plan_already_gone = "already gone"
+plan_keep_reason_flag = "kept by flag"
+plan_keep_reason_brew = "managed by Homebrew — see hint below"
+plan_binary_unknown = "<binary path could not be resolved>"
+dry_run_footer = "Dry run — nothing was changed. Re-run without --dry-run to delete."
+confirm = "Proceed with uninstall?"
+aborted = "Uninstall cancelled."
+proxy_stop_failed = "failed to stop proxy (continuing anyway)"
+removed_marker = "[✓]"
+hint_brew_header = "Homebrew manages the binary. Finish with:"
+hint_brew_untap_note = "optional — removes the tap repo"
+hint_binary_unknown = "Couldn't resolve the binary path — remove it by hand."
+done = "Uninstall complete."
 
 [perf]
 none = "Aucune donnée de performance pour l'instant."

@@ -97,6 +97,7 @@ doctor = "本機自我檢查（憑證、閘道、代理、工具）"
 events = "訂閱即時事件串流（SSE）"
 settings = "查看 / 修改 CLI 偏好（語言等）"
 update = "檢查新版本並執行對應的升級"
+uninstall = "從此機器移除 everyapi 狀態和二進位"
 version = "印出建置版本"
 
 [launcher.subs.wallet]
@@ -1106,6 +1107,25 @@ deleted = "兌換碼 #%d 已刪除。"
 cleared = "已刪除 %d 個失效兌換碼。"
 delete_confirm = "刪除兌換碼 #%d？此操作不可撤銷。"
 clear_confirm = "刪除所有已用 / 停用 / 過期的兌換碼？此操作不可撤銷。"
+
+[uninstall]
+plan_header = "將移除以下內容："
+plan_proxy_running = "Sanitizer 代理正在執行 — 將先停止"
+plan_remove_marker = "[-]"
+plan_keep_marker = "[ ]"
+plan_already_gone = "已不存在"
+plan_keep_reason_flag = "由旗標保留"
+plan_keep_reason_brew = "由 Homebrew 管理 — 見下方提示"
+plan_binary_unknown = "<無法解析二進位路徑>"
+dry_run_footer = "乾跑 — 未做任何更改。去掉 --dry-run 再次執行以刪除。"
+confirm = "繼續解除安裝？"
+aborted = "已取消解除安裝。"
+proxy_stop_failed = "停止代理失敗（繼續執行）"
+removed_marker = "[✓]"
+hint_brew_header = "Homebrew 管理著二進位。請用以下指令完成："
+hint_brew_untap_note = "可選 — 同時移除 tap 倉庫"
+hint_binary_unknown = "無法解析二進位路徑 — 請手動移除。"
+done = "解除安裝完成。"
 
 [perf]
 none = "尚無效能資料。"
