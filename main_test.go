@@ -59,11 +59,20 @@ func TestRenderUsageGatedByRole(t *testing.T) {
 	}
 }
 
-func TestNameCell_BoldAfterPadding(t *testing.T) {
-	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
+// withColorProfile captures the current lipgloss color profile, sets
+// it to p for the duration of the test, and restores it on cleanup.
+// Reseting to Ascii unconditionally would clobber a non-Ascii default
+// a sibling test had set, leaking state across the suite.
+func withColorProfile(t *testing.T, p termenv.Profile) {
+	t.Helper()
+	orig := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(p)
+	t.Cleanup(func() { lipgloss.SetColorProfile(orig) })
+}
 
+func TestNameCell_BoldAfterPadding(t *testing.T) {
 	// Plain profile: exact width, no escapes — alignment preserved.
-	lipgloss.SetColorProfile(termenv.Ascii)
+	withColorProfile(t, termenv.Ascii)
 	if got := nameCell("login", 8); got != "login   " {
 		t.Fatalf("plain: want %q, got %q", "login   ", got)
 	}
@@ -81,8 +90,7 @@ func TestNameCell_BoldAfterPadding(t *testing.T) {
 }
 
 func TestRenderUsage_StripsMarkersWhenUnstyled(t *testing.T) {
-	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
-	lipgloss.SetColorProfile(termenv.Ascii)
+	withColorProfile(t, termenv.Ascii)
 	if out := renderUsage(); strings.Contains(out, "**") {
 		t.Fatalf("usage must not leak ** markers when unstyled:\n%s", out)
 	}

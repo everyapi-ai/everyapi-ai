@@ -10,11 +10,21 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/internal/style"
 )
 
-func TestEmph_StyledVsPlain(t *testing.T) {
-	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
+// withColorProfile captures the current lipgloss color profile,
+// sets it to p for the duration of the test, and restores it on
+// cleanup. Resetting to Ascii unconditionally (the original pattern)
+// would clobber a non-Ascii default set by a sibling test that
+// happened to run earlier — leaking state across the suite.
+func withColorProfile(t *testing.T, p termenv.Profile) {
+	t.Helper()
+	orig := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(p)
+	t.Cleanup(func() { lipgloss.SetColorProfile(orig) })
+}
 
+func TestEmph_StyledVsPlain(t *testing.T) {
 	// Styling ON: marker becomes bold ANSI, markers gone.
-	lipgloss.SetColorProfile(termenv.TrueColor)
+	withColorProfile(t, termenv.TrueColor)
 	got := style.Emph("Show current **quota**, usage")
 	if !strings.Contains(got, "\x1b[1m") {
 		t.Fatalf("want bold SGR, got %q", got)
@@ -31,8 +41,7 @@ func TestEmph_StyledVsPlain(t *testing.T) {
 }
 
 func TestBold_PlainWhenUnstyled(t *testing.T) {
-	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
-	lipgloss.SetColorProfile(termenv.Ascii)
+	withColorProfile(t, termenv.Ascii)
 	if got := style.Bold("login"); got != "login" {
 		t.Fatalf("want %q, got %q", "login", got)
 	}
