@@ -9,6 +9,7 @@ import (
 	"regexp"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
 
 // emphMarkerRe matches **bold** spans, mirroring the markdown-bold
@@ -16,13 +17,22 @@ import (
 // so multiple spans on one line each render independently.
 var emphMarkerRe = regexp.MustCompile(`\*\*(.+?)\*\*`)
 
-var boldStyle = lipgloss.NewStyle().Bold(true)
-
 // Bold renders s in bold, inheriting the terminal's default foreground
 // (no hardcoded color — readable on dark and light themes alike).
-// Returns s unchanged when the output profile carries no styling.
+// Returns s unchanged when the output has no styling (piped / NO_COLOR /
+// dumb terminal); lipgloss.ColorProfile reports the stdout profile and
+// enables VT processing on Windows.
+//
+// The span CLOSES with \x1b[22m (bold-off), NOT \x1b[0m (full reset).
+// These labels get embedded inside huh's per-row foreground style for
+// the launcher picker; a full reset would strip that selection
+// highlight for the rest of the line, whereas bold-off turns off only
+// the intensity and leaves any surrounding color intact.
 func Bold(s string) string {
-	return boldStyle.Render(s)
+	if lipgloss.ColorProfile() == termenv.Ascii {
+		return s
+	}
+	return "\x1b[1m" + s + "\x1b[22m"
 }
 
 // Emph converts **bold** markers in s to bold text, and strips the
