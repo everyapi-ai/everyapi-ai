@@ -8,17 +8,44 @@ Status: **core flows shipped** — buyer onboarding, seller commands (plain-key 
 
 ## Installation
 
+**macOS (Homebrew):**
+
 ```bash
 brew tap everyapi-ai/tap && brew install everyapi
 ```
 
-Later upgrades — `brew update` first:
+Later upgrades — `brew update` first (without it, `brew upgrade everyapi` uses the cached formula and reports "already installed" even when a newer release exists):
 
 ```bash
 brew update && brew upgrade everyapi
 ```
 
-Without `brew update`, `brew upgrade everyapi` uses the cached formula and reports "already installed" even when a newer release exists.
+**Linux / macOS (install script):**
+
+```bash
+curl -fsSL https://everyapi.ai/install.sh | bash
+```
+
+The script auto-detects OS + arch, downloads the matching `everyapi_{os}_{arch}.tar.gz` from the public release mirror, verifies the SHA256, and installs to `~/.local/bin` (or `/usr/local/bin` when run as root). If [cosign](https://github.com/sigstore/cosign) is installed it also verifies the keyless signature — pass `--require-signature` to make that step mandatory (recommended for CI / supply-chain-sensitive setups).
+
+Common flags:
+
+```bash
+curl -fsSL https://everyapi.ai/install.sh | bash -s -- --version v0.2.2     # pin a version
+curl -fsSL https://everyapi.ai/install.sh | bash -s -- --prefix /usr/local  # custom prefix
+curl -fsSL https://everyapi.ai/install.sh | bash -s -- --require-signature  # fail if cosign verify fails
+curl -fsSL https://everyapi.ai/install.sh | bash -s -- --force              # reinstall the same version
+```
+
+To upgrade later, re-run the same command. The script resolves the latest release tag and replaces the binary in place when a newer one exists; if the installed binary is already at the resolved target version, it exits with `already at vX.Y.Z — nothing to do` (safe to put in setup scripts / dotfiles). Pass `--force` to reinstall on top (useful for verifying integrity or recovering a damaged file). The script is also published in this repo at [`install.sh`](install.sh) if you'd rather download + read it first.
+
+**Go users (`go install`):**
+
+```bash
+go install github.com/everyapi-ai/everyapi-ai@latest
+```
+
+**Windows / manual:** grab `everyapi_windows_amd64.zip` (or any other artifact) from the [Releases page](https://github.com/everyapi-ai/everyapi-ai/releases/latest) and verify against `SHA256SUMS` before placing the binary on `%PATH%`.
 
 ## Commands
 

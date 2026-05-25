@@ -253,6 +253,15 @@ func printUnknownInstallHint(latest string) {
 	binaryPath := guessBinaryPath()
 	cliout.Printf("%s\n", i18n.T("update.cant_auto"))
 
+	// Install-script path comes first because it's the most common
+	// install method for users who land in the "unknown" branch —
+	// `curl … install.sh | bash` lands the binary in ~/.local/bin,
+	// which doesn't match the brew /Cellar/ or go install $GOBIN
+	// prefixes detectInstallMethod() looks for. Re-running the same
+	// curl command upgrades in place, so it's the closest thing to
+	// a one-liner upgrade for non-brew/non-go users.
+	cliout.Printf("  # Install script (Linux / macOS — re-run to upgrade in place)\n")
+	cliout.Printf("  curl -fsSL https://everyapi.ai/install.sh | bash\n\n")
 	cliout.Printf("  # Homebrew (after `brew tap everyapi-ai/tap`)\n")
 	cliout.Printf("  brew update && brew upgrade everyapi\n\n")
 	cliout.Printf("  # go install\n")
