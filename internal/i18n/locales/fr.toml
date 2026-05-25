@@ -1041,7 +1041,7 @@ active_marker = "'*' marque le nœud actif (utilisé par défaut par start/stop/
 quota = "quota :"
 requests = "requêtes :"
 topup = "rechargement :"
-remaining_used = "$%.2f restant   $%.2f utilisé"
+remaining_used = "**$%.2f** restant   **$%.2f** utilisé"
 
 [topup]
 before_open = "Avant d'ouvrir le navigateur, vérifiez qu'il s'agit du vrai dashboard EveryAPI."

@@ -1030,7 +1030,7 @@ active_marker = "'*' はアクティブノードを示します（既定で star
 quota = "クォータ:"
 requests = "リクエスト:"
 topup = "入金:"
-remaining_used = "$%.2f 残り   $%.2f 使用"
+remaining_used = "**$%.2f** 残り   **$%.2f** 使用"
 
 [topup]
 before_open = "ブラウザを開く前に、これが本物の EveryAPI ダッシュボードであることを確認してください。"

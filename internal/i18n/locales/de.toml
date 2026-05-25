@@ -1038,7 +1038,7 @@ active_marker = "'*' markiert den aktiven Knoten (wird standardmäßig von start
 quota = "Quota:"
 requests = "Anfragen:"
 topup = "Aufladung:"
-remaining_used = "$%.2f übrig   $%.2f verwendet"
+remaining_used = "**$%.2f** übrig   **$%.2f** verwendet"
 
 [topup]
 before_open = "Bevor du den Browser öffnest, überprüfe, dass dies das echte EveryAPI-Dashboard ist."

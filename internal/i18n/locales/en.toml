@@ -1032,7 +1032,7 @@ active_marker = "'*' marks the active node (used by start/stop/status/logs by de
 quota = "quota:"
 requests = "requests:"
 topup = "topup:"
-remaining_used = "$%.2f remaining   $%.2f used"
+remaining_used = "**$%.2f** remaining   **$%.2f** used"
 
 [topup]
 before_open = "Before opening the browser, verify this is the real EveryAPI dashboard."

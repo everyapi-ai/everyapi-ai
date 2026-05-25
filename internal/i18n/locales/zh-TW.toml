@@ -1012,7 +1012,7 @@ active_marker = "'*' 標記作用中節點（start/stop/status/logs 預設使用
 quota = "額度："
 requests = "請求數："
 topup = "儲值："
-remaining_used = "剩餘 $%.2f   已用 $%.2f"
+remaining_used = "剩餘 **$%.2f**   已用 **$%.2f**"
 
 [topup]
 before_open = "開啟瀏覽器前，請確認這是真實的 EveryAPI dashboard。"

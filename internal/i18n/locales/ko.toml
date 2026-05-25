@@ -1028,7 +1028,7 @@ active_marker = "'*' 는 활성 노드를 표시합니다 (기본적으로 start
 quota = "쿼터:"
 requests = "요청:"
 topup = "충전:"
-remaining_used = "$%.2f 남음   $%.2f 사용"
+remaining_used = "**$%.2f** 남음   **$%.2f** 사용"
 
 [topup]
 before_open = "브라우저를 열기 전에, 이것이 실제 EveryAPI 대시보드인지 확인하세요."
