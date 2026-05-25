@@ -56,7 +56,7 @@ COMMANDS
   **models** <sub>    **Model catalog**: list / pricing / groups
   **upstream**        Upstream **provider health** (status-page rollup)
   **perf**            Per-model **performance** (success rate / latency / throughput)
-  **demand** <sub>    Buyer-side **marketplace** postings (list/my/show/submit/cancel/remove)
+  **demand** <sub>    Buyer-side **marketplace** postings (list / my / show / submit / cancel / remove)
   **dispute** <sub>   Open / list / inspect **disputes**
   **report**          File an **abuse / TOS-violation** report
   **notify** <sub>    In-app **notifications** (list / count / read / readall)
