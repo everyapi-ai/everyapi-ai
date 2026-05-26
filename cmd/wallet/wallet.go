@@ -14,11 +14,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/internal/style"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
+
+// styledRedeemed renders the wallet.redeemed line with the credited
+// quota bolded. The amount is **-marked in wallet.redeemed across every
+// locale; routing the formatted string through style.Emph bolds it on a
+// styled terminal and strips the markers when piped / NO_COLOR.
+func styledRedeemed(quota int64) string {
+	return style.Emph(fmt.Sprintf(i18n.T("wallet.redeemed"), quota))
+}
 
 func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
@@ -89,8 +98,8 @@ func runHistory(args []string) error {
 		if t.PaymentProvider != "" && t.PaymentProvider != t.PaymentMethod {
 			method = fmt.Sprintf("%s/%s", t.PaymentMethod, t.PaymentProvider)
 		}
-		cliout.Printf("  %s  [#%d]  %s  amount=%d  money=%g  status=%s  trade=%s\n",
-			when, t.ID, method, t.Amount, t.Money, t.Status, t.TradeNo)
+		cliout.Printf("  %s  [#%d]  %s  amount=%d  money=%s  status=%s  trade=%s\n",
+			when, t.ID, method, t.Amount, style.Bold(fmt.Sprintf("%g", t.Money)), t.Status, t.TradeNo)
 	}
 	return nil
 }
@@ -167,6 +176,6 @@ func runRedeem(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf(i18n.T("wallet.redeemed")+"\n", quota)
+	cliout.Println(styledRedeemed(quota))
 	return nil
 }

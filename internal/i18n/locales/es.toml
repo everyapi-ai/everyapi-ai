@@ -29,6 +29,7 @@ error_prefix = "Error"
 missing_subcommand = "falta subcomando (prueba '%s help')"
 unknown_subcommand = "subcomando '%s' desconocido %q"
 pick_subcommand = "%s — elige un subcomando:"
+back = "← atrás"
 browser_open_failed = "No se pudo abrir el navegador automáticamente — copia la URL de arriba."
 browser_open_failed_qr = "No se pudo abrir el navegador automáticamente — escanea el QR o copia la URL de arriba."
 open_browser_now = "¿Abrir el navegador ahora?"
@@ -365,7 +366,7 @@ SUBCOMANDOS
 
 [wallet]
 no_topups = "No hay recargas registradas."
-redeemed = "Canjeado: +%d cuota acreditada."
+redeemed = "Canjeado: +**%d** cuota acreditada."
 usage_redeem = "uso: everyapi wallet redeem <key>"
 usage = '''
 everyapi wallet — historial de pagos, métodos, claves de canje
@@ -1040,7 +1041,7 @@ active_marker = "'*' marca el nodo activo (usado por start/stop/status/logs por 
 quota = "cuota:"
 requests = "peticiones:"
 topup = "recarga:"
-remaining_used = "$%.2f restante   $%.2f usado"
+remaining_used = "**$%.2f** restante   **$%.2f** usado"
 
 [topup]
 before_open = "Antes de abrir el navegador, verifica que este es el dashboard real de EveryAPI."

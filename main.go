@@ -513,6 +513,13 @@ func dispatchInteractive(c command, args []string) error {
 // nested prompt re-renders the sub-picker), returns
 // ErrPickCancelled itself when the user cancels the sub-picker
 // (so the caller — runLauncher or main — re-renders THE PARENT).
+//
+// A trailing "back" row gives that unwind a visible affordance. Esc
+// already returns ErrPickCancelled, but the binding is invisible
+// (runHuhField sets WithShowHelp(false)), so a user who never learned
+// Esc was stranded in the sub-menu — they could only re-run claim /
+// status, never climb back to the launcher. Selecting the back row
+// raises the same ErrPickCancelled the key does.
 func runSubPicker(c command) error {
 	maxName := 0
 	for _, s := range c.subs {
@@ -520,16 +527,22 @@ func runSubPicker(c command) error {
 			maxName = len(s.name)
 		}
 	}
-	labels := make([]string, len(c.subs))
+	// Declared subs first, then the back row at index len(c.subs).
+	backIdx := len(c.subs)
+	labels := make([]string, len(c.subs)+1)
 	for i, s := range c.subs {
 		labels[i] = nameCell(s.name, maxName) + "  " + subcommandDesc(c.name, s)
 	}
+	labels[backIdx] = i18n.T("common.back")
 	prompt := fmt.Sprintf(i18n.T("common.pick_subcommand"), c.name)
 	lastSel := 0
 	for {
 		idx, err := cliprompt.PickWithSelected(prompt, labels, lastSel)
 		if err != nil {
 			return err
+		}
+		if idx == backIdx {
+			return cliprompt.ErrPickCancelled
 		}
 		lastSel = idx
 		err = c.run(c.subs[idx].args)

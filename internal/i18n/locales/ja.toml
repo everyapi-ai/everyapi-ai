@@ -23,6 +23,7 @@ error_prefix = "エラー"
 missing_subcommand = "サブコマンドがありません（'%s help' を試してください）"
 unknown_subcommand = "不明な '%s' サブコマンド %q"
 pick_subcommand = "%s — サブコマンドを選択してください:"
+back = "← 戻る"
 browser_open_failed = "ブラウザを自動で開けませんでした — 上の URL をコピーしてください。"
 browser_open_failed_qr = "ブラウザを自動で開けませんでした — QR をスキャンするか、上の URL をコピーしてください。"
 open_browser_now = "ブラウザを開きますか？"
@@ -358,7 +359,7 @@ everyapi models — アカウントから参照できるモデルカタログ
 
 [wallet]
 no_topups = "入金記録がありません。"
-redeemed = "引き換え成功: +%d クォータを付与しました。"
+redeemed = "引き換え成功: +**%d** クォータを付与しました。"
 usage_redeem = "使用法: everyapi wallet redeem <key>"
 usage = '''
 everyapi wallet — 支払い履歴、支払い方法、引換キー
@@ -1030,7 +1031,7 @@ active_marker = "'*' はアクティブノードを示します（既定で star
 quota = "クォータ:"
 requests = "リクエスト:"
 topup = "入金:"
-remaining_used = "$%.2f 残り   $%.2f 使用"
+remaining_used = "**$%.2f** 残り   **$%.2f** 使用"
 
 [topup]
 before_open = "ブラウザを開く前に、これが本物の EveryAPI ダッシュボードであることを確認してください。"

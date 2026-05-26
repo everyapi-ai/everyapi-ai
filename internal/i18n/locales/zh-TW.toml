@@ -13,6 +13,7 @@ error_prefix = "錯誤"
 missing_subcommand = "缺少子命令（試試 '%s help'）"
 unknown_subcommand = "未知的 '%s' 子命令 %q"
 pick_subcommand = "%s — 選一個子命令："
+back = "← 返回"
 browser_open_failed = "無法自動開啟瀏覽器 — 請複製上方 URL。"
 browser_open_failed_qr = "無法自動開啟瀏覽器 — 請掃描 QR code 或複製上方 URL。"
 open_browser_now = "現在開啟瀏覽器？"
@@ -348,7 +349,7 @@ everyapi models — 你帳戶可見的模型目錄
 
 [wallet]
 no_topups = "無儲值紀錄。"
-redeemed = "兌換成功：增加 %d 額度。"
+redeemed = "兌換成功：增加 **%d** 額度。"
 usage_redeem = "用法：everyapi wallet redeem <key>"
 usage = '''
 everyapi wallet — 儲值紀錄、付款方式、兌換碼
@@ -1012,7 +1013,7 @@ active_marker = "'*' 標記作用中節點（start/stop/status/logs 預設使用
 quota = "額度："
 requests = "請求數："
 topup = "儲值："
-remaining_used = "剩餘 $%.2f   已用 $%.2f"
+remaining_used = "剩餘 **$%.2f**   已用 **$%.2f**"
 
 [topup]
 before_open = "開啟瀏覽器前，請確認這是真實的 EveryAPI dashboard。"
