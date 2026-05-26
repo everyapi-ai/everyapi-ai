@@ -1101,6 +1101,11 @@ no_relay_key_long = '''
 'everyapi login' 을 다시 실행하세요.'''
 unknown_flag = "알 수 없는 플래그 %q (도구 플래그 앞에 `--` 를 붙이세요: `everyapi use <tool> -- %s ...`)"
 usage = "사용법: everyapi use <tool> [--group <이름>|--channel <이름>] [--direct] [-- 도구 인자...]"
+tool_not_installed = "%s 가 설치되어 있지 않습니다. 설치 명령:"
+install_prompt = "지금 %s 를 설치할까요?"
+installing = "%s 설치 중..."
+installed = "%s 설치 완료."
+installed_not_on_path = "%s 가 설치되었지만 아직 $PATH 에 없습니다. 새 셸을 열거나 설치 프로그램의 bin 디렉터리를 PATH 에 추가하세요."
 
 [upstream]
 none = "구성된 업스트림 제공자가 없습니다."

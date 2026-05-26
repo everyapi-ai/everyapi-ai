@@ -121,6 +121,17 @@ func Use(args []string) error {
 		return err
 	}
 
+	// Preflight: if the tool's binary isn't on PATH, offer to run
+	// its installer. This runs BEFORE the relay-key probe + sanitizer
+	// boot so a buyer who's never installed the agent doesn't pay
+	// for two network round-trips just to hit "not installed" at the
+	// very end. Non-interactive callers (CI, piped stdin) get the
+	// original ErrToolNotFound — we're not going to start writing
+	// to npm's global prefix from a script that didn't ask for it.
+	if err := ensureToolInstalled(t); err != nil {
+		return err
+	}
+
 	// The device-auth access token can't relay (it's a management
 	// credential); resolve the account's relay API key instead.
 	relayKey, err := resolveRelayKey(creds, group)
@@ -536,6 +547,59 @@ func pickGroupInteractive(creds *config.Credentials) (string, error) {
 		return "", err
 	}
 	return groups[idx], nil
+}
+
+// ensureToolInstalled is the preflight gate between Lookup and the
+// network probes. If the tool is already on PATH it's a no-op. If
+// it's missing and the session is non-interactive (CI / piped
+// stdin), or the tool has no usable auto-installer for this
+// platform, the caller sees the original ErrToolNotFound — same
+// behavior as before this helper existed. If it's missing AND we
+// have a TTY AND CanAutoInstall returns true, we surface a yes/no
+// confirm. Default is YES for routine package-manager installs and
+// NO for installers that pipe a remote shell script into bash —
+// pressing Enter shouldn't ever run untrusted code fetched at
+// install time. On Yes we stream the installer's output to the
+// terminal so npm / curl progress reaches the user live, then
+// return nil so the caller proceeds to launch.
+//
+// `ErrInstalledButNotOnPath` from RunInstall is translated here so
+// the user gets a localized "installed but not on PATH — open a new
+// shell" message instead of the raw English error type.
+func ensureToolInstalled(t *tools.Tool) error {
+	if tools.IsInstalled(t) {
+		return nil
+	}
+	if !cliprompt.IsInteractive() || !tools.CanAutoInstall(t) {
+		return &tools.ErrToolNotFound{Tool: t}
+	}
+	cliout.Printf(i18n.T("use.tool_not_installed")+"\n", t.ExecName)
+	cliout.Printf("  %s\n", t.InstallCmd)
+	ok, err := cliprompt.YesNo(
+		bufio.NewReader(os.Stdin),
+		fmt.Sprintf(i18n.T("use.install_prompt"), t.Name),
+		t.InstallPromptDefault(),
+	)
+	if err != nil {
+		// Esc / Ctrl-C from the confirm propagates as cancellation
+		// so the launcher loop catches it. ensureToolInstalled is
+		// only reached after IsInteractive() — a TTY won't EOF on
+		// read — so we don't carve out an EOF special case here.
+		return err
+	}
+	if !ok {
+		return &tools.ErrToolNotFound{Tool: t}
+	}
+	cliout.Printf(i18n.T("use.installing")+"\n", t.Name)
+	if err := tools.RunInstall(t); err != nil {
+		var notOnPath *tools.ErrInstalledButNotOnPath
+		if errors.As(err, &notOnPath) {
+			return fmt.Errorf(i18n.T("use.installed_not_on_path"), notOnPath.Tool.ExecName)
+		}
+		return err
+	}
+	cliout.Printf(i18n.T("use.installed")+"\n", t.Name)
+	return nil
 }
 
 // interactivePicker is the no-arg fallback. Renders the registered

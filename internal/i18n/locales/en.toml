@@ -1105,6 +1105,11 @@ and it's separate from your login token. Create an API key in the
 EveryAPI dashboard (%s), then run 'everyapi login' again.'''
 unknown_flag = "unknown flag %q (use `--` before tool flags: `everyapi use <tool> -- %s ...`)"
 usage = "usage: everyapi use <tool> [--group <name>|--channel <name>] [--direct] [-- tool args...]"
+tool_not_installed = "%s is not installed. Install command:"
+install_prompt = "Install %s now?"
+installing = "Installing %s ..."
+installed = "%s installed."
+installed_not_on_path = "%s installed, but not on $PATH yet. Open a new shell, or add the installer's bin directory to PATH."
 
 [upstream]
 none = "No upstream providers configured."

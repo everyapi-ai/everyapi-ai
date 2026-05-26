@@ -1114,6 +1114,11 @@ elle est distincte du jeton de connexion. Créez une clé API dans le
 tableau de bord EveryAPI (%s), puis relancez 'everyapi login'.'''
 unknown_flag = "flag inconnu %q (utilisez `--` avant les flags de l'outil : `everyapi use <tool> -- %s ...`)"
 usage = "utilisation : everyapi use <tool> [--group <nom>|--channel <nom>] [--direct] [-- arguments de l'outil...]"
+tool_not_installed = "%s n'est pas installé. Commande d'installation :"
+install_prompt = "Installer %s maintenant ?"
+installing = "Installation de %s ..."
+installed = "%s installé."
+installed_not_on_path = "%s a été installé mais n'est pas encore dans $PATH. Ouvrez un nouveau shell ou ajoutez le répertoire bin de l'installateur à PATH."
 
 [upstream]
 none = "Aucun fournisseur upstream configuré."

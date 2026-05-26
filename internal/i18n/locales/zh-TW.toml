@@ -1085,6 +1085,11 @@ no_relay_key_long = '''
 然後重新執行 'everyapi login'。'''
 unknown_flag = "未知 flag %q（在工具 flag 前加 `--`：`everyapi use <tool> -- %s ...`）"
 usage = "用法：everyapi use <tool> [--group <名稱>|--channel <名稱>] [--direct] [-- 工具參數...]"
+tool_not_installed = "%s 尚未安裝。安裝指令："
+install_prompt = "現在安裝 %s 嗎？"
+installing = "正在安裝 %s ……"
+installed = "%s 已安裝。"
+installed_not_on_path = "%s 已安裝，但還不在 $PATH 中。請開啟新的 shell，或將安裝器的 bin 目錄加入 PATH。"
 
 [upstream]
 none = "未設定上游供應商。"

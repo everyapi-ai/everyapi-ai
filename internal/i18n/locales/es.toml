@@ -1113,6 +1113,11 @@ y es independiente del token de inicio de sesión. Crea una clave API en el
 panel de EveryAPI (%s) y vuelve a ejecutar 'everyapi login'.'''
 unknown_flag = "flag desconocido %q (usa `--` antes de los flags de la herramienta: `everyapi use <tool> -- %s ...`)"
 usage = "uso: everyapi use <tool> [--group <nombre>|--channel <nombre>] [--direct] [-- args de la herramienta...]"
+tool_not_installed = "%s no está instalado. Comando de instalación:"
+install_prompt = "¿Instalar %s ahora?"
+installing = "Instalando %s ..."
+installed = "%s instalado."
+installed_not_on_path = "%s se instaló, pero todavía no está en $PATH. Abre una shell nueva o añade el directorio bin del instalador a PATH."
 
 [upstream]
 none = "No hay proveedores upstream configurados."

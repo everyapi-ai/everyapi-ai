@@ -27,6 +27,31 @@ type Tool struct {
 	ExecName    string
 	InstallHint string
 
+	// InstallCmd is the shell command 'everyapi use' offers to run
+	// on the user's behalf when ExecName isn't on $PATH. Executed
+	// via `sh -c` on Unix and `cmd /C` on Windows; an empty value
+	// disables the auto-install prompt and the user falls back to
+	// reading InstallHint and running the installer themselves.
+	// For tools whose canonical installer is Unix-only (e.g. a
+	// `curl | bash` script), InstallCmdUnixOnly should be true so
+	// Windows users see the hint instead of a guaranteed-to-fail
+	// shell pipeline.
+	//
+	// SECURITY INVARIANT: this string MUST be a compile-time literal
+	// embedded in the Registry below. It is passed verbatim to `sh
+	// -c` / `cmd /C` with no escaping — sourcing it from user input,
+	// env vars, config files, or any network response would be RCE.
+	// If you find yourself wanting to make this dynamic, design a
+	// per-tool installer function instead.
+	InstallCmd string
+	// InstallCmdUnixOnly gates InstallCmd off on Windows when the
+	// command relies on a POSIX-only pipeline (curl | bash, etc.).
+	// Doubles as the "this installer is less reversible than `npm
+	// install -g`" signal: prompt callers default to N when this is
+	// true, so a single press of Enter never runs a remote shell
+	// script on the user's machine.
+	InstallCmdUnixOnly bool
+
 	// YoloFlag is the tool-specific "skip every confirmation"
 	// argument the user might want to pass — claude's
 	// --dangerously-skip-permissions, codex's
@@ -53,6 +78,19 @@ func (t *Tool) Env(apiBase, token string) map[string]string {
 	return t.envFn(apiBase, token)
 }
 
+// InstallPromptDefault picks the press-Enter default for the
+// "install <tool> now? [Y/n]" prompt. We default to Yes for routine
+// package-manager installs (npm install -g …) and No for installers
+// that pipe a remote shell script into bash — a single Enter
+// shouldn't ever run untrusted code fetched at install time.
+// InstallCmdUnixOnly happens to be exactly that signal today
+// (claude's curl|bash is the only Unix-only installer in the
+// Registry), so we reuse it. If that coupling breaks in the future,
+// promote this to its own field.
+func (t *Tool) InstallPromptDefault() bool {
+	return !t.InstallCmdUnixOnly
+}
+
 // joinBase concatenates the API base and a tool-specific suffix,
 // avoiding double slashes. Centralized so adding a tool doesn't have
 // to reinvent the join logic.
@@ -75,11 +113,13 @@ var Registry = map[string]*Tool{
 	// /v1 suffix — because Anthropic's official client appends its
 	// own version path. Verified in Anthropic SDK source.
 	"claude": {
-		Name:        "claude",
-		ExecName:    "claude",
-		InstallHint: "Install Claude Code: https://docs.claude.com/en/docs/claude-code/setup",
-		YoloFlag:    "--dangerously-skip-permissions",
-		YoloLabel:   "skip all permission prompts (--dangerously-skip-permissions)",
+		Name:               "claude",
+		ExecName:           "claude",
+		InstallHint:        "Install Claude Code: https://docs.claude.com/en/docs/claude-code/setup",
+		InstallCmd:         "curl -fsSL https://claude.ai/install.sh | bash",
+		InstallCmdUnixOnly: true,
+		YoloFlag:           "--dangerously-skip-permissions",
+		YoloLabel:          "skip all permission prompts (--dangerously-skip-permissions)",
 		envFn: func(apiBase, token string) map[string]string {
 			return map[string]string{
 				"ANTHROPIC_BASE_URL":  joinBase(apiBase, ""),
@@ -95,6 +135,7 @@ var Registry = map[string]*Tool{
 		Name:        "codex",
 		ExecName:    "codex",
 		InstallHint: "Install Codex CLI: https://github.com/openai/codex#installation",
+		InstallCmd:  "npm install -g @openai/codex",
 		YoloFlag:    "--dangerously-bypass-approvals-and-sandbox",
 		YoloLabel:   "bypass approvals + sandbox (--dangerously-bypass-approvals-and-sandbox)",
 		envFn: func(apiBase, token string) map[string]string {
@@ -113,6 +154,7 @@ var Registry = map[string]*Tool{
 		Name:        "gemini",
 		ExecName:    "gemini",
 		InstallHint: "Install Gemini CLI: https://github.com/google-gemini/gemini-cli#installation",
+		InstallCmd:  "npm install -g @google/gemini-cli",
 		YoloFlag:    "--yolo",
 		YoloLabel:   "yolo mode — auto-approve every tool call (--yolo)",
 		envFn: func(apiBase, token string) map[string]string {
