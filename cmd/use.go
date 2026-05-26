@@ -225,6 +225,21 @@ func Use(args []string) error {
 		}
 	}
 
+	// Per-tool pre-exec setup — currently only codex uses this
+	// (writes an isolated CODEX_HOME with apikey-mode auth.json +
+	// everyapi-provider config.toml, since codex routes via config
+	// not env vars and defaults to ChatGPT device-login). Runs
+	// AFTER the yolo prompt so a user who Escs out doesn't pay for
+	// a file write that's about to be orphaned. Returned env
+	// overlays t.Env so the hook can pin CODEX_HOME.
+	extraEnv, err := t.Prepare(apiBaseForEnv, relayKey)
+	if err != nil {
+		return fmt.Errorf("prepare %s: %w", t.ExecName, err)
+	}
+	for k, v := range extraEnv {
+		env[k] = v
+	}
+
 	// Surface the resolved base URL so an aspiring debugger knows
 	// where the requests are heading. One line, before the exec
 	// disappears the parent process.

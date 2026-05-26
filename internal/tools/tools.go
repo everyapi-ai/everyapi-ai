@@ -72,6 +72,16 @@ type Tool struct {
 	// exec. Implemented as a function (not a static map) because the
 	// per-tool URL suffix varies (some take a v1 prefix, some don't).
 	envFn func(apiBase, token string) map[string]string
+
+	// prepareFn is an optional pre-exec hook for tools that need
+	// more than env vars — e.g. codex, whose router is pinned by
+	// `~/.codex/config.toml` (model_provider) and whose auth_mode is
+	// pinned by `~/.codex/auth.json` (apikey vs chatgpt). Returning
+	// a non-nil env map merges those vars on top of envFn's output
+	// (last write wins), letting the hook redirect CODEX_HOME at a
+	// generated config dir. Nil means the tool needs no pre-exec
+	// setup beyond env vars.
+	prepareFn func(apiBase, token string) (map[string]string, error)
 }
 
 func (t *Tool) Env(apiBase, token string) map[string]string {
@@ -90,6 +100,20 @@ func (t *Tool) Env(apiBase, token string) map[string]string {
 func (t *Tool) InstallPromptDefault() bool {
 	return !t.InstallCmdUnixOnly
 }
+
+// Prepare runs the tool's optional pre-exec setup (e.g. codex's
+// CODEX_HOME / auth.json / config.toml). Returns env additions to
+// overlay on top of Env(). nil map + nil error means "no setup
+// needed". Errors abort the launch — failing to set up an isolated
+// config is preferable to falling back to the user's real ~/.codex
+// and silently going through ChatGPT auth.
+func (t *Tool) Prepare(apiBase, token string) (map[string]string, error) {
+	if t.prepareFn == nil {
+		return nil, nil
+	}
+	return t.prepareFn(apiBase, token)
+}
+
 
 // joinBase concatenates the API base and a tool-specific suffix,
 // avoiding double slashes. Centralized so adding a tool doesn't have
@@ -128,9 +152,17 @@ var Registry = map[string]*Tool{
 		},
 	},
 
-	// OpenAI Codex CLI: reuses the OpenAI SDK env contract, so
-	// OPENAI_BASE_URL + OPENAI_API_KEY. The /v1 suffix is required
-	// because the OpenAI SDK does NOT append it.
+	// OpenAI Codex CLI: unlike claude/gemini, codex does NOT read
+	// OPENAI_BASE_URL at runtime — its router is pinned to whatever
+	// `model_provider` is set in ~/.codex/config.toml, and auth_mode
+	// is pinned in ~/.codex/auth.json (defaults to "chatgpt" on a
+	// fresh install, which then redirects to the ChatGPT login page
+	// regardless of OPENAI_API_KEY). To make `everyapi use codex`
+	// actually route through the gateway we redirect CODEX_HOME at
+	// a generated config dir (see codex.go) where we write our own
+	// auth.json (apikey mode) + config.toml (everyapi provider).
+	// The OPENAI_API_KEY env var is still set as belt-and-suspenders
+	// — config.toml's env_key points back at it.
 	"codex": {
 		Name:        "codex",
 		ExecName:    "codex",
@@ -138,12 +170,10 @@ var Registry = map[string]*Tool{
 		InstallCmd:  "npm install -g @openai/codex",
 		YoloFlag:    "--dangerously-bypass-approvals-and-sandbox",
 		YoloLabel:   "bypass approvals + sandbox (--dangerously-bypass-approvals-and-sandbox)",
-		envFn: func(apiBase, token string) map[string]string {
-			return map[string]string{
-				"OPENAI_BASE_URL": joinBase(apiBase, "/v1"),
-				"OPENAI_API_KEY":  token,
-			}
+		envFn: func(_, token string) map[string]string {
+			return map[string]string{"OPENAI_API_KEY": token}
 		},
+		prepareFn: prepareCodex,
 	},
 
 	// Google Gemini CLI: reads GEMINI_API_KEY (auth) and

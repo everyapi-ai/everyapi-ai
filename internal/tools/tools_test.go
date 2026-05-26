@@ -42,16 +42,22 @@ func TestEnv_Claude(t *testing.T) {
 	}
 }
 
-// TestEnv_Codex verifies the OpenAI env contract: /v1 suffix is
-// required (OpenAI SDK does NOT append it).
+// TestEnv_Codex verifies codex's env contract: only OPENAI_API_KEY.
+// Codex does NOT honor OPENAI_BASE_URL at runtime — its router is
+// pinned to ~/.codex/config.toml's model_provider. The base_url is
+// injected via the prepareFn (CODEX_HOME → config.toml) instead.
 func TestEnv_Codex(t *testing.T) {
 	tool, _ := Lookup("codex")
 	env := tool.Env("https://api.everyapi.ai", "my-token")
-	if got := env["OPENAI_BASE_URL"]; got != "https://api.everyapi.ai/v1" {
-		t.Errorf("OPENAI_BASE_URL = %q (need /v1 suffix)", got)
-	}
 	if got := env["OPENAI_API_KEY"]; got != "my-token" {
 		t.Errorf("OPENAI_API_KEY = %q", got)
+	}
+	if _, ok := env["OPENAI_BASE_URL"]; ok {
+		// If you're re-adding OPENAI_BASE_URL, double-check codex
+		// actually reads it — last time we checked, it doesn't,
+		// and setting it created confusing "the env is set but
+		// requests still hit api.openai.com" debug sessions.
+		t.Error("codex env should not set OPENAI_BASE_URL (codex routes via config.toml model_provider, see prepareFn)")
 	}
 }
 
@@ -71,15 +77,18 @@ func TestEnv_Gemini(t *testing.T) {
 // TestEnv_LocalDevBase verifies the joinBase helper doesn't insert
 // double slashes when the user has a trailing-slash base (a
 // surprisingly common dev typo: `EVERYAPI_BASE=http://localhost:8787/`).
+// Gemini still proves this end-to-end via envFn; for codex the same
+// joinBase invariant is covered through prepareCodex's config.toml
+// (see TestPrepareCodex_TrailingSlashBase).
 func TestEnv_LocalDevBase(t *testing.T) {
-	tool, _ := Lookup("codex")
+	tool, _ := Lookup("gemini")
 	env := tool.Env("http://localhost:8787/", "tok")
-	got := env["OPENAI_BASE_URL"]
-	if got != "http://localhost:8787/v1" {
-		t.Errorf("OPENAI_BASE_URL = %q (expected single slash join)", got)
+	got := env["GOOGLE_GEMINI_BASE_URL"]
+	if got != "http://localhost:8787/v1beta" {
+		t.Errorf("GOOGLE_GEMINI_BASE_URL = %q (expected single slash join)", got)
 	}
 	// Defensive: no `://` anomalies introduced
-	if strings.Contains(got, "//v1") {
+	if strings.Contains(got, "//v1beta") {
 		t.Errorf("found double slash: %q", got)
 	}
 }
