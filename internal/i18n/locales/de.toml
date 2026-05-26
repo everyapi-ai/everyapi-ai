@@ -364,7 +364,7 @@ UNTERBEFEHLE
 
 [wallet]
 no_topups = "Keine Aufladungen erfasst."
-redeemed = "Eingelöst: +%d Quota gutgeschrieben."
+redeemed = "Eingelöst: +**%d** Quota gutgeschrieben."
 usage_redeem = "Verwendung: everyapi wallet redeem <key>"
 usage = '''
 everyapi wallet — Zahlungsverlauf, Methoden, Einlöse-Schlüssel
@@ -1039,7 +1039,7 @@ active_marker = "'*' markiert den aktiven Knoten (wird standardmäßig von start
 quota = "Quota:"
 requests = "Anfragen:"
 topup = "Aufladung:"
-remaining_used = "$%.2f übrig   $%.2f verwendet"
+remaining_used = "**$%.2f** übrig   **$%.2f** verwendet"
 
 [topup]
 before_open = "Bevor du den Browser öffnest, überprüfe, dass dies das echte EveryAPI-Dashboard ist."

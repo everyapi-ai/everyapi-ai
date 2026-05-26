@@ -366,7 +366,7 @@ SUBCOMANDOS
 
 [wallet]
 no_topups = "No hay recargas registradas."
-redeemed = "Canjeado: +%d cuota acreditada."
+redeemed = "Canjeado: +**%d** cuota acreditada."
 usage_redeem = "uso: everyapi wallet redeem <key>"
 usage = '''
 everyapi wallet — historial de pagos, métodos, claves de canje
@@ -1041,7 +1041,7 @@ active_marker = "'*' marca el nodo activo (usado por start/stop/status/logs por 
 quota = "cuota:"
 requests = "peticiones:"
 topup = "recarga:"
-remaining_used = "$%.2f restante   $%.2f usado"
+remaining_used = "**$%.2f** restante   **$%.2f** usado"
 
 [topup]
 before_open = "Antes de abrir el navegador, verifica que este es el dashboard real de EveryAPI."

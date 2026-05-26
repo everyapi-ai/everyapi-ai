@@ -359,7 +359,7 @@ everyapi models — 계정에서 보이는 모델 카탈로그
 
 [wallet]
 no_topups = "충전 기록이 없습니다."
-redeemed = "교환 성공: +%d 쿼터 적립."
+redeemed = "교환 성공: +**%d** 쿼터 적립."
 usage_redeem = "사용법: everyapi wallet redeem <key>"
 usage = '''
 everyapi wallet — 결제 내역, 결제 수단, 교환 키
@@ -1029,7 +1029,7 @@ active_marker = "'*' 는 활성 노드를 표시합니다 (기본적으로 start
 quota = "쿼터:"
 requests = "요청:"
 topup = "충전:"
-remaining_used = "$%.2f 남음   $%.2f 사용"
+remaining_used = "**$%.2f** 남음   **$%.2f** 사용"
 
 [topup]
 before_open = "브라우저를 열기 전에, 이것이 실제 EveryAPI 대시보드인지 확인하세요."
