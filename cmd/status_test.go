@@ -193,13 +193,17 @@ func TestStatusBoldsValues(t *testing.T) {
 			"\x1b[1m$100.00\x1b[22m",        // remaining
 			"\x1b[1m$0.00\x1b[22m",          // used
 			"\x1b[1m7\x1b[22m",              // request count
-			"/wallet\x1b[22m",               // topup URL closes inside a bold span
 			"\x1b[1mNOT CONFIGURED\x1b[22m", // relay verdict (no key on this stub)
 		}
 		for _, w := range wantSpans {
 			if !strings.Contains(out, w) {
 				t.Errorf("status output missing bold span %q\n--- output ---\n%s", w, out)
 			}
+		}
+		// The topup URL is deliberately NOT bolded — terminals style
+		// detected links themselves, and we keep emphasis off URLs.
+		if strings.Contains(out, "/wallet\x1b[22m") {
+			t.Errorf("topup URL should not be bolded\n--- output ---\n%s", out)
 		}
 	})
 

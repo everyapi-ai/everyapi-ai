@@ -89,7 +89,7 @@ func Status(args []string) error {
 	}
 	cliout.Printf("  %-10s %s\n", i18n.T("status.quota"), styledQuota(quotaUSD, usedUSD))
 	cliout.Printf("  %-10s %s\n", i18n.T("status.requests"), style.Bold(fmt.Sprintf("%d", self.RequestCount)))
-	cliout.Printf("  %-10s %s\n", i18n.T("status.topup"), style.Bold(api.WebOriginFromBase(creds.APIBase)+"/wallet"))
+	cliout.Printf("  %-10s %s/wallet\n", i18n.T("status.topup"), api.WebOriginFromBase(creds.APIBase))
 
 	// The quota line above comes from /api/user/self (UserAuth) and
 	// says nothing about whether the RELAY works: the access token

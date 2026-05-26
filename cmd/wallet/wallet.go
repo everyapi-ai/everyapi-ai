@@ -152,7 +152,7 @@ func runInfo(args []string) error {
 		}
 	}
 	if info.TopupLink != "" {
-		cliout.Printf("\nDashboard top-up: %s\n", style.Bold(info.TopupLink))
+		cliout.Printf("\nDashboard top-up: %s\n", info.TopupLink)
 	}
 	cliout.Println("\nFor card / e-wallet payments use 'everyapi topup' (browser flow).")
 	return nil

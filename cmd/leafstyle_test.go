@@ -74,13 +74,12 @@ func TestTopupBoldsValues(t *testing.T) {
 			t.Fatalf("Topup: %v", err)
 		}
 		out := buf.String()
-		for _, w := range []string{
-			"\x1b[1mPURPLE-TIGER-42\x1b[22m", // verification phrase
-			"jump_session=SESS123\x1b[22m",   // URL closes inside a bold span
-		} {
-			if !strings.Contains(out, w) {
-				t.Errorf("topup output missing bold span %q\n--- output ---\n%s", w, out)
-			}
+		if !strings.Contains(out, "\x1b[1mPURPLE-TIGER-42\x1b[22m") {
+			t.Errorf("topup output missing bold verification phrase\n--- output ---\n%s", out)
+		}
+		// The jump URL is deliberately NOT bolded.
+		if strings.Contains(out, "jump_session=SESS123\x1b[22m") {
+			t.Errorf("topup URL should not be bolded\n--- output ---\n%s", out)
 		}
 	})
 

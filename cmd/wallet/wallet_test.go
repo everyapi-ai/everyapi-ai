@@ -108,11 +108,15 @@ func TestWalletBoldsValues(t *testing.T) {
 		}
 	})
 
-	t.Run("info bolds the dashboard url", func(t *testing.T) {
+	t.Run("info shows the dashboard url unbolded", func(t *testing.T) {
 		styletest.WithColorProfile(t, termenv.TrueColor)
 		out := run(t, "info")
-		if !strings.Contains(out, "\x1b[1mhttps://app.everyapi.ai/topup\x1b[22m") {
-			t.Errorf("info output missing bold dashboard url:\n%s", out)
+		if !strings.Contains(out, "https://app.everyapi.ai/topup") {
+			t.Errorf("info output missing dashboard url:\n%s", out)
+		}
+		// URLs are deliberately not bolded.
+		if strings.Contains(out, "\x1b[1mhttps://app.everyapi.ai/topup") {
+			t.Errorf("dashboard url should not be bolded:\n%s", out)
 		}
 	})
 

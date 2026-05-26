@@ -79,7 +79,7 @@ func Login(args []string) error {
 	} else {
 		cliout.Println(i18n.T("login.url_hint"))
 	}
-	cliout.Printf("\n    %s\n\n", style.Bold(prefilledURL))
+	cliout.Printf("\n    %s\n\n", prefilledURL)
 	// Surface the bare user_code too in case the dashboard fails to
 	// pre-fill (older /cli/auth deploys, query-stripping middlebox,
 	// user pasted the URL into a tool that drops query strings).
