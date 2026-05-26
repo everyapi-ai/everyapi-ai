@@ -5,23 +5,11 @@ import (
 	"flag"
 	"fmt"
 
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
-	"github.com/everyapi-ai/everyapi-ai/internal/style"
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
-
-// styledQuota renders the "remaining / used" body of the quota line.
-// The amounts are marked with **…** in status.remaining_used across
-// every locale; routing the formatted string through style.Emph bolds
-// them on a styled terminal and strips the markers to plain text when
-// output is piped / NO_COLOR — keeping `everyapi status | grep`
-// parseable. Markers live in the format string, never in the data, so
-// formatting must happen before the Emph pass.
-func styledQuota(quotaUSD, usedUSD float64) string {
-	return style.Emph(fmt.Sprintf(i18n.T("status.remaining_used"), quotaUSD, usedUSD))
-}
 
 // Status renders the user's quota and usage in USD. Reads
 // quota_per_unit from /api/status (unauthenticated) so a stale token
@@ -83,12 +71,12 @@ func Status(args []string) error {
 
 	cliout.Println("")
 	if self.Email != "" {
-		cliout.Printf("  %s (%s)\n", style.Bold(self.Username), self.Email)
+		cliout.Printf("  %s (%s)\n", self.Username, self.Email)
 	} else {
-		cliout.Printf("  %s\n", style.Bold(self.Username))
+		cliout.Printf("  %s\n", self.Username)
 	}
-	cliout.Printf("  %-10s %s\n", i18n.T("status.quota"), styledQuota(quotaUSD, usedUSD))
-	cliout.Printf("  %-10s %s\n", i18n.T("status.requests"), style.Bold(fmt.Sprintf("%d", self.RequestCount)))
+	cliout.Printf("  %-10s "+i18n.T("status.remaining_used")+"\n", i18n.T("status.quota"), quotaUSD, usedUSD)
+	cliout.Printf("  %-10s %d\n", i18n.T("status.requests"), self.RequestCount)
 	cliout.Printf("  %-10s %s/wallet\n", i18n.T("status.topup"), api.WebOriginFromBase(creds.APIBase))
 
 	// The quota line above comes from /api/user/self (UserAuth) and
@@ -107,26 +95,26 @@ func Status(args []string) error {
 	relayKey, rkErr := resolveRelayKey(creds, "")
 	switch {
 	case errors.Is(rkErr, errNoRelayKey):
-		cliout.Printf("  relay:     %s — no relay API key on the account\n", style.Bold("NOT CONFIGURED"))
+		cliout.Printf("  relay:     NOT CONFIGURED — no relay API key on the account\n")
 		cliout.Printf("             create an API key in the dashboard, then 'everyapi login'\n")
 	case rkErr != nil:
 		// Token lookup itself failed (transport, 5xx, etc.). Not a
 		// verdict on the key — just say we couldn't check.
-		cliout.Printf("  relay:     %s — could not resolve relay key (%v)\n", style.Bold("unknown"), rkErr)
+		cliout.Printf("  relay:     unknown — could not resolve relay key (%v)\n", rkErr)
 	default:
 		perr := api.New(creds.APIBase, relayKey).ProbeRelayToken(ctx)
 		switch {
 		case perr == nil:
-			cliout.Printf("  relay:     %s\n", style.Bold("ok"))
+			cliout.Printf("  relay:     ok\n")
 		case api.IsUnauthorized(perr):
-			cliout.Printf("  relay:     %s — relay key invalid / expired / disabled / out of quota\n", style.Bold("UNAVAILABLE"))
+			cliout.Printf("  relay:     UNAVAILABLE — relay key invalid / expired / disabled / out of quota\n")
 			cliout.Printf("             (account quota above is separate; top up %s/wallet or run 'everyapi login')\n",
 				api.WebOriginFromBase(creds.APIBase))
 		default:
 			// Non-401 probe failure (5xx, network). The key may be
 			// fine — we just couldn't get a verdict. Same shape as
 			// the lookup-failure branch.
-			cliout.Printf("  relay:     %s — probe failed (%v)\n", style.Bold("unknown"), perr)
+			cliout.Printf("  relay:     unknown — probe failed (%v)\n", perr)
 		}
 	}
 
