@@ -412,21 +412,28 @@ func TestMaybePromptUpdate_FailureBackoffExpired(t *testing.T) {
 	}
 }
 
-// TestMaybePromptUpdate_FreshCacheSkipsFetch — when the cache is
-// still within its TTL, the fetcher must not run. Otherwise every
-// command would hit GitHub.
-func TestMaybePromptUpdate_FreshCacheSkipsFetch(t *testing.T) {
+// TestMaybePromptUpdate_EveryInvocationPolls pins the new contract:
+// there is no TTL gate, so an interactive non-skip command always
+// triggers the GitHub fetch as long as the failure backoff isn't
+// active. This is the actual user-visible behavior — "I ran everyapi,
+// I expect to be told about a new release if there is one" — captured
+// directly so a future refactor that re-introduces a TTL silently
+// breaks the test instead of regressing the UX.
+//
+// Cache is intentionally seeded with a recent CheckedAt and a
+// LatestVersion equal to the running version: the OLD code would
+// short-circuit here ("cache is fresh and we're already up-to-date").
+// The new code must still call the fetcher because the answer could
+// have changed in the seconds between the seed and this invocation.
+func TestMaybePromptUpdate_EveryInvocationPolls(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("EVERYAPI_NO_UPDATE_CHECK", "")
 	withInteractive(t, true)
-	// Current version matches cached LatestVersion so even though the
-	// gate would say "no prompt", we still want to verify the FETCH
-	// didn't happen — that's the freshness contract.
 	withVersion(t, "v0.0.1")
 
 	if err := saveUpdateCheckCache(&updateCheckCache{
-		CheckedAt:     time.Now().Add(-1 * time.Hour).Unix(), // fresh
+		CheckedAt:     time.Now().Add(-1 * time.Minute).Unix(),
 		LatestVersion: "v0.0.1",
 	}); err != nil {
 		t.Fatal(err)
@@ -435,12 +442,59 @@ func TestMaybePromptUpdate_FreshCacheSkipsFetch(t *testing.T) {
 	fetcherCalled := false
 	withFetcher(t, func(ctx context.Context) (string, error) {
 		fetcherCalled = true
-		return "v9.9.9", nil
+		// Match the running version so updatePromptable returns false
+		// and the picker doesn't render (would hang on missing TTY).
+		return "v0.0.1", nil
 	})
 
 	_ = MaybePromptUpdate("status")
-	if fetcherCalled {
-		t.Error("fresh cache should not trigger a fetch")
+	if !fetcherCalled {
+		t.Error("every interactive non-skip invocation must hit the fetcher (no TTL gate)")
+	}
+}
+
+// TestMaybePromptUpdate_SuccessfulFetchDoesNotInhibitNextInvocation
+// guards against the failure-backoff being accidentally activated by
+// a SUCCESSFUL fetch.
+//
+// Pre-fix bug: refreshUpdateCheckCacheSync stamps `LastFetchAttemptAt
+// = now` on both the success and failure paths. A naive
+// `attemptedRecently = LastFetchAttemptAt within 1h` check would
+// then treat the previous success as a recent failure-marker and
+// skip the next refresh for an hour — silently degrading the "every
+// invocation polls" contract into "poll once an hour."
+//
+// Post-fix: the check is `LastFetchAttemptAt > CheckedAt` (only
+// failure leaves `LastFetchAttemptAt` ahead of `CheckedAt`), so a
+// recent success no longer parks the next invocation.
+//
+// The cache seed mirrors the on-disk state immediately after a
+// successful fetch: both timestamps equal, well within 1h.
+func TestMaybePromptUpdate_SuccessfulFetchDoesNotInhibitNextInvocation(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("EVERYAPI_NO_UPDATE_CHECK", "")
+	withInteractive(t, true)
+	withVersion(t, "v0.0.1")
+
+	justNow := time.Now().Add(-1 * time.Minute).Unix()
+	if err := saveUpdateCheckCache(&updateCheckCache{
+		CheckedAt:          justNow, // == LastFetchAttemptAt → last attempt succeeded
+		LastFetchAttemptAt: justNow,
+		LatestVersion:      "v0.0.1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	fetcherCalled := false
+	withFetcher(t, func(ctx context.Context) (string, error) {
+		fetcherCalled = true
+		return "v0.0.1", nil
+	})
+
+	_ = MaybePromptUpdate("status")
+	if !fetcherCalled {
+		t.Error("a recent SUCCESSFUL fetch must not activate the 1h failure-backoff inhibitor")
 	}
 }
 
@@ -506,12 +560,12 @@ func TestPromptChoiceConstants(t *testing.T) {
 // the launcher gap (#374): the bare-`everyapi` entry point dispatches
 // with commandName "", which must NOT be treated as a skip command, so
 // a user who only ever picks from the menu still sees an available
-// update. With a fresh cache advertising a newer release, the empty
-// commandName has to walk all the way into the prompt.
+// update.
 //
-// A fresh cache (recent CheckedAt) means the fetcher must NOT run — the
-// stub fails loud if it does, pinning the "don't re-poll a fresh cache"
-// contract on this path too.
+// The fetcher returns the same tag the cache already has, so refresh
+// runs (it always does — no TTL gate) but doesn't change the
+// prompt-relevant state. The test stays focused on its real claim:
+// "" makes it past the skip-command check and into the prompt.
 func TestMaybePromptUpdate_LauncherPathPrompts(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
@@ -519,13 +573,12 @@ func TestMaybePromptUpdate_LauncherPathPrompts(t *testing.T) {
 	withInteractive(t, true)
 	withVersion(t, "v0.2.7") // installed
 	withFetcher(t, func(ctx context.Context) (string, error) {
-		t.Error("fresh cache should not trigger a fetch on the launcher path")
-		return "", errors.New("must not be called")
+		return "v0.2.8", nil // matches the seeded cache — no semantic change
 	})
 
 	if err := saveUpdateCheckCache(&updateCheckCache{
-		CheckedAt:     time.Now().Add(-1 * time.Hour).Unix(), // fresh: no refetch
-		LatestVersion: "v0.2.8",                              // newer than installed
+		CheckedAt:     time.Now().Add(-1 * time.Hour).Unix(),
+		LatestVersion: "v0.2.8", // newer than installed → prompt should fire
 	}); err != nil {
 		t.Fatal(err)
 	}

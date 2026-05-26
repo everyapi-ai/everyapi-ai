@@ -20,11 +20,6 @@ import (
 // reminder cadence is a UX preference, not a credential.
 const updateCheckFilename = "update_check.json"
 
-// updateCheckCacheTTL caps how often we hit GitHub's releases API
-// from the auto-check path. Manual `everyapi update` always polls
-// the live endpoint; this only governs the silent pre-command poll.
-const updateCheckCacheTTL = 24 * time.Hour
-
 // updateCheckPromptCooldown — when the user picks "remind me later",
 // don't re-prompt within this window even if the cache is still
 // reporting a newer version. Without this the prompt would reappear
@@ -38,10 +33,10 @@ const updateCheckCacheTTL = 24 * time.Hour
 const updateCheckPromptCooldown = 12 * time.Hour
 
 // updateCheckFailureBackoff — after a failed fetch (offline, slow
-// network, rate-limited), don't retry within this window. Without
-// it, an offline laptop pays `updateRefreshTimeout` on every single
-// command for the entire offline session, because `loadUpdateCheckCache`
-// keeps returning nil and `cacheFresh` keeps being false.
+// network), don't retry within this window. Without it, an offline
+// laptop pays `updateRefreshTimeout` on every single command for the
+// entire offline session — since there's no TTL gate, every command
+// would otherwise re-enter the refresh path and re-hit the timeout.
 //
 // 1h is a compromise: short enough that "GitHub was briefly down"
 // recovers quickly, long enough that an actually-offline machine
@@ -49,12 +44,11 @@ const updateCheckPromptCooldown = 12 * time.Hour
 const updateCheckFailureBackoff = 1 * time.Hour
 
 // updateRefreshTimeout caps the synchronous GitHub poll on the
-// auto-check path. Tight by design: this latency hits at most once
-// per `updateCheckCacheTTL` (cache miss / stale) AND not within
-// `updateCheckFailureBackoff` after a failure, so the worst case
-// is one slow command every 1-24h. Any timeout silently writes a
-// failure marker (CheckedAt unchanged, LastFetchAttemptAt = now) so
-// the backoff kicks in.
+// auto-check path. Tight by design: every invocation enters this
+// path (no TTL caching) so a slow response can't hold up the user's
+// real command for more than 2.5s. On timeout / network error we
+// write a failure marker so updateCheckFailureBackoff (1h) absorbs
+// the repeat cost on an offline machine.
 const updateRefreshTimeout = 2500 * time.Millisecond
 
 // updateCheckCache mirrors the JSON cache file. Hand-rolled tags so a
@@ -210,13 +204,20 @@ var (
 //   - EVERYAPI_NO_UPDATE_CHECK=1
 //   - command is in updateCheckSkipCommands
 //
-// The cache-stale refresh is SYNCHRONOUS with a tight timeout
-// (updateRefreshTimeout). It runs at most once per cache TTL on the
-// success path, and at most once per failure-backoff on the offline
-// path — so a flaky / offline network can't punish every command.
-// Doing it async was tempting but the goroutine would race the
-// user's command finishing on fast paths (status, version, …) and
-// the cache would never get written.
+// Polling policy: every qualifying invocation hits GitHub. Users
+// expect "I just ran everyapi, if there's a new release I want to
+// know" to mean exactly that — within a single command, not "within
+// the next 4-24h once some background TTL expires". The
+// /releases/latest 302 redirect (post-#374) has no rate limit, the
+// updateRefreshTimeout caps the wait at 2.5s, and on any failure
+// updateCheckFailureBackoff (1h) absorbs the repeat cost so an
+// offline machine doesn't pay 2.5s on every command. The 12h
+// LastPromptedAt cooldown still gates how often the user sees a
+// picker — this function only governs the network call.
+//
+// The refresh is SYNCHRONOUS. Async was tempting but the goroutine
+// would race the user's command finishing on fast paths (status,
+// version, …) and the cache would never get written.
 func MaybePromptUpdate(commandName string) (skipOriginal bool) {
 	if !isInteractiveFn() {
 		return false
@@ -233,22 +234,25 @@ func MaybePromptUpdate(commandName string) (skipOriginal bool) {
 	}
 
 	cache, _ := loadUpdateCheckCache()
-	// `cacheFresh` requires BOTH a recent CheckedAt and a non-empty
-	// LatestVersion — a partially-written cache (CheckedAt set but
-	// LatestVersion empty) shouldn't lock us out of a refresh for 24h.
-	cacheFresh := cache != nil &&
-		cache.LatestVersion != "" &&
-		time.Since(time.Unix(cache.CheckedAt, 0)) < updateCheckCacheTTL
 
-	// `attemptedRecently` short-circuits the refresh after a failed
-	// fetch. Pairs with refreshUpdateCheckCacheSync's failure-marker
-	// write to bound the offline / rate-limited cost to one slow
-	// command per `updateCheckFailureBackoff`.
-	attemptedRecently := cache != nil &&
+	// `lastAttemptFailed` is the only short-circuit on the refresh —
+	// it covers offline / GitHub-down by remembering that the
+	// previous attempt failed and giving the network 1h to recover.
+	//
+	// Distinguishing success from failure matters: refreshUpdateCheck-
+	// CacheSync stamps `LastFetchAttemptAt = now` on BOTH paths, and
+	// `CheckedAt = now` only on success. So `LastFetchAttemptAt >
+	// CheckedAt` is exactly the "the last attempt was a failure"
+	// signal. A naive "any recent attempt" check would treat a
+	// successful fetch as a reason to skip the next one, silently
+	// degrading "poll every invocation" into "poll every 1h" —
+	// which is the bug review caught before this landed.
+	lastAttemptFailed := cache != nil &&
 		cache.LastFetchAttemptAt > 0 &&
+		cache.LastFetchAttemptAt > cache.CheckedAt &&
 		time.Since(time.Unix(cache.LastFetchAttemptAt, 0)) < updateCheckFailureBackoff
 
-	if !cacheFresh && !attemptedRecently {
+	if !lastAttemptFailed {
 		if refreshed := refreshUpdateCheckCacheSync(cache); refreshed != nil {
 			cache = refreshed
 		}
