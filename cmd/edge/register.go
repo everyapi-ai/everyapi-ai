@@ -73,7 +73,15 @@ func edgeRegister(args []string) error {
 		Gateway:           gatewayURLFromAPIBase(creds.APIBase),
 	}
 	metaPath := filepath.Join(dir, "node.json")
-	mb, _ := json.MarshalIndent(meta, "", "  ")
+	mb, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		// Should not happen with the small, fixed nodeMeta struct,
+		// but swallowing this would silently write an empty file
+		// and brick the next `everyapi edge start` (loadNodeMeta
+		// would decode the zero JSON into a zero-valued meta with
+		// no token, no gateway URL) with no visible root cause.
+		return fmt.Errorf(i18n.T("edge.register.persist_meta_failed"), err)
+	}
 	if err := os.WriteFile(metaPath, mb, 0o600); err != nil {
 		return fmt.Errorf(i18n.T("edge.register.persist_meta_failed"), err)
 	}
