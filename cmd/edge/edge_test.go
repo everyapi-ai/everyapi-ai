@@ -14,7 +14,7 @@ func TestRunHelp(t *testing.T) {
 			t.Errorf("Run(%q) returned error: %v", arg, err)
 		}
 	}
-	for _, sub := range []string{"register", "start", "status", "stop", "logs", "models", "update", "remove"} {
+	for _, sub := range []string{"register", "start", "status", "stop", "logs", "models", "update", "rename", "pause", "resume", "remove"} {
 		if !strings.Contains(edgeUsage(), sub) {
 			t.Errorf("edgeUsage missing subcommand %q", sub)
 		}

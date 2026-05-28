@@ -878,10 +878,12 @@ VERWENDUNG
   everyapi edge <Unterbefehl> [Optionen]
 
 UNTERBEFEHLE
-  register [--name N] [--country CC]
+  register [--name N] [--country CC] [--attach-to-channel ID]
         Legt im EveryAPI-Backend einen Knoten + Registrierungstoken an und
         speichert sie unter ~/.local/share/everyapi/edge/<node-id>/.
         Nutzt deinen cli-Login wieder (kein separates Einfügen des Tokens).
+        Mit --attach-to-channel den Knoten als Geschwister an einen
+        bestehenden Edge-Kanal anhängen (Multi-Node-Load-Balancing).
 
   list   (Alias: ls)
         Zeigt alle Knoten des angemeldeten Nutzers im aktuellen Backend,
@@ -903,6 +905,18 @@ UNTERBEFEHLE
   stop   [--node ID]                 docker compose down
   logs   [-f|--follow] [--node ID]   docker compose logs
   update [--node ID]                 docker compose pull && up -d
+
+  rename --name NEW [--country CC] [--region R] [--clear-location] [--node ID]
+        PUT /api/seller/edge/nodes/:id mit neuem Namen und/oder Standort.
+        Der gepaarte Kanalname wird in derselben Transaktion synchronisiert.
+
+  pause  [--node ID]                 Den gepaarten Kanal manuell deaktivieren
+                                     (klebrig, übersteht Reconnects). Käufer-
+                                     Traffic wird hier nicht mehr geroutet.
+  resume [--node ID]                 Manuelle Deaktivierung aufheben. Der
+                                     Kanal nimmt am Routing teil, sobald der
+                                     nächste Heartbeat des Agents ankommt.
+
   remove [--node ID] [--keep-backend]
         docker compose down -v + löscht das lokale workdir. Ruft außerdem
         DELETE /api/seller/edge/nodes/<id> im Backend auf, sofern nicht
@@ -1020,6 +1034,18 @@ unknown_subcommand = "unbekannter 'edge models'-Unterbefehl %q (erwartet: list |
 usage_op = "Verwendung: everyapi edge models %s <model>"
 model_prompt = "Modell (z. B. llama3.1:8b)"
 macos_native = "der macOS-Modus nutzt natives ollama (kein Container) — führe 'ollama %s' direkt auf dem Host aus"
+
+[edge.rename]
+nothing_to_change = "Mindestens eines von --name / --country / --region / --clear-location angeben — nichts zu ändern"
+clear_with_country = "--clear-location schließt --country / --region gegenseitig aus"
+meta_save_warn = "⚠ Umbenennen serverseitig erfolgreich, aber lokales Meta-Speichern fehlgeschlagen (%v); 'everyapi edge status' zeigt evtl. den alten Namen bis zum nächsten 'edge register'"
+done = "✓ Knoten #%d umbenannt. Der gepaarte Kanalname wird beim nächsten Dashboard-Refresh aktualisiert."
+
+[edge.pause]
+done = "✓ Knoten #%d pausiert. Käufer-Traffic wird nicht mehr hierher geroutet, bis 'everyapi edge resume' ausgeführt wird."
+
+[edge.resume]
+done = "✓ Knoten #%d fortgesetzt. Der Kanal nimmt am Routing teil, sobald der nächste Heartbeat ankommt."
 
 [edge.detect]
 invalid_mode = "--mode muss eines davon sein: auto, nvidia, rocm, macos, cpu"

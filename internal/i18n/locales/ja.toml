@@ -870,10 +870,12 @@ text = """everyapi edge — BYO-GPU サプライヤーエージェント
   everyapi edge <サブコマンド> [フラグ]
 
 サブコマンド
-  register [--name N] [--country CC]
+  register [--name N] [--country CC] [--attach-to-channel ID]
         EveryAPI バックエンドにノード + 登録トークンを作成し、
         ~/.local/share/everyapi/edge/<node-id>/ に保存します。cli の
         ログインを再利用します（トークンの貼り付けは不要）。
+        --attach-to-channel で既存の edge チャンネルに兄弟ノードとして
+        追加できます（マルチノード負荷分散）。
 
   list   (エイリアス: ls)
         現在のバックエンドでログインユーザーが所有するすべてのノードを
@@ -894,6 +896,19 @@ text = """everyapi edge — BYO-GPU サプライヤーエージェント
   stop   [--node ID]                 docker compose down
   logs   [-f|--follow] [--node ID]   docker compose logs
   update [--node ID]                 docker compose pull && up -d
+
+  rename --name NEW [--country CC] [--region R] [--clear-location] [--node ID]
+        PUT /api/seller/edge/nodes/:id で名前および/または位置を更新。
+        ペアになっているチャンネル名は同じトランザクション内で同期されます。
+
+  pause  [--node ID]                 ペアになっているチャンネルを手動で
+                                     無効化（粘着的、再接続後も維持）。
+                                     購入者トラフィックはここにルーティング
+                                     されなくなります。
+  resume [--node ID]                 手動無効化を解除します。チャンネルは
+                                     次のエージェントのハートビート受信後に
+                                     ローテーションへ復帰します。
+
   remove [--node ID] [--keep-backend]
         docker compose down -v + ローカル workdir を削除します。
         --keep-backend を指定しない限り、バックエンドの
@@ -1012,6 +1027,18 @@ unknown_subcommand = "不明な 'edge models' サブコマンド %q（list | pul
 usage_op = "使い方: everyapi edge models %s <model>"
 model_prompt = "モデル（例: llama3.1:8b）"
 macos_native = "macOS モードはネイティブの ollama を使用します（コンテナなし）— ホスト上で直接 'ollama %s' を実行してください"
+
+[edge.rename]
+nothing_to_change = "--name / --country / --region / --clear-location のいずれかを指定してください — 更新する項目がありません"
+clear_with_country = "--clear-location は --country / --region と同時に指定できません"
+meta_save_warn = "⚠ サーバー側のリネームは成功しましたが、ローカル meta の保存に失敗しました（%v）。次回の 'edge register' まで 'everyapi edge status' は古い名前を表示する場合があります"
+done = "✓ ノード #%d をリネームしました。ペアになっているチャンネル名は次回のダッシュボード更新時に反映されます。"
+
+[edge.pause]
+done = "✓ ノード #%d を一時停止しました。'everyapi edge resume' まで購入者トラフィックはルーティングされません。"
+
+[edge.resume]
+done = "✓ ノード #%d を再開しました。次のハートビートが届いた時点でチャンネルがローテーションに復帰します。"
 
 [edge.detect]
 invalid_mode = "--mode は次のいずれかである必要があります: auto, nvidia, rocm, macos, cpu"

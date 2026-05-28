@@ -22,6 +22,15 @@ func edgeRegister(args []string) error {
 	name := fs.String("name", "", "Human-readable name (e.g. 'rtx-4090-tokyo'). Required.")
 	country := fs.String("country", "", "Two-letter country code (optional; advertised to buyers for latency).")
 	region := fs.String("region", "", "Region label (optional; freeform, e.g. 'us-west').")
+	// attachTo wires the seller's "one channel, N machines" mode
+	// from EDGE_NODE.md §5. Default 0 = unset, which the SDK maps to
+	// omitting the field and the backend interprets as "create a
+	// fresh channel for this node." A non-zero value validates
+	// server-side: must be an edge-kind channel owned by the same
+	// seller, otherwise the response is 422 errEdgeAttachInvalid.
+	attachTo := fs.Int("attach-to-channel", 0,
+		"Channel ID to attach this node to as a sibling (multi-node load balancing). "+
+			"Omit to auto-create a fresh channel for this node.")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -49,6 +58,9 @@ func edgeRegister(args []string) error {
 	req := api.EdgeNodeCreate{Name: nodeName}
 	if *country != "" || *region != "" {
 		req.Location = &api.EdgeLoc{CountryISO2: strings.ToUpper(*country), Region: *region}
+	}
+	if *attachTo > 0 {
+		req.AttachToChannelID = attachTo
 	}
 
 	reg, err := client.CreateEdgeNode(cliout.WithCtx(), req)

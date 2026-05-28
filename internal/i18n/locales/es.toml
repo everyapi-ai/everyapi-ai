@@ -880,10 +880,12 @@ USO
   everyapi edge <subcomando> [opciones]
 
 SUBCOMANDOS
-  register [--name N] [--country CC]
+  register [--name N] [--country CC] [--attach-to-channel ID]
         Crea un nodo + token de registro en el backend de EveryAPI y los
         guarda en ~/.local/share/everyapi/edge/<node-id>/. Reutiliza tu
-        sesión de cli (sin pegar otro token).
+        sesión de cli (sin pegar otro token). Usa --attach-to-channel
+        para adjuntar el nodo a un canal edge existente (balanceo
+        multi-nodo) en lugar de auto-crear uno.
 
   list   (alias: ls)
         Muestra todos los nodos que posee el usuario conectado en el
@@ -906,6 +908,20 @@ SUBCOMANDOS
   stop   [--node ID]                 docker compose down
   logs   [-f|--follow] [--node ID]   docker compose logs
   update [--node ID]                 docker compose pull && up -d
+
+  rename --name NEW [--country CC] [--region R] [--clear-location] [--node ID]
+        PUT /api/seller/edge/nodes/:id con el nuevo nombre y/o ubicación.
+        El nombre del canal emparejado se sincroniza en la misma
+        transacción.
+
+  pause  [--node ID]                 Desactiva manualmente el canal emparejado
+                                     (persistente, sobrevive a reconexiones).
+                                     El tráfico de compradores deja de
+                                     enrutarse aquí.
+  resume [--node ID]                 Limpia la desactivación manual. El canal
+                                     vuelve a la rotación cuando llegue el
+                                     próximo heartbeat del agente.
+
   remove [--node ID] [--keep-backend]
         docker compose down -v + elimina el workdir local. También llama a
         DELETE /api/seller/edge/nodes/<id> en el backend a menos que se
@@ -1022,6 +1038,18 @@ unknown_subcommand = "subcomando 'edge models' desconocido %q (se esperaba: list
 usage_op = "uso: everyapi edge models %s <model>"
 model_prompt = "Modelo (p. ej. llama3.1:8b)"
 macos_native = "el modo macOS usa ollama nativo (sin contenedor) — ejecuta 'ollama %s' directamente en el host"
+
+[edge.rename]
+nothing_to_change = "pasa al menos uno de --name / --country / --region / --clear-location — no hay nada que actualizar"
+clear_with_country = "--clear-location es mutuamente exclusivo con --country / --region"
+meta_save_warn = "⚠ renombrado correcto en el servidor pero falló el guardado del meta local (%v); 'everyapi edge status' puede mostrar el nombre anterior hasta el próximo 'edge register'"
+done = "✓ Nodo #%d renombrado. El nombre del canal emparejado se reflejará en el próximo refresco del panel."
+
+[edge.pause]
+done = "✓ Nodo #%d pausado. El tráfico de compradores dejará de enrutarse aquí hasta 'everyapi edge resume'."
+
+[edge.resume]
+done = "✓ Nodo #%d reanudado. El canal se reincorpora a la rotación en cuanto llegue el siguiente heartbeat."
 
 [edge.detect]
 invalid_mode = "--mode debe ser uno de: auto, nvidia, rocm, macos, cpu"

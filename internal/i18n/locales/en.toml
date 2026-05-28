@@ -873,10 +873,12 @@ USAGE
   everyapi edge <subcommand> [flags]
 
 SUBCOMMANDS
-  register [--name N] [--country CC]
+  register [--name N] [--country CC] [--attach-to-channel ID]
         Mint a node + registration token on the EveryAPI backend, persist
         them to ~/.local/share/everyapi/edge/<node-id>/. Reuses your
-        cli login (no separate token paste).
+        cli login (no separate token paste). Use --attach-to-channel
+        to add a sibling node to an existing edge channel for
+        multi-node load balancing instead of auto-creating a fresh one.
 
   list   (alias: ls)
         Print every node the signed-in user owns on the current backend,
@@ -897,6 +899,18 @@ SUBCOMMANDS
   stop   [--node ID]                 docker compose down
   logs   [-f|--follow] [--node ID]   docker compose logs
   update [--node ID]                 docker compose pull && up -d
+
+  rename --name NEW [--country CC] [--region R] [--node ID]
+        PUT /api/seller/edge/nodes/:id with the new name and/or location.
+        The paired channel name is updated in the same transaction.
+
+  pause  [--node ID]                 Manually disable the paired channel
+                                     (sticky; survives reconnects). Buyer
+                                     traffic stops routing here.
+  resume [--node ID]                 Clear the manual disable. The next
+                                     agent heartbeat puts the channel
+                                     back into routing rotation.
+
   remove [--node ID] [--keep-backend]
         docker compose down -v + delete the local workdir. Also calls
         DELETE /api/seller/edge/nodes/<id> on the backend unless
@@ -1014,6 +1028,18 @@ unknown_subcommand = "unknown 'edge models' subcommand %q (expected: list | pull
 usage_op = "usage: everyapi edge models %s <model>"
 model_prompt = "Model (e.g. llama3.1:8b)"
 macos_native = "macOS mode uses native ollama (no container) — run 'ollama %s' directly on the host"
+
+[edge.rename]
+nothing_to_change = "pass at least one of --name / --country / --region / --clear-location — nothing to update"
+clear_with_country = "--clear-location is mutually exclusive with --country / --region"
+meta_save_warn = "⚠ rename succeeded server-side but local meta save failed (%v); 'everyapi edge status' may show the old name until next 'edge register'"
+done = "✓ Renamed node #%d. The paired channel name will reflect on the next dashboard refresh."
+
+[edge.pause]
+done = "✓ Paused node #%d. Buyer traffic will stop routing here until 'everyapi edge resume'."
+
+[edge.resume]
+done = "✓ Resumed node #%d. Channel rejoins rotation as soon as the agent's next heartbeat lands."
 
 [edge.detect]
 invalid_mode = "--mode must be one of: auto, nvidia, rocm, macos, cpu"

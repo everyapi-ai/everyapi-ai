@@ -880,10 +880,12 @@ UTILISATION
   everyapi edge <sous-commande> [options]
 
 SOUS-COMMANDES
-  register [--name N] [--country CC]
+  register [--name N] [--country CC] [--attach-to-channel ID]
         Crée un nœud + un token d'enregistrement sur le backend EveryAPI et
         les enregistre dans ~/.local/share/everyapi/edge/<node-id>/.
-        Réutilise votre connexion cli (pas de token à coller).
+        Réutilise votre connexion cli (pas de token à coller). Utilisez
+        --attach-to-channel pour rattacher le nœud à un canal edge
+        existant (équilibrage multi-nœuds) plutôt que d'en créer un.
 
   list   (alias : ls)
         Affiche tous les nœuds que possède l'utilisateur connecté sur le
@@ -906,6 +908,20 @@ SOUS-COMMANDES
   stop   [--node ID]                 docker compose down
   logs   [-f|--follow] [--node ID]   docker compose logs
   update [--node ID]                 docker compose pull && up -d
+
+  rename --name NEW [--country CC] [--region R] [--clear-location] [--node ID]
+        PUT /api/seller/edge/nodes/:id avec le nouveau nom et/ou
+        emplacement. Le nom du canal jumelé est synchronisé dans la
+        même transaction.
+
+  pause  [--node ID]                 Désactive manuellement le canal jumelé
+                                     (persistant, survit aux reconnexions).
+                                     Le trafic acheteur cesse d'être routé
+                                     ici.
+  resume [--node ID]                 Annule la désactivation manuelle. Le
+                                     canal réintègre la rotation dès le
+                                     prochain heartbeat de l'agent.
+
   remove [--node ID] [--keep-backend]
         docker compose down -v + supprime le workdir local. Appelle aussi
         DELETE /api/seller/edge/nodes/<id> sur le backend sauf si
@@ -1023,6 +1039,18 @@ unknown_subcommand = "sous-commande 'edge models' inconnue %q (attendu : list | 
 usage_op = "utilisation : everyapi edge models %s <model>"
 model_prompt = "Modèle (p. ex. llama3.1:8b)"
 macos_native = "le mode macOS utilise ollama natif (sans conteneur) — lancez 'ollama %s' directement sur l'hôte"
+
+[edge.rename]
+nothing_to_change = "passez au moins l'un de --name / --country / --region / --clear-location — rien à mettre à jour"
+clear_with_country = "--clear-location est mutuellement exclusif avec --country / --region"
+meta_save_warn = "⚠ renommage côté serveur réussi mais l'enregistrement du méta local a échoué (%v) ; 'everyapi edge status' peut afficher l'ancien nom jusqu'au prochain 'edge register'"
+done = "✓ Nœud #%d renommé. Le nom du canal jumelé sera reflété au prochain rafraîchissement du tableau de bord."
+
+[edge.pause]
+done = "✓ Nœud #%d mis en pause. Le trafic acheteur ne sera plus routé ici jusqu'à 'everyapi edge resume'."
+
+[edge.resume]
+done = "✓ Nœud #%d réactivé. Le canal rejoint la rotation dès le prochain heartbeat."
 
 [edge.detect]
 invalid_mode = "--mode doit être l'un de : auto, nvidia, rocm, macos, cpu"

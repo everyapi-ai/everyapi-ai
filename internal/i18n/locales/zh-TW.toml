@@ -854,10 +854,11 @@ text = """everyapi edge —— BYO-GPU 供給方代理
   everyapi edge <子命令> [參數]
 
 子命令
-  register [--name N] [--country CC]
+  register [--name N] [--country CC] [--attach-to-channel ID]
         在 EveryAPI 後端建立一個節點 + 註冊權杖，並持久化到
         ~/.local/share/everyapi/edge/<node-id>/。複用你的 cli 登入
-        （無需單獨貼上權杖）。
+        （無需單獨貼上權杖）。用 --attach-to-channel 把節點掛到已存
+        在的 edge 頻道下做多節點分流，省去新建頻道。
 
   list   (別名：ls)
         列出目前後端上登入使用者擁有的所有節點，頂部顯示 api_base 和帳戶
@@ -877,6 +878,16 @@ text = """everyapi edge —— BYO-GPU 供給方代理
   stop   [--node ID]                 docker compose down
   logs   [-f|--follow] [--node ID]   docker compose logs
   update [--node ID]                 docker compose pull && up -d
+
+  rename --name NEW [--country CC] [--region R] [--clear-location] [--node ID]
+        PUT /api/seller/edge/nodes/:id，更新名稱和/或位置。同事務內
+        會同步配對頻道的名稱。
+
+  pause  [--node ID]                 手動停用配對頻道（黏性，跨重連保留）。
+                                     買家流量停止路由到這裡。
+  resume [--node ID]                 解除手動停用。下次 agent 心跳後頻道
+                                     重新加入分流。
+
   remove [--node ID] [--keep-backend]
         docker compose down -v + 刪除本機 workdir。除非設定
         --keep-backend，否則還會呼叫後端的
@@ -994,6 +1005,18 @@ unknown_subcommand = "未知的 'edge models' 子命令 %q（應為：list | pul
 usage_op = "用法：everyapi edge models %s <model>"
 model_prompt = "模型（例如 llama3.1:8b）"
 macos_native = "macOS 模式使用原生 ollama（無容器）—— 請直接在主機上執行 'ollama %s'"
+
+[edge.rename]
+nothing_to_change = "至少傳一個 --name / --country / --region / --clear-location —— 沒有要更新的欄位"
+clear_with_country = "--clear-location 與 --country / --region 互斥"
+meta_save_warn = "⚠ 伺服端重新命名成功但本地 meta 儲存失敗（%v）；下次 'edge register' 之前 'everyapi edge status' 可能仍顯示舊名稱"
+done = "✓ 已重新命名節點 #%d。配對的頻道名稱會在下次儀表板重新整理時同步。"
+
+[edge.pause]
+done = "✓ 已暫停節點 #%d。在 'everyapi edge resume' 之前買家流量不會再路由到這裡。"
+
+[edge.resume]
+done = "✓ 已恢復節點 #%d。下一次 heartbeat 抵達後頻道會重新加入分流。"
 
 [edge.detect]
 invalid_mode = "--mode 必須是以下之一：auto、nvidia、rocm、macos、cpu"
