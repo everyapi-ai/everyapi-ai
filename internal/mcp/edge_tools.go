@@ -144,10 +144,10 @@ func handleEdgeStatus(ctx context.Context, raw json.RawMessage) (string, error) 
 			count = 1
 		}
 		fmt.Fprintf(&b, "  hardware:  %s × %d (%dGB VRAM)\n",
-			node.Hardware.GPUModel, count, node.Hardware.VRAMGB)
+			node.Hardware.GPUModel, count, node.Hardware.VRAMTotalGB)
 	}
-	if node.Location != nil && (node.Location.Country != "" || node.Location.Region != "") {
-		fmt.Fprintf(&b, "  location:  %s/%s\n", node.Location.Country, node.Location.Region)
+	if node.Location != nil && (node.Location.CountryISO2 != "" || node.Location.Region != "") {
+		fmt.Fprintf(&b, "  location:  %s/%s\n", node.Location.CountryISO2, node.Location.Region)
 	}
 	return strings.TrimRight(b.String(), "\n"), nil
 }

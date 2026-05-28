@@ -49,7 +49,7 @@ func edgeStatus(args []string) error {
 		}
 		if remote.Hardware != nil && remote.Hardware.GPUModel != "" {
 			cliout.Printf(i18n.T("edge.status.hardware_line"), i18n.T("edge.field.hardware"),
-				remote.Hardware.GPUModel, max1(remote.Hardware.GPUCount), remote.Hardware.VRAMGB)
+				remote.Hardware.GPUModel, max1(remote.Hardware.GPUCount), remote.Hardware.VRAMTotalGB)
 		}
 	}
 

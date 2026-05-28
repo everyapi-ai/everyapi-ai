@@ -48,7 +48,7 @@ func edgeRegister(args []string) error {
 
 	req := api.EdgeNodeCreate{Name: nodeName}
 	if *country != "" || *region != "" {
-		req.Location = &api.EdgeLoc{Country: strings.ToUpper(*country), Region: *region}
+		req.Location = &api.EdgeLoc{CountryISO2: strings.ToUpper(*country), Region: *region}
 	}
 
 	reg, err := client.CreateEdgeNode(cliout.WithCtx(), req)
