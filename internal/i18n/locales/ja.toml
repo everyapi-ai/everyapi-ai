@@ -172,6 +172,9 @@ stop = "docker compose down"
 logs = "docker compose logs"
 models = "現在のノードで ollama モデルを list / pull / remove"
 update = "docker compose pull && up"
+rename = "ノードの名前変更 / 位置情報変更（サーバー側、ダッシュボード表示を更新）"
+pause = "ノードを手動で無効化 — 'resume' まで再接続を跨いで維持"
+resume = "手動 pause を解除 — 次のハートビートでルーティングに復帰"
 remove = "現在のノードを削除 + バックエンドの行を削除"
 
 [launcher.subs.admin]
@@ -951,6 +954,7 @@ live = "ライブ:"
 [edge.register]
 name_required = "--name は必須です（例: --name 'rtx-4090-tokyo'）"
 name_prompt = "ノード名（例: rtx-4090-tokyo）"
+attach_unknown_channel = "--attach-to-channel=%d はあなたの edge チャンネル（所有: %s）ではありません。'everyapi edge list' でノード→チャンネルの対応を確認してください。"
 persist_meta_failed = "ノードのメタデータ保存に失敗: %w"
 set_active_failed = "アクティブノードの設定に失敗: %w"
 registered = "✓ ノード #%d（%s）を登録しました\n"

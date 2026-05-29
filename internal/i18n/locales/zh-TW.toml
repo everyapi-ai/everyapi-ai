@@ -162,6 +162,9 @@ stop = "docker compose down"
 logs = "docker compose logs"
 models = "在目前節點列出 / pull / remove ollama 模型"
 update = "docker compose pull && up"
+rename = "重新命名節點或變更位置（伺服端，同步更新儀表板標籤）"
+pause = "手動停用節點 —— 跨重連黏性保持直到 'resume'"
+resume = "解除手動停用 —— 下次心跳後節點重新加入路由"
 remove = "移除目前節點 + 刪除後端記錄"
 
 [launcher.subs.admin]
@@ -929,6 +932,7 @@ live = "即時："
 [edge.register]
 name_required = "必須指定 --name（例如 --name 'rtx-4090-tokyo'）"
 name_prompt = "節點名稱（例如 rtx-4090-tokyo）"
+attach_unknown_channel = "--attach-to-channel=%d 不是你的 edge 頻道（你擁有：%s）。執行 'everyapi edge list' 查看節點→頻道對應。"
 persist_meta_failed = "持久化節點中繼資料失敗：%w"
 set_active_failed = "設定作用中節點失敗：%w"
 registered = "✓ 已註冊節點 #%d（%s）\n"

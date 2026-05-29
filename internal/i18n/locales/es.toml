@@ -178,6 +178,9 @@ stop = "docker compose down"
 logs = "docker compose logs"
 models = "Listar / pull / remove modelos ollama en el nodo activo"
 update = "docker compose pull && up"
+rename = "Renombrar o reubicar un nodo (lado servidor; actualiza la etiqueta del panel)"
+pause = "Desactivar manualmente un nodo — persistente entre reconexiones hasta 'resume'"
+resume = "Limpiar una pausa manual — el nodo vuelve al enrutamiento en el próximo heartbeat"
 remove = "Quitar el nodo activo + eliminar la fila del backend"
 
 [launcher.subs.admin]
@@ -962,6 +965,7 @@ live = "en vivo:"
 [edge.register]
 name_required = "--name es obligatorio (p. ej. --name 'rtx-4090-tokyo')"
 name_prompt = "Nombre del nodo (p. ej. rtx-4090-tokyo)"
+attach_unknown_channel = "--attach-to-channel=%d no es uno de tus canales edge (propios: %s). Ejecuta 'everyapi edge list' para ver el mapeo nodo→canal."
 persist_meta_failed = "no se pudieron guardar los metadatos del nodo: %w"
 set_active_failed = "no se pudo fijar el nodo activo: %w"
 registered = "✓ Nodo #%d (%s) registrado\n"

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
@@ -60,6 +61,16 @@ func edgeRegister(args []string) error {
 		req.Location = &api.EdgeLoc{CountryISO2: strings.ToUpper(*country), Region: *region}
 	}
 	if *attachTo > 0 {
+		// Pre-validate the channel id against the seller's own
+		// node listing — fail fast with a usable hint instead of
+		// the backend's terse 422 "attach_to_channel_id is not a
+		// valid edge channel you own". Listing returns at most the
+		// seller's own ~10 nodes (the per-seller channel cap), so
+		// the extra round-trip is cheap and the error message
+		// names the wrong id explicitly + suggests `edge list`.
+		if vErr := validateAttachToChannel(client, *attachTo); vErr != nil {
+			return vErr
+		}
 		req.AttachToChannelID = attachTo
 	}
 
@@ -106,6 +117,59 @@ func edgeRegister(args []string) error {
 	cliout.Printf("%s", i18n.T("edge.register.set_active"))
 	cliout.Printf("%s", i18n.T("edge.register.next"))
 	return nil
+}
+
+// validateAttachToChannel checks that the supplied channel id
+// appears as channel_id on one of the seller's existing nodes. The
+// backend's POST /api/seller/edge/nodes rejects an invalid
+// attach_to_channel_id with a single sentinel error
+// (errEdgeAttachInvalid) that doesn't enumerate the IDs the seller
+// owns — pre-validating client-side lets us emit a hint that names
+// the existing channels and points at `everyapi edge list`.
+//
+// Best-effort: any list error (network, auth) skips the check and
+// lets the server's validation run. The intent here is help on the
+// happy-path typo, not a hard gate.
+//
+// Edge case deliberately deferred to the backend: a seller may own
+// an edge channel that has zero nodes attached (created via
+// dashboard, then all nodes removed). Our proxy here is "channel
+// has a node owned by me", so that channel won't appear in `owned`.
+// Rather than mis-classify it as "no edge channels", we only emit
+// the unknown-channel hint when we have at least one known id; for
+// the empty case we silently defer to backend validation. Trade-off:
+// the user sees the terser backend message in that rare path, but
+// avoids the worse "you don't own any channels" lie that would push
+// them to drop the flag and create a duplicate.
+func validateAttachToChannel(client *api.Client, channelID int) error {
+	nodes, err := client.ListEdgeNodes(cliout.WithCtx())
+	if err != nil {
+		return nil
+	}
+	owned := map[int]bool{}
+	for _, n := range nodes {
+		if n.ChannelID != nil {
+			owned[*n.ChannelID] = true
+		}
+	}
+	if owned[channelID] {
+		return nil
+	}
+	if len(owned) == 0 {
+		// Defer to backend — we can't distinguish "no channels at all"
+		// from "channels exist but have no nodes attached".
+		return nil
+	}
+	ids := make([]int, 0, len(owned))
+	for id := range owned {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	idStrs := make([]string, len(ids))
+	for i, id := range ids {
+		idStrs[i] = fmt.Sprintf("%d", id)
+	}
+	return fmt.Errorf(i18n.T("edge.register.attach_unknown_channel"), channelID, strings.Join(idStrs, ", "))
 }
 
 // classifyRegisterErr surfaces the backend's structured error messages

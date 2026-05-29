@@ -177,6 +177,9 @@ stop = "docker compose down"
 logs = "docker compose logs"
 models = "Lister / pull / remove les modèles ollama sur le nœud actif"
 update = "docker compose pull && up"
+rename = "Renommer ou relocaliser un nœud (côté serveur ; met à jour le libellé du tableau de bord)"
+pause = "Désactiver manuellement un nœud — persistant entre reconnexions jusqu'à 'resume'"
+resume = "Annuler une pause manuelle — le nœud rejoint le routage au prochain heartbeat"
 remove = "Retirer le nœud actif + supprimer la ligne backend"
 
 [launcher.subs.admin]
@@ -963,6 +966,7 @@ live = "en direct :"
 [edge.register]
 name_required = "--name est requis (p. ex. --name 'rtx-4090-tokyo')"
 name_prompt = "Nom du nœud (p. ex. rtx-4090-tokyo)"
+attach_unknown_channel = "--attach-to-channel=%d n'est pas un de vos canaux edge (vos canaux : %s). Lancez 'everyapi edge list' pour voir la correspondance nœud→canal."
 persist_meta_failed = "échec de l'enregistrement des métadonnées du nœud : %w"
 set_active_failed = "échec de la définition du nœud actif : %w"
 registered = "✓ Nœud #%d (%s) enregistré\n"

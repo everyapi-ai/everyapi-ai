@@ -172,6 +172,9 @@ stop = "docker compose down"
 logs = "docker compose logs"
 models = "현재 노드에서 ollama 모델 list / pull / remove"
 update = "docker compose pull && up"
+rename = "노드 이름 변경 또는 위치 재설정 (서버 측, 대시보드 레이블 갱신)"
+pause = "노드 수동 비활성화 — 'resume' 까지 재연결을 가로질러 유지"
+resume = "수동 일시중지 해제 — 다음 하트비트에서 노드가 라우팅에 복귀"
 remove = "현재 노드 제거 + 백엔드 행 삭제"
 
 [launcher.subs.admin]
@@ -949,6 +952,7 @@ live = "라이브:"
 [edge.register]
 name_required = "--name 은 필수입니다 (예: --name 'rtx-4090-tokyo')"
 name_prompt = "노드 이름 (예: rtx-4090-tokyo)"
+attach_unknown_channel = "--attach-to-channel=%d 는 본인의 edge 채널이 아닙니다 (소유: %s). 'everyapi edge list' 로 노드→채널 매핑을 확인하세요."
 persist_meta_failed = "노드 메타데이터 저장 실패: %w"
 set_active_failed = "활성 노드 설정 실패: %w"
 registered = "✓ 노드 #%d (%s) 를 등록했습니다\n"

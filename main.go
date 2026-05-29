@@ -199,6 +199,9 @@ var commands = []command{
 		{name: "logs", desc: "docker compose logs", args: []string{"logs"}},
 		{name: "models", desc: "List / pull / remove ollama models on the active node", args: []string{"models"}},
 		{name: "update", desc: "docker compose pull && up", args: []string{"update"}},
+		{name: "rename", desc: "Rename or relocate a node (server-side; updates dashboard label)", args: []string{"rename"}},
+		{name: "pause", desc: "Manually disable a node — sticky across reconnects until 'resume'", args: []string{"pause"}},
+		{name: "resume", desc: "Clear a manual pause — node rejoins routing on next heartbeat", args: []string{"resume"}},
 		{name: "remove", desc: "Remove the active node + delete backend row", args: []string{"remove"}},
 	}},
 	{name: "admin", desc: "Operator commands (admin role required)", adminOnly: true, requireLogin: true, run: admin.Run, subs: []subcommand{

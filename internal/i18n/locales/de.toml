@@ -176,6 +176,9 @@ stop = "docker compose down"
 logs = "docker compose logs"
 models = "ollama-Modelle auf dem aktiven Node listen / pullen / entfernen"
 update = "docker compose pull && up"
+rename = "Knoten umbenennen oder neu lokalisieren (serverseitig; aktualisiert das Dashboard-Label)"
+pause = "Knoten manuell deaktivieren — bleibt über Reconnects hinweg bis 'resume'"
+resume = "Manuelle Pause aufheben — Knoten tritt beim nächsten Heartbeat dem Routing wieder bei"
 remove = "Aktiven Node entfernen + Backend-Eintrag löschen"
 
 [launcher.subs.admin]
@@ -958,6 +961,7 @@ live = "Live:"
 [edge.register]
 name_required = "--name ist erforderlich (z. B. --name 'rtx-4090-tokyo')"
 name_prompt = "Knotenname (z. B. rtx-4090-tokyo)"
+attach_unknown_channel = "--attach-to-channel=%d ist keiner deiner Edge-Kanäle (eigene: %s). 'everyapi edge list' zeigt das Node→Kanal-Mapping."
 persist_meta_failed = "Knoten-Metadaten konnten nicht gespeichert werden: %w"
 set_active_failed = "aktiver Knoten konnte nicht gesetzt werden: %w"
 registered = "✓ Knoten #%d (%s) registriert\n"
