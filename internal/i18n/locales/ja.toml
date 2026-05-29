@@ -946,6 +946,7 @@ models = "モデル:"
 hardware = "ハードウェア:"
 channel = "チャネル:"
 user = "ユーザー:"
+live = "ライブ:"
 
 [edge.register]
 name_required = "--name は必須です（例: --name 'rtx-4090-tokyo'）"

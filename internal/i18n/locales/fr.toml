@@ -958,6 +958,7 @@ models = "modèles :"
 hardware = "matériel :"
 channel = "canal :"
 user = "utilisateur :"
+live = "en direct :"
 
 [edge.register]
 name_required = "--name est requis (p. ex. --name 'rtx-4090-tokyo')"

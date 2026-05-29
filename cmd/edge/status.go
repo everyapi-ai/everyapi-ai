@@ -51,6 +51,25 @@ func edgeStatus(args []string) error {
 			cliout.Printf(i18n.T("edge.status.hardware_line"), i18n.T("edge.field.hardware"),
 				remote.Hardware.GPUModel, max1(remote.Hardware.GPUCount), remote.Hardware.VRAMTotalGB)
 		}
+		// Live telemetry — only present when the agent has sent at
+		// least one heartbeat. Nil pointers mean "no live data" not
+		// "zero"; we render only when at least one field is reported.
+		if remote.GPUUtilPct != nil || remote.VRAMUsedGB != nil || remote.ActiveRequests != nil {
+			cliout.Printf("  %-12s", i18n.T("edge.field.live"))
+			sep := ""
+			if remote.GPUUtilPct != nil {
+				cliout.Printf("%sGPU %d%%", sep, *remote.GPUUtilPct)
+				sep = ", "
+			}
+			if remote.VRAMUsedGB != nil {
+				cliout.Printf("%sVRAM %.1fGB", sep, *remote.VRAMUsedGB)
+				sep = ", "
+			}
+			if remote.ActiveRequests != nil {
+				cliout.Printf("%s%d active req", sep, *remote.ActiveRequests)
+			}
+			cliout.Printf("\n")
+		}
 	}
 
 	// Local docker view — only attempt if docker is on PATH; quietly

@@ -924,6 +924,7 @@ models = "模型："
 hardware = "硬體："
 channel = "通道："
 user = "使用者："
+live = "即時："
 
 [edge.register]
 name_required = "必須指定 --name（例如 --name 'rtx-4090-tokyo'）"

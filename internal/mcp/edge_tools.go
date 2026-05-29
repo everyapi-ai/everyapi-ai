@@ -149,6 +149,26 @@ func handleEdgeStatus(ctx context.Context, raw json.RawMessage) (string, error) 
 	if node.Location != nil && (node.Location.CountryISO2 != "" || node.Location.Region != "") {
 		fmt.Fprintf(&b, "  location:  %s/%s\n", node.Location.CountryISO2, node.Location.Region)
 	}
+	// Live telemetry — nil pointers mean "no heartbeat yet" or
+	// "offline"; only render if the agent actually reported. A 0%
+	// util reading IS meaningful for an idle online node, so we
+	// gate display on the pointer rather than the value.
+	if node.GPUUtilPct != nil || node.VRAMUsedGB != nil || node.ActiveRequests != nil {
+		fmt.Fprintf(&b, "  live:      ")
+		sep := ""
+		if node.GPUUtilPct != nil {
+			fmt.Fprintf(&b, "%sGPU %d%%", sep, *node.GPUUtilPct)
+			sep = ", "
+		}
+		if node.VRAMUsedGB != nil {
+			fmt.Fprintf(&b, "%sVRAM %.1fGB", sep, *node.VRAMUsedGB)
+			sep = ", "
+		}
+		if node.ActiveRequests != nil {
+			fmt.Fprintf(&b, "%s%d active req", sep, *node.ActiveRequests)
+		}
+		fmt.Fprintln(&b)
+	}
 	return strings.TrimRight(b.String(), "\n"), nil
 }
 
