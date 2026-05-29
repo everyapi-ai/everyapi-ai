@@ -66,6 +66,16 @@ type Tool struct {
 	// what the user gets — "skip permission prompts (claude)" /
 	// "bypass approvals + sandbox (codex)" / "yolo mode (gemini)".
 	YoloLabel string
+	// YoloEnv is the env-var form of the blanket-bypass switch, for
+	// tools whose "skip every confirmation" mode is toggled by an
+	// environment variable rather than an argv flag — hermes reads
+	// HERMES_YOLO_MODE=1 and exposes no equivalent command-line flag.
+	// When set and the user opts in at the prompt, 'everyapi use'
+	// puts this var = "1" in the tool's env instead of (or in
+	// addition to) prepending YoloFlag. A tool may set YoloFlag,
+	// YoloEnv, or both; empty when the tool has no blanket-bypass
+	// switch at all.
+	YoloEnv string
 
 	// envFn builds the env vars from the resolved API base + access
 	// token. Returns a map[name]value to merge into os.Environ before
@@ -114,7 +124,6 @@ func (t *Tool) Prepare(apiBase, token string) (map[string]string, error) {
 	return t.prepareFn(apiBase, token)
 }
 
-
 // joinBase concatenates the API base and a tool-specific suffix,
 // avoiding double slashes. Centralized so adding a tool doesn't have
 // to reinvent the join logic.
@@ -146,7 +155,7 @@ var Registry = map[string]*Tool{
 		YoloLabel:          "skip all permission prompts (--dangerously-skip-permissions)",
 		envFn: func(apiBase, token string) map[string]string {
 			return map[string]string{
-				"ANTHROPIC_BASE_URL":  joinBase(apiBase, ""),
+				"ANTHROPIC_BASE_URL":   joinBase(apiBase, ""),
 				"ANTHROPIC_AUTH_TOKEN": token,
 			}
 		},
@@ -194,6 +203,31 @@ var Registry = map[string]*Tool{
 			}
 		},
 	},
+
+	// Nous Research Hermes Agent (Python CLI, binary `hermes`). Unlike
+	// claude/gemini, hermes does NOT read OPENAI_BASE_URL for its main
+	// model — config.yaml is the single source of truth for the
+	// endpoint, and OPENAI_API_KEY is only consulted when base_url's
+	// host is openai.com (so it never attaches for an EveryAPI host).
+	// So all routing goes through a generated config.yaml under an
+	// isolated HERMES_HOME (see hermes.go): provider=custom pins
+	// hermes at <apiBase>/v1, with the relay key inlined as
+	// model.api_key. envFn therefore sets nothing — HERMES_HOME comes
+	// from prepareFn. Yolo is env-based (HERMES_YOLO_MODE), not a flag.
+	"hermes": {
+		Name:               "hermes",
+		ExecName:           "hermes",
+		InstallHint:        "Install Hermes Agent: https://github.com/NousResearch/hermes-agent (or: pip install hermes-agent)",
+		InstallCmd:         "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash",
+		InstallCmdUnixOnly: true,
+		YoloEnv:            "HERMES_YOLO_MODE",
+		YoloLabel:          "yolo mode — disable all approval prompts (HERMES_YOLO_MODE)",
+		envFn: func(_, _ string) map[string]string {
+			// Routing is config-file driven; see prepareHermes.
+			return map[string]string{}
+		},
+		prepareFn: prepareHermes,
+	},
 }
 
 // Lookup returns the tool entry for `name`, or an error listing the
@@ -212,6 +246,7 @@ func Lookup(name string) (*Tool, error) {
 func Names() []string {
 	// Deterministic order matters for both the error message and the
 	// picker UX. Hand-coded to match the ordering most likely to
-	// reflect user demand (Claude first, then OpenAI, then Gemini).
-	return []string{"claude", "codex", "gemini"}
+	// reflect user demand (Claude first, then OpenAI, then Gemini,
+	// then Hermes).
+	return []string{"claude", "codex", "gemini", "hermes"}
 }

@@ -9,7 +9,7 @@ import (
 // can be added freely; removing one should be a deliberate spec
 // change that breaks this test.
 func TestRegistry_HasExpectedTools(t *testing.T) {
-	want := []string{"claude", "codex", "gemini"}
+	want := []string{"claude", "codex", "gemini", "hermes"}
 	got := Names()
 	if len(got) != len(want) {
 		t.Fatalf("want %d tools, got %d (%v)", len(want), len(got), got)
@@ -71,6 +71,21 @@ func TestEnv_Gemini(t *testing.T) {
 	}
 	if got := env["GOOGLE_GEMINI_BASE_URL"]; got != "https://api.everyapi.ai/v1beta" {
 		t.Errorf("GOOGLE_GEMINI_BASE_URL = %q (need /v1beta suffix)", got)
+	}
+}
+
+// TestEnv_Hermes verifies hermes' env contract: envFn sets NOTHING.
+// All routing (base_url + relay key) goes through the generated
+// config.yaml in prepareHermes; in particular OPENAI_BASE_URL /
+// OPENAI_API_KEY must NOT be set, since hermes ignores OPENAI_BASE_URL
+// for its main model and only honors OPENAI_API_KEY for openai.com
+// hosts — setting them would create confusing "env is set but nothing
+// routes" debug sessions. HERMES_HOME comes from prepareFn, not here.
+func TestEnv_Hermes(t *testing.T) {
+	tool, _ := Lookup("hermes")
+	env := tool.Env("https://api.everyapi.ai", "my-token")
+	if len(env) != 0 {
+		t.Errorf("hermes Env should be empty (routing is config-file driven), got %v", env)
 	}
 }
 

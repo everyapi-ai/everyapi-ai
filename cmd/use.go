@@ -13,12 +13,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
-	"github.com/everyapi-ai/everyapi-sdk/config"
 	"github.com/everyapi-ai/everyapi-ai/internal/tools"
+	"github.com/everyapi-ai/everyapi-sdk/api"
+	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
 // useUsage is split so the prose can embed literal backticks (e.g.
@@ -29,7 +29,7 @@ USAGE
   everyapi use [<tool>] [--group <name> | --channel <name>] [--direct] [-- tool args...]
 
 ARGUMENTS
-  <tool>                 claude | codex | gemini
+  <tool>                 claude | codex | gemini | hermes
                          Omit to open an interactive picker over installed tools.
 
 FLAGS
@@ -50,6 +50,7 @@ EXAMPLES
   everyapi use claude
   everyapi use codex --channel byteplus
   everyapi use claude -- --model opus
+  everyapi use hermes
 `
 
 // Use is the buyer onboarding bridge: verify credentials, configure
@@ -193,14 +194,16 @@ func Use(args []string) error {
 	env := t.Env(apiBaseForEnv, relayKey)
 
 	// Dangerous-mode prompt. Each tool exposes a single "skip
-	// every confirmation" flag (Tool.YoloFlag); if the user
-	// hasn't already passed it via `-- <flags>`, offer it through
-	// a TTY confirm so they don't have to remember the exact
-	// string. Default is YES — `everyapi use` is meant to be the
-	// "just run the agent" shortcut, so the press-Enter happy path
-	// keeps you out of the per-tool permission loop. Pick "no"
-	// once if you want the prompts back.
-	if t.YoloFlag != "" && !containsFlag(extraArgs, t.YoloFlag) && cliprompt.IsInteractive() {
+	// every confirmation" switch — an argv flag (Tool.YoloFlag,
+	// claude/codex/gemini) or an env var (Tool.YoloEnv, hermes'
+	// HERMES_YOLO_MODE). If the user hasn't already passed the flag
+	// via `-- <flags>`, offer it through a TTY confirm so they don't
+	// have to remember the exact string. Default is YES — `everyapi
+	// use` is meant to be the "just run the agent" shortcut, so the
+	// press-Enter happy path keeps you out of the per-tool permission
+	// loop. Pick "no" once if you want the prompts back.
+	yoloAlreadyPassed := t.YoloFlag != "" && containsFlag(extraArgs, t.YoloFlag)
+	if (t.YoloFlag != "" || t.YoloEnv != "") && !yoloAlreadyPassed && cliprompt.IsInteractive() {
 		enable, perr := cliprompt.YesNo(
 			bufio.NewReader(os.Stdin),
 			fmt.Sprintf(i18n.T("use.yolo_prompt"), t.YoloLabel),
@@ -218,10 +221,17 @@ func Use(args []string) error {
 			}
 		}
 		if enable {
-			// Prepend so a user-passed flag after `--` still
-			// wins on conflict (last-flag wins in Go's flag and
-			// in claude/codex/gemini's argv parsing alike).
-			extraArgs = append([]string{t.YoloFlag}, extraArgs...)
+			if t.YoloFlag != "" {
+				// Prepend so a user-passed flag after `--` still
+				// wins on conflict (last-flag wins in Go's flag and
+				// in claude/codex/gemini's argv parsing alike).
+				extraArgs = append([]string{t.YoloFlag}, extraArgs...)
+			}
+			if t.YoloEnv != "" {
+				// Set before Prepare()'s overlay, which only adds
+				// HERMES_HOME and won't clobber this.
+				env[t.YoloEnv] = "1"
+			}
 		}
 	}
 

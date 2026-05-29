@@ -71,18 +71,24 @@ The main reason to install this CLI. It sets the target tool's env vars per the 
 everyapi use claude         # Claude Code → EveryAPI
 everyapi use codex          # OpenAI Codex CLI → EveryAPI
 everyapi use gemini         # Gemini CLI → EveryAPI
+everyapi use hermes         # Nous Research Hermes Agent → EveryAPI
 everyapi use                # no arg → interactive picker over installed tools
 ```
 
-Each tool uses different env-var conventions; the CLI remembers them:
+Each tool uses different conventions; the CLI remembers them:
 
-| Tool | Environment variables set |
+| Tool | How it's pointed at EveryAPI |
 |---|---|
-| claude | `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` |
-| codex | `OPENAI_BASE_URL`, `OPENAI_API_KEY` |
-| gemini | `GEMINI_API_KEY`, `GOOGLE_GEMINI_BASE_URL` |
+| claude | env: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` |
+| codex | env: `OPENAI_API_KEY` + generated `CODEX_HOME/config.toml` (codex routes via config, not `OPENAI_BASE_URL`) |
+| gemini | env: `GEMINI_API_KEY`, `GOOGLE_GEMINI_BASE_URL` |
+| hermes | generated `HERMES_HOME/config.yaml` (`provider: custom`, `base_url`, inline `api_key`); hermes ignores `OPENAI_BASE_URL` for its main model |
 
 No more looking up which variable name each tool reads, whether you need to append `/v1`, or which auth-header style applies.
+
+**hermes model default**: `provider: custom` has no built-in model, so `everyapi use hermes` boots with `claude-sonnet-4-6` by default. Both claude and gpt families are reachable through the same `/v1` endpoint — switch at runtime with `hermes model`, or set a different boot default per launch: `EVERYAPI_HERMES_MODEL=gpt-5.1 everyapi use hermes`.
+
+**hermes config isolation**: `everyapi use hermes` redirects `HERMES_HOME` to `~/.config/everyapi/hermes-home`, so its `config.yaml` (and the sessions/logs that accumulate there) are kept separate from your personal `~/.hermes` — a plain `hermes` invocation is untouched, and the two won't share session history. Bare `hermes` opens the interactive chat; pass `everyapi use hermes -- --tui` for the terminal UI.
 
 > ⚠️ **Subprocess env safety note**: the env vars above contain your relay API key. Third-party CLIs in debug / verbose mode may log env — before running `everyapi use`, make sure the debug flag you turn on does not leak `*_TOKEN` / `*_API_KEY`. Before sharing debug logs, run `sed -i 's/sk-everyapi-[A-Za-z0-9]*/REDACTED/g'`.
 

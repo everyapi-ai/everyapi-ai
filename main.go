@@ -147,7 +147,7 @@ var commands = []command{
 		{name: "plans", desc: "List enabled subscription plans", args: []string{"plans"}},
 		{name: "self", desc: "Show your subscriptions", args: []string{"self"}},
 	}},
-	{name: "use", desc: "Launch a third-party CLI (claude / codex / gemini) via EveryAPI", requireLogin: true, run: cmd.Use},
+	{name: "use", desc: "Launch a third-party CLI (claude / codex / gemini / hermes) via EveryAPI", requireLogin: true, run: cmd.Use},
 	{name: "token", desc: "Manage relay API tokens (list / create / key / revoke / …)", requireLogin: true, run: token.Run, subs: []subcommand{
 		// Only flag-free verbs surface in the launcher picker; the
 		// rest (create/update/key/revoke/enable/disable/show) need a
