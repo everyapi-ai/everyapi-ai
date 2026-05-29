@@ -1063,7 +1063,7 @@ url_hint = "授权此设备，请访问（验证码已内置）："
 code_hint = "若页面未自动填充，请输入验证码：%s"
 browser_opened = "浏览器已打开。请在浏览器或手机端完成授权；本机将自动继续。"
 no_relay_note_1 = "提示：你的账户尚未创建 relay API key。`everyapi use` 需要一个"
-no_relay_note_2 = "EveryAPI dashboard，然后再次运行 'everyapi login'。"
+no_relay_note_2 = "EveryAPI dashboard 创建后，下次 `everyapi use` 或 `everyapi status` 会自动拉取（无需重新登录）。"
 logged_in_saved = "\n已以 %s 登录。凭证已保存到 %s/credentials.json\n"
 
 [logout]

@@ -1063,7 +1063,7 @@ url_hint = "授權此裝置，請前往（驗證碼已內建）："
 code_hint = "若頁面未自動填入，請輸入驗證碼：%s"
 browser_opened = "瀏覽器已開啟。請在瀏覽器或手機端完成授權；本機將自動繼續。"
 no_relay_note_1 = "提示：你的帳戶尚未建立 relay API key。`everyapi use` 需要一個"
-no_relay_note_2 = "EveryAPI dashboard，然後再次執行 'everyapi login'。"
+no_relay_note_2 = "EveryAPI dashboard 建立後，下次 `everyapi use` 或 `everyapi status` 會自動取得（無需重新登入）。"
 logged_in_saved = "\n已以 %s 登入。憑證已儲存到 %s/credentials.json\n"
 
 [logout]

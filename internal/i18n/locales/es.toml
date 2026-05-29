@@ -1096,7 +1096,7 @@ url_hint = "Para autorizar este dispositivo, visita (el código va incluido en e
 code_hint = "Si la página no se prellena, introduce el código: %s"
 browser_opened = "Navegador abierto. Aprueba ahí (o termina en tu teléfono); esto continuará por sí solo."
 no_relay_note_1 = "Nota: tu cuenta aún no tiene relay API key. `everyapi use` necesita una"
-no_relay_note_2 = "EveryAPI dashboard, luego ejecuta 'everyapi login' otra vez."
+no_relay_note_2 = "EveryAPI dashboard, luego `everyapi use` o `everyapi status` la traerán automáticamente (no hace falta volver a iniciar sesión)."
 logged_in_saved = "\nSesión iniciada como %s. Credenciales guardadas en %s/credentials.json\n"
 
 [logout]

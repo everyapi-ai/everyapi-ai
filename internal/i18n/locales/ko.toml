@@ -1083,7 +1083,7 @@ url_hint = "이 기기를 인증하려면 방문하세요 (코드는 링크에 �
 code_hint = "페이지가 자동 입력되지 않으면 코드를 입력하세요: %s"
 browser_opened = "브라우저를 열었습니다. 거기서 (또는 휴대폰에서) 승인하세요. 본 처리는 자동으로 완료됩니다."
 no_relay_note_1 = "참고: 귀하의 계정에는 아직 relay API key 가 없습니다. `everyapi use` 는 하나가 필요합니다"
-no_relay_note_2 = "EveryAPI 대시보드에서 생성한 뒤 'everyapi login' 을 다시 실행하세요."
+no_relay_note_2 = "EveryAPI 대시보드에서 생성하면, 다음 `everyapi use` 또는 `everyapi status` 가 자동으로 가져옵니다 (재로그인 불필요)."
 logged_in_saved = "\n%s 로 로그인했습니다. 자격 증명이 %s/credentials.json 에 저장됨\n"
 
 [logout]

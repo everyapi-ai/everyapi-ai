@@ -1085,7 +1085,7 @@ url_hint = "この端末を認証するには、以下にアクセスしてく�
 code_hint = "ページが自動入力されない場合は、コードを入力してください: %s"
 browser_opened = "ブラウザを開きました。そちらで承認 (またはスマートフォンで完了) してください。本処理は自動で進みます。"
 no_relay_note_1 = "注意: あなたのアカウントにはまだ relay API key がありません。`everyapi use` には 1 つ必要です"
-no_relay_note_2 = "EveryAPI ダッシュボードで作成後、再度 'everyapi login' を実行してください。"
+no_relay_note_2 = "EveryAPI ダッシュボードで作成すれば、次の `everyapi use` または `everyapi status` が自動で取得します（再ログインは不要）。"
 logged_in_saved = "\n%s としてログインしました。認証情報は %s/credentials.json に保存されました\n"
 
 [logout]

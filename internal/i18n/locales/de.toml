@@ -1092,7 +1092,7 @@ url_hint = "Um dieses Gerät zu autorisieren, besuche (der Code ist in den Link 
 code_hint = "Falls die Seite nicht vorausgefüllt ist, gib den Code ein: %s"
 browser_opened = "Browser geöffnet. Bestätige dort (oder auf deinem Handy); dies wird automatisch abgeschlossen."
 no_relay_note_1 = "Hinweis: dein Konto hat noch keinen Relay-API-Key. `everyapi use` benötigt einen"
-no_relay_note_2 = "EveryAPI-Dashboard, dann erneut 'everyapi login' ausführen."
+no_relay_note_2 = "EveryAPI-Dashboard, danach holen `everyapi use` oder `everyapi status` den Key automatisch (kein erneutes Login nötig)."
 logged_in_saved = "\nAls %s angemeldet. Credentials gespeichert in %s/credentials.json\n"
 
 [logout]
