@@ -25,7 +25,8 @@ error_prefix = "エラー"
 missing_subcommand = "サブコマンドがありません（'%s help' を試してください）"
 unknown_subcommand = "不明な '%s' サブコマンド %q"
 pick_subcommand = "%s — サブコマンドを選択してください:"
-back = "← 戻る"
+back = "戻る"
+back_hint = "← 一つ上へ"
 browser_open_failed = "ブラウザを自動で開けませんでした — 上の URL をコピーしてください。"
 browser_open_failed_qr = "ブラウザを自動で開けませんでした — QR をスキャンするか、上の URL をコピーしてください。"
 open_browser_now = "ブラウザを開きますか？"
@@ -118,7 +119,7 @@ notify = "アプリ内通知 (list / count / read / readall)"
 dm = "ダイレクトメッセージ (threads / open / send / messages / read)"
 seller = "チャネルマーケットプレイスのセラー向けコマンド"
 edge = "BYO-GPU サプライヤーエージェント (docker + ollama)"
-admin = "運用コマンド（admin ロールが必要）"
+admin = "運用コマンド"
 proxy = "ローカルサニタイザプロキシ (SDK リクエストのプライバシーフィルタ)"
 mcp = "AI CLI 向け MCP サーバー (Claude Code / Codex / Gemini)"
 doctor = "セルフチェック（認証情報、ゲートウェイ、サニタイザ、ツール）"
@@ -805,6 +806,33 @@ status_set = "marketplace.enabled: %s\n"
 no_change = "marketplace.enabled: すでに %s — 変更なし\n"
 changed = "marketplace.enabled: %s → %s\n"
 
+[doctor.badge]
+ok = "正常"
+warn = "警告"
+fail = "失敗"
+
+[doctor.check]
+creds = "認証情報をキャッシュ"
+session = "セッション認証済み"
+token = "relay token 発行可能"
+backend = "バックエンド到達可能"
+sanitizer = "サニタイザープロキシ"
+
+[doctor.hint]
+login = "まず 'everyapi auth login' を実行"
+relogin = "'everyapi auth login' を再実行"
+mint = "'everyapi token create --name prod --unlimited' で発行"
+proxy_start = "'everyapi proxy start' で起動"
+prefix = "ヒント: "
+
+[doctor.detail]
+logged_in = "%s としてログイン中 (id=%d)"
+tokens = "有効 %d / 合計 %d"
+tokens_none = "%d 個の token、有効 0"
+proxy_down = "未起動（--direct はどのみち回避します）"
+proxy_unhealthy = "待ち受け中だが異常 (%s)"
+proxy_ok = "127.0.0.1:8786 で待ち受け中"
+
 [doctor.section]
 account = "アカウント"
 gateway = "ゲートウェイ"
@@ -817,6 +845,7 @@ green = "結果: すべて正常。"
 
 [doctor]
 tally = "(ok=%d warn=%d fail=%d)"
+failed_err = "doctor が失敗を検出しました（上記参照）"
 usage = '''
 everyapi doctor — セルフチェック (認証情報、ゲートウェイ、サニタイザ、ツール)
 
@@ -833,8 +862,8 @@ count = "%d 個の MCP クライアントを認識:"
 registered_count = "%d / %d が登録済み。"
 state_registered = "登録済み"
 state_not_registered = "未登録"
-state_not_installed = "PATH 上にありません"
-state_probe_failed = "(プローブ失敗)"
+state_not_installed = "未インストール"
+state_probe_failed = "検出失敗"
 run_install_hint = "'everyapi mcp install %s' を実行してください"
 
 [mcp]

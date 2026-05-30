@@ -17,10 +17,11 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/internal/style"
 	"github.com/everyapi-ai/everyapi-ai/internal/tools"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -39,10 +40,10 @@ func Run(args []string) error {
 	report := newReport()
 
 	report.section(i18n.T("doctor.section.account"))
-	report.run("credentials cached", func() (string, string, error) {
+	report.run(i18n.T("doctor.check.creds"), func() (string, string, error) {
 		creds, err := config.Load()
 		if errors.Is(err, config.ErrNoCredentials) {
-			return "", "run 'everyapi auth login' first", err
+			return "", i18n.T("doctor.hint.login"), err
 		}
 		if err != nil {
 			return "", "", err
@@ -59,18 +60,18 @@ func Run(args []string) error {
 	}
 	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
 
-	report.run("session authenticated", func() (string, string, error) {
+	report.run(i18n.T("doctor.check.session"), func() (string, string, error) {
 		self, err := client.GetSelf(ctx)
 		if err != nil {
 			if api.IsUnauthorized(err) {
-				return "", "re-run 'everyapi auth login'", err
+				return "", i18n.T("doctor.hint.relogin"), err
 			}
 			return "", "", err
 		}
-		return fmt.Sprintf("logged in as %s (id=%d)", self.Username, self.ID), "", nil
+		return fmt.Sprintf(i18n.T("doctor.detail.logged_in"), self.Username, self.ID), "", nil
 	})
 
-	report.run("relay token mintable", func() (string, string, error) {
+	report.run(i18n.T("doctor.check.token"), func() (string, string, error) {
 		toks, err := client.ListTokens(ctx)
 		if err != nil {
 			return "", "", err
@@ -82,15 +83,15 @@ func Run(args []string) error {
 			}
 		}
 		if enabled == 0 {
-			return fmt.Sprintf("%d token(s), 0 enabled", len(toks)),
-				"mint one with 'everyapi token create --name prod --unlimited'",
+			return fmt.Sprintf(i18n.T("doctor.detail.tokens_none"), len(toks)),
+				i18n.T("doctor.hint.mint"),
 				errSoft("no enabled tokens")
 		}
-		return fmt.Sprintf("%d enabled / %d total", enabled, len(toks)), "", nil
+		return fmt.Sprintf(i18n.T("doctor.detail.tokens"), enabled, len(toks)), "", nil
 	})
 
 	report.section(i18n.T("doctor.section.gateway"))
-	report.run("backend reachable", func() (string, string, error) {
+	report.run(i18n.T("doctor.check.backend"), func() (string, string, error) {
 		st, err := client.GetStatus(ctx)
 		if err != nil {
 			return "", "", err
@@ -98,7 +99,7 @@ func Run(args []string) error {
 		return fmt.Sprintf("quota_per_unit=%g", st.QuotaPerUnit), "", nil
 	})
 
-	report.run("sanitizer proxy", func() (string, string, error) {
+	report.run(i18n.T("doctor.check.sanitizer"), func() (string, string, error) {
 		// Sanitizer is best-effort. Probe the default listen
 		// (loopback:8786 — current default) with a 1s timeout; if
 		// no socket answers we surface as WARN, not FAIL, because
@@ -106,15 +107,15 @@ func Run(args []string) error {
 		hc := &http.Client{Timeout: 1 * time.Second}
 		resp, err := hc.Get("http://127.0.0.1:8786/healthz")
 		if err != nil {
-			return "not running (--direct will bypass it anyway)",
-				"start with 'everyapi proxy start'",
+			return i18n.T("doctor.detail.proxy_down"),
+				i18n.T("doctor.hint.proxy_start"),
 				errSoft(err.Error())
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Sprintf("listening but unhealthy (%s)", resp.Status), "", errSoft(resp.Status)
+			return fmt.Sprintf(i18n.T("doctor.detail.proxy_unhealthy"), resp.Status), "", errSoft(resp.Status)
 		}
-		return "listening on 127.0.0.1:8786", "", nil
+		return i18n.T("doctor.detail.proxy_ok"), "", nil
 	})
 
 	report.section(i18n.T("doctor.section.tools"))
@@ -143,20 +144,28 @@ func Run(args []string) error {
 // status badge fit without ragged wrapping on an 80-col terminal.
 // Names exceeding nameCol just push the badge right; better than
 // truncating something the user is trying to copy into a ticket.
-const (
-	nameCol      = 28
-	statusBadgeW = 6 // "  ok  " / " warn " / " fail "
-)
+const nameCol = 28
 
 type report struct {
 	failed     bool
 	warned     bool
 	totals     map[string]int
 	sectionLed bool // suppresses the leading blank-line before the very first section
+	badgeW     int  // display width of the widest localized status word
 }
 
 func newReport() *report {
-	return &report{totals: map[string]int{}}
+	r := &report{totals: map[string]int{}}
+	for _, w := range []string{
+		i18n.T("doctor.badge.ok"),
+		i18n.T("doctor.badge.warn"),
+		i18n.T("doctor.badge.fail"),
+	} {
+		if dw := style.Width(w); dw > r.badgeW {
+			r.badgeW = dw
+		}
+	}
+	return r
 }
 
 func (r *report) section(title string) {
@@ -165,31 +174,45 @@ func (r *report) section(title string) {
 	}
 	r.sectionLed = true
 	cliout.Printf("%s\n", paint(title, ansiBold))
-	cliout.Printf("%s\n", paint(repeat("─", len(title)), ansiDim))
+	// Underline by DISPLAY width — len(title) over-counts CJK titles.
+	cliout.Printf("%s\n", paint(repeat("─", style.Width(title)), ansiDim))
 }
 
 func (r *report) run(name string, fn func() (detail, hint string, err error)) {
 	detail, hint, err := fn()
-	var badge, color string
+	var word, color string
 	switch {
 	case err == nil:
-		badge, color = "  ok  ", ansiGreen
+		word, color = i18n.T("doctor.badge.ok"), ansiGreen
 		r.totals["ok"]++
 	case isSoft(err):
-		badge, color = " warn ", ansiYellow
+		word, color = i18n.T("doctor.badge.warn"), ansiYellow
 		r.warned = true
 		r.totals["warn"]++
 	default:
-		badge, color = " fail ", ansiRed
+		word, color = i18n.T("doctor.badge.fail"), ansiRed
 		r.failed = true
 		r.totals["fail"]++
 		detail = err.Error()
 	}
-	cliout.Printf("  %s  %-*s  %s\n", paint(badge, color, ansiInverse), nameCol, name, detail)
+	// Reverse-video chip: the status word padded to badgeW with a
+	// 1-space margin each side. The name column pads by DISPLAY width so
+	// CJK labels keep the detail column aligned with ASCII rows.
+	chip := paint(" "+word+repeat(" ", r.badgeW-style.Width(word))+" ", color, ansiInverse)
+	cliout.Printf("  %s  %s  %s\n", chip, padTo(name, nameCol), detail)
 	if err != nil && hint != "" {
-		cliout.Printf("  %s  %-*s  %s%s\n",
-			repeat(" ", statusBadgeW), nameCol, "", paint("hint: ", ansiDim), hint)
+		cliout.Printf("  %s  %s  %s%s\n",
+			repeat(" ", r.badgeW+2), repeat(" ", nameCol),
+			paint(i18n.T("doctor.hint.prefix"), ansiDim), hint)
 	}
+}
+
+// padTo right-pads s to w display columns (no-op when already wider).
+func padTo(s string, w int) string {
+	if d := w - style.Width(s); d > 0 {
+		return s + repeat(" ", d)
+	}
+	return s
 }
 
 func (r *report) summarize() {
@@ -209,7 +232,7 @@ func (r *report) summarize() {
 
 func (r *report) err() error {
 	if r.failed {
-		return errors.New("doctor reported failures (see rows above)")
+		return errors.New(i18n.T("doctor.failed_err"))
 	}
 	return nil
 }

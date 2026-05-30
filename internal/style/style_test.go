@@ -39,3 +39,30 @@ func TestBold_PlainWhenUnstyled(t *testing.T) {
 		t.Fatalf("want %q, got %q", "login", got)
 	}
 }
+
+func TestBadge_StyledVsPlain(t *testing.T) {
+	// Styled: reverse-video + the tone's color SGR wraps the text.
+	styletest.WithColorProfile(t, termenv.TrueColor)
+	got := style.Badge(" registered ", style.ToneGreen)
+	if !strings.Contains(got, "\x1b[7m") || !strings.Contains(got, "\x1b[32m") {
+		t.Fatalf("want reverse + green SGR, got %q", got)
+	}
+	if !strings.Contains(got, " registered ") {
+		t.Fatalf("badge must keep its text, got %q", got)
+	}
+
+	// Unstyled: plain text, no escapes — so piped/NO_COLOR output stays
+	// readable and column math (style.Width) still works.
+	lipgloss.SetColorProfile(termenv.Ascii)
+	if got := style.Badge(" registered ", style.ToneRed); got != " registered " {
+		t.Fatalf("want plain text, got %q", got)
+	}
+}
+
+func TestWidth_CJK(t *testing.T) {
+	// A wide CJK rune counts as 2 columns; this is why badge/back-row
+	// padding uses Width, not len.
+	if got := style.Width("未注册"); got != 6 {
+		t.Errorf("Width(未注册) = %d, want 6", got)
+	}
+}

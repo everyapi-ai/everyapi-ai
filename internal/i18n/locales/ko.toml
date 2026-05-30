@@ -25,7 +25,8 @@ error_prefix = "오류"
 missing_subcommand = "하위 명령이 없습니다 ('%s help' 를 시도해보세요)"
 unknown_subcommand = "알 수 없는 '%s' 하위 명령 %q"
 pick_subcommand = "%s — 하위 명령을 선택하세요:"
-back = "← 뒤로"
+back = "뒤로"
+back_hint = "← 상위로"
 browser_open_failed = "브라우저를 자동으로 열 수 없습니다 — 위 URL을 복사하세요."
 browser_open_failed_qr = "브라우저를 자동으로 열 수 없습니다 — QR을 스캔하거나 위 URL을 복사하세요."
 open_browser_now = "지금 브라우저를 열까요?"
@@ -118,7 +119,7 @@ notify = "앱 내 알림 (list / count / read / readall)"
 dm = "다이렉트 메시지 (threads / open / send / messages / read)"
 seller = "채널 마켓플레이스 셀러 명령"
 edge = "BYO-GPU 공급자 에이전트 (docker + ollama)"
-admin = "운영 명령 (admin 역할 필요)"
+admin = "운영 명령"
 proxy = "로컬 새너타이저 프록시 (SDK 요청 프라이버시 필터)"
 mcp = "AI CLI 용 MCP 서버 (Claude Code / Codex / Gemini)"
 doctor = "자가 진단 (인증 정보, 게이트웨이, 새너타이저, 도구)"
@@ -804,6 +805,33 @@ status_set = "marketplace.enabled: %s\n"
 no_change = "marketplace.enabled: 이미 %s — 변경 없음\n"
 changed = "marketplace.enabled: %s → %s\n"
 
+[doctor.badge]
+ok = "정상"
+warn = "경고"
+fail = "실패"
+
+[doctor.check]
+creds = "자격 증명 캐시됨"
+session = "세션 인증됨"
+token = "relay token 발급 가능"
+backend = "백엔드 연결 가능"
+sanitizer = "새니타이저 프록시"
+
+[doctor.hint]
+login = "먼저 'everyapi auth login' 실행"
+relogin = "'everyapi auth login' 다시 실행"
+mint = "'everyapi token create --name prod --unlimited' 로 발급"
+proxy_start = "'everyapi proxy start' 로 시작"
+prefix = "힌트: "
+
+[doctor.detail]
+logged_in = "%s 로 로그인됨 (id=%d)"
+tokens = "활성 %d / 전체 %d"
+tokens_none = "token %d 개, 활성 0"
+proxy_down = "실행 중 아님 (--direct 는 어차피 우회함)"
+proxy_unhealthy = "수신 중이나 비정상 (%s)"
+proxy_ok = "127.0.0.1:8786 에서 수신 중"
+
 [doctor.section]
 account = "계정"
 gateway = "게이트웨이"
@@ -816,6 +844,7 @@ green = "결과: 모두 정상."
 
 [doctor]
 tally = "(ok=%d warn=%d fail=%d)"
+failed_err = "doctor 가 실패를 보고함 (위 참조)"
 usage = '''
 everyapi doctor — 자가 진단 (인증 정보, 게이트웨이, 새너타이저, 도구)
 
@@ -832,8 +861,8 @@ count = "알려진 MCP 클라이언트 %d 개:"
 registered_count = "%d / %d 등록됨."
 state_registered = "등록됨"
 state_not_registered = "미등록"
-state_not_installed = "PATH 에 없음"
-state_probe_failed = "(프로브 실패)"
+state_not_installed = "미설치"
+state_probe_failed = "검사 실패"
 run_install_hint = "'everyapi mcp install %s' 를 실행하세요"
 
 [mcp]

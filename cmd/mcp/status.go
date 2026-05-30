@@ -10,6 +10,7 @@ import (
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/internal/style"
 )
 
 // probeClient returns one of these state constants. Kept as
@@ -45,30 +46,51 @@ func Status(args []string) error {
 	names := clientNames()
 	cliout.Printf(i18n.T("mcp.status.count")+"\n\n", len(names))
 
+	// Align the colored state badge to the widest localized state word
+	// (display width — the words are CJK in some locales) and the client
+	// column to the widest name (ASCII).
+	badgeW := 0
+	for _, w := range []string{
+		i18n.T("mcp.status.state_registered"),
+		i18n.T("mcp.status.state_not_registered"),
+		i18n.T("mcp.status.state_not_installed"),
+		i18n.T("mcp.status.state_probe_failed"),
+	} {
+		if dw := style.Width(w); dw > badgeW {
+			badgeW = dw
+		}
+	}
+	nameW := 0
+	for _, n := range names {
+		if len(n) > nameW {
+			nameW = len(n)
+		}
+	}
+
 	registered := 0
 	for _, n := range names {
 		c := mcpClients[n]
-		state := probeClient(c)
 		var (
-			label string
-			extra = c.ConfigPath
+			word  string
+			tone  style.Tone
+			extra string
 		)
-		switch state {
-		case stateNotInstalled:
-			label = i18n.T("mcp.status.state_not_installed")
-			// c.InstallHint already starts with "Install …" so just
-			// surface it verbatim instead of prefixing "install:".
-			extra = c.InstallHint
+		switch probeClient(c) {
 		case stateRegistered:
-			label = i18n.T("mcp.status.state_registered")
+			word, tone, extra = i18n.T("mcp.status.state_registered"), style.ToneGreen, c.ConfigPath
 			registered++
 		case stateNotRegistered:
-			label = i18n.T("mcp.status.state_not_registered")
-			extra = fmt.Sprintf(i18n.T("mcp.status.run_install_hint"), n)
+			word, tone, extra = i18n.T("mcp.status.state_not_registered"), style.ToneYellow, fmt.Sprintf(i18n.T("mcp.status.run_install_hint"), n)
+		case stateNotInstalled:
+			// c.InstallHint already starts with "Install …".
+			word, tone, extra = i18n.T("mcp.status.state_not_installed"), style.ToneGray, c.InstallHint
 		default:
-			label = i18n.T("mcp.status.state_probe_failed")
+			word, tone, extra = i18n.T("mcp.status.state_probe_failed"), style.ToneRed, ""
 		}
-		cliout.Printf("  %-7s %-15s  %s\n", n, label, extra)
+		// Pad the word to badgeW (display width) inside a 1-space margin
+		// so every chip is the same size.
+		chip := style.Badge(" "+word+strings.Repeat(" ", badgeW-style.Width(word))+" ", tone)
+		cliout.Printf("  %s  %-*s  %s\n", chip, nameW, n, extra)
 	}
 	cliout.Printf("\n"+i18n.T("mcp.status.registered_count")+"\n", registered, len(names))
 	return nil
@@ -86,12 +108,12 @@ func Status(args []string) error {
 // `everyapi mcp status` and any caller that polls it.
 func probeClient(c *mcpClient) string {
 	if _, err := exec.LookPath(c.Name); err != nil {
-		return "not on PATH"
+		return stateNotInstalled
 	}
 	if c.ListArgv == nil {
 		// Defensive: an entry without a ListArgv can't be probed.
 		// Treat as unknown so the rest of the table still renders.
-		return "(probe failed)"
+		return stateProbeFailed
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
 	defer cancel()
@@ -102,13 +124,13 @@ func probeClient(c *mcpClient) string {
 		// are registered (printed e.g. "No MCP servers configured")
 		// — a non-zero exit means the binary itself broke, not that
 		// our server is missing. A context-deadline error lands here
-		// too; the same "(probe failed)" label is the right outcome.
-		return "(probe failed)"
+		// too; the same "probe failed" label is the right outcome.
+		return stateProbeFailed
 	}
 	if strings.Contains(string(out), "everyapi") {
-		return "registered"
+		return stateRegistered
 	}
-	return "not registered"
+	return stateNotRegistered
 }
 
 // probeTimeout caps each per-client `mcp list` shell-out. 5s is

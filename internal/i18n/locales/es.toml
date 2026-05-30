@@ -31,7 +31,8 @@ error_prefix = "Error"
 missing_subcommand = "falta subcomando (prueba '%s help')"
 unknown_subcommand = "subcomando '%s' desconocido %q"
 pick_subcommand = "%s — elige un subcomando:"
-back = "← atrás"
+back = "atrás"
+back_hint = "← subir un nivel"
 browser_open_failed = "No se pudo abrir el navegador automáticamente — copia la URL de arriba."
 browser_open_failed_qr = "No se pudo abrir el navegador automáticamente — escanea el QR o copia la URL de arriba."
 open_browser_now = "¿Abrir el navegador ahora?"
@@ -124,7 +125,7 @@ notify = "Notificaciones en la app (list / count / read / readall)"
 dm = "Mensajes directos (threads / open / send / messages / read)"
 seller = "Comandos de vendedor del marketplace de canales"
 edge = "Agente proveedor BYO-GPU (docker + ollama)"
-admin = "Comandos de operador (requiere rol admin)"
+admin = "Comandos de operador"
 proxy = "Proxy sanitizador local (filtro de privacidad para peticiones SDK)"
 mcp = "Servidor MCP para CLIs de IA (Claude Code / Codex / Gemini)"
 doctor = "Auto-chequeo (credenciales, gateway, sanitizador, herramientas)"
@@ -815,6 +816,33 @@ status_set = "marketplace.enabled: %s\n"
 no_change = "marketplace.enabled: ya está %s — sin cambios\n"
 changed = "marketplace.enabled: %s → %s\n"
 
+[doctor.badge]
+ok = "ok"
+warn = "aviso"
+fail = "fallo"
+
+[doctor.check]
+creds = "credenciales en caché"
+session = "sesión autenticada"
+token = "relay token emitible"
+backend = "backend accesible"
+sanitizer = "proxy sanitizador"
+
+[doctor.hint]
+login = "ejecuta primero 'everyapi auth login'"
+relogin = "vuelve a ejecutar 'everyapi auth login'"
+mint = "emite uno con 'everyapi token create --name prod --unlimited'"
+proxy_start = "inícialo con 'everyapi proxy start'"
+prefix = "pista: "
+
+[doctor.detail]
+logged_in = "conectado como %s (id=%d)"
+tokens = "%d activos / %d en total"
+tokens_none = "%d token(s), 0 activos"
+proxy_down = "no en ejecución (--direct lo omite igualmente)"
+proxy_unhealthy = "escuchando pero no sano (%s)"
+proxy_ok = "escuchando en 127.0.0.1:8786"
+
 [doctor.section]
 account = "Cuenta"
 gateway = "Gateway"
@@ -827,6 +855,7 @@ green = "Resultado: todo en verde."
 
 [doctor]
 tally = "(ok=%d warn=%d fail=%d)"
+failed_err = "doctor reportó fallos (ver filas arriba)"
 usage = '''
 everyapi doctor — auto-chequeo (credenciales, gateway, sanitizador, herramientas)
 
@@ -843,8 +872,8 @@ count = "%d cliente(s) MCP conocido(s):"
 registered_count = "%d de %d registrados."
 state_registered = "registrado"
 state_not_registered = "no registrado"
-state_not_installed = "no está en PATH"
-state_probe_failed = "(prueba fallida)"
+state_not_installed = "no instalado"
+state_probe_failed = "fallo de sondeo"
 run_install_hint = "ejecuta 'everyapi mcp install %s'"
 
 [mcp]

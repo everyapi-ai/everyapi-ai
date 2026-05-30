@@ -352,7 +352,7 @@ var commands = []command{
 		{name: "resume", desc: "Clear a manual pause — node rejoins routing on next heartbeat", args: []string{"resume"}},
 		{name: "remove", desc: "Remove the active node + delete backend row", args: []string{"remove"}},
 	}},
-	{name: "admin", desc: "Operator commands (admin role required)", adminOnly: true, requireLogin: true, run: admin.Run, subs: []subcommand{
+	{name: "admin", desc: "Operator commands", adminOnly: true, requireLogin: true, run: admin.Run, subs: []subcommand{
 		{name: "marketplace status", desc: "Show marketplace.enabled flag", args: []string{"marketplace", "status"}},
 		{name: "marketplace on", desc: "Open the marketplace", args: []string{"marketplace", "on"}},
 		{name: "marketplace off", desc: "Close the marketplace", args: []string{"marketplace", "off"}},
@@ -528,13 +528,13 @@ func runLauncher() error {
 		}
 		isAdmin := loggedIn && creds.IsAdmin()
 
-		sections := launcherSections(loggedIn, isAdmin)
+		sections, maxName := launcherSections(loggedIn, isAdmin)
 		var chosen command
 		if menuLayout() == menuLayoutNested {
 			// Nested: category picker → command picker. Esc at the
 			// category level cancels the whole launcher (same as Esc on
 			// the flat picker did); Esc inside a category goes back up.
-			c, perr := pickCommandNested(sections)
+			c, perr := pickCommandNested(sections, maxName)
 			if perr != nil {
 				if errors.Is(perr, cliprompt.ErrPickCancelled) {
 					return nil
@@ -706,8 +706,14 @@ type menuSection struct {
 // categories. It reuses launcherRows for the auth filtering and the
 // global name-column alignment, then buckets the parallel slices by
 // groupOf — empty categories are dropped.
-func launcherSections(loggedIn, isAdmin bool) []menuSection {
+func launcherSections(loggedIn, isAdmin bool) ([]menuSection, int) {
 	visible, labels := launcherRows(loggedIn, isAdmin)
+	maxName := 0
+	for _, c := range visible {
+		if len(c.name) > maxName {
+			maxName = len(c.name)
+		}
+	}
 	idxByGroup := make(map[string][]int, len(launcherGroupOrder))
 	for i, c := range visible {
 		g := groupOf(c.name)
@@ -726,7 +732,21 @@ func launcherSections(loggedIn, isAdmin bool) []menuSection {
 		}
 		sections = append(sections, s)
 	}
-	return sections
+	return sections, maxName
+}
+
+// backRowLabel renders the sub-picker "go up" row in the same two-column
+// shape as the command rows: the localized back word in the (bold) name
+// column, an arrow hint in the description column. Padding is by display
+// width (style.Width), so the wide CJK back word still aligns its hint
+// with the command descriptions.
+func backRowLabel(maxName int) string {
+	word := i18n.T("common.back")
+	pad := maxName - style.Width(word)
+	if pad < 0 {
+		pad = 0
+	}
+	return style.Bold(word) + strings.Repeat(" ", pad) + "  " + i18n.T("common.back_hint")
 }
 
 // menuLayout reads the persisted launcher layout preference. Defaults
@@ -744,7 +764,7 @@ func menuLayout() string {
 // category returns to the category list; Esc at the category level
 // returns ErrPickCancelled so the caller exits the launcher. A trailing
 // "back" row in each category mirrors the Esc-to-go-up affordance.
-func pickCommandNested(sections []menuSection) (command, error) {
+func pickCommandNested(sections []menuSection, maxName int) (command, error) {
 	titles := make([]string, len(sections))
 	for i, s := range sections {
 		titles[i] = s.title
@@ -757,7 +777,7 @@ func pickCommandNested(sections []menuSection) (command, error) {
 		}
 		gsel = gidx
 		s := sections[gidx]
-		rows := append(append([]string{}, s.labels...), i18n.T("common.back"))
+		rows := append(append([]string{}, s.labels...), backRowLabel(maxName))
 		cidx, cerr := cliprompt.PickWithSelected(s.title, rows, 0)
 		if cerr != nil {
 			if errors.Is(cerr, cliprompt.ErrPickCancelled) {
@@ -887,7 +907,7 @@ func runSubPicker(c command) error {
 	for i, s := range c.subs {
 		labels[i] = nameCell(s.name, maxName) + "  " + subcommandDesc(c.name, s)
 	}
-	labels[backIdx] = i18n.T("common.back")
+	labels[backIdx] = backRowLabel(maxName)
 	prompt := fmt.Sprintf(i18n.T("common.pick_subcommand"), c.name)
 	lastSel := 0
 	for {

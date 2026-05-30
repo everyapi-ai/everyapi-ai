@@ -57,3 +57,45 @@ func Emph(s string) string {
 		return Bold(m[len("**") : len(m)-len("**")])
 	})
 }
+
+// Width returns the printable display width of s — CJK / wide runes
+// count as 2 columns, ANSI escapes as 0. Use it (not len) when aligning
+// columns that may contain non-ASCII text (e.g. a localized menu label).
+func Width(s string) int {
+	return lipgloss.Width(s)
+}
+
+// Tone selects a Badge's color.
+type Tone int
+
+const (
+	ToneGreen  Tone = iota // success / present
+	ToneYellow             // attention / action needed
+	ToneRed                // error / failure
+	ToneGray               // absent / inactive
+)
+
+func (t Tone) sgr() string {
+	switch t {
+	case ToneYellow:
+		return "\x1b[33m"
+	case ToneRed:
+		return "\x1b[31m"
+	case ToneGray:
+		return "\x1b[90m"
+	default:
+		return "\x1b[32m"
+	}
+}
+
+// Badge renders s as a reverse-video colored chip (the foreground color
+// becomes the chip's fill). TTY-aware: returns s unchanged when output
+// is unstyled (NO_COLOR / piped / dumb terminal), so callers still get
+// readable text. Pad s to a fixed display width before calling when
+// aligning a column of badges.
+func Badge(s string, t Tone) string {
+	if lipgloss.ColorProfile() == termenv.Ascii {
+		return s
+	}
+	return "\x1b[7m" + t.sgr() + s + "\x1b[0m"
+}

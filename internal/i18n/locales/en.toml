@@ -27,7 +27,8 @@ error_prefix = "Error"
 missing_subcommand = "missing subcommand (try '%s help')"
 unknown_subcommand = "unknown '%s' subcommand %q"
 pick_subcommand = "%s — pick a subcommand:"
-back = "← back"
+back = "back"
+back_hint = "← up a level"
 browser_open_failed = "Couldn't open the browser automatically — copy the URL above."
 browser_open_failed_qr = "Couldn't open the browser automatically — scan the QR or copy the URL above."
 open_browser_now = "Open the browser now?"
@@ -109,7 +110,7 @@ notify = "In-app **notifications** (list / count / read / readall)"
 dm = "**Direct messages** (threads / open / send / messages / read)"
 seller = "**Channel-marketplace** seller commands"
 edge = "**BYO-GPU** supplier agent (docker + ollama)"
-admin = "**Operator** commands (admin role required)"
+admin = "**Operator** commands"
 proxy = "Local **sanitizer proxy** (privacy filter for SDK requests)"
 mcp = "**MCP server** for AI CLIs (Claude Code / Codex / Gemini)"
 doctor = "**Self-check** (creds, gateway, sanitizer, tools)"
@@ -797,6 +798,33 @@ status_set = "marketplace.enabled: %s\n"
 no_change = "marketplace.enabled: already %s — no change\n"
 changed = "marketplace.enabled: %s → %s\n"
 
+[doctor.badge]
+ok = "ok"
+warn = "warn"
+fail = "fail"
+
+[doctor.check]
+creds = "credentials cached"
+session = "session authenticated"
+token = "relay token mintable"
+backend = "backend reachable"
+sanitizer = "sanitizer proxy"
+
+[doctor.hint]
+login = "run 'everyapi auth login' first"
+relogin = "re-run 'everyapi auth login'"
+mint = "mint one with 'everyapi token create --name prod --unlimited'"
+proxy_start = "start with 'everyapi proxy start'"
+prefix = "hint: "
+
+[doctor.detail]
+logged_in = "logged in as %s (id=%d)"
+tokens = "%d enabled / %d total"
+tokens_none = "%d token(s), 0 enabled"
+proxy_down = "not running (--direct will bypass it anyway)"
+proxy_unhealthy = "listening but unhealthy (%s)"
+proxy_ok = "listening on 127.0.0.1:8786"
+
 [doctor.section]
 account = "Account"
 gateway = "Gateway"
@@ -809,6 +837,7 @@ green = "Result: all green."
 
 [doctor]
 tally = "(ok=%d warn=%d fail=%d)"
+failed_err = "doctor reported failures (see rows above)"
 usage = '''
 everyapi doctor — self-check (creds, gateway, sanitizer, tools)
 
@@ -825,8 +854,8 @@ count = "%d MCP client(s) known:"
 registered_count = "%d of %d registered."
 state_registered = "registered"
 state_not_registered = "not registered"
-state_not_installed = "not on PATH"
-state_probe_failed = "(probe failed)"
+state_not_installed = "not installed"
+state_probe_failed = "probe failed"
 run_install_hint = "run 'everyapi mcp install %s'"
 
 [mcp]

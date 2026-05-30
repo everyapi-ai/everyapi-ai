@@ -29,7 +29,8 @@ error_prefix = "Fehler"
 missing_subcommand = "fehlender Unterbefehl (versuche '%s help')"
 unknown_subcommand = "unbekannter '%s'-Unterbefehl %q"
 pick_subcommand = "%s — wähle einen Unterbefehl:"
-back = "← zurück"
+back = "zurück"
+back_hint = "← eine Ebene hoch"
 browser_open_failed = "Browser konnte nicht automatisch geöffnet werden — kopiere die URL oben."
 browser_open_failed_qr = "Browser konnte nicht automatisch geöffnet werden — scanne den QR oder kopiere die URL oben."
 open_browser_now = "Jetzt den Browser öffnen?"
@@ -122,7 +123,7 @@ notify = "In-App-Benachrichtigungen (list / count / read / readall)"
 dm = "Direktnachrichten (threads / open / send / messages / read)"
 seller = "Verkäuferbefehle des Channel-Marketplaces"
 edge = "BYO-GPU-Anbieter-Agent (docker + ollama)"
-admin = "Operator-Befehle (admin-Rolle erforderlich)"
+admin = "Operator-Befehle"
 proxy = "Lokaler Sanitizer-Proxy (Privatsphäre-Filter für SDK-Anfragen)"
 mcp = "MCP-Server für KI-CLIs (Claude Code / Codex / Gemini)"
 doctor = "Selbsttest (Anmeldedaten, Gateway, Sanitizer, Tools)"
@@ -812,6 +813,33 @@ status_set = "marketplace.enabled: %s\n"
 no_change = "marketplace.enabled: bereits %s — keine Änderung\n"
 changed = "marketplace.enabled: %s → %s\n"
 
+[doctor.badge]
+ok = "ok"
+warn = "Warnung"
+fail = "Fehler"
+
+[doctor.check]
+creds = "Zugangsdaten zwischengespeichert"
+session = "Sitzung authentifiziert"
+token = "relay-Token erzeugbar"
+backend = "Backend erreichbar"
+sanitizer = "Sanitizer-Proxy"
+
+[doctor.hint]
+login = "zuerst 'everyapi auth login' ausführen"
+relogin = "'everyapi auth login' erneut ausführen"
+mint = "mit 'everyapi token create --name prod --unlimited' erzeugen"
+proxy_start = "mit 'everyapi proxy start' starten"
+prefix = "Tipp: "
+
+[doctor.detail]
+logged_in = "angemeldet als %s (id=%d)"
+tokens = "%d aktiv / %d gesamt"
+tokens_none = "%d Token, 0 aktiv"
+proxy_down = "läuft nicht (--direct umgeht ihn ohnehin)"
+proxy_unhealthy = "lauscht, aber ungesund (%s)"
+proxy_ok = "lauscht auf 127.0.0.1:8786"
+
 [doctor.section]
 account = "Konto"
 gateway = "Gateway"
@@ -824,6 +852,7 @@ green = "Ergebnis: alles grün."
 
 [doctor]
 tally = "(ok=%d warn=%d fail=%d)"
+failed_err = "doctor meldete Fehler (siehe oben)"
 usage = '''
 everyapi doctor — Selbsttest (Anmeldedaten, Gateway, Sanitizer, Tools)
 
@@ -840,8 +869,8 @@ count = "%d bekannte MCP-Client(s):"
 registered_count = "%d von %d registriert."
 state_registered = "registriert"
 state_not_registered = "nicht registriert"
-state_not_installed = "nicht im PATH"
-state_probe_failed = "(Probe fehlgeschlagen)"
+state_not_installed = "nicht installiert"
+state_probe_failed = "Prüfung fehlgeschlagen"
 run_install_hint = "führe 'everyapi mcp install %s' aus"
 
 [mcp]

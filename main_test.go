@@ -13,6 +13,8 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/internal/style"
 	"github.com/everyapi-ai/everyapi-ai/internal/styletest"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -283,7 +285,7 @@ func TestEveryCommandGrouped(t *testing.T) {
 // visible command lands in exactly one section (no drops, no dupes).
 func TestLauncherSections_PartitionsInOrder(t *testing.T) {
 	visible, _ := launcherRows(true, true)
-	sections := launcherSections(true, true)
+	sections, _ := launcherSections(true, true)
 	if len(sections) == 0 {
 		t.Fatal("no sections for a logged-in admin")
 	}
@@ -355,5 +357,21 @@ func TestNamespaceDispatchers_Surface(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "definitely-not-a-sub") {
 			t.Errorf("%sRun(bogus) = %v, want an error naming the bad sub", d.name, err)
 		}
+	}
+}
+
+// TestBackRowLabel_AlignsToDescColumn locks the sub-picker back row's
+// two-column shape: the localized hint must start at the same display
+// column as command descriptions (maxName + 2 spaces), even though the
+// back word may be wide CJK — i.e. padding is by display width, not len.
+func TestBackRowLabel_AlignsToDescColumn(t *testing.T) {
+	const maxName = 12
+	out := backRowLabel(maxName)
+	word, hint := i18n.T("common.back"), i18n.T("common.back_hint")
+	if !strings.Contains(out, word) || !strings.Contains(out, hint) {
+		t.Fatalf("backRowLabel = %q, want both %q and %q", out, word, hint)
+	}
+	if got, want := style.Width(out), maxName+2+style.Width(hint); got != want {
+		t.Errorf("display width = %d, want %d (maxName + 2 + hint)", got, want)
 	}
 }

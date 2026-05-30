@@ -15,7 +15,8 @@ error_prefix = "錯誤"
 missing_subcommand = "缺少子命令（試試 '%s help'）"
 unknown_subcommand = "未知的 '%s' 子命令 %q"
 pick_subcommand = "%s — 選一個子命令："
-back = "← 返回"
+back = "返回"
+back_hint = "← 上一層"
 browser_open_failed = "無法自動開啟瀏覽器 — 請複製上方 URL。"
 browser_open_failed_qr = "無法自動開啟瀏覽器 — 請掃描 QR code 或複製上方 URL。"
 open_browser_now = "現在開啟瀏覽器？"
@@ -108,7 +109,7 @@ notify = "站內通知（list / count / read / readall）"
 dm = "私訊（threads / open / send / messages / read）"
 seller = "賣方頻道市集命令"
 edge = "自帶 GPU 供應商代理（docker + ollama）"
-admin = "維運命令（需要管理員角色）"
+admin = "維運命令"
 proxy = "本機去敏代理（SDK 請求隱私過濾）"
 mcp = "AI CLI 的 MCP 伺服器（Claude Code / Codex / Gemini）"
 doctor = "本機自我檢查（憑證、閘道、代理、工具）"
@@ -793,6 +794,33 @@ status_set = "marketplace.enabled：%s\n"
 no_change = "marketplace.enabled：已是 %s — 無變更\n"
 changed = "marketplace.enabled：%s → %s\n"
 
+[doctor.badge]
+ok = "通過"
+warn = "告警"
+fail = "失敗"
+
+[doctor.check]
+creds = "憑證已快取"
+session = "工作階段已驗證"
+token = "可簽發 relay token"
+backend = "後端可達"
+sanitizer = "脫敏代理"
+
+[doctor.hint]
+login = "先執行 'everyapi auth login'"
+relogin = "重新執行 'everyapi auth login'"
+mint = "用 'everyapi token create --name prod --unlimited' 簽發一個"
+proxy_start = "用 'everyapi proxy start' 啟動"
+prefix = "提示："
+
+[doctor.detail]
+logged_in = "已登入為 %s（id=%d）"
+tokens = "已啟用 %d / 共 %d"
+tokens_none = "%d 個 token，0 個啟用"
+proxy_down = "未執行（--direct 會繞過它）"
+proxy_unhealthy = "在監聽但不健康（%s）"
+proxy_ok = "監聽於 127.0.0.1:8786"
+
 [doctor.section]
 account = "帳戶"
 gateway = "閘道"
@@ -805,6 +833,7 @@ green = "結果：全部通過。"
 
 [doctor]
 tally = "(通過=%d 警告=%d 失敗=%d)"
+failed_err = "doctor 檢出失敗項（見上方）"
 usage = '''
 everyapi doctor — 自我檢查（憑證、閘道、淨化器、工具）
 
@@ -821,8 +850,8 @@ count = "已知 %d 個 MCP 用戶端："
 registered_count = "%d / %d 已註冊。"
 state_registered = "已註冊"
 state_not_registered = "未註冊"
-state_not_installed = "PATH 上未安裝"
-state_probe_failed = "（探測失敗）"
+state_not_installed = "未安裝"
+state_probe_failed = "探測失敗"
 run_install_hint = "執行 'everyapi mcp install %s'"
 
 [mcp]
