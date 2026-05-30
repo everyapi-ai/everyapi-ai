@@ -38,7 +38,7 @@ everyapi — EveryAPI 命令列
   checkin         領取今日簽到額度
   user <子>       個人資訊 / 2FA / passkey / OAuth 綁定 / 推廣碼
   subscription <子>  訂閱方案 / 我的訂閱 / 計費偏好
-  use <工具>      透過 EveryAPI 啟動第三方 CLI（claude / codex / gemini）
+  use <工具>      透過 EveryAPI 啟動第三方 CLI（claude / codex / gemini / hermes）
   token <子>      管理 relay API token（list / show / create / update / key / revoke / usage）
   log <子>        請求日誌：list / stat / summary
   usage           按日用量
@@ -77,7 +77,7 @@ wallet = "儲值紀錄 / 付款方式 / 兌換碼"
 checkin = "領取今日簽到額度"
 user = "個人資訊 / 2FA / passkey / OAuth 綁定 / 推廣碼"
 subscription = "訂閱方案 / 我的訂閱 / 計費偏好"
-use = "透過 EveryAPI 啟動第三方 CLI（claude / codex / gemini）"
+use = "透過 EveryAPI 啟動第三方 CLI（claude / codex / gemini / hermes）"
 token = "管理 relay API token（list / create / key / revoke / …）"
 log = "請求日誌：list / stat / summary"
 usage = "按日額度用量"

@@ -282,6 +282,10 @@ func Use(args []string) error {
 	} else {
 		cliout.Printf(i18n.T("use.launching")+"\n", t.ExecName, creds.APIBase)
 	}
+	// Discard any terminal control-sequence reply (e.g. the OSC 11
+	// background-color report a huh picker triggered) still buffered on
+	// stdin, so it doesn't leak into the exec'd tool as phantom input.
+	cliprompt.DrainStdin()
 	return tools.Exec(t, env, extraArgs)
 }
 

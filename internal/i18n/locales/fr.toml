@@ -53,7 +53,7 @@ COMMANDES
   checkin         Réclamer le quota quotidien d'aujourd'hui
   user <sub>      Profil / 2FA / passkey / liaisons OAuth / code d'affiliation
   subscription <sub>  Plans d'abonnement / mon compte / préférence de facturation
-  use <outil>     Lancer un CLI tiers (claude / codex / gemini) via EveryAPI
+  use <outil>     Lancer un CLI tiers (claude / codex / gemini / hermes) via EveryAPI
   token <sub>     Gérer les tokens de relais (list / show / create / update / key / revoke / usage)
   log <sub>       Journal des requêtes : list / stat / summary
   usage           Utilisation de quota jour par jour
@@ -92,7 +92,7 @@ wallet = "Historique de paiements / méthodes / clés d'échange"
 checkin = "Réclamer le quota quotidien d'aujourd'hui"
 user = "Profil / 2FA / passkey / liaisons OAuth / code d'affiliation"
 subscription = "Plans d'abonnement / mon compte / préférence de facturation"
-use = "Lancer un CLI tiers (claude / codex / gemini) via EveryAPI"
+use = "Lancer un CLI tiers (claude / codex / gemini / hermes) via EveryAPI"
 token = "Gérer les tokens de relais (list / create / key / revoke / …)"
 log = "Journal des requêtes : list / stat / summary"
 usage = "Utilisation de quota jour par jour"

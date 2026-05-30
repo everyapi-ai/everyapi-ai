@@ -52,7 +52,7 @@ BEFEHLE
   checkin         Heutige Tageszuteilungs-Quota einlösen
   user <Sub>      Profil / 2FA / Passkey / OAuth-Bindungen / Affiliate-Code
   subscription <Sub>  Abopläne / eigene Abos / Abrechnungspräferenz
-  use <Tool>      Drittanbieter-CLI über EveryAPI starten (claude / codex / gemini)
+  use <Tool>      Drittanbieter-CLI über EveryAPI starten (claude / codex / gemini / hermes)
   token <Sub>     Relay-API-Tokens verwalten (list / show / create / update / key / revoke / usage)
   log <Sub>       Anfrage-Log: list / stat / summary
   usage           Tag-für-Tag Quota-Nutzung
@@ -91,7 +91,7 @@ wallet = "Zahlungsverlauf / Methoden / Einlöse-Schlüssel"
 checkin = "Heutige Tageszuteilungs-Quota einlösen"
 user = "Profil / 2FA / Passkey / OAuth-Bindungen / Affiliate-Code"
 subscription = "Abopläne / eigene Abos / Abrechnungspräferenz"
-use = "Drittanbieter-CLI über EveryAPI starten (claude / codex / gemini)"
+use = "Drittanbieter-CLI über EveryAPI starten (claude / codex / gemini / hermes)"
 token = "Relay-API-Tokens verwalten (list / create / key / revoke / …)"
 log = "Anfrage-Log: list / stat / summary"
 usage = "Tag-für-Tag Quota-Nutzung"

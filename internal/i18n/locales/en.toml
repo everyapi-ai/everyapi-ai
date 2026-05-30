@@ -50,7 +50,7 @@ COMMANDS
   **checkin**         Claim today's **daily-grant** quota
   **user** <sub>      **Profile** / 2FA / passkey / oauth bindings / aff code
   **subscription** <sub>  **Subscription** plans / self / billing preference
-  **use** <tool>      Launch a **third-party CLI** (claude / codex / gemini) via EveryAPI
+  **use** <tool>      Launch a **third-party CLI** (claude / codex / gemini / hermes) via EveryAPI
   **token** <sub>     Manage relay **API tokens** (list / show / create / update / key / revoke / usage)
   **log** <sub>       **Request log**: list / stat / summary
   **usage**           **Day-by-day** quota usage
@@ -89,7 +89,7 @@ wallet = "**Payment** history / methods / redemption keys"
 checkin = "Claim today's **daily-grant** quota"
 user = "**Profile** / 2FA / passkey / oauth bindings / aff code"
 subscription = "**Subscription** plans / self / billing preference"
-use = "Launch a **third-party CLI** (claude / codex / gemini) via EveryAPI"
+use = "Launch a **third-party CLI** (claude / codex / gemini / hermes) via EveryAPI"
 token = "Manage relay **API tokens** (list / create / key / revoke / …)"
 log = "**Request log**: list / stat / summary"
 usage = "**Day-by-day** quota usage"

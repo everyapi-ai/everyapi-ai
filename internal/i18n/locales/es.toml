@@ -54,7 +54,7 @@ COMANDOS
   checkin         Reclamar la cuota diaria de hoy
   user <sub>      Perfil / 2FA / passkey / vínculos OAuth / código de afiliado
   subscription <sub>  Planes de suscripción / mi cuenta / preferencia de facturación
-  use <herr>      Iniciar un CLI de terceros (claude / codex / gemini) vía EveryAPI
+  use <herr>      Iniciar un CLI de terceros (claude / codex / gemini / hermes) vía EveryAPI
   token <sub>     Gestionar tokens de relay (list / show / create / update / key / revoke / usage)
   log <sub>       Registro de peticiones: list / stat / summary
   usage           Uso de cuota por día
@@ -93,7 +93,7 @@ wallet = "Historial de pagos / métodos / claves de canje"
 checkin = "Reclamar la cuota diaria de hoy"
 user = "Perfil / 2FA / passkey / vínculos OAuth / código de afiliado"
 subscription = "Planes de suscripción / mi cuenta / preferencia de facturación"
-use = "Iniciar un CLI de terceros (claude / codex / gemini) vía EveryAPI"
+use = "Iniciar un CLI de terceros (claude / codex / gemini / hermes) vía EveryAPI"
 token = "Gestionar tokens de relay (list / create / key / revoke / …)"
 log = "Registro de peticiones: list / stat / summary"
 usage = "Uso de cuota por día"

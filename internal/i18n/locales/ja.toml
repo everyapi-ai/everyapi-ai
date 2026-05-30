@@ -48,7 +48,7 @@ everyapi — EveryAPI CLI
   checkin         本日のデイリー付与クォータを受領
   user <sub>      プロフィール / 2FA / passkey / OAuth 連携 / アフィリエイトコード
   subscription <sub>  サブスクリプションプラン / 自分の契約 / 課金設定
-  use <tool>      EveryAPI 経由でサードパーティ CLI を起動 (claude / codex / gemini)
+  use <tool>      EveryAPI 経由でサードパーティ CLI を起動 (claude / codex / gemini / hermes)
   token <sub>     リレー API トークン管理 (list / show / create / update / key / revoke / usage)
   log <sub>       リクエストログ: list / stat / summary
   usage           日別のクォータ使用量
@@ -87,7 +87,7 @@ wallet = "支払い履歴 / 支払い方法 / 引換キー"
 checkin = "本日のデイリー付与クォータを受領"
 user = "プロフィール / 2FA / passkey / OAuth 連携 / アフィリエイトコード"
 subscription = "サブスクリプションプラン / 自分の契約 / 課金設定"
-use = "EveryAPI 経由でサードパーティ CLI を起動 (claude / codex / gemini)"
+use = "EveryAPI 経由でサードパーティ CLI を起動 (claude / codex / gemini / hermes)"
 token = "リレー API トークン管理 (list / create / key / revoke / …)"
 log = "リクエストログ: list / stat / summary"
 usage = "日別のクォータ使用量"
