@@ -397,3 +397,20 @@ func TestProxyMenuSubs_StartStopMutuallyExclusive(t *testing.T) {
 		t.Errorf("configure must always be present, got %+v", subs)
 	}
 }
+
+// TestAuthMenuSubs_LoginLogoutMutuallyExclusive locks the auth
+// sub-menu's rule: it offers exactly one action — login when signed out,
+// logout when signed in — and status is never a row (it's the header,
+// see authHeader). Robust to whatever login state the test environment
+// happens to be in: it asserts the shape, not which branch.
+func TestAuthMenuSubs_LoginLogoutMutuallyExclusive(t *testing.T) {
+	subs := authMenuSubs()
+	if len(subs) != 1 {
+		t.Fatalf("auth menu must offer exactly one action, got %+v", subs)
+	}
+	switch subs[0].name {
+	case "login", "logout":
+	default:
+		t.Errorf("auth menu action must be login or logout, got %q", subs[0].name)
+	}
+}

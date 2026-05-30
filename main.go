@@ -169,6 +169,36 @@ func proxyMenuSubs() []subcommand {
 	}
 }
 
+// authHeader prints the session status above the auth sub-picker — the
+// same `everyapi auth status` output (quota / usage / balance) when
+// signed in. cmd.Status returns (without printing) a localized one-liner
+// when signed out or expired; surface that as the header so the menu is
+// never unheaded and the user can see why login is the only action.
+func authHeader() {
+	if err := cmd.Status(nil); err != nil {
+		cliout.Println(err.Error())
+	}
+}
+
+// authMenuSubs builds the interactive auth sub-menu by login state.
+// login and logout are mutually exclusive; status is no longer a row —
+// it's the header (see authHeader), shown on entry. Signed out → only
+// login; signed in → only logout. Re-evaluated on every sub-picker
+// re-render, so the menu flips the moment the user logs in or out. Gates
+// on stored-credential presence (config.Load) — the same lightweight
+// signal hideLoggedIn / requireLogin used before these moved under
+// `auth`.
+func authMenuSubs() []subcommand {
+	if creds, _ := config.Load(); creds != nil {
+		return []subcommand{
+			{name: "logout", desc: "Remove this device's credentials", args: []string{"logout"}},
+		}
+	}
+	return []subcommand{
+		{name: "login", desc: "Authenticate this device with EveryAPI", args: []string{"login"}},
+	}
+}
+
 // versionHeader prints the build version — the header above the version
 // sub-picker (update / uninstall).
 func versionHeader() { _ = cmd.Version(nil) }
@@ -303,16 +333,12 @@ func versionRun(args []string) error {
 // two names conflict" question impossible.
 var commands = []command{
 	// Session commands live under `auth` (everyapi auth login|logout|
-	// status) so the top level isn't cluttered with them. The parent has
-	// no requireLogin/hideLoggedIn gate — login must show logged-out,
-	// logout/status logged-in, and per-sub gating isn't supported — so
-	// it's always visible; the subs' own run funcs error cleanly when
-	// invoked in the wrong auth state.
-	{name: "auth", desc: "Sign in / out, session status", run: cmd.Auth, subs: []subcommand{
-		{name: "login", desc: "Authenticate this device with EveryAPI", args: []string{"login"}},
-		{name: "logout", desc: "Remove this device's credentials", args: []string{"logout"}},
-		{name: "status", desc: "Show current quota, usage, and balance", args: []string{"status"}},
-	}},
+	// status) so the top level isn't cluttered with them. The parent
+	// carries no requireLogin/hideLoggedIn gate — it must stay visible in
+	// both auth states. Entering it shows the session status as a header
+	// (authHeader); authMenuSubs then offers the one applicable action
+	// (login when signed out, logout when signed in).
+	{name: "auth", desc: "Sign in / out, session status", run: cmd.Auth, headerFn: authHeader, subsFn: authMenuSubs},
 	{name: "wallet", desc: "Top-up · payment history · methods · redemption keys", requireLogin: true, run: walletRun, subs: []subcommand{
 		{name: "topup", desc: "Open the wallet top-up page (anti-phishing verification phrase)", args: []string{"topup"}},
 		{name: "history", desc: "Paginated payment history", args: []string{"history"}},
