@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -122,18 +123,20 @@ func (m groupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// gpStyle holds the lazily-built lipgloss styles. lipgloss reads the
-// color profile / background once; building at package scope is fine.
+// gpTheme reuses huh's default theme (the same one every other cliprompt
+// picker renders with) so the grouped launcher looks identical to the
+// rest of the CLI instead of inventing its own palette. Colors resolve
+// against the terminal at render time. gpHintStyle is the one extra
+// style — a faint footer, since huh's own help line is suppressed here.
 var (
-	gpHeaderStyle = lipgloss.NewStyle().Faint(true).Bold(true)
-	gpCursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Bold(true)
-	gpSelStyle    = lipgloss.NewStyle().Bold(true)
+	gpTheme     = huh.ThemeCharm()
+	gpHintStyle = lipgloss.NewStyle().Faint(true)
 )
 
 func (m groupModel) View() string {
 	var b strings.Builder
 	if m.title != "" {
-		b.WriteString(m.title)
+		b.WriteString(gpTheme.Focused.Title.Render(m.title))
 		b.WriteString("\n\n")
 	}
 
@@ -166,19 +169,21 @@ func (m groupModel) View() string {
 		r := m.rows[i]
 		switch {
 		case r.header:
-			// Category title flush-left; commands indent under it.
-			b.WriteString(gpHeaderStyle.Render(r.text))
+			// Category title, styled like a huh group title (flush-left).
+			b.WriteString(gpTheme.Group.Title.Render(r.text))
 		case i == curRow:
-			// "❯ " (2 cols) lines up with the non-cursor "  " indent.
-			b.WriteString(gpCursorStyle.Render("❯ ") + gpSelStyle.Render(r.text))
+			// huh's selector ("> ", themed) + the selected-option color,
+			// matching every other picker. The selector is 2 cols wide,
+			// so it lines up with the non-cursor "  " indent.
+			b.WriteString(gpTheme.Focused.SelectSelector.String() + gpTheme.Focused.SelectedOption.Render(r.text))
 		default:
-			b.WriteString("  " + r.text)
+			b.WriteString("  " + gpTheme.Focused.UnselectedOption.Render(r.text))
 		}
 		b.WriteString("\n")
 	}
 
 	b.WriteString("\n")
-	b.WriteString(gpHeaderStyle.Render(menuNavHint()))
+	b.WriteString(gpHintStyle.Render(menuNavHint()))
 	b.WriteString("\n")
 	return b.String()
 }
