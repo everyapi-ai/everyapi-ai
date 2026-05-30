@@ -55,7 +55,13 @@ func Status(args []string) error {
 	}
 	self, err := client.GetSelf(ctx)
 	if err != nil {
-		if api.IsUnauthorized(err) {
+		// GetStatus (public) just succeeded, so the backend is reachable
+		// — a rejection of the authenticated self call means the session
+		// is bad. That arrives either as a 401 or, for an invalid token,
+		// as the backend's HTTP-200 envelope rejection (EnvelopeError);
+		// both map to the friendly "session expired, re-login" message.
+		var envErr *api.EnvelopeError
+		if api.IsUnauthorized(err) || errors.As(err, &envErr) {
 			return errors.New(i18n.T("auth.session_expired"))
 		}
 		return fmt.Errorf("fetch user: %w", err)

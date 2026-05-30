@@ -63,7 +63,11 @@ func Run(args []string) error {
 	report.run(i18n.T("doctor.check.session"), func() (string, string, error) {
 		self, err := client.GetSelf(ctx)
 		if err != nil {
-			if api.IsUnauthorized(err) {
+			// A dead token surfaces as a 401 OR, the legacy way, an
+			// HTTP-200 envelope rejection (EnvelopeError) — both mean
+			// "re-login", not a generic failure.
+			var envErr *api.EnvelopeError
+			if api.IsUnauthorized(err) || errors.As(err, &envErr) {
 				return "", i18n.T("doctor.hint.relogin"), err
 			}
 			return "", "", err
