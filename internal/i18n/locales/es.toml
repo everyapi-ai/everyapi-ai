@@ -1311,3 +1311,21 @@ unknown_sub = "subcomando market desconocido %q"
 [inbox]
 usage = "uso: everyapi inbox <notify|dm>"
 unknown_sub = "subcomando inbox desconocido %q"
+
+[cliprompt]
+pick_toggle_hint = "espacio para alternar · enter para confirmar · esc para volver"
+pick_enter_name_number = "Introduce nombre o número: "
+pick_toggle_csv = "Introduce nombres o números separados por comas para ALTERNAR (vacío = sin cambios): "
+
+[proxy.detector]
+anthropic_key = "Clave de API de Anthropic (sk-ant-…)"
+openai_key = "Clave de API de OpenAI (sk-… , también variantes proj-/svcacct-)"
+groq_key = "Clave de API de Groq (gsk_…)"
+google_api_key = "Clave de API de Google / Gemini (AIza…)"
+github_token = "Token PAT / OAuth de GitHub (ghp_/gho_/github_pat_/…)"
+slack_token = "Token de Slack (xoxb-/xoxa-/xoxp-/xoxr-/xoxs-)"
+stripe_key = "Clave secreta / restringida de Stripe (sk_/rk_ live o test)"
+aws_access_key = "ID de clave de acceso de AWS (AKIA/ASIA/AGPA/…)"
+pem_private_key = "Bloque de clave privada en formato PEM"
+luhn_credit_card = "Número de tarjeta de crédito (13–19 dígitos + comprobación Luhn)"
+chinese_id = "DNI de residente chino (18 dígitos + suma de control ISO-7064)"

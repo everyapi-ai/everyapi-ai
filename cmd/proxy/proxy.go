@@ -273,6 +273,21 @@ func proxyStop(args []string) error {
 	return nil
 }
 
+// builtinDetectorDesc returns the localized one-line summary for a
+// built-in detector. Translations live in the CLI's locale files
+// (proxy.detector.<name>) rather than the SDK, which stays UI-agnostic;
+// the literal token prefixes (sk-ant-…, AIza…, ghp_/…) are kept verbatim
+// inside each translation since they're the actual match patterns. Falls
+// back to the SDK's English description for any detector that doesn't yet
+// have a locale key, so a newly-added detector still renders something.
+func builtinDetectorDesc(name string) string {
+	key := "proxy.detector." + name
+	if d := i18n.T(key); d != key {
+		return d
+	}
+	return sanitizer.DescribeBuiltin(name)
+}
+
 // proxyConfigure walks the user through detector toggles + custom
 // patterns interactively and writes the result to
 // ~/.config/everyapi/sanitizer.json. Re-running it shows the current
@@ -318,7 +333,7 @@ func proxyConfigure(args []string) error {
 	}
 	labels := make([]string, len(allDetectors))
 	for i, name := range allDetectors {
-		labels[i] = fmt.Sprintf("%-*s — %s", nameWidth, name, sanitizer.DescribeBuiltin(name))
+		labels[i] = fmt.Sprintf("%-*s — %s", nameWidth, name, builtinDetectorDesc(name))
 	}
 	preselected := make([]string, 0, len(allDetectors))
 	for _, name := range allDetectors {

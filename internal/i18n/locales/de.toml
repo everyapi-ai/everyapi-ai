@@ -1307,3 +1307,21 @@ unknown_sub = "unbekannter market-Unterbefehl %q"
 [inbox]
 usage = "Verwendung: everyapi inbox <notify|dm>"
 unknown_sub = "unbekannter inbox-Unterbefehl %q"
+
+[cliprompt]
+pick_toggle_hint = "Leertaste zum Umschalten · Enter zum Bestätigen · Esc für Zurück"
+pick_enter_name_number = "Name oder Nummer eingeben: "
+pick_toggle_csv = "Namen oder Nummern zum UMSCHALTEN durch Kommas getrennt eingeben (leer = keine Änderung): "
+
+[proxy.detector]
+anthropic_key = "Anthropic-API-Schlüssel (sk-ant-…)"
+openai_key = "OpenAI-API-Schlüssel (sk-… , auch proj-/svcacct-Varianten)"
+groq_key = "Groq-API-Schlüssel (gsk_…)"
+google_api_key = "Google-/Gemini-API-Schlüssel (AIza…)"
+github_token = "GitHub-PAT-/OAuth-Token (ghp_/gho_/github_pat_/…)"
+slack_token = "Slack-Token (xoxb-/xoxa-/xoxp-/xoxr-/xoxs-)"
+stripe_key = "Stripe-Geheim-/eingeschränkter Schlüssel (sk_/rk_ live oder test)"
+aws_access_key = "AWS-Zugriffsschlüssel-ID (AKIA/ASIA/AGPA/…)"
+pem_private_key = "PEM-codierter privater Schlüsselblock"
+luhn_credit_card = "Kreditkartennummer (13–19 Ziffern + Luhn-Prüfung)"
+chinese_id = "Chinesischer Personalausweis (18 Ziffern + ISO-7064-Prüfsumme)"

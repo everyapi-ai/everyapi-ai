@@ -1300,3 +1300,21 @@ unknown_sub = "不明な market サブコマンド %q"
 [inbox]
 usage = "使用法: everyapi inbox <notify|dm>"
 unknown_sub = "不明な inbox サブコマンド %q"
+
+[cliprompt]
+pick_toggle_hint = "スペースで切替 · Enter で確定 · Esc で戻る"
+pick_enter_name_number = "名前または番号を入力: "
+pick_toggle_csv = "切り替える名前または番号をカンマ区切りで入力（空欄=変更なし）: "
+
+[proxy.detector]
+anthropic_key = "Anthropic API キー（sk-ant-…）"
+openai_key = "OpenAI API キー（sk-…、proj-/svcacct- の変種も）"
+groq_key = "Groq API キー（gsk_…）"
+google_api_key = "Google / Gemini API キー（AIza…）"
+github_token = "GitHub PAT / OAuth トークン（ghp_/gho_/github_pat_/…）"
+slack_token = "Slack トークン（xoxb-/xoxa-/xoxp-/xoxr-/xoxs-）"
+stripe_key = "Stripe シークレット / 制限付きキー（sk_/rk_ 本番またはテスト）"
+aws_access_key = "AWS アクセスキー ID（AKIA/ASIA/AGPA/…）"
+pem_private_key = "PEM エンコードの秘密鍵ブロック"
+luhn_credit_card = "クレジットカード番号（13〜19 桁 + Luhn チェック）"
+chinese_id = "中国居民身分証（18 桁 + ISO-7064 チェックサム）"

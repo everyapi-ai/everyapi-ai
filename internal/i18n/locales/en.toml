@@ -1290,3 +1290,21 @@ unknown_sub = "unknown market subcommand %q"
 [inbox]
 usage = "usage: everyapi inbox <notify|dm>"
 unknown_sub = "unknown inbox subcommand %q"
+
+[cliprompt]
+pick_toggle_hint = "space to toggle · enter to confirm · esc to go back"
+pick_enter_name_number = "Enter name or number: "
+pick_toggle_csv = "Enter comma-separated names or numbers to TOGGLE (blank = no change): "
+
+[proxy.detector]
+anthropic_key = "Anthropic API key (sk-ant-…)"
+openai_key = "OpenAI API key (sk-… , also proj-/svcacct- variants)"
+groq_key = "Groq API key (gsk_…)"
+google_api_key = "Google / Gemini API key (AIza…)"
+github_token = "GitHub PAT / OAuth token (ghp_/gho_/github_pat_/…)"
+slack_token = "Slack token (xoxb-/xoxa-/xoxp-/xoxr-/xoxs-)"
+stripe_key = "Stripe secret / restricted key (sk_/rk_ live or test)"
+aws_access_key = "AWS access key ID (AKIA/ASIA/AGPA/…)"
+pem_private_key = "PEM-encoded private key block"
+luhn_credit_card = "Credit card number (13–19 digits + Luhn check)"
+chinese_id = "Chinese resident ID (18 digits + ISO-7064 checksum)"

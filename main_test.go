@@ -375,3 +375,25 @@ func TestBackRowLabel_AlignsToDescColumn(t *testing.T) {
 		t.Errorf("display width = %d, want %d (maxName + 2 + hint)", got, want)
 	}
 }
+
+// TestProxyMenuSubs_StartStopMutuallyExclusive locks the proxy
+// sub-menu's core rule: start and stop never appear together (a running
+// proxy can't be started, a stopped one can't be stopped) and configure
+// is always offered. Robust to whatever proxy.IsRunning reports in the
+// test environment — it only asserts the start/stop XOR, not which one.
+func TestProxyMenuSubs_StartStopMutuallyExclusive(t *testing.T) {
+	subs := proxyMenuSubs()
+	if len(subs) != 2 {
+		t.Fatalf("want 2 rows (toggle + configure), got %d: %+v", len(subs), subs)
+	}
+	has := map[string]bool{}
+	for _, s := range subs {
+		has[s.name] = true
+	}
+	if has["start"] == has["stop"] {
+		t.Errorf("exactly one of start/stop must show, got start=%v stop=%v", has["start"], has["stop"])
+	}
+	if !has["configure"] {
+		t.Errorf("configure must always be present, got %+v", subs)
+	}
+}

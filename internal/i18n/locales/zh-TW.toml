@@ -1278,3 +1278,21 @@ unknown_sub = "未知 market 子命令 %q"
 [inbox]
 usage = "用法： everyapi inbox <notify|dm>"
 unknown_sub = "未知 inbox 子命令 %q"
+
+[cliprompt]
+pick_toggle_hint = "空格切換 · 輸入鍵確認 · esc 返回"
+pick_enter_name_number = "輸入名稱或編號："
+pick_toggle_csv = "輸入要切換的名稱或編號（逗號分隔，留空=不變）："
+
+[proxy.detector]
+anthropic_key = "Anthropic API 金鑰（sk-ant-…）"
+openai_key = "OpenAI API 金鑰（sk-…，含 proj-/svcacct- 變體）"
+groq_key = "Groq API 金鑰（gsk_…）"
+google_api_key = "Google / Gemini API 金鑰（AIza…）"
+github_token = "GitHub PAT / OAuth 權杖（ghp_/gho_/github_pat_/…）"
+slack_token = "Slack 權杖（xoxb-/xoxa-/xoxp-/xoxr-/xoxs-）"
+stripe_key = "Stripe 私鑰 / 受限金鑰（sk_/rk_ 正式或測試）"
+aws_access_key = "AWS 存取金鑰 ID（AKIA/ASIA/AGPA/…）"
+pem_private_key = "PEM 編碼的私鑰區塊"
+luhn_credit_card = "信用卡號（13–19 位數字 + Luhn 校驗）"
+chinese_id = "中國居民身分證（18 位 + ISO-7064 校驗碼）"

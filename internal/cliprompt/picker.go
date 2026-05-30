@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/huh"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 // ErrPickCancelled is returned by Pick when the user hits Ctrl-C
@@ -58,7 +59,7 @@ func pickByNumber(prompt string, items []string) (int, error) {
 	for i, n := range items {
 		cliout.Printf("  %d) %s\n", i+1, n)
 	}
-	cliout.Printf("Enter name or number: ")
+	cliout.Printf("%s", i18n.T("cliprompt.pick_enter_name_number"))
 	var choice string
 	if _, err := fmt.Scanln(&choice); err != nil {
 		return -1, fmt.Errorf("read selection: %w", err)
@@ -131,7 +132,7 @@ func PickMany(prompt string, labels, values []string, preselected []string) ([]s
 	selected := append([]string(nil), preselected...)
 	err := runHuhField(huh.NewMultiSelect[string]().
 		Title(prompt).
-		Description("space to toggle · enter to confirm").
+		Description(i18n.T("cliprompt.pick_toggle_hint")).
 		Options(opts...).
 		Value(&selected))
 	if err != nil {
@@ -162,7 +163,7 @@ func pickManyByNumber(prompt string, labels, values, preselected []string) ([]st
 		}
 		cliout.Printf("  [%s] %d) %s\n", marker, i+1, labels[i])
 	}
-	cliout.Printf("Enter comma-separated names or numbers to TOGGLE (blank = no change): ")
+	cliout.Printf("%s", i18n.T("cliprompt.pick_toggle_csv"))
 	var line string
 	if _, err := fmt.Scanln(&line); err != nil {
 		// EOF on empty stdin → no change. Same shape as Pick.

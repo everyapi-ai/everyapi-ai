@@ -107,8 +107,21 @@ type command struct {
 	// row, so the picker only lists the things you can DO. Reuses the
 	// command's own status printer, so it stays in sync.
 	headerFn func()
-	run      func(args []string) error
+	// subsFn is the dynamic alternative to subs: when set, the
+	// sub-picker calls it on every re-render instead of reading the
+	// static slice — for commands whose available actions depend on live
+	// state. proxy uses it so the menu shows start XOR stop (they're
+	// mutually exclusive) and flips the moment the user starts or stops
+	// the proxy. A command sets subs OR subsFn, not both.
+	subsFn func() []subcommand
+	run    func(args []string) error
 }
+
+// hasSubmenu reports whether c offers a sub-picker — either a static
+// subs slice or a dynamic subsFn. Both the usage `<sub>` tag and the
+// interactive dispatch gate on this, so a subsFn-only command (proxy)
+// is treated identically to a statically-listed one.
+func (c command) hasSubmenu() bool { return len(c.subs) > 0 || c.subsFn != nil }
 
 // subcommand is one row in a command group's sub-menu rendered by
 // runSubPicker. name is what the picker shows; desc is the help
@@ -138,6 +151,23 @@ func mcpHeader() { _ = runMCP([]string{"status"}) }
 // proxyHeader prints the sanitizer proxy's running status above the
 // proxy sub-picker — same code path as `everyapi proxy status`.
 func proxyHeader() { _ = proxy.Run([]string{"status"}) }
+
+// proxyMenuSubs builds the interactive proxy sub-menu, showing only the
+// action that applies: start and stop are mutually exclusive — a running
+// proxy can't be started and a stopped one can't be stopped — so the
+// picker lists exactly one of them next to configure. Re-evaluated on
+// every sub-picker re-render (see runSubPicker), so the row flips from
+// start to stop the instant the proxy comes up, and back when it stops.
+func proxyMenuSubs() []subcommand {
+	toggle := subcommand{name: "start", desc: "Run the sanitizer proxy (asks background vs foreground)", args: []string{"start"}}
+	if proxy.IsRunning() {
+		toggle = subcommand{name: "stop", desc: "Stop the running proxy (uses PID file)", args: []string{"stop"}}
+	}
+	return []subcommand{
+		toggle,
+		{name: "configure", desc: "Interactive detector + custom-pattern setup", args: []string{"configure"}},
+	}
+}
 
 // versionHeader prints the build version — the header above the version
 // sub-picker (update / uninstall).
@@ -357,11 +387,7 @@ var commands = []command{
 		{name: "marketplace on", desc: "Open the marketplace", args: []string{"marketplace", "on"}},
 		{name: "marketplace off", desc: "Close the marketplace", args: []string{"marketplace", "off"}},
 	}},
-	{name: "proxy", desc: "Local sanitizer proxy (privacy filter for SDK requests)", run: proxy.Run, headerFn: proxyHeader, subs: []subcommand{
-		{name: "start", desc: "Run the sanitizer proxy (asks background vs foreground)", args: []string{"start"}},
-		{name: "stop", desc: "Stop the running proxy (uses PID file)", args: []string{"stop"}},
-		{name: "configure", desc: "Interactive detector + custom-pattern setup", args: []string{"configure"}},
-	}},
+	{name: "proxy", desc: "Local sanitizer proxy (privacy filter for SDK requests)", run: proxy.Run, headerFn: proxyHeader, subsFn: proxyMenuSubs},
 	{name: "mcp", desc: "MCP server for AI CLIs (Claude Code / Codex / Gemini)", run: runMCP, headerFn: mcpHeader, subs: mcpSubs},
 	{name: "doctor", desc: "Self-check (creds, gateway, sanitizer, tools)", run: doctor.Run},
 	{name: "events", desc: "Subscribe to the live event stream (SSE)", requireLogin: true, run: events.Run},
@@ -431,7 +457,7 @@ func usageCommandList(isAdmin bool) string {
 		b.WriteString("\n" + groupTitle(key) + "\n")
 		for _, c := range cs {
 			tag := ""
-			if len(c.subs) > 0 {
+			if c.hasSubmenu() {
 				tag = subTag
 			}
 			pad := strings.Repeat(" ", descCol-len(c.name)-len(tag))
@@ -875,7 +901,7 @@ func sessionRejected(creds *config.Credentials) bool {
 // command's original "no subcommand specified" usage text exactly
 // the way it printed before any of this picker code existed.
 func dispatchInteractive(c command, args []string) error {
-	if len(args) > 0 || len(c.subs) == 0 || !cliprompt.IsInteractive() {
+	if len(args) > 0 || !c.hasSubmenu() || !cliprompt.IsInteractive() {
 		return c.run(args)
 	}
 	return runSubPicker(c)
@@ -895,22 +921,36 @@ func dispatchInteractive(c command, args []string) error {
 // status, never climb back to the launcher. Selecting the back row
 // raises the same ErrPickCancelled the key does.
 func runSubPicker(c command) error {
-	maxName := 0
-	for _, s := range c.subs {
-		if len(s.name) > maxName {
-			maxName = len(s.name)
-		}
-	}
-	// Declared subs first, then the back row at index len(c.subs).
-	backIdx := len(c.subs)
-	labels := make([]string, len(c.subs)+1)
-	for i, s := range c.subs {
-		labels[i] = nameCell(s.name, maxName) + "  " + subcommandDesc(c.name, s)
-	}
-	labels[backIdx] = backRowLabel(maxName)
 	prompt := fmt.Sprintf(i18n.T("common.pick_subcommand"), c.name)
 	lastSel := 0
 	for {
+		// Resolve the rows fresh each iteration: subsFn-backed commands
+		// (proxy) change their available actions with live state, so the
+		// menu must rebuild — not just the header — after every action.
+		subs := c.subs
+		if c.subsFn != nil {
+			subs = c.subsFn()
+		}
+		maxName := 0
+		for _, s := range subs {
+			if len(s.name) > maxName {
+				maxName = len(s.name)
+			}
+		}
+		// Declared subs first, then the back row at index len(subs).
+		backIdx := len(subs)
+		labels := make([]string, len(subs)+1)
+		for i, s := range subs {
+			labels[i] = nameCell(s.name, maxName) + "  " + subcommandDesc(c.name, s)
+		}
+		labels[backIdx] = backRowLabel(maxName)
+		// The row count can shrink between iterations (proxy start/stop
+		// keeps it constant, but be defensive); clamp the remembered
+		// selection so PickWithSelected never indexes out of range.
+		if lastSel > backIdx {
+			lastSel = backIdx
+		}
+
 		// Stateful commands (mcp/proxy) print their current status above
 		// the menu, refreshed each loop so it reflects the last action.
 		if c.headerFn != nil {
@@ -925,7 +965,7 @@ func runSubPicker(c command) error {
 			return cliprompt.ErrPickCancelled
 		}
 		lastSel = idx
-		err = c.run(c.subs[idx].args)
+		err = c.run(subs[idx].args)
 		// Same "stay in the menu" rule as runLauncher: real
 		// errors get printed to stderr but don't eject the
 		// user from this sub-picker — they can pick something

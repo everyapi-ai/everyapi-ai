@@ -1298,3 +1298,21 @@ unknown_sub = "알 수 없는 market 하위 명령 %q"
 [inbox]
 usage = "사용법: everyapi inbox <notify|dm>"
 unknown_sub = "알 수 없는 inbox 하위 명령 %q"
+
+[cliprompt]
+pick_toggle_hint = "스페이스로 토글 · Enter로 확인 · Esc로 뒤로"
+pick_enter_name_number = "이름 또는 번호 입력: "
+pick_toggle_csv = "토글할 이름 또는 번호를 쉼표로 구분해 입력 (빈칸=변경 없음): "
+
+[proxy.detector]
+anthropic_key = "Anthropic API 키 (sk-ant-…)"
+openai_key = "OpenAI API 키 (sk-… , proj-/svcacct- 변형 포함)"
+groq_key = "Groq API 키 (gsk_…)"
+google_api_key = "Google / Gemini API 키 (AIza…)"
+github_token = "GitHub PAT / OAuth 토큰 (ghp_/gho_/github_pat_/…)"
+slack_token = "Slack 토큰 (xoxb-/xoxa-/xoxp-/xoxr-/xoxs-)"
+stripe_key = "Stripe 비밀 / 제한 키 (sk_/rk_ 라이브 또는 테스트)"
+aws_access_key = "AWS 액세스 키 ID (AKIA/ASIA/AGPA/…)"
+pem_private_key = "PEM 인코딩된 개인 키 블록"
+luhn_credit_card = "신용카드 번호 (13–19자리 + Luhn 검사)"
+chinese_id = "중국 주민 신분증 (18자리 + ISO-7064 체크섬)"
