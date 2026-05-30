@@ -783,12 +783,34 @@ everyapi account subscription — 구독 플랜 / 내 구독 / 설정
 '''
 
 [admin.user]
+status_enabled = "활성"
+status_disabled = "비활성"
+used = "사용"
+detail_title = "사용자"
+f_username = "사용자 이름"
+f_email = "이메일"
+f_role = "역할"
+f_status = "상태"
+f_group = "그룹"
+f_quota = "쿼터"
+f_display = "표시 이름"
 no_matches = "일치 결과 없음."
 deleted = "사용자 #%d 을 삭제했습니다."
 delete_confirm = "사용자 #%d 을 삭제하시겠습니까? 이 작업은 파괴적이며 되돌릴 수 없습니다."
 action_applied = "admin user manage: action=%q 을 사용자 #%d 에 적용함"
 
 [admin.abuse]
+updated = "신고 #%d 업데이트됨."
+detail_title = "신고"
+f_status = "상태"
+f_filed = "접수 시각"
+f_reporter = "신고자"
+f_category = "카테고리"
+f_target_type = "대상 유형"
+f_target_id = "대상 ID"
+f_evidence = "증거"
+f_description = "설명"
+f_note = "관리 메모"
 no_reports = "신고가 없습니다."
 
 [admin.audit]
@@ -1238,6 +1260,14 @@ ind_critical = "심각한 장애"
 ind_unknown = "알 수 없음"
 
 [admin.redemption]
+detail_title = "교환 코드"
+f_key = "키"
+f_name = "이름"
+f_status = "상태"
+f_quota = "쿼터"
+f_created = "생성 시각"
+f_expires = "만료 시각"
+f_used_by = "사용자"
 none = "교환 코드가 없습니다."
 never = "기한 없음"
 status_enabled = "활성화"
@@ -1353,3 +1383,56 @@ bad_id = "양의 정수 id를 입력하세요."
 [admin.console]
 title_area = "admin — 영역 선택:"
 title_action = "%s — 작업 선택:"
+
+[admin.role]
+guest = "게스트"
+common = "일반 사용자"
+admin = "관리자"
+root = "루트"
+
+[admin.common]
+rows_total = "%d개 / 전체 %d개:"
+matches = "%d개 일치:"
+matches_total = "%d개 일치 / 전체 %d개:"
+
+[admin.channel]
+test_title = "채널 #%d 테스트:"
+empty_result = "(결과 없음)"
+tag_enabled = "태그 %q 활성화됨."
+tag_disabled = "태그 %q 비활성화됨."
+
+[admin.help]
+usage = '''
+everyapi admin — 운영 명령(관리자 전용)
+
+사용법
+  everyapi admin <subcommand> [flags]
+
+하위 명령
+  marketplace status     현재 marketplace.enabled 플래그 표시
+  marketplace on         마켓 열기(자체 GPU + 판매자 흐름)
+  marketplace off        닫기; 실행 중 노드는 계속
+  user search <keyword>  사용자 이름 / 이메일 / 표시 이름 퍼지 검색
+  user show <id>         사용자 1건
+  user list [--page P]   페이지 사용자 목록
+  user manage <id> --action enable|disable|delete|promote_admin|demote_admin
+                         상태/역할 작업 적용(권한은 백엔드 검증)
+  channel test <id>      채널 1건 상태 점검
+  channel tag <name> --enable|--disable
+                         태그가 붙은 모든 채널 일괄 전환
+  log tail [--user U] [--model M] [--channel C] [--group G] [--since W]
+                         페이지 관리 로그 검색
+  abuse list [--status]  접수된 신고
+  abuse show <id>        신고 1건
+  abuse update <id> --status X [--note N]
+                         신고 처리
+  audit [--page P]       최근 관리 감사 로그
+  redemption list|search <kw>|show <id>|create --name N --quota Q [--count C] [--expires E]
+             |update <id>|status <id> enable|disable|delete <id>|clear-invalid
+                         선불 쿼터 교환 코드 관리(생성 시 키 생성·출력)
+  help                   이 도움말 표시
+
+인증: 'everyapi auth login' 토큰 재사용; 백엔드에서 관리자여야 함(비관리자는 403).
+
+모든 작업은 대시보드와 동일한 감사 로그에 기록됩니다.
+'''

@@ -772,12 +772,34 @@ everyapi account subscription — 订阅计划 / 我的订阅 / 计费偏好
 '''
 
 [admin.user]
+status_enabled = "已启用"
+status_disabled = "已禁用"
+used = "已用"
+detail_title = "用户"
+f_username = "用户名"
+f_email = "邮箱"
+f_role = "角色"
+f_status = "状态"
+f_group = "分组"
+f_quota = "额度"
+f_display = "显示名"
 no_matches = "无匹配。"
 deleted = "用户 #%d 已删除。"
 delete_confirm = "删除用户 #%d？此操作具有破坏性且不可恢复。"
 action_applied = "admin user manage：操作 %q 已应用到用户 #%d"
 
 [admin.abuse]
+updated = "举报 #%d 已更新。"
+detail_title = "举报"
+f_status = "状态"
+f_filed = "提交时间"
+f_reporter = "举报人"
+f_category = "类别"
+f_target_type = "目标类型"
+f_target_id = "目标 ID"
+f_evidence = "证据"
+f_description = "描述"
+f_note = "管理备注"
 no_reports = "无举报。"
 
 [admin.audit]
@@ -1218,6 +1240,14 @@ ind_critical = "严重故障"
 ind_unknown = "未知"
 
 [admin.redemption]
+detail_title = "兑换码"
+f_key = "密钥"
+f_name = "名称"
+f_status = "状态"
+f_quota = "额度"
+f_created = "创建时间"
+f_expires = "过期时间"
+f_used_by = "使用者"
 none = "暂无兑换码。"
 never = "永不过期"
 status_enabled = "启用"
@@ -1333,3 +1363,56 @@ bad_id = "请输入正整数 id。"
 [admin.console]
 title_area = "admin — 选个领域："
 title_action = "%s — 选个动作："
+
+[admin.role]
+guest = "访客"
+common = "普通用户"
+admin = "管理员"
+root = "超级管理员"
+
+[admin.common]
+rows_total = "显示 %d 条，共 %d 条："
+matches = "%d 条匹配："
+matches_total = "%d 条匹配，共 %d 条："
+
+[admin.channel]
+test_title = "渠道 #%d 测试："
+empty_result = "（无结果）"
+tag_enabled = "标签 %q 已启用。"
+tag_disabled = "标签 %q 已禁用。"
+
+[admin.help]
+usage = '''
+everyapi admin — 运维命令（仅管理员）
+
+用法
+  everyapi admin <subcommand> [flags]
+
+子命令
+  marketplace status     查看当前 marketplace.enabled 开关
+  marketplace on         开启市场（自带 GPU + 卖家流程）
+  marketplace off        关闭市场；运行中的节点继续运行
+  user search <keyword>  按用户名 / 邮箱 / 显示名模糊查找
+  user show <id>         单条用户记录
+  user list [--page P]   分页用户列表
+  user manage <id> --action enable|disable|delete|promote_admin|demote_admin
+                         应用状态/角色操作（后端校验权限）
+  channel test <id>      健康检查单个渠道
+  channel tag <name> --enable|--disable
+                         按标签批量翻转所有渠道
+  log tail [--user U] [--model M] [--channel C] [--group G] [--since W]
+                         分页管理日志检索
+  abuse list [--status]  已提交的举报
+  abuse show <id>        单条举报
+  abuse update <id> --status X [--note N]
+                         处置一条举报
+  audit [--page P]       近期管理审计日志
+  redemption list|search <kw>|show <id>|create --name N --quota Q [--count C] [--expires E]
+             |update <id>|status <id> enable|disable|delete <id>|clear-invalid
+                         管理预付额度兑换码（创建即生成并打印密钥）
+  help                   打印本帮助
+
+鉴权：复用你 'everyapi auth login' 的令牌；后端须为管理员（非管理员返回 403）。
+
+所有操作都会写入与面板相同的审计日志。
+'''

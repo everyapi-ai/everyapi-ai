@@ -793,12 +793,34 @@ NOTE
 '''
 
 [admin.user]
+status_enabled = "activé"
+status_disabled = "désactivé"
+used = "utilisé"
+detail_title = "Utilisateur"
+f_username = "nom d'utilisateur"
+f_email = "e-mail"
+f_role = "rôle"
+f_status = "statut"
+f_group = "groupe"
+f_quota = "quota"
+f_display = "nom affiché"
 no_matches = "Aucune correspondance."
 deleted = "Utilisateur #%d supprimé."
 delete_confirm = "Supprimer l'utilisateur #%d ? C'est destructif et irréversible."
 action_applied = "admin user manage : action=%q appliquée à l'utilisateur #%d"
 
 [admin.abuse]
+updated = "Signalement #%d mis à jour."
+detail_title = "Signalement"
+f_status = "statut"
+f_filed = "déposé"
+f_reporter = "signaleur"
+f_category = "catégorie"
+f_target_type = "type de cible"
+f_target_id = "id de cible"
+f_evidence = "preuve"
+f_description = "description"
+f_note = "note admin"
 no_reports = "Aucun signalement."
 
 [admin.audit]
@@ -1252,6 +1274,14 @@ ind_critical = "panne critique"
 ind_unknown = "inconnu"
 
 [admin.redemption]
+detail_title = "Code"
+f_key = "clé"
+f_name = "nom"
+f_status = "statut"
+f_quota = "quota"
+f_created = "créé"
+f_expires = "expire"
+f_used_by = "utilisé par"
 none = "Aucun code d'échange."
 never = "jamais"
 status_enabled = "activé"
@@ -1367,3 +1397,56 @@ bad_id = "Saisissez un id entier positif."
 [admin.console]
 title_area = "admin — choisissez un domaine :"
 title_action = "%s — choisissez une action :"
+
+[admin.role]
+guest = "invité"
+common = "utilisateur"
+admin = "administrateur"
+root = "root"
+
+[admin.common]
+rows_total = "%d ligne(s) sur %d au total :"
+matches = "%d correspondance(s) :"
+matches_total = "%d correspondance(s) sur %d au total :"
+
+[admin.channel]
+test_title = "Test du canal #%d :"
+empty_result = "(aucun résultat)"
+tag_enabled = "Tag %q activé."
+tag_disabled = "Tag %q désactivé."
+
+[admin.help]
+usage = '''
+everyapi admin — commandes d'opérateur (admin uniquement)
+
+UTILISATION
+  everyapi admin <subcommand> [flags]
+
+SOUS-COMMANDES
+  marketplace status     Affiche l'indicateur marketplace.enabled actuel
+  marketplace on         Ouvrir la marketplace (BYO-GPU + flux vendeur)
+  marketplace off        La fermer ; les nœuds actifs continuent
+  user search <keyword>  Recherche floue sur nom / e-mail / nom affiché
+  user show <id>         Un enregistrement utilisateur
+  user list [--page P]   Liste paginée des utilisateurs
+  user manage <id> --action enable|disable|delete|promote_admin|demote_admin
+                         Applique une action de statut/rôle (le backend vérifie le rôle)
+  channel test <id>      Vérifier l'état d'un canal
+  channel tag <name> --enable|--disable
+                         Basculer en masse les canaux portant le tag
+  log tail [--user U] [--model M] [--channel C] [--group G] [--since W]
+                         Recherche paginée du journal
+  abuse list [--status]  Signalements déposés
+  abuse show <id>        Un signalement
+  abuse update <id> --status X [--note N]
+                         Traiter un signalement
+  audit [--page P]       Entrées récentes du journal d'audit
+  redemption list|search <kw>|show <id>|create --name N --quota Q [--count C] [--expires E]
+             |update <id>|status <id> enable|disable|delete <id>|clear-invalid
+                         Gérer les codes de rachat de quota (la création génère et imprime les clés)
+  help                   Afficher ce message
+
+Auth : réutilise le jeton de 'everyapi auth login' ; vous devez être admin sur le backend (sinon 403).
+
+Chaque action est consignée dans le même journal d'audit que le tableau de bord.
+'''

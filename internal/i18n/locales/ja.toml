@@ -784,12 +784,34 @@ everyapi account subscription — サブスクリプションプラン / 自分�
 '''
 
 [admin.user]
+status_enabled = "有効"
+status_disabled = "無効"
+used = "使用済み"
+detail_title = "ユーザー"
+f_username = "ユーザー名"
+f_email = "メール"
+f_role = "ロール"
+f_status = "ステータス"
+f_group = "グループ"
+f_quota = "クォータ"
+f_display = "表示名"
 no_matches = "一致なし。"
 deleted = "ユーザー #%d を削除しました。"
 delete_confirm = "ユーザー #%d を削除しますか？この操作は破壊的で取り消せません。"
 action_applied = "admin user manage: action=%q をユーザー #%d に適用しました"
 
 [admin.abuse]
+updated = "通報 #%d を更新しました。"
+detail_title = "通報"
+f_status = "ステータス"
+f_filed = "通報日時"
+f_reporter = "通報者"
+f_category = "カテゴリ"
+f_target_type = "対象種別"
+f_target_id = "対象 ID"
+f_evidence = "証拠"
+f_description = "説明"
+f_note = "管理メモ"
 no_reports = "報告はありません。"
 
 [admin.audit]
@@ -1240,6 +1262,14 @@ ind_critical = "重大障害"
 ind_unknown = "不明"
 
 [admin.redemption]
+detail_title = "引き換えコード"
+f_key = "キー"
+f_name = "名前"
+f_status = "ステータス"
+f_quota = "クォータ"
+f_created = "作成日時"
+f_expires = "有効期限"
+f_used_by = "使用者"
 none = "引換コードはありません。"
 never = "期限なし"
 status_enabled = "有効"
@@ -1355,3 +1385,56 @@ bad_id = "正の整数 id を入力してください。"
 [admin.console]
 title_area = "admin — 領域を選択:"
 title_action = "%s — 操作を選択:"
+
+[admin.role]
+guest = "ゲスト"
+common = "一般ユーザー"
+admin = "管理者"
+root = "ルート"
+
+[admin.common]
+rows_total = "%d 件 / 全 %d 件："
+matches = "%d 件一致："
+matches_total = "%d 件一致 / 全 %d 件："
+
+[admin.channel]
+test_title = "チャネル #%d テスト:"
+empty_result = "（結果なし）"
+tag_enabled = "タグ %q を有効化しました。"
+tag_disabled = "タグ %q を無効化しました。"
+
+[admin.help]
+usage = '''
+everyapi admin — 運用コマンド（管理者専用）
+
+使用法
+  everyapi admin <subcommand> [flags]
+
+サブコマンド
+  marketplace status     現在の marketplace.enabled フラグを表示
+  marketplace on         マーケットを開く（自前 GPU + 販売者フロー）
+  marketplace off        閉じる；稼働中ノードは継続
+  user search <keyword>  ユーザー名 / メール / 表示名で曖昧検索
+  user show <id>         ユーザー 1 件
+  user list [--page P]   ページングされたユーザー一覧
+  user manage <id> --action enable|disable|delete|promote_admin|demote_admin
+                         状態/ロール操作を適用（権限は後端で検証）
+  channel test <id>      チャネルを 1 件ヘルスチェック
+  channel tag <name> --enable|--disable
+                         タグの付いた全チャネルを一括切替
+  log tail [--user U] [--model M] [--channel C] [--group G] [--since W]
+                         ページング管理ログ検索
+  abuse list [--status]  提出済みの通報
+  abuse show <id>        通報 1 件
+  abuse update <id> --status X [--note N]
+                         通報を処理
+  audit [--page P]       最近の管理監査ログ
+  redemption list|search <kw>|show <id>|create --name N --quota Q [--count C] [--expires E]
+             |update <id>|status <id> enable|disable|delete <id>|clear-invalid
+                         前払いクォータ引き換えコードを管理（作成時にキーを生成・表示）
+  help                   このヘルプを表示
+
+認証：'everyapi auth login' のトークンを再利用。後端で管理者である必要あり（非管理者は 403）。
+
+すべての操作はダッシュボードと同じ監査ログに記録されます。
+'''

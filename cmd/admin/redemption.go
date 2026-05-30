@@ -61,13 +61,13 @@ func redemptionStatusLabel(s int) string {
 	}
 }
 
-func printRedemptionRow(r api.Redemption) {
+func printRedemptionRow(r api.Redemption, perUnit float64) {
 	exp := i18n.T("admin.redemption.never")
 	if r.ExpiredTime > 0 {
 		exp = time.Unix(r.ExpiredTime, 0).Format("2006-01-02")
 	}
-	cliout.Printf("  [#%d] %s — %s, quota=%d, expires=%s\n",
-		r.ID, r.Name, redemptionStatusLabel(r.Status), r.Quota, exp)
+	cliout.Printf("  #%-4d %s · %s · %s · %s\n",
+		r.ID, r.Name, redemptionStatusLabel(r.Status), fmtQuota(int64(r.Quota), perUnit), exp)
 }
 
 func adminRedemptionList(args []string) error {
@@ -89,9 +89,10 @@ func adminRedemptionList(args []string) error {
 		cliout.Println(i18n.T("admin.redemption.none"))
 		return nil
 	}
-	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)
+	cliout.Printf(i18n.T("admin.common.rows_total")+"\n", len(rows), total)
+	perUnit := quotaPerUnit(client)
 	for _, r := range rows {
-		printRedemptionRow(r)
+		printRedemptionRow(r, perUnit)
 	}
 	return nil
 }
@@ -119,9 +120,10 @@ func adminRedemptionSearch(args []string) error {
 		cliout.Println(i18n.T("admin.redemption.none"))
 		return nil
 	}
-	cliout.Printf("%d match(es) of %d total:\n", len(rows), total)
+	cliout.Printf(i18n.T("admin.common.matches_total")+"\n", len(rows), total)
+	perUnit := quotaPerUnit(client)
 	for _, r := range rows {
-		printRedemptionRow(r)
+		printRedemptionRow(r, perUnit)
 	}
 	return nil
 }
@@ -142,20 +144,19 @@ func adminRedemptionShow(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Redemption #%d\n", r.ID)
-	cliout.Printf("  key:      %s\n", r.Key)
-	cliout.Printf("  name:     %s\n", r.Name)
-	cliout.Printf("  status:   %s\n", redemptionStatusLabel(r.Status))
-	cliout.Printf("  quota:    %d\n", r.Quota)
-	cliout.Printf("  created:  %s\n", time.Unix(r.CreatedTime, 0).Format("2006-01-02 15:04:05"))
+	expires := i18n.T("admin.redemption.never")
 	if r.ExpiredTime > 0 {
-		cliout.Printf("  expires:  %s\n", time.Unix(r.ExpiredTime, 0).Format("2006-01-02 15:04:05"))
-	} else {
-		cliout.Printf("  expires:  %s\n", i18n.T("admin.redemption.never"))
+		expires = time.Unix(r.ExpiredTime, 0).Format("2006-01-02 15:04:05")
 	}
-	if r.UsedUsername != "" {
-		cliout.Printf("  used by:  %s\n", r.UsedUsername)
-	}
+	var d detail
+	d.add("admin.redemption.f_key", r.Key)
+	d.add("admin.redemption.f_name", r.Name)
+	d.add("admin.redemption.f_status", redemptionStatusLabel(r.Status))
+	d.add("admin.redemption.f_quota", fmtQuota(int64(r.Quota), quotaPerUnit(client)))
+	d.add("admin.redemption.f_created", time.Unix(r.CreatedTime, 0).Format("2006-01-02 15:04:05"))
+	d.add("admin.redemption.f_expires", expires)
+	d.add("admin.redemption.f_used_by", r.UsedUsername)
+	printDetail("admin.redemption.detail_title", r.ID, d)
 	return nil
 }
 

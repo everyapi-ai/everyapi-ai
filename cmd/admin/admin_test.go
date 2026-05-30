@@ -3,6 +3,8 @@ package admin
 import (
 	"strings"
 	"testing"
+
+	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 func TestRunHelp(t *testing.T) {
@@ -11,9 +13,13 @@ func TestRunHelp(t *testing.T) {
 			t.Errorf("Run(%q) returned error: %v", arg, err)
 		}
 	}
+	// The usage text moved to the admin.help.usage locale key; the
+	// command-syntax column stays English in every locale, so these
+	// tokens are present regardless of language.
+	usage := i18n.T("admin.help.usage")
 	for _, want := range []string{"marketplace", "status", "on", "off"} {
-		if !strings.Contains(adminUsage, want) {
-			t.Errorf("adminUsage missing %q", want)
+		if !strings.Contains(usage, want) {
+			t.Errorf("admin.help.usage missing %q", want)
 		}
 	}
 }

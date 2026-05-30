@@ -9,10 +9,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -78,11 +78,8 @@ func adminUserList(args []string) error {
 		cliout.Println(i18n.T("admin.user.no_matches"))
 		return nil
 	}
-	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)
-	for _, u := range rows {
-		cliout.Printf("  [#%d] %s (%s) — role=%d status=%d quota=%d used=%d group=%s\n",
-			u.ID, u.Username, u.Email, u.Role, u.Status, u.Quota, u.UsedQuota, u.Group)
-	}
+	cliout.Printf(i18n.T("admin.common.rows_total")+"\n", len(rows), total)
+	printUserRows(rows, quotaPerUnit(client), true)
 	return nil
 }
 
@@ -103,10 +100,8 @@ func adminUserSearch(args []string) error {
 		cliout.Println(i18n.T("admin.user.no_matches"))
 		return nil
 	}
-	cliout.Printf("%d match(es):\n", len(rows))
-	for _, u := range rows {
-		cliout.Printf("  [#%d] %s (%s) — role=%d status=%d\n", u.ID, u.Username, u.Email, u.Role, u.Status)
-	}
+	cliout.Printf(i18n.T("admin.common.matches")+"\n", len(rows))
+	printUserRows(rows, 0, false)
 	return nil
 }
 
@@ -126,16 +121,7 @@ func adminUserShow(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("User #%d\n", u.ID)
-	cliout.Printf("  username:    %s\n", u.Username)
-	cliout.Printf("  email:       %s\n", u.Email)
-	cliout.Printf("  role:        %d\n", u.Role)
-	cliout.Printf("  status:      %d\n", u.Status)
-	cliout.Printf("  group:       %s\n", u.Group)
-	cliout.Printf("  quota:       %d (used %d)\n", u.Quota, u.UsedQuota)
-	if u.DisplayName != "" {
-		cliout.Printf("  display:     %s\n", u.DisplayName)
-	}
+	printUserDetail(u, quotaPerUnit(client))
 	return nil
 }
 
@@ -240,9 +226,9 @@ func adminChannelTest(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Channel #%d test:\n", id)
+	cliout.Printf(i18n.T("admin.channel.test_title")+"\n", id)
 	if len(res) == 0 {
-		cliout.Println("  (empty result)")
+		cliout.Println("  " + i18n.T("admin.channel.empty_result"))
 		return nil
 	}
 	for k, v := range res {
@@ -272,11 +258,11 @@ func adminChannelTag(args []string) error {
 	if err := client.AdminTagChannels(cliout.WithCtx(), tag, *enable); err != nil {
 		return classifyErr(err)
 	}
-	verb := "disabled"
+	key := "admin.channel.tag_disabled"
 	if *enable {
-		verb = "enabled"
+		key = "admin.channel.tag_enabled"
 	}
-	cliout.Printf("Tag %q %s.\n", tag, verb)
+	cliout.Printf(i18n.T(key)+"\n", tag)
 	return nil
 }
 
@@ -323,11 +309,15 @@ func adminLogTail(args []string) error {
 		cliout.Println(i18n.T("log.no_rows"))
 		return nil
 	}
-	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)
+	cliout.Printf(i18n.T("admin.common.rows_total")+"\n", len(rows), total)
 	for _, r := range rows {
 		ts := time.Unix(r.CreatedAt, 0).Format("01-02 15:04:05")
-		cliout.Printf("  %s  uid=%s  model=%s  quota=%d  tokens=%d/%d  ch=#%d\n",
-			ts, r.Username, r.ModelName, r.Quota, r.PromptTokens, r.CompletionTokens, r.ChannelID)
+		// Per-request log lines keep the compact key=value shape (grep-
+		// friendly); quota stays in raw units — rounding tiny per-call
+		// amounts to USD cents would collapse them all to $0.00 — but
+		// gets thousands separators so it's not a wall of digits.
+		cliout.Printf("  %s  uid=%s  model=%s  quota=%s  tokens=%d/%d  ch=#%d\n",
+			ts, r.Username, r.ModelName, commaInt(int64(r.Quota)), r.PromptTokens, r.CompletionTokens, r.ChannelID)
 		if r.Content != "" {
 			cliout.Printf("    %s\n", r.Content)
 		}
@@ -394,11 +384,18 @@ func adminAbuseList(args []string) error {
 		cliout.Println(i18n.T("admin.abuse.no_reports"))
 		return nil
 	}
-	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)
+	cliout.Printf(i18n.T("admin.common.rows_total")+"\n", len(rows), total)
 	for _, r := range rows {
 		when := time.Unix(r.CreatedAt, 0).Format("01-02 15:04")
-		cliout.Printf("  [#%d] %s  %s/%s  status=%s  by=%s (%s)\n",
-			r.ID, when, r.Category, r.TargetType, r.Status, r.ReporterEmail, r.ReporterIP)
+		by := r.ReporterEmail
+		if r.ReporterIP != "" {
+			if by != "" {
+				by += " "
+			}
+			by += "(" + r.ReporterIP + ")"
+		}
+		cliout.Printf("  #%-4d %s  %s/%s · %s · %s\n",
+			r.ID, when, r.Category, r.TargetType, r.Status, by)
 	}
 	return nil
 }
@@ -419,21 +416,17 @@ func adminAbuseShow(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Report #%d  status=%s\n", r.ID, r.Status)
-	cliout.Printf("  filed:        %s\n", time.Unix(r.CreatedAt, 0).Format("2006-01-02 15:04:05"))
-	cliout.Printf("  reporter:     %s (%s)  uid=%d\n", r.ReporterEmail, r.ReporterIP, r.ReporterUID)
-	cliout.Printf("  category:     %s\n", r.Category)
-	cliout.Printf("  target type:  %s\n", r.TargetType)
-	if r.TargetID != "" {
-		cliout.Printf("  target id:    %s\n", r.TargetID)
-	}
-	if r.EvidenceURL != "" {
-		cliout.Printf("  evidence:     %s\n", r.EvidenceURL)
-	}
-	cliout.Printf("  description:\n    %s\n", r.Description)
-	if r.AdminNote != "" {
-		cliout.Printf("  admin note:\n    %s\n", r.AdminNote)
-	}
+	var d detail
+	d.add("admin.abuse.f_status", r.Status)
+	d.add("admin.abuse.f_filed", time.Unix(r.CreatedAt, 0).Format("2006-01-02 15:04:05"))
+	d.add("admin.abuse.f_reporter", fmt.Sprintf("%s (%s) uid=%d", r.ReporterEmail, r.ReporterIP, r.ReporterUID))
+	d.add("admin.abuse.f_category", r.Category)
+	d.add("admin.abuse.f_target_type", r.TargetType)
+	d.add("admin.abuse.f_target_id", r.TargetID)
+	d.add("admin.abuse.f_evidence", r.EvidenceURL)
+	d.add("admin.abuse.f_description", r.Description)
+	d.add("admin.abuse.f_note", r.AdminNote)
+	printDetail("admin.abuse.detail_title", r.ID, d)
 	return nil
 }
 
@@ -461,7 +454,7 @@ func adminAbuseUpdate(args []string) error {
 	if err := client.AdminUpdateAbuseReport(cliout.WithCtx(), id, *status, *note); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Report #%d updated.\n", id)
+	cliout.Printf(i18n.T("admin.abuse.updated")+"\n", id)
 	return nil
 }
 
@@ -486,11 +479,13 @@ func adminAudit(args []string) error {
 		cliout.Println(i18n.T("admin.audit.no_rows"))
 		return nil
 	}
-	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)
+	cliout.Printf(i18n.T("admin.common.rows_total")+"\n", len(rows), total)
 	for _, r := range rows {
 		when := time.Unix(r.CreatedAt, 0).Format("01-02 15:04:05")
-		cliout.Printf("  %s  [%s] uid=%d (%s)  target=%s/%s\n",
-			when, r.Action, r.ActorID, r.ActorName, r.TargetType, r.TargetID)
+		// Label-free "·"-joined form (no English field tags): time ·
+		// action · actor (#id) · target. Values are backend strings.
+		cliout.Printf("  %s · %s · %s (#%d) · %s/%s\n",
+			when, r.Action, r.ActorName, r.ActorID, r.TargetType, r.TargetID)
 		if r.Payload != "" {
 			line := r.Payload
 			if len(line) > 200 {

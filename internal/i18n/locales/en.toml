@@ -776,12 +776,34 @@ NOTE
 '''
 
 [admin.user]
+status_enabled = "enabled"
+status_disabled = "disabled"
+used = "used"
+detail_title = "User"
+f_username = "username"
+f_email = "email"
+f_role = "role"
+f_status = "status"
+f_group = "group"
+f_quota = "quota"
+f_display = "display name"
 no_matches = "No matches."
 deleted = "User #%d deleted."
 delete_confirm = "Delete user #%d? This is destructive and irreversible."
 action_applied = "admin user manage: action=%q applied to user #%d"
 
 [admin.abuse]
+updated = "Report #%d updated."
+detail_title = "Report"
+f_status = "status"
+f_filed = "filed"
+f_reporter = "reporter"
+f_category = "category"
+f_target_type = "target type"
+f_target_id = "target id"
+f_evidence = "evidence"
+f_description = "description"
+f_note = "admin note"
 no_reports = "No reports."
 
 [admin.audit]
@@ -1230,6 +1252,14 @@ ind_critical = "critical outage"
 ind_unknown = "unknown"
 
 [admin.redemption]
+detail_title = "Redemption"
+f_key = "key"
+f_name = "name"
+f_status = "status"
+f_quota = "quota"
+f_created = "created"
+f_expires = "expires"
+f_used_by = "used by"
 none = "No redemption codes."
 never = "never"
 status_enabled = "enabled"
@@ -1345,3 +1375,56 @@ bad_id = "Please enter a positive integer id."
 [admin.console]
 title_area = "admin — pick an area:"
 title_action = "%s — pick an action:"
+
+[admin.role]
+guest = "guest"
+common = "user"
+admin = "admin"
+root = "root"
+
+[admin.common]
+rows_total = "%d row(s) of %d total:"
+matches = "%d match(es):"
+matches_total = "%d match(es) of %d total:"
+
+[admin.channel]
+test_title = "Channel #%d test:"
+empty_result = "(empty result)"
+tag_enabled = "Tag %q enabled."
+tag_disabled = "Tag %q disabled."
+
+[admin.help]
+usage = '''
+everyapi admin — operator commands (admin-only)
+
+USAGE
+  everyapi admin <subcommand> [flags]
+
+SUBCOMMANDS
+  marketplace status     Show the current marketplace.enabled flag
+  marketplace on         Open the marketplace (BYO-GPU + seller flow)
+  marketplace off        Close it; running nodes keep going
+  user search <keyword>  Fuzzy lookup over username / email / display name
+  user show <id>         Single user record
+  user list [--page P]   Paged user list
+  user manage <id> --action enable|disable|delete|promote_admin|demote_admin
+                         Apply a status/role action (backend enforces the role check)
+  channel test <id>      Health-check one channel
+  channel tag <name> --enable|--disable
+                         Bulk-flip every channel carrying the tag
+  log tail [--user U] [--model M] [--channel C] [--group G] [--since W]
+                         Paged admin log search
+  abuse list [--status]  Filed reports
+  abuse show <id>        Single report
+  abuse update <id> --status X [--note N]
+                         Triage a report
+  audit [--page P]       Recent admin audit-log rows
+  redemption list|search <kw>|show <id>|create --name N --quota Q [--count C] [--expires E]
+             |update <id>|status <id> enable|disable|delete <id>|clear-invalid
+                         Manage prepaid quota vouchers (create mints + prints keys)
+  help                   Print this message
+
+Auth: reuses your 'everyapi auth login' token; you must be an admin on the backend (non-admins get a 403).
+
+Every action lands in the same audit log the dashboard writes to.
+'''

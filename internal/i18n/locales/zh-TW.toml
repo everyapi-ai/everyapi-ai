@@ -772,12 +772,34 @@ everyapi account subscription — 訂閱方案 / 我的訂閱 / 計費偏好
 '''
 
 [admin.user]
+status_enabled = "已啟用"
+status_disabled = "已停用"
+used = "已用"
+detail_title = "使用者"
+f_username = "使用者名稱"
+f_email = "電子郵件"
+f_role = "角色"
+f_status = "狀態"
+f_group = "分組"
+f_quota = "額度"
+f_display = "顯示名稱"
 no_matches = "無比對。"
 deleted = "使用者 #%d 已刪除。"
 delete_confirm = "刪除使用者 #%d？此操作具有破壞性且不可恢復。"
 action_applied = "admin user manage：操作 %q 已套用到使用者 #%d"
 
 [admin.abuse]
+updated = "檢舉 #%d 已更新。"
+detail_title = "檢舉"
+f_status = "狀態"
+f_filed = "提交時間"
+f_reporter = "檢舉人"
+f_category = "類別"
+f_target_type = "目標類型"
+f_target_id = "目標 ID"
+f_evidence = "證據"
+f_description = "描述"
+f_note = "管理備註"
 no_reports = "無檢舉。"
 
 [admin.audit]
@@ -1218,6 +1240,14 @@ ind_critical = "嚴重故障"
 ind_unknown = "未知"
 
 [admin.redemption]
+detail_title = "兌換碼"
+f_key = "金鑰"
+f_name = "名稱"
+f_status = "狀態"
+f_quota = "額度"
+f_created = "建立時間"
+f_expires = "過期時間"
+f_used_by = "使用者"
 none = "尚無兌換碼。"
 never = "永不過期"
 status_enabled = "啟用"
@@ -1333,3 +1363,56 @@ bad_id = "請輸入正整數 id。"
 [admin.console]
 title_area = "admin — 選個領域："
 title_action = "%s — 選個動作："
+
+[admin.role]
+guest = "訪客"
+common = "普通使用者"
+admin = "管理員"
+root = "超級管理員"
+
+[admin.common]
+rows_total = "顯示 %d 筆，共 %d 筆："
+matches = "%d 筆符合："
+matches_total = "%d 筆符合，共 %d 筆："
+
+[admin.channel]
+test_title = "通道 #%d 測試："
+empty_result = "（無結果）"
+tag_enabled = "標籤 %q 已啟用。"
+tag_disabled = "標籤 %q 已停用。"
+
+[admin.help]
+usage = '''
+everyapi admin — 運維命令（僅管理員）
+
+用法
+  everyapi admin <subcommand> [flags]
+
+子命令
+  marketplace status     查看目前 marketplace.enabled 開關
+  marketplace on         開啟市場（自帶 GPU + 賣家流程）
+  marketplace off        關閉市場；執行中的節點繼續執行
+  user search <keyword>  依使用者名稱 / 電子郵件 / 顯示名稱模糊查找
+  user show <id>         單筆使用者記錄
+  user list [--page P]   分頁使用者列表
+  user manage <id> --action enable|disable|delete|promote_admin|demote_admin
+                         套用狀態/角色操作（後端校驗權限）
+  channel test <id>      健康檢查單一通道
+  channel tag <name> --enable|--disable
+                         依標籤批次翻轉所有通道
+  log tail [--user U] [--model M] [--channel C] [--group G] [--since W]
+                         分頁管理日誌檢索
+  abuse list [--status]  已提交的檢舉
+  abuse show <id>        單筆檢舉
+  abuse update <id> --status X [--note N]
+                         處置一筆檢舉
+  audit [--page P]       近期管理稽核日誌
+  redemption list|search <kw>|show <id>|create --name N --quota Q [--count C] [--expires E]
+             |update <id>|status <id> enable|disable|delete <id>|clear-invalid
+                         管理預付額度兌換碼（建立即產生並列印金鑰）
+  help                   列印本說明
+
+驗證：複用你 'everyapi auth login' 的權杖；後端須為管理員（非管理員回傳 403）。
+
+所有操作都會寫入與面板相同的稽核日誌。
+'''

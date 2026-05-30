@@ -791,12 +791,34 @@ HINWEIS
 '''
 
 [admin.user]
+status_enabled = "aktiv"
+status_disabled = "deaktiviert"
+used = "verwendet"
+detail_title = "Benutzer"
+f_username = "Benutzername"
+f_email = "E-Mail"
+f_role = "Rolle"
+f_status = "Status"
+f_group = "Gruppe"
+f_quota = "Kontingent"
+f_display = "Anzeigename"
 no_matches = "Keine Treffer."
 deleted = "Nutzer #%d gelöscht."
 delete_confirm = "Nutzer #%d löschen? Dies ist destruktiv und unumkehrbar."
 action_applied = "admin user manage: action=%q auf Nutzer #%d angewendet"
 
 [admin.abuse]
+updated = "Meldung #%d aktualisiert."
+detail_title = "Meldung"
+f_status = "Status"
+f_filed = "eingereicht"
+f_reporter = "Melder"
+f_category = "Kategorie"
+f_target_type = "Zieltyp"
+f_target_id = "Ziel-ID"
+f_evidence = "Beweis"
+f_description = "Beschreibung"
+f_note = "Admin-Notiz"
 no_reports = "Keine Meldungen."
 
 [admin.audit]
@@ -1247,6 +1269,14 @@ ind_critical = "kritische Störung"
 ind_unknown = "unbekannt"
 
 [admin.redemption]
+detail_title = "Einlösecode"
+f_key = "Schlüssel"
+f_name = "Name"
+f_status = "Status"
+f_quota = "Kontingent"
+f_created = "erstellt"
+f_expires = "läuft ab"
+f_used_by = "verwendet von"
 none = "Keine Einlöse-Codes."
 never = "nie"
 status_enabled = "aktiviert"
@@ -1362,3 +1392,56 @@ bad_id = "Bitte eine positive ganze Zahl als id eingeben."
 [admin.console]
 title_area = "admin — Bereich wählen:"
 title_action = "%s — Aktion wählen:"
+
+[admin.role]
+guest = "Gast"
+common = "Benutzer"
+admin = "Administrator"
+root = "Root"
+
+[admin.common]
+rows_total = "%d Zeile(n) von %d insgesamt:"
+matches = "%d Treffer:"
+matches_total = "%d Treffer von %d insgesamt:"
+
+[admin.channel]
+test_title = "Kanal-#%d-Test:"
+empty_result = "(kein Ergebnis)"
+tag_enabled = "Tag %q aktiviert."
+tag_disabled = "Tag %q deaktiviert."
+
+[admin.help]
+usage = '''
+everyapi admin — Betreiberbefehle (nur Admin)
+
+VERWENDUNG
+  everyapi admin <subcommand> [flags]
+
+UNTERBEFEHLE
+  marketplace status     Aktuelles marketplace.enabled-Flag anzeigen
+  marketplace on         Marktplatz öffnen (BYO-GPU + Verkäuferfluss)
+  marketplace off        Schließen; laufende Knoten bleiben aktiv
+  user search <keyword>  Unscharfe Suche über Name / E-Mail / Anzeigename
+  user show <id>         Ein Benutzerdatensatz
+  user list [--page P]   Paginierte Benutzerliste
+  user manage <id> --action enable|disable|delete|promote_admin|demote_admin
+                         Status-/Rollenaktion anwenden (Backend prüft die Rolle)
+  channel test <id>      Einen Kanal auf Zustand prüfen
+  channel tag <name> --enable|--disable
+                         Alle Kanäle mit dem Tag massenhaft umschalten
+  log tail [--user U] [--model M] [--channel C] [--group G] [--since W]
+                         Paginierte Admin-Protokollsuche
+  abuse list [--status]  Eingereichte Meldungen
+  abuse show <id>        Eine Meldung
+  abuse update <id> --status X [--note N]
+                         Eine Meldung bearbeiten
+  audit [--page P]       Neueste Audit-Log-Einträge
+  redemption list|search <kw>|show <id>|create --name N --quota Q [--count C] [--expires E]
+             |update <id>|status <id> enable|disable|delete <id>|clear-invalid
+                         Prepaid-Kontingent-Codes verwalten (Erstellen erzeugt und druckt Schlüssel)
+  help                   Diese Meldung anzeigen
+
+Auth: verwendet dein 'everyapi auth login'-Token; du musst Backend-Admin sein (sonst 403).
+
+Jede Aktion landet im selben Audit-Log, das auch das Dashboard schreibt.
+'''

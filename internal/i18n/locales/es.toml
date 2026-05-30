@@ -794,12 +794,34 @@ NOTA
 '''
 
 [admin.user]
+status_enabled = "activo"
+status_disabled = "desactivado"
+used = "usado"
+detail_title = "Usuario"
+f_username = "usuario"
+f_email = "correo"
+f_role = "rol"
+f_status = "estado"
+f_group = "grupo"
+f_quota = "cuota"
+f_display = "nombre visible"
 no_matches = "Sin coincidencias."
 deleted = "Usuario #%d eliminado."
 delete_confirm = "¿Eliminar el usuario #%d? Esto es destructivo e irreversible."
 action_applied = "admin user manage: action=%q aplicada al usuario #%d"
 
 [admin.abuse]
+updated = "Reporte #%d actualizado."
+detail_title = "Reporte"
+f_status = "estado"
+f_filed = "fecha"
+f_reporter = "reportante"
+f_category = "categoría"
+f_target_type = "tipo de objetivo"
+f_target_id = "id de objetivo"
+f_evidence = "evidencia"
+f_description = "descripción"
+f_note = "nota de admin"
 no_reports = "Sin reportes."
 
 [admin.audit]
@@ -1251,6 +1273,14 @@ ind_critical = "interrupción crítica"
 ind_unknown = "desconocido"
 
 [admin.redemption]
+detail_title = "Canje"
+f_key = "clave"
+f_name = "nombre"
+f_status = "estado"
+f_quota = "cuota"
+f_created = "creado"
+f_expires = "caduca"
+f_used_by = "usado por"
 none = "No hay códigos de canje."
 never = "nunca"
 status_enabled = "habilitado"
@@ -1366,3 +1396,56 @@ bad_id = "Introduce un id entero positivo."
 [admin.console]
 title_area = "admin — elige un área:"
 title_action = "%s — elige una acción:"
+
+[admin.role]
+guest = "invitado"
+common = "usuario"
+admin = "administrador"
+root = "root"
+
+[admin.common]
+rows_total = "%d fila(s) de %d en total:"
+matches = "%d coincidencia(s):"
+matches_total = "%d coincidencia(s) de %d en total:"
+
+[admin.channel]
+test_title = "Prueba del canal #%d:"
+empty_result = "(sin resultados)"
+tag_enabled = "Etiqueta %q habilitada."
+tag_disabled = "Etiqueta %q deshabilitada."
+
+[admin.help]
+usage = '''
+everyapi admin — comandos de operador (solo admin)
+
+USO
+  everyapi admin <subcommand> [flags]
+
+SUBCOMANDOS
+  marketplace status     Muestra el indicador marketplace.enabled actual
+  marketplace on         Abrir el marketplace (BYO-GPU + flujo de vendedor)
+  marketplace off        Cerrarlo; los nodos en marcha siguen
+  user search <keyword>  Búsqueda difusa por usuario / correo / nombre visible
+  user show <id>         Un registro de usuario
+  user list [--page P]   Lista paginada de usuarios
+  user manage <id> --action enable|disable|delete|promote_admin|demote_admin
+                         Aplica una acción de estado/rol (el backend valida el rol)
+  channel test <id>      Comprobar el estado de un canal
+  channel tag <name> --enable|--disable
+                         Conmutar en bloque los canales con la etiqueta
+  log tail [--user U] [--model M] [--channel C] [--group G] [--since W]
+                         Búsqueda paginada del registro
+  abuse list [--status]  Reportes presentados
+  abuse show <id>        Un reporte
+  abuse update <id> --status X [--note N]
+                         Gestionar un reporte
+  audit [--page P]       Entradas recientes del registro de auditoría
+  redemption list|search <kw>|show <id>|create --name N --quota Q [--count C] [--expires E]
+             |update <id>|status <id> enable|disable|delete <id>|clear-invalid
+                         Gestiona códigos de canje de cuota (al crear genera e imprime claves)
+  help                   Mostrar este mensaje
+
+Auth: reutiliza tu token de 'everyapi auth login'; debes ser admin en el backend (los no admin reciben 403).
+
+Toda acción queda en el mismo registro de auditoría que escribe el panel.
+'''
