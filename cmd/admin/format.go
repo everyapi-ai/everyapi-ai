@@ -25,13 +25,13 @@ import (
 func roleLabel(role int) string {
 	switch role {
 	case 100:
-		return i18n.T("admin.role.root")
+		return style.Color(i18n.T("admin.role.root"), style.ToneRed)
 	case 10:
-		return i18n.T("admin.role.admin")
+		return style.Color(i18n.T("admin.role.admin"), style.ToneYellow)
 	case 1:
-		return i18n.T("admin.role.common")
+		return i18n.T("admin.role.common") // ordinary user — no tint
 	case 0:
-		return i18n.T("admin.role.guest")
+		return style.Color(i18n.T("admin.role.guest"), style.ToneGray)
 	default:
 		return fmt.Sprintf("role=%d", role)
 	}
@@ -41,9 +41,9 @@ func roleLabel(role int) string {
 func userStatusLabel(status int) string {
 	switch status {
 	case 1:
-		return i18n.T("admin.user.status_enabled")
+		return style.Color(i18n.T("admin.user.status_enabled"), style.ToneGreen)
 	case 2:
-		return i18n.T("admin.user.status_disabled")
+		return style.Color(i18n.T("admin.user.status_disabled"), style.ToneRed)
 	default:
 		return fmt.Sprintf("status=%d", status)
 	}
@@ -95,31 +95,89 @@ func commaInt(n int64) string {
 	return b.String()
 }
 
-// printUserRows renders a user listing: id, the username padded to the
-// widest in the set, then "role · status[ · quota][ · group]" with the
-// email trailing when present. withQuota is off for search (its rows
-// carry no quota), so search skips the extra /api/status round-trip.
+// tcol is one column of a printTable: a header plus whether it
+// right-aligns (numbers read better flush-right).
+type tcol struct {
+	header string
+	right  bool
+}
+
+// printTable renders an aligned table: a header row, then each row's cells
+// padded to the widest cell in their column (display width, CJK-safe), with
+// two-space gutters. trailing[i], when non-empty, is appended after the
+// fixed columns for row i — used for the often-empty, often-long email so
+// it never widens every row.
+func printTable(cols []tcol, rows [][]string, trailing []string) {
+	w := make([]int, len(cols))
+	for i, c := range cols {
+		w[i] = style.Width(c.header)
+	}
+	for _, r := range rows {
+		for i, cell := range r {
+			if x := style.Width(cell); x > w[i] {
+				w[i] = x
+			}
+		}
+	}
+	put := func(cells []string, trail string) {
+		var b strings.Builder
+		b.WriteString("  ")
+		for i, cell := range cells {
+			if i > 0 {
+				b.WriteString("  ")
+			}
+			if cols[i].right {
+				b.WriteString(padLeft(cell, w[i]))
+			} else {
+				b.WriteString(padName(cell, w[i]))
+			}
+		}
+		if trail != "" {
+			b.WriteString("  " + trail)
+		}
+		cliout.Println(strings.TrimRight(b.String(), " "))
+	}
+	header := make([]string, len(cols))
+	for i, c := range cols {
+		header[i] = style.Dim(c.header) // de-emphasize the header row
+	}
+	put(header, "")
+	for i, r := range rows {
+		t := ""
+		if trailing != nil {
+			t = trailing[i]
+		}
+		put(r, t)
+	}
+}
+
+// printUserRows renders a user listing as an aligned table. withQuota is
+// off for search (its rows carry no quota), so it drops the quota/used
+// columns and skips the extra /api/status round-trip.
 func printUserRows(rows []api.AdminUserRow, perUnit float64, withQuota bool) {
-	maxName := 0
-	for _, u := range rows {
-		if w := style.Width(u.Username); w > maxName {
-			maxName = w
-		}
+	cols := []tcol{
+		{"ID", true},
+		{i18n.T("admin.user.f_username"), false},
+		{i18n.T("admin.user.f_role"), false},
+		{i18n.T("admin.user.f_status"), false},
 	}
-	for _, u := range rows {
-		segs := []string{roleLabel(u.Role), userStatusLabel(u.Status)}
+	if withQuota {
+		cols = append(cols, tcol{i18n.T("admin.user.f_quota"), true}, tcol{i18n.T("admin.user.used"), true})
+	}
+	cols = append(cols, tcol{i18n.T("admin.user.f_group"), false})
+
+	cells := make([][]string, len(rows))
+	trailing := make([]string, len(rows))
+	for i, u := range rows {
+		row := []string{fmt.Sprintf("#%d", u.ID), u.Username, roleLabel(u.Role), userStatusLabel(u.Status)}
 		if withQuota {
-			segs = append(segs, quotaUsed(u.Quota, u.UsedQuota, perUnit))
+			row = append(row, fmtQuota(u.Quota, perUnit), fmtQuota(u.UsedQuota, perUnit))
 		}
-		if u.Group != "" {
-			segs = append(segs, u.Group)
-		}
-		line := fmt.Sprintf("  #%-4d %s  %s", u.ID, padName(u.Username, maxName), strings.Join(segs, " · "))
-		if u.Email != "" {
-			line += "  " + u.Email
-		}
-		cliout.Println(line)
+		row = append(row, u.Group)
+		cells[i] = row
+		trailing[i] = u.Email
 	}
+	printTable(cols, cells, trailing)
 }
 
 // detail accumulates "label: value" rows for a single-record view. Build
@@ -145,9 +203,31 @@ func printDetail(titleKey string, id int, d detail) {
 			w = x
 		}
 	}
-	cliout.Printf("%s #%d\n", i18n.T(titleKey), id)
+	cliout.Printf("%s #%d\n", style.Bold(i18n.T(titleKey)), id)
 	for _, r := range d.rows {
-		cliout.Printf("  %s  %s\n", padName(r.label+":", w+1), r.val)
+		// Dim the label column (same de-emphasis as table headers); the
+		// value keeps whatever tint roleLabel/statusLabel gave it.
+		cliout.Printf("  %s  %s\n", style.Dim(padName(r.label+":", w+1)), r.val)
+	}
+}
+
+// okText / mutedText tint a localized message: green for a successful
+// mutation, gray for a no-op / cancellation. The whole template is
+// wrapped, so any %-verb inside is filled by the caller's Printf after
+// the color codes — and both are TTY-aware (plain when unstyled).
+func okText(key string) string    { return style.Color(i18n.T(key), style.ToneGreen) }
+func mutedText(key string) string { return style.Color(i18n.T(key), style.ToneGray) }
+
+// boolState tints a marketplace.enabled flag value: true → green, false →
+// gray, anything else (e.g. "<unset>") dimmed.
+func boolState(s string) string {
+	switch s {
+	case "true":
+		return style.Color(s, style.ToneGreen)
+	case "false":
+		return style.Color(s, style.ToneGray)
+	default:
+		return style.Dim(s)
 	}
 }
 
@@ -169,6 +249,15 @@ func printUserDetail(u *api.AdminUserRow, perUnit float64) {
 func padName(s string, w int) string {
 	if d := w - style.Width(s); d > 0 {
 		return s + strings.Repeat(" ", d)
+	}
+	return s
+}
+
+// padLeft left-pads s to w display columns (right-alignment) for numeric
+// columns so decimal points and ids line up.
+func padLeft(s string, w int) string {
+	if d := w - style.Width(s); d > 0 {
+		return strings.Repeat(" ", d) + s
 	}
 	return s
 }

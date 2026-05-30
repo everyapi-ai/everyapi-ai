@@ -6,12 +6,14 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"time"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/internal/style"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -152,7 +154,7 @@ func adminUserManage(args []string) error {
 	}); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf(i18n.T("admin.user.action_applied")+"\n", *action, id)
+	cliout.Printf(okText("admin.user.action_applied")+"\n", *action, id)
 	return nil
 }
 
@@ -179,7 +181,7 @@ func adminUserDelete(args []string) error {
 			return err
 		}
 		if !ok {
-			cliout.Println(i18n.T("common.canceled"))
+			cliout.Println(mutedText("common.canceled"))
 			return nil
 		}
 	}
@@ -190,7 +192,7 @@ func adminUserDelete(args []string) error {
 	if err := client.AdminDeleteUser(cliout.WithCtx(), id); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf(i18n.T("admin.user.deleted")+"\n", id)
+	cliout.Printf(okText("admin.user.deleted")+"\n", id)
 	return nil
 }
 
@@ -226,13 +228,24 @@ func adminChannelTest(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf(i18n.T("admin.channel.test_title")+"\n", id)
+	cliout.Printf("%s\n", style.Bold(fmt.Sprintf(i18n.T("admin.channel.test_title"), id)))
 	if len(res) == 0 {
-		cliout.Println("  " + i18n.T("admin.channel.empty_result"))
+		cliout.Println("  " + style.Dim(i18n.T("admin.channel.empty_result")))
 		return nil
 	}
-	for k, v := range res {
-		cliout.Printf("  %s: %v\n", k, v)
+	// Backend test result is a free-form map; sort the keys for a stable
+	// order and align them into a dim-labelled column.
+	keys := make([]string, 0, len(res))
+	w := 0
+	for k := range res {
+		keys = append(keys, k)
+		if x := style.Width(k); x > w {
+			w = x
+		}
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		cliout.Printf("  %s  %v\n", style.Dim(padName(k+":", w+1)), res[k])
 	}
 	return nil
 }
@@ -262,7 +275,7 @@ func adminChannelTag(args []string) error {
 	if *enable {
 		key = "admin.channel.tag_enabled"
 	}
-	cliout.Printf(i18n.T(key)+"\n", tag)
+	cliout.Printf(okText(key)+"\n", tag)
 	return nil
 }
 
@@ -317,7 +330,7 @@ func adminLogTail(args []string) error {
 		// amounts to USD cents would collapse them all to $0.00 — but
 		// gets thousands separators so it's not a wall of digits.
 		cliout.Printf("  %s  uid=%s  model=%s  quota=%s  tokens=%d/%d  ch=#%d\n",
-			ts, r.Username, r.ModelName, commaInt(int64(r.Quota)), r.PromptTokens, r.CompletionTokens, r.ChannelID)
+			style.Dim(ts), r.Username, r.ModelName, commaInt(int64(r.Quota)), r.PromptTokens, r.CompletionTokens, r.ChannelID)
 		if r.Content != "" {
 			cliout.Printf("    %s\n", r.Content)
 		}
@@ -385,8 +398,16 @@ func adminAbuseList(args []string) error {
 		return nil
 	}
 	cliout.Printf(i18n.T("admin.common.rows_total")+"\n", len(rows), total)
-	for _, r := range rows {
-		when := time.Unix(r.CreatedAt, 0).Format("01-02 15:04")
+	cols := []tcol{
+		{"ID", true},
+		{i18n.T("admin.abuse.f_filed"), false},
+		{i18n.T("admin.abuse.f_category"), false},
+		{i18n.T("admin.abuse.f_target_type"), false},
+		{i18n.T("admin.abuse.f_status"), false},
+		{i18n.T("admin.abuse.f_reporter"), false},
+	}
+	cells := make([][]string, len(rows))
+	for i, r := range rows {
 		by := r.ReporterEmail
 		if r.ReporterIP != "" {
 			if by != "" {
@@ -394,9 +415,13 @@ func adminAbuseList(args []string) error {
 			}
 			by += "(" + r.ReporterIP + ")"
 		}
-		cliout.Printf("  #%-4d %s  %s/%s · %s · %s\n",
-			r.ID, when, r.Category, r.TargetType, r.Status, by)
+		cells[i] = []string{
+			fmt.Sprintf("#%d", r.ID),
+			time.Unix(r.CreatedAt, 0).Format("01-02 15:04"),
+			r.Category, r.TargetType, r.Status, by,
+		}
 	}
+	printTable(cols, cells, nil)
 	return nil
 }
 
@@ -454,7 +479,7 @@ func adminAbuseUpdate(args []string) error {
 	if err := client.AdminUpdateAbuseReport(cliout.WithCtx(), id, *status, *note); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf(i18n.T("admin.abuse.updated")+"\n", id)
+	cliout.Printf(okText("admin.abuse.updated")+"\n", id)
 	return nil
 }
 
@@ -485,13 +510,13 @@ func adminAudit(args []string) error {
 		// Label-free "·"-joined form (no English field tags): time ·
 		// action · actor (#id) · target. Values are backend strings.
 		cliout.Printf("  %s · %s · %s (#%d) · %s/%s\n",
-			when, r.Action, r.ActorName, r.ActorID, r.TargetType, r.TargetID)
+			style.Dim(when), r.Action, r.ActorName, r.ActorID, r.TargetType, r.TargetID)
 		if r.Payload != "" {
 			line := r.Payload
 			if len(line) > 200 {
 				line = line[:200] + "…"
 			}
-			cliout.Printf("    %s\n", line)
+			cliout.Printf("    %s\n", style.Dim(line))
 		}
 	}
 	return nil

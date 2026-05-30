@@ -43,7 +43,7 @@ func marketplaceStatus() error {
 		cliout.Printf("%s", i18n.T("admin.marketplace.status_unset"))
 		return nil
 	}
-	cliout.Printf(i18n.T("admin.marketplace.status_set"), val)
+	cliout.Printf(i18n.T("admin.marketplace.status_set"), boolState(val))
 	return nil
 }
 
@@ -68,10 +68,10 @@ func marketplaceSet(target bool) error {
 		return err
 	}
 	if prev == targetStr {
-		cliout.Printf(i18n.T("admin.marketplace.no_change"), targetStr)
+		cliout.Printf(i18n.T("admin.marketplace.no_change"), boolState(targetStr))
 		return nil
 	}
-	cliout.Printf(i18n.T("admin.marketplace.changed"), prevOrUnset(prev), targetStr)
+	cliout.Printf(i18n.T("admin.marketplace.changed"), boolState(prevOrUnset(prev)), boolState(targetStr))
 	return nil
 }
 

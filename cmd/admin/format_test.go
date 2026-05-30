@@ -3,13 +3,18 @@ package admin
 import (
 	"testing"
 
+	"github.com/muesli/termenv"
+
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/internal/styletest"
 )
 
 // roleLabel / userStatusLabel must translate the known enums and fall
 // back to the raw form for anything unexpected (so a future backend role
-// is visible, not silently blank).
+// is visible, not silently blank). Force the Ascii profile so labels are
+// plain (no color escapes) regardless of the test host's TERM.
 func TestRoleAndStatusLabels(t *testing.T) {
+	styletest.WithColorProfile(t, termenv.Ascii)
 	i18n.SetLanguage("en")
 	for role, want := range map[int]string{100: "root", 10: "admin", 1: "user", 0: "guest"} {
 		if got := roleLabel(role); got != want {
@@ -53,5 +58,20 @@ func TestFmtQuota(t *testing.T) {
 	}
 	if got := fmtQuota(9000000, 0); got != "9,000,000" {
 		t.Errorf("fmtQuota with no perUnit = %q, want raw grouped 9,000,000", got)
+	}
+}
+
+// padLeft / padName align by display width (CJK runes count as 2), which
+// is what keeps the table columns straight.
+func TestPad(t *testing.T) {
+	if got := padLeft("#1", 4); got != "  #1" {
+		t.Errorf("padLeft(#1,4) = %q, want '  #1'", got)
+	}
+	if got := padName("x", 4); got != "x   " {
+		t.Errorf("padName(x,4) = %q, want 'x   '", got)
+	}
+	// 角色 is 2 CJK runes = 4 display cols; padding to 6 adds 2 spaces.
+	if got := padName("角色", 6); got != "角色  " {
+		t.Errorf("padName(角色,6) = %q, want '角色  '", got)
 	}
 }

@@ -99,3 +99,23 @@ func Badge(s string, t Tone) string {
 	}
 	return "\x1b[7m" + t.sgr() + s + "\x1b[0m"
 }
+
+// Color renders s in the tone's foreground color (no reverse-video) —
+// lighter than Badge, for tinting table cells (status / role) without a
+// chip on every row. Same TTY/NO_COLOR gate; Width still measures the
+// visible text, so colored cells stay aligned.
+func Color(s string, t Tone) string {
+	if lipgloss.ColorProfile() == termenv.Ascii {
+		return s
+	}
+	return t.sgr() + s + "\x1b[0m"
+}
+
+// Dim renders s faint — for de-emphasized chrome like table headers and
+// id columns. TTY-aware; closes with a full reset.
+func Dim(s string) string {
+	if lipgloss.ColorProfile() == termenv.Ascii {
+		return s
+	}
+	return "\x1b[2m" + s + "\x1b[0m"
+}

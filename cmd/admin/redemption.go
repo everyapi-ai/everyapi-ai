@@ -12,6 +12,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/internal/style"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 )
 
@@ -51,23 +52,34 @@ func adminRedemption(args []string) error {
 func redemptionStatusLabel(s int) string {
 	switch s {
 	case api.RedemptionStatusEnabled:
-		return i18n.T("admin.redemption.status_enabled")
+		return style.Color(i18n.T("admin.redemption.status_enabled"), style.ToneGreen)
 	case api.RedemptionStatusDisabled:
-		return i18n.T("admin.redemption.status_disabled")
+		return style.Color(i18n.T("admin.redemption.status_disabled"), style.ToneGray)
 	case api.RedemptionStatusUsed:
-		return i18n.T("admin.redemption.status_used")
+		return style.Color(i18n.T("admin.redemption.status_used"), style.ToneGray)
 	default:
 		return fmt.Sprintf("status=%d", s)
 	}
 }
 
-func printRedemptionRow(r api.Redemption, perUnit float64) {
-	exp := i18n.T("admin.redemption.never")
-	if r.ExpiredTime > 0 {
-		exp = time.Unix(r.ExpiredTime, 0).Format("2006-01-02")
+// printRedemptionRows renders the voucher listing as an aligned table.
+func printRedemptionRows(rows []api.Redemption, perUnit float64) {
+	cols := []tcol{
+		{"ID", true},
+		{i18n.T("admin.redemption.f_name"), false},
+		{i18n.T("admin.redemption.f_status"), false},
+		{i18n.T("admin.redemption.f_quota"), true},
+		{i18n.T("admin.redemption.f_expires"), false},
 	}
-	cliout.Printf("  #%-4d %s · %s · %s · %s\n",
-		r.ID, r.Name, redemptionStatusLabel(r.Status), fmtQuota(int64(r.Quota), perUnit), exp)
+	cells := make([][]string, len(rows))
+	for i, r := range rows {
+		exp := i18n.T("admin.redemption.never")
+		if r.ExpiredTime > 0 {
+			exp = time.Unix(r.ExpiredTime, 0).Format("2006-01-02")
+		}
+		cells[i] = []string{fmt.Sprintf("#%d", r.ID), r.Name, redemptionStatusLabel(r.Status), fmtQuota(int64(r.Quota), perUnit), exp}
+	}
+	printTable(cols, cells, nil)
 }
 
 func adminRedemptionList(args []string) error {
@@ -90,10 +102,7 @@ func adminRedemptionList(args []string) error {
 		return nil
 	}
 	cliout.Printf(i18n.T("admin.common.rows_total")+"\n", len(rows), total)
-	perUnit := quotaPerUnit(client)
-	for _, r := range rows {
-		printRedemptionRow(r, perUnit)
-	}
+	printRedemptionRows(rows, quotaPerUnit(client))
 	return nil
 }
 
@@ -121,10 +130,7 @@ func adminRedemptionSearch(args []string) error {
 		return nil
 	}
 	cliout.Printf(i18n.T("admin.common.matches_total")+"\n", len(rows), total)
-	perUnit := quotaPerUnit(client)
-	for _, r := range rows {
-		printRedemptionRow(r, perUnit)
-	}
+	printRedemptionRows(rows, quotaPerUnit(client))
 	return nil
 }
 
@@ -193,7 +199,7 @@ func adminRedemptionCreate(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf(i18n.T("admin.redemption.created")+"\n", len(keys))
+	cliout.Printf(okText("admin.redemption.created")+"\n", len(keys))
 	for _, k := range keys {
 		cliout.Printf("  %s\n", k)
 	}
@@ -247,7 +253,7 @@ func adminRedemptionUpdate(args []string) error {
 	if err := client.AdminUpdateRedemption(cliout.WithCtx(), upd); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf(i18n.T("admin.redemption.updated")+"\n", id)
+	cliout.Printf(okText("admin.redemption.updated")+"\n", id)
 	return nil
 }
 
@@ -298,7 +304,7 @@ func adminRedemptionDelete(args []string) error {
 			return err
 		}
 		if !ok {
-			cliout.Println(i18n.T("common.canceled"))
+			cliout.Println(mutedText("common.canceled"))
 			return nil
 		}
 	}
@@ -309,7 +315,7 @@ func adminRedemptionDelete(args []string) error {
 	if err := client.AdminDeleteRedemption(cliout.WithCtx(), id); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf(i18n.T("admin.redemption.deleted")+"\n", id)
+	cliout.Printf(okText("admin.redemption.deleted")+"\n", id)
 	return nil
 }
 
@@ -325,7 +331,7 @@ func adminRedemptionClearInvalid(args []string) error {
 			return err
 		}
 		if !ok {
-			cliout.Println(i18n.T("common.canceled"))
+			cliout.Println(mutedText("common.canceled"))
 			return nil
 		}
 	}
@@ -337,6 +343,6 @@ func adminRedemptionClearInvalid(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf(i18n.T("admin.redemption.cleared")+"\n", n)
+	cliout.Printf(okText("admin.redemption.cleared")+"\n", n)
 	return nil
 }
