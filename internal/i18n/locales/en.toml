@@ -35,6 +35,8 @@ rows_of_total = "%d row(s) of %d total:"
 
 [launcher]
 welcome = "everyapi — pick a command:"
+pick_category = "everyapi — pick a category:"
+nav_hint = "↑/↓ select · enter confirm · esc back"
 usage = '''
 everyapi — EveryAPI CLI
 
@@ -79,6 +81,15 @@ Run 'everyapi <command> help' for subcommand details and flags
 '''
 usage_admin_block = '''  **admin** <sub>     **Operator** commands (admin role required)
 '''
+
+[launcher.group]
+account = "Account & Billing"
+api = "Using the API"
+insights = "Usage & Insights"
+marketplace = "Marketplace & Messages"
+selling = "Selling & Supply"
+tools = "Tools & Settings"
+admin = "Admin"
 
 [launcher.desc]
 login = "Authenticate this **device** with EveryAPI"
@@ -200,6 +211,10 @@ saved = "Settings saved."
 lang_invalid = "invalid language; supported"
 current = "Current settings"
 lang_label = "language"
+menu_label = "Launcher menu layout"
+menu_grouped = "grouped (single screen)"
+menu_nested = "nested (category picker)"
+menu_invalid = "menu_layout must be 'grouped' or 'nested'"
 file_at = "Settings file:"
 reset_confirm = "Reset all CLI settings to defaults?"
 unknown_key = "unknown setting key %q"

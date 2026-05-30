@@ -39,6 +39,8 @@ rows_of_total = "%d fila(s) de %d total:"
 
 [launcher]
 welcome = "everyapi — elige un comando:"
+pick_category = "everyapi — elige una categoría:"
+nav_hint = "↑/↓ seleccionar · enter confirmar · esc volver"
 usage = '''
 everyapi — CLI de EveryAPI
 
@@ -83,6 +85,15 @@ Ejecuta 'everyapi <comando> help' para ver detalles y opciones de subcomandos
 '''
 usage_admin_block = '''  admin <sub>     Comandos de operador (requiere rol admin)
 '''
+
+[launcher.group]
+account = "Cuenta y facturación"
+api = "Usar la API"
+insights = "Uso y métricas"
+marketplace = "Mercado y mensajes"
+selling = "Vender / suministro"
+tools = "Herramientas y ajustes"
+admin = "Administración"
 
 [launcher.desc]
 login = "Autenticar este dispositivo con EveryAPI"
@@ -204,6 +215,10 @@ saved = "Configuración guardada."
 lang_invalid = "idioma no válido; soportados"
 current = "Configuración actual"
 lang_label = "idioma"
+menu_label = "Disposición del menú"
+menu_grouped = "agrupado (una pantalla)"
+menu_nested = "anidado (selección por categoría)"
+menu_invalid = "menu_layout debe ser 'grouped' o 'nested'"
 file_at = "Archivo de configuración:"
 reset_confirm = "¿Restablecer toda la configuración del CLI a los valores por defecto?"
 unknown_key = "clave de configuración desconocida %q"

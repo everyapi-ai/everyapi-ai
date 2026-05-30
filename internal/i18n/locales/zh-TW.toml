@@ -23,6 +23,8 @@ rows_of_total = "共 %d 行，總計 %d 行："
 
 [launcher]
 welcome = "everyapi — 選一個命令："
+pick_category = "everyapi — 選一個類別："
+nav_hint = "↑/↓ 選擇 · enter 確認 · esc 返回"
 usage = '''
 everyapi — EveryAPI 命令列
 
@@ -67,6 +69,15 @@ __ADMIN_BLOCK__
 '''
 usage_admin_block = '''  admin <子>      維運命令（需要管理員角色）
 '''
+
+[launcher.group]
+account = "帳戶 / 計費"
+api = "呼叫 API"
+insights = "用量與監控"
+marketplace = "市場與訊息"
+selling = "賣家 / 供給"
+tools = "工具與設定"
+admin = "管理"
 
 [launcher.desc]
 login = "登入此裝置到 EveryAPI"
@@ -188,6 +199,10 @@ saved = "設定已儲存。"
 lang_invalid = "語言不支援，可選"
 current = "目前設定"
 lang_label = "語言"
+menu_label = "啟動器選單版面"
+menu_grouped = "分組（單一畫面）"
+menu_nested = "分層（先選類別）"
+menu_invalid = "menu_layout 只能是 grouped 或 nested"
 file_at = "設定檔："
 reset_confirm = "重置所有 CLI 設定為預設值？"
 unknown_key = "未知設定項 %q"

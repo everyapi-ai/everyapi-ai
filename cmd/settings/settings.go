@@ -64,6 +64,7 @@ func runList(args []string) error {
 	}
 	cliout.Printf("%s\n", i18n.T("settings.current"))
 	cliout.Printf("  %s: %s\n", i18n.T("settings.lang_label"), labelLanguage(s.Language))
+	cliout.Printf("  %s: %s\n", i18n.T("settings.menu_label"), labelMenuLayout(s.MenuLayout))
 	path, _ := config.SettingsPath()
 	if path != "" {
 		cliout.Printf("\n%s %s\n", i18n.T("settings.file_at"), path)
@@ -196,11 +197,33 @@ func runInteractive() error {
 	}
 	picked := langs[idx]
 	s.Language = picked
+	// Apply the language immediately so the menu-layout picker below
+	// renders its labels in the just-chosen language.
+	i18n.SetLanguage(picked)
+	_ = os.Setenv("EVERYAPI_LANG", picked)
+
+	// Second question: launcher menu layout (grouped single screen vs.
+	// nested category picker). Esc here keeps the language choice and
+	// leaves the layout unchanged.
+	layouts := []string{"grouped", "nested"}
+	layoutOpts := []string{i18n.T("settings.menu_grouped"), i18n.T("settings.menu_nested")}
+	curLayout := 0
+	if effectiveMenuLayout(s.MenuLayout) == "nested" {
+		curLayout = 1
+	}
+	lidx, lerr := cliprompt.PickWithSelected(i18n.T("settings.menu_label"), layoutOpts, curLayout)
+	if lerr != nil {
+		if !errors.Is(lerr, cliprompt.ErrPickCancelled) {
+			return lerr
+		}
+		// Esc: skip the layout change, still persist the language.
+	} else {
+		s.MenuLayout = layouts[lidx]
+	}
+
 	if err := config.SaveSettings(s); err != nil {
 		return err
 	}
-	i18n.SetLanguage(picked)
-	_ = os.Setenv("EVERYAPI_LANG", picked)
 	cliout.Println(i18n.T("settings.saved"))
 	return nil
 }
@@ -215,6 +238,8 @@ func readKey(s *config.Settings, key string) (string, bool) {
 	switch key {
 	case "language":
 		return s.Language, true
+	case "menu_layout":
+		return effectiveMenuLayout(s.MenuLayout), true
 	}
 	return "", false
 }
@@ -232,8 +257,34 @@ func writeKey(s *config.Settings, key, value string) error {
 		}
 		s.Language = v
 		return nil
+	case "menu_layout":
+		v := strings.ToLower(strings.TrimSpace(value))
+		if v != "grouped" && v != "nested" {
+			return errors.New(i18n.T("settings.menu_invalid"))
+		}
+		s.MenuLayout = v
+		return nil
 	}
 	return fmt.Errorf(i18n.T("settings.unknown_key"), key)
+}
+
+// effectiveMenuLayout maps the stored value (possibly empty) to the
+// concrete layout the launcher uses, so `settings get` / `list` show
+// what's actually in effect rather than a blank.
+func effectiveMenuLayout(v string) string {
+	if v == "nested" {
+		return "nested"
+	}
+	return "grouped"
+}
+
+// labelMenuLayout renders the layout for the settings list — the
+// localized human name, not the raw enum value.
+func labelMenuLayout(v string) string {
+	if effectiveMenuLayout(v) == "nested" {
+		return i18n.T("settings.menu_nested")
+	}
+	return i18n.T("settings.menu_grouped")
 }
 
 func contains(haystack []string, needle string) bool {

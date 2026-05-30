@@ -23,6 +23,8 @@ rows_of_total = "共 %d 行，总计 %d 行："
 
 [launcher]
 welcome = "everyapi — 选一个命令："
+pick_category = "everyapi — 选一个类别："
+nav_hint = "↑/↓ 选择 · enter 确认 · esc 返回"
 usage = '''
 everyapi — EveryAPI 命令行
 
@@ -67,6 +69,15 @@ __ADMIN_BLOCK__
 '''
 usage_admin_block = '''  admin <子>      运维命令（需要管理员角色）
 '''
+
+[launcher.group]
+account = "账户 / 计费"
+api = "调用 API"
+insights = "用量与监控"
+marketplace = "市场与消息"
+selling = "卖家 / 供给"
+tools = "工具与设置"
+admin = "管理"
 
 [launcher.desc]
 login = "登录此设备到 EveryAPI"
@@ -188,6 +199,10 @@ saved = "设置已保存。"
 lang_invalid = "语言不支持，可选"
 current = "当前设置"
 lang_label = "语言"
+menu_label = "启动器菜单布局"
+menu_grouped = "分组（单屏）"
+menu_nested = "分层（先选类别）"
+menu_invalid = "menu_layout 只能是 grouped 或 nested"
 file_at = "配置文件："
 reset_confirm = "重置所有 CLI 设置为默认值？"
 unknown_key = "未知设置项 %q"

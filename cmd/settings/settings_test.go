@@ -61,3 +61,45 @@ func TestLabelLanguage(t *testing.T) {
 		t.Errorf("explicit pref: got %q, want zh", got)
 	}
 }
+
+// TestMenuLayout_WriteReadRoundTrip covers the menu_layout key: valid
+// values stick, invalid ones are rejected, and readKey reports the
+// effective layout (empty → grouped).
+func TestMenuLayout_WriteReadRoundTrip(t *testing.T) {
+	s := &config.Settings{}
+
+	// Empty stored value reads back as the effective default.
+	if v, ok := readKey(s, "menu_layout"); !ok || v != "grouped" {
+		t.Errorf("readKey(menu_layout) on empty = %q,%v; want \"grouped\",true", v, ok)
+	}
+
+	if err := writeKey(s, "menu_layout", "nested"); err != nil {
+		t.Fatalf("writeKey nested: %v", err)
+	}
+	if s.MenuLayout != "nested" {
+		t.Errorf("MenuLayout = %q, want nested", s.MenuLayout)
+	}
+	if v, _ := readKey(s, "menu_layout"); v != "nested" {
+		t.Errorf("readKey(menu_layout) = %q, want nested", v)
+	}
+
+	// Case-insensitive + trims.
+	if err := writeKey(s, "menu_layout", "  GROUPED "); err != nil {
+		t.Fatalf("writeKey GROUPED: %v", err)
+	}
+	if s.MenuLayout != "grouped" {
+		t.Errorf("MenuLayout = %q, want grouped", s.MenuLayout)
+	}
+
+	if err := writeKey(s, "menu_layout", "fancy"); err == nil {
+		t.Error("writeKey accepted an invalid menu_layout value")
+	}
+}
+
+func TestEffectiveMenuLayout(t *testing.T) {
+	for in, want := range map[string]string{"": "grouped", "grouped": "grouped", "nested": "nested", "bogus": "grouped"} {
+		if got := effectiveMenuLayout(in); got != want {
+			t.Errorf("effectiveMenuLayout(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

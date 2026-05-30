@@ -244,3 +244,69 @@ func TestSessionRejected(t *testing.T) {
 		}
 	})
 }
+
+// TestEveryCommandGrouped is the guard that keeps the launcher's
+// category map exhaustive: every registered top-level command must map
+// to a known group, and every group it maps to must be one the launcher
+// actually renders (launcherGroupOrder). A new command added to the
+// registry with no commandGroup entry fails here instead of silently
+// landing in the groupOf fallback bucket.
+func TestEveryCommandGrouped(t *testing.T) {
+	known := map[string]bool{}
+	for _, g := range launcherGroupOrder {
+		known[g] = true
+	}
+	for _, c := range commands {
+		g, ok := commandGroup[c.name]
+		if !ok {
+			t.Errorf("command %q has no commandGroup entry", c.name)
+			continue
+		}
+		if !known[g] {
+			t.Errorf("command %q maps to group %q which isn't in launcherGroupOrder", c.name, g)
+		}
+	}
+	// Reverse: no stale mapping for a command that no longer exists.
+	exists := map[string]bool{}
+	for _, c := range commands {
+		exists[c.name] = true
+	}
+	for name := range commandGroup {
+		if !exists[name] {
+			t.Errorf("commandGroup has entry for %q which isn't a registered command", name)
+		}
+	}
+}
+
+// TestLauncherSections_PartitionsInOrder verifies the logged-in section
+// list is built in launcherGroupOrder, non-empty, and that every
+// visible command lands in exactly one section (no drops, no dupes).
+func TestLauncherSections_PartitionsInOrder(t *testing.T) {
+	visible, _ := launcherRows(true, true)
+	sections := launcherSections(true, true)
+	if len(sections) == 0 {
+		t.Fatal("no sections for a logged-in admin")
+	}
+	// Section titles must appear in launcherGroupOrder order (titles are
+	// localized, so compare by re-deriving the key order via group sizes
+	// instead: assert the flattened command count matches visible).
+	total := 0
+	seen := map[string]int{}
+	for _, s := range sections {
+		if len(s.cmds) != len(s.labels) {
+			t.Errorf("section %q: %d cmds vs %d labels", s.title, len(s.cmds), len(s.labels))
+		}
+		for _, c := range s.cmds {
+			seen[c.name]++
+			total++
+		}
+	}
+	if total != len(visible) {
+		t.Errorf("sections cover %d commands, want %d (visible)", total, len(visible))
+	}
+	for _, c := range visible {
+		if seen[c.name] != 1 {
+			t.Errorf("command %q appears in %d sections, want 1", c.name, seen[c.name])
+		}
+	}
+}

@@ -33,6 +33,8 @@ rows_of_total = "%d 行 / 全 %d 行:"
 
 [launcher]
 welcome = "everyapi — コマンドを選択してください:"
+pick_category = "everyapi — カテゴリを選択してください:"
+nav_hint = "↑/↓ 選択 · enter 決定 · esc 戻る"
 usage = '''
 everyapi — EveryAPI CLI
 
@@ -77,6 +79,15 @@ __ADMIN_BLOCK__
 '''
 usage_admin_block = '''  admin <sub>     運用コマンド（admin ロールが必要）
 '''
+
+[launcher.group]
+account = "アカウント / 課金"
+api = "API を使う"
+insights = "使用量とモニタリング"
+marketplace = "マーケット / メッセージ"
+selling = "販売 / 供給"
+tools = "ツールと設定"
+admin = "管理"
 
 [launcher.desc]
 login = "この端末を EveryAPI に認証"
@@ -198,6 +209,10 @@ saved = "設定を保存しました。"
 lang_invalid = "サポートされていない言語です。利用可能"
 current = "現在の設定"
 lang_label = "言語"
+menu_label = "ランチャーのメニュー表示"
+menu_grouped = "グループ表示（1画面）"
+menu_nested = "ネスト（カテゴリ選択）"
+menu_invalid = "menu_layout は grouped か nested のいずれかです"
 file_at = "設定ファイル:"
 reset_confirm = "すべての CLI 設定をデフォルトに戻しますか？"
 unknown_key = "不明な設定キー %q"

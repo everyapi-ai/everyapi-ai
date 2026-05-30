@@ -309,6 +309,9 @@ func resolveLanguage() {
 // menu to its logged-out shape instead of advertising commands that
 // would only 401.
 func runLauncher() error {
+	// Localize the grouped picker's nav-hint footer once up front
+	// (language is already resolved by main → resolveLanguage).
+	cliprompt.SetMenuNavHint(i18n.T("launcher.nav_hint"))
 	// sessionDead latches once the backend definitively rejects the
 	// cached token (the entry probe below). The credentials file is
 	// left intact — `login` overwrites it — but for the rest of this
@@ -336,24 +339,47 @@ func runLauncher() error {
 		}
 		isAdmin := loggedIn && creds.IsAdmin()
 
-		visible, labels := launcherRows(loggedIn, isAdmin)
-		// The row set shrinks when the probe (or a logout) flips the
-		// menu to logged-out; clamp the remembered cursor so it can't
-		// index past the rebuilt slice.
-		if lastSel >= len(labels) {
-			lastSel = 0
-		}
-
-		idx, err := cliprompt.PickWithSelected(i18n.T("launcher.welcome"), labels, lastSel)
-		if err != nil {
-			if errors.Is(err, cliprompt.ErrPickCancelled) {
-				return nil
+		sections := launcherSections(loggedIn, isAdmin)
+		var chosen command
+		if menuLayout() == menuLayoutNested {
+			// Nested: category picker → command picker. Esc at the
+			// category level cancels the whole launcher (same as Esc on
+			// the flat picker did); Esc inside a category goes back up.
+			c, perr := pickCommandNested(sections)
+			if perr != nil {
+				if errors.Is(perr, cliprompt.ErrPickCancelled) {
+					return nil
+				}
+				return perr
 			}
-			return err
+			chosen = c
+		} else {
+			// Grouped single screen. Flatten the sections back into the
+			// parallel (groups, commands) shape PickGrouped expects; its
+			// returned flat index maps straight into `flat`.
+			var groups []cliprompt.MenuGroup
+			var flat []command
+			for _, s := range sections {
+				groups = append(groups, cliprompt.MenuGroup{Title: s.title, Labels: s.labels})
+				flat = append(flat, s.cmds...)
+			}
+			// The row set shrinks when the probe (or a logout) flips the
+			// menu to logged-out; clamp the remembered cursor so it can't
+			// index past the rebuilt slice.
+			if lastSel >= len(flat) {
+				lastSel = 0
+			}
+			idx, perr := cliprompt.PickGrouped(i18n.T("launcher.welcome"), groups, lastSel)
+			if perr != nil {
+				if errors.Is(perr, cliprompt.ErrPickCancelled) {
+					return nil
+				}
+				return perr
+			}
+			lastSel = idx
+			chosen = flat[idx]
 		}
-		lastSel = idx
-		chosen := visible[idx]
-		err = dispatchInteractive(chosen, nil)
+		err := dispatchInteractive(chosen, nil)
 		// A successful `login` clears the stale-session latch so the
 		// next iteration's rebuild shows the logged-in menu instead
 		// of staying stuck on the logged-out set.
@@ -419,6 +445,142 @@ func launcherRows(loggedIn, isAdmin bool) ([]command, []string) {
 		labels[i] = nameCell(c.name, maxName) + "  " + commandDesc(c)
 	}
 	return visible, labels
+}
+
+const (
+	menuLayoutGrouped = "grouped"
+	menuLayoutNested  = "nested"
+)
+
+// launcherGroupOrder is the display order of the launcher's command
+// categories — high-frequency buyer commands first, role/utility
+// surfaces last. Each key resolves to a localized title via
+// `launcher.group.<key>`.
+var launcherGroupOrder = []string{"account", "api", "insights", "marketplace", "selling", "tools", "admin"}
+
+// commandGroup maps every top-level command name to its launcher
+// category. Kept as a side table (not a field on command) so the big
+// registry literal stays untouched. TestEveryCommandGrouped asserts
+// this covers the registry exactly — a new command with no entry here
+// fails that test rather than silently landing in the fallback bucket.
+var commandGroup = map[string]string{
+	// Account & billing
+	"status": "account", "topup": "account", "wallet": "account",
+	"checkin": "account", "user": "account", "subscription": "account",
+	// Using the API
+	"use": "api", "token": "api", "models": "api",
+	// Usage & insights
+	"usage": "insights", "log": "insights", "perf": "insights", "upstream": "insights",
+	// Marketplace & messages
+	"demand": "marketplace", "dispute": "marketplace", "report": "marketplace",
+	"notify": "marketplace", "dm": "marketplace",
+	// Selling / supply
+	"seller": "selling", "edge": "selling",
+	// Tools & settings (incl. session)
+	"login": "tools", "logout": "tools", "mcp": "tools", "proxy": "tools",
+	"doctor": "tools", "events": "tools", "settings": "tools",
+	"update": "tools", "uninstall": "tools", "version": "tools",
+	// Admin
+	"admin": "admin",
+}
+
+// groupOf returns a command's category key, defaulting to "tools" for
+// any command missing from commandGroup (defensive — the test keeps the
+// map exhaustive, so this fallback shouldn't fire in practice).
+func groupOf(name string) string {
+	if g, ok := commandGroup[name]; ok {
+		return g
+	}
+	return "tools"
+}
+
+// groupTitle resolves a category's localized header, falling back to
+// the raw key if the locale is missing it (i18n.T returns the key).
+func groupTitle(key string) string {
+	if t := i18n.T("launcher.group." + key); t != "launcher.group."+key {
+		return t
+	}
+	return key
+}
+
+// menuSection is one rendered category: a localized title plus the
+// parallel label/command rows under it. labels are the aligned
+// "name  desc" strings from launcherRows (so column alignment is shared
+// across categories), cmds the commands they dispatch.
+type menuSection struct {
+	title  string
+	labels []string
+	cmds   []command
+}
+
+// launcherSections partitions the visible command set into ordered
+// categories. It reuses launcherRows for the auth filtering and the
+// global name-column alignment, then buckets the parallel slices by
+// groupOf — empty categories are dropped.
+func launcherSections(loggedIn, isAdmin bool) []menuSection {
+	visible, labels := launcherRows(loggedIn, isAdmin)
+	idxByGroup := make(map[string][]int, len(launcherGroupOrder))
+	for i, c := range visible {
+		g := groupOf(c.name)
+		idxByGroup[g] = append(idxByGroup[g], i)
+	}
+	var sections []menuSection
+	for _, key := range launcherGroupOrder {
+		ix := idxByGroup[key]
+		if len(ix) == 0 {
+			continue
+		}
+		s := menuSection{title: groupTitle(key)}
+		for _, i := range ix {
+			s.labels = append(s.labels, labels[i])
+			s.cmds = append(s.cmds, visible[i])
+		}
+		sections = append(sections, s)
+	}
+	return sections
+}
+
+// menuLayout reads the persisted launcher layout preference. Defaults
+// to grouped; any unrecognized value (incl. a missing / corrupt
+// settings file) also falls back to grouped.
+func menuLayout() string {
+	if s, err := config.LoadSettings(); err == nil && s != nil && s.MenuLayout == menuLayoutNested {
+		return menuLayoutNested
+	}
+	return menuLayoutGrouped
+}
+
+// pickCommandNested drives the two-level (B) launcher: a category
+// picker, then the command picker for the chosen category. Esc inside a
+// category returns to the category list; Esc at the category level
+// returns ErrPickCancelled so the caller exits the launcher. A trailing
+// "back" row in each category mirrors the Esc-to-go-up affordance.
+func pickCommandNested(sections []menuSection) (command, error) {
+	titles := make([]string, len(sections))
+	for i, s := range sections {
+		titles[i] = s.title
+	}
+	gsel := 0
+	for {
+		gidx, err := cliprompt.PickWithSelected(i18n.T("launcher.pick_category"), titles, gsel)
+		if err != nil {
+			return command{}, err // Esc here cancels the launcher
+		}
+		gsel = gidx
+		s := sections[gidx]
+		rows := append(append([]string{}, s.labels...), i18n.T("common.back"))
+		cidx, cerr := cliprompt.PickWithSelected(s.title, rows, 0)
+		if cerr != nil {
+			if errors.Is(cerr, cliprompt.ErrPickCancelled) {
+				continue // Esc inside a category → back to the category list
+			}
+			return command{}, cerr
+		}
+		if cidx == len(s.labels) {
+			continue // the "back" row
+		}
+		return s.cmds[cidx], nil
+	}
 }
 
 // commandDesc resolves the launcher row's description. Looks up
