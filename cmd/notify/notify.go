@@ -1,4 +1,4 @@
-// Package notify wires `everyapi notify …` — in-app notifications:
+// Package notify wires `everyapi inbox notify …` — in-app notifications:
 // list, unread count, mark one read, mark all read.
 package notify
 
@@ -124,7 +124,7 @@ func runCount(args []string) error {
 
 func runRead(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: everyapi notify read <id>")
+		return errors.New("usage: everyapi inbox notify read <id>")
 	}
 	id, err := strconv.Atoi(args[0])
 	if err != nil || id <= 0 {

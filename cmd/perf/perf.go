@@ -1,6 +1,6 @@
-// Package perf wires `everyapi perf` — a per-model performance summary
+// Package perf wires `everyapi stats perf` — a per-model performance summary
 // (success rate / latency / throughput) of the gateway's relay traffic.
-// Complements `everyapi upstream` (provider-side status). The endpoint
+// Complements `everyapi stats upstream` (provider-side status). The endpoint
 // is a global aggregate with optional auth, so this works before login;
 // pass --base to point at a non-default gateway.
 package perf

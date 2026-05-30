@@ -14,8 +14,10 @@
 # Lang* 定数を追加する以外はコード変更不要。
 
 [auth]
-not_logged_in = "ログインしていません — まず 'everyapi login' を実行してください"
-session_expired = "セッションの有効期限が切れました — 再度 'everyapi login' を実行してください"
+usage = "使用法: everyapi auth <login|logout|status>"
+unknown_sub = "不明な auth サブコマンド %q（使用可能: login, logout, status）"
+not_logged_in = "ログインしていません — まず 'everyapi auth login' を実行してください"
+session_expired = "セッションの有効期限が切れました — 再度 'everyapi auth login' を実行してください"
 
 [common]
 canceled = "キャンセルしました。"
@@ -32,6 +34,8 @@ cancelled_nothing_submitted = "キャンセルしました — 何も送信さ�
 rows_of_total = "%d 行 / 全 %d 行:"
 
 [launcher]
+usage_header = "everyapi — EveryAPI CLI\n\n使用法\n  everyapi <コマンド> [引数]"
+usage_footer = "\n各コマンドのサブコマンド・フラグは 'everyapi <コマンド> help' で確認できます。"
 welcome = "everyapi — コマンドを選択してください:"
 pick_category = "everyapi — カテゴリを選択してください:"
 nav_hint = "↑/↓ 選択 · enter 決定 · esc 戻る"
@@ -82,17 +86,19 @@ usage_admin_block = '''  admin <sub>     運用コマンド（admin ロールが
 
 [launcher.group]
 account = "アカウント / 課金"
-api = "API を使う"
+api = "API & データ"
 insights = "使用量とモニタリング"
-marketplace = "マーケット / メッセージ"
+marketplace = "マーケット · メッセージ · 供給"
 selling = "販売 / 供給"
 tools = "ツールと設定"
 admin = "管理"
 
 [launcher.desc]
-login = "この端末を EveryAPI に認証"
-logout = "この端末の認証情報を削除"
-status = "現在のクォータ、使用量、残高を表示"
+account = "プロフィール · 2FA · サブスク · 課金"
+stats = "使用量 · ログ · 性能 · アップストリーム"
+market = "需要 · 異議 · 通報"
+inbox = "通知 · ダイレクトメッセージ"
+auth = "ログイン / ログアウト / セッション状態"
 topup = "ウォレット入金ページを開く（フィッシング対策フレーズあり）"
 wallet = "支払い履歴 / 支払い方法 / 引換キー"
 checkin = "本日のデイリー付与クォータを受領"
@@ -120,9 +126,48 @@ events = "ライブイベントストリームを購読 (SSE)"
 settings = "CLI 設定を表示 / 変更（言語など）"
 update = "新しいリリースを確認し、対応するアップグレードを実行"
 uninstall = "このマシンから everyapi の状態とバイナリを削除"
-version = "ビルドバージョンを表示"
+version = "ビルドバージョン · update · uninstall"
+
+[launcher.subs.auth]
+login = "この端末を EveryAPI に認証"
+logout = "この端末の認証情報を削除"
+status = "現在のクォータ、使用量、残高を表示"
+
+[launcher.subs.version]
+update = "新しいリリースを確認し、対応するアップグレードを実行"
+uninstall = "このマシンから everyapi の状態とバイナリを削除"
+
+[launcher.subs.account]
+info = "プロフィール + セキュリティの集約ビュー"
+"2fa" = "2FA の状態"
+aff = "アフィリエイトコードを表示"
+plans = "有効なサブスクリプションプラン一覧"
+self = "自分のサブスクリプションを表示"
+
+[launcher.subs.stats]
+usage = "日別のクォータ使用量"
+log_list = "最近のログエントリ（新しい順）"
+log_stat = "期間内のクォータ / RPM / TPM 集計"
+log_summary = "直近 7 日のモデル別消費サマリ"
+perf = "モデル別パフォーマンス (成功率 / レイテンシ / スループット)"
+upstream = "上流プロバイダの稼働状況 (ステータスページ集計)"
+
+[launcher.subs.market]
+demand_list = "公開マーケットプレイスのフィード"
+demand_my = "自分が投稿した需要"
+dispute_my = "自分の未解決 + 解決済みディスピュート"
+report = "不正利用 / 規約違反を報告"
+
+[launcher.subs.inbox]
+notify_list = "最近の通知"
+notify_count = "未読件数のみ"
+notify_readall = "すべての未読を既読にする"
+dm_threads = "自分の DM スレッド"
+dm_contacts = "DM したことのあるユーザー"
+dm_count = "未読 DM 件数"
 
 [launcher.subs.wallet]
+topup = "ウォレット入金ページを開く（フィッシング対策フレーズあり）"
 history = "ページネーション付きの支払い履歴"
 info = "有効な支払い方法と推奨金額"
 
@@ -281,7 +326,7 @@ CREATE / UPDATE フラグ
   --name <n>           表示名 (create で必須、最大 50 文字)
   --group <g>          ルーティンググループ (デフォルト "" = 自動)
   --unlimited          クォータ無制限 (--quota を上書き)
-  --quota <int>        残りクォータ (ゲートウェイ単位、'everyapi status' 参照)
+  --quota <int>        残りクォータ (ゲートウェイ単位、'everyapi auth status' 参照)
   --expires <when>     "never" (create のデフォルト) または絶対 Unix 秒
   --models <a,b,c>     指定モデル id の CSV に制限 (未指定 / 空 → すべて)
   --ip <cidr,cidr>     IP 許可リスト (未指定 → 制限なし)
@@ -323,10 +368,10 @@ expires_never = "期限なし"
 no_rows = "条件に一致するログ行はありません。"
 no_spend = "この期間に支出記録はありません。"
 usage = '''
-everyapi log — リクエストログ
+everyapi stats log — リクエストログ
 
 使用法
-  everyapi log <subcommand> [flags]
+  everyapi stats log <subcommand> [flags]
 
 サブコマンド
   list    [flags]   最近のログ (新しい順、デフォルト 20 行)
@@ -391,7 +436,7 @@ everyapi wallet — 支払い履歴、支払い方法、引換キー
   redeem <key>                                    入金 / 引換キーを適用
 
 注意
-  実際の入金 (Stripe / Creem / Waffo / EPay) には 'everyapi topup' を
+  実際の入金 (Stripe / Creem / Waffo / EPay) には 'everyapi wallet topup' を
   使ってください。フィッシング対策フレーズ付きでダッシュボードが
   開きます。カード決済は帯域外で処理されるため、ブラウザ移動が
   必須です。
@@ -552,10 +597,10 @@ cancelled = "需要 #%d をキャンセルしました。"
 removed = "需要 #%d を削除しました。"
 remove_confirm = "需要 #%d を完全に削除しますか？"
 usage = '''
-everyapi demand — バイヤー側マーケットプレイスの投稿
+everyapi market demand — バイヤー側マーケットプレイスの投稿
 
 使用法
-  everyapi demand <subcommand> [flags]
+  everyapi market demand <subcommand> [flags]
 
 サブコマンド
   list   [--state open|closed] [--page P] [--limit N]
@@ -573,10 +618,10 @@ everyapi demand — バイヤー側マーケットプレイスの投稿
 no_rows = "ディスピュートはありません。"
 opened = "ディスピュート #%d を起票しました (state=%s)。"
 usage = '''
-everyapi dispute — ディスピュートの起票 / 一覧 / 詳細
+everyapi market dispute — ディスピュートの起票 / 一覧 / 詳細
 
 使用法
-  everyapi dispute <subcommand> [flags]
+  everyapi market dispute <subcommand> [flags]
 
 サブコマンド
   submit --counterparty <uid> --type <t> --target-kind <k> --target <id> --description <d> [--amount <quota>]
@@ -588,10 +633,10 @@ everyapi dispute — ディスピュートの起票 / 一覧 / 詳細
 [report]
 filed = "報告を受け付けました。記載いただいたメールアドレス宛に abuse 担当が連絡します。"
 usage = '''
-everyapi report — 不正利用 / TOS 違反の報告
+everyapi market report — 不正利用 / TOS 違反の報告
 
 使用法
-  everyapi report --email <e> --category <c> --target-type <t> --description <d>
+  everyapi market report --email <e> --category <c> --target-type <t> --description <d>
                   [--target-id <id>] [--evidence <url>]
 
 注意
@@ -606,10 +651,10 @@ unread_count = "未読 %d 件"
 marked_read = "#%d を既読にしました。"
 marked_all = "%d 件の通知を既読にしました。"
 usage = '''
-everyapi notify — アプリ内通知
+everyapi inbox notify — アプリ内通知
 
 使用法
-  everyapi notify <subcommand> [flags]
+  everyapi inbox notify <subcommand> [flags]
 
 サブコマンド
   list   [--unread] [--page P] [--limit N]   最近の通知
@@ -625,10 +670,10 @@ no_messages = "(メッセージなし)"
 sent_at = "#%d を %s に送信"
 marked_read = "スレッド #%d を既読にしました。"
 usage = '''
-everyapi dm — 他ユーザーとのダイレクトメッセージ
+everyapi inbox dm — 他ユーザーとのダイレクトメッセージ
 
 使用法
-  everyapi dm <subcommand> [flags]
+  everyapi inbox dm <subcommand> [flags]
 
 サブコマンド
   threads  [--page P] [--limit N]      自分の DM スレッド (新しい順)
@@ -645,7 +690,7 @@ everyapi dm — 他ユーザーとのダイレクトメッセージ
 account_header = "アカウント #%d  %s  (%s)"
 passkey_use_dashboard = "(登録 / 削除はブラウザ操作です — ダッシュボードを使ってください。)"
 passkey_none = "登録された passkey はありません。ダッシュボードで登録してください (ブラウザのみ)。"
-"2fa_disabled_msg" = "2FA は無効です。'everyapi user 2fa enable' で有効にできます。"
+"2fa_disabled_msg" = "2FA は無効です。'everyapi account user 2fa enable' で有効にできます。"
 "2fa_disabled" = "2FA は無効です。"
 no_bindings = "OAuth 連携はありません。"
 bindings_count = "%d 件の連携:"
@@ -654,16 +699,16 @@ unbind_confirm = "OAuth プロバイダ #%d の連携を解除しますか？再
 aff_code = "アフィリエイトコード: %s"
 aff_new = "新しいアフィリエイトコード: %s"
 aff_rotated_warning = "以前のコードを埋め込んだリンクは、もう報酬対象になりません。"
-aff_transfer_usage = "使用法: everyapi user aff transfer <amount> [-y]"
+aff_transfer_usage = "使用法: everyapi account user aff transfer <amount> [-y]"
 aff_transfer_bad_amount = "無効な金額 %q（正の整数、ゲートウェイのクォータ単位である必要があります）"
 aff_transfer_confirm = "アフィリエイト報酬からメイン残高へ $%.2f（%d 単位）を振り替えますか？"
 aff_transfer_ok = "メイン残高へ $%.2f を振り替えました。"
-oauth_usage = "使い方: everyapi user oauth {list|unbind <provider_id>}"
+oauth_usage = "使い方: everyapi account user oauth {list|unbind <provider_id>}"
 passkey_dashboard_gated = "passkey ステータスは dashboard session cookie に依存します — passkey 管理は Web UI を使ってください"
 passkey_registered_last_used = "Passkey 登録済み。最終使用: %s"
 "2fa_status" = "2FA: enabled=%v locked=%v"
 "2fa_backup_remaining" = "バックアップコード残り: %d"
-"2fa_low_hint" = "  （残り少 — 'everyapi user 2fa backup --code <new-totp>' で再生成を検討）"
+"2fa_low_hint" = "  （残り少 — 'everyapi account user 2fa backup --code <new-totp>' で再生成を検討）"
 backup_regenerated = "%d 個のバックアップコードを再生成しました — 今すぐ保存してください。再表示されません:"
 "2fa_enroll_intro" = "二要素認証をセットアップします。"
 "2fa_scan_hint" = "認証アプリでこの QR をスキャンしてください（または下のシークレットを手動で入力）:"
@@ -685,15 +730,15 @@ passwd_ok = "パスワードを変更しました。"
 setting_bad_type = "無効な --type %q（email | webhook | bark | gotify を指定）"
 setting_threshold_required = "--threshold は 0 より大きい値である必要があります"
 setting_saved = "通知設定を保存しました。"
-setting_none = "通知チャネルが設定されていません。'everyapi user setting --type <ch> ...' で設定してください。"
+setting_none = "通知チャネルが設定されていません。'everyapi account user setting --type <ch> ...' で設定してください。"
 setting_header = "通知チャネル: %s"
 setting_threshold = "しきい値"
 setting_test_sent = "テスト通知を送信しました — チャネルを確認してください。"
 usage = '''
-everyapi user — プロフィール / 2FA / OAuth 連携 / アフィリエイトコード
+everyapi account user — プロフィール / 2FA / OAuth 連携 / アフィリエイトコード
 
 使用法
-  everyapi user <subcommand> [flags]
+  everyapi account user <subcommand> [flags]
 
 サブコマンド
   info                                  プロフィール + セキュリティの統合ビュー
@@ -726,10 +771,10 @@ preference_updated = "課金設定を %q に更新しました。"
 current_preference = "現在の請求設定: %s"
 set_hint = "--set <value> で変更します。未知の値はバックエンドで既定値に正規化されます。"
 usage = '''
-everyapi subscription — サブスクリプションプラン / 自分の契約 / 設定
+everyapi account subscription — サブスクリプションプラン / 自分の契約 / 設定
 
 使用法
-  everyapi subscription <subcommand> [flags]
+  everyapi account subscription <subcommand> [flags]
 
 サブコマンド
   plans                            有効なサブスクリプションプランを一覧
@@ -738,7 +783,7 @@ everyapi subscription — サブスクリプションプラン / 自分の契約
                                    (例: "topup" / "subscription" / "subscription_first")
                                    バックエンドが不明な値を正規化します。
 注意
-  プラン購入はブラウザ操作です — 'everyapi topup' でフィッシング対策
+  プラン購入はブラウザ操作です — 'everyapi wallet topup' でフィッシング対策
   ハンドシェイクの後ろにあるダッシュボードのウォレットを開いてください。
 '''
 
@@ -942,7 +987,7 @@ text = """everyapi edge — BYO-GPU サプライヤーエージェント
         このメッセージを表示します。
 
 初回実行
-  $ everyapi login                    # まだの場合
+  $ everyapi auth login                    # まだの場合
   $ everyapi edge register --name "rtx-4090-tokyo"
   $ everyapi edge start
   $ everyapi edge models pull llama3.1:8b
@@ -1095,7 +1140,7 @@ browser_opened = "ブラウザを開きました。ページ上のフレーズ�
 [login]
 waiting = "認証待機中... (Ctrl+C でキャンセル)"
 waiting_with_copy = "認証待機中... (Ctrl+C でキャンセル、'c' で URL コピー)"
-next_hint = "次は 'everyapi status' か 'everyapi use claude' を試してください。"
+next_hint = "次は 'everyapi auth status' か 'everyapi use claude' を試してください。"
 url_copied = "URL をクリップボードにコピーしました。"
 url_copy_failed = "コピーできませんでした: %v"
 qr_hint = "この QR をスマートフォン (または既に EveryAPI にログイン済みの端末) でスキャンしてください:"
@@ -1104,7 +1149,7 @@ url_hint = "この端末を認証するには、以下にアクセスしてく�
 code_hint = "ページが自動入力されない場合は、コードを入力してください: %s"
 browser_opened = "ブラウザを開きました。そちらで承認 (またはスマートフォンで完了) してください。本処理は自動で進みます。"
 no_relay_note_1 = "注意: あなたのアカウントにはまだ relay API key がありません。`everyapi use` には 1 つ必要です"
-no_relay_note_2 = "EveryAPI ダッシュボードで作成すれば、次の `everyapi use` または `everyapi status` が自動で取得します（再ログインは不要）。"
+no_relay_note_2 = "EveryAPI ダッシュボードで作成すれば、次の `everyapi use` または `everyapi auth status` が自動で取得します（再ログインは不要）。"
 logged_in_saved = "\n%s としてログインしました。認証情報は %s/credentials.json に保存されました\n"
 
 [logout]
@@ -1144,11 +1189,11 @@ launching_via = "%s を %s 経由で %s に対して起動中"
 sanitizer_warn = "警告: サニタイザプロキシが起動しませんでした (%v)。\n"
 fallback_direct = "直接モードにフォールバックします — トラフィックはプライバシーフィルタを通らずに %s に到達します。\n"
 fallback_hint = "このメッセージを抑制するには --direct を指定するか、'everyapi proxy start' でデバッグしてください。\n\n"
-no_relay_keys = "アカウントにグループを選択するための有効な relay API key がありません — EveryAPI ダッシュボードで作成後、'everyapi login' を実行してください"
+no_relay_keys = "アカウントにグループを選択するための有効な relay API key がありません — EveryAPI ダッシュボードで作成後、'everyapi auth login' を実行してください"
 no_relay_key_long = '''
 アカウントに使用可能な relay API キーがありません — `everyapi use` には必要です。
 ログイントークンとは別物です。EveryAPI dashboard (%s) で API キーを作成し、
-'everyapi login' を再度実行してください。'''
+'everyapi auth login' を再度実行してください。'''
 unknown_flag = "不明なフラグ %q (ツールフラグの前に `--` を付けてください: `everyapi use <tool> -- %s ...`)"
 usage = "使用法: everyapi use <tool> [--group <名前>|--channel <名前>] [--model <id>] [--direct] [-- ツール引数...]"
 model_picker = "%s で使うモデルを選択してください（EveryAPI 経由）:"
@@ -1206,3 +1251,23 @@ done = "アンインストールが完了しました。"
 [perf]
 none = "パフォーマンスデータがまだありません。"
 header = "モデル別パフォーマンス（直近 %dh、使用量の多い順）:"
+
+[version]
+usage = "使用法: everyapi version [update|uninstall]"
+unknown_sub = "不明な version サブコマンド %q（使用可能: update, uninstall）"
+
+[account]
+usage = "使用法: everyapi account <info|2fa|aff|plans|self>"
+unknown_sub = "不明な account サブコマンド %q"
+
+[stats]
+usage = "使用法: everyapi stats <usage|log|perf|upstream>"
+unknown_sub = "不明な stats サブコマンド %q"
+
+[market]
+usage = "使用法: everyapi market <demand|dispute|report>"
+unknown_sub = "不明な market サブコマンド %q"
+
+[inbox]
+usage = "使用法: everyapi inbox <notify|dm>"
+unknown_sub = "不明な inbox サブコマンド %q"

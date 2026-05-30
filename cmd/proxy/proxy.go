@@ -438,7 +438,7 @@ func pidFilePath() (string, error) {
 // IsRunning reports whether a sanitizer proxy we can actually signal
 // is up — the pid file exists AND the process it points at is alive.
 // A bare pid-file check would lie when the previous proxy crashed
-// without cleanup; callers (`everyapi uninstall`'s plan-render block)
+// without cleanup; callers (`everyapi version uninstall`'s plan-render block)
 // rely on this returning false for stale-pid leftovers so the
 // confirmation text isn't misleading.
 func IsRunning() bool {

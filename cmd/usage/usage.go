@@ -1,6 +1,6 @@
-// Package usage wires `everyapi usage` — day-by-day quota_data
+// Package usage wires `everyapi stats usage` — day-by-day quota_data
 // rows for the caller. Backend caps the window at 30 days; we
-// default to the last 7 so a bare `everyapi usage` is one screen
+// default to the last 7 so a bare `everyapi stats usage` is one screen
 // of useful output.
 package usage
 
@@ -16,10 +16,10 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-const usageDoc = `everyapi usage — day-by-day quota usage
+const usageDoc = `everyapi stats usage — day-by-day quota usage
 
 USAGE
-  everyapi usage [--days N] [--since <window|ts>] [--until <ts>] [--per-day | --per-model]
+  everyapi stats usage [--days N] [--since <window|ts>] [--until <ts>] [--per-day | --per-model]
 
 FLAGS
   --days  <int>          Lookback in days (default 7; max 30 per backend cap)

@@ -1,6 +1,6 @@
 // Package wallet wires `everyapi wallet …` — payment history,
 // payment methods, and redemption-key application. The existing
-// `everyapi topup` command (which opens the dashboard top-up page
+// `everyapi wallet topup` command (which opens the dashboard top-up page
 // behind the §7-5 anti-phishing handshake) stays as-is for actual
 // money-in flows; wallet covers everything that's safe to do over
 // the API without a browser.
@@ -154,7 +154,7 @@ func runInfo(args []string) error {
 	if info.TopupLink != "" {
 		cliout.Printf("\nDashboard top-up: %s\n", info.TopupLink)
 	}
-	cliout.Println("\nFor card / e-wallet payments use 'everyapi topup' (browser flow).")
+	cliout.Println("\nFor card / e-wallet payments use 'everyapi wallet topup' (browser flow).")
 	return nil
 }
 

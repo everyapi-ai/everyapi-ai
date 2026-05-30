@@ -40,7 +40,7 @@ var errNotAdmin = errors.New(
 //     required") rather than a generic auth-failure envelope.
 //
 // A backend that disagreed with the local Role (e.g. a freshly-
-// promoted user whose last `everyapi login` was pre-promotion)
+// promoted user whose last `everyapi auth login` was pre-promotion)
 // still gets the 403 from the API call below — the local check is
 // a cheap first line.
 func ensureAdmin() (*api.Client, error) {

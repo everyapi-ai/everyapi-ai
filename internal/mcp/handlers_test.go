@@ -79,8 +79,8 @@ func TestHandleStatus_NotLoggedIn(t *testing.T) {
 	if err == nil {
 		t.Fatal("want not-logged-in error")
 	}
-	if !strings.Contains(err.Error(), "everyapi login") {
-		t.Errorf("error should mention `everyapi login`: %q", err.Error())
+	if !strings.Contains(err.Error(), "everyapi auth login") {
+		t.Errorf("error should mention `everyapi auth login`: %q", err.Error())
 	}
 }
 

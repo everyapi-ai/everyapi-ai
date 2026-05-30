@@ -183,7 +183,7 @@ func sellerWithdraw(args []string) error {
 	}
 
 	// Render the transferred amount in USD so the user sees the same
-	// units the dashboard / `everyapi status` use. perUnit is a free
+	// units the dashboard / `everyapi auth status` use. perUnit is a free
 	// /api/status round-trip; tolerate a failure (rare) by falling back
 	// to raw DB units rather than aborting after a successful transfer.
 	perUnit := 1.0
@@ -609,7 +609,7 @@ func sellerClient() (*api.Client, *config.Credentials, error) {
 }
 
 // classifySellerErr maps backend API errors to friendly CLI messages.
-// 401 = stale token (same shape as `everyapi status`); everything else
+// 401 = stale token (same shape as `everyapi auth status`); everything else
 // passes through so the server's explicit messages (eligibility
 // reasons, cap-reached, type-not-allowed) surface verbatim.
 func classifySellerErr(err error) error {

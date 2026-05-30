@@ -1,6 +1,6 @@
-// Package subscription wires `everyapi subscription …` — plans
+// Package subscription wires `everyapi account subscription …` — plans
 // (read), self (read), preference (write). Pay flows
-// (Stripe / Creem / EPay) intentionally stay on `everyapi topup`
+// (Stripe / Creem / EPay) intentionally stay on `everyapi wallet topup`
 // since card collection needs a browser.
 package subscription
 
@@ -21,7 +21,7 @@ func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
 		cliout.Println(i18n.T("subscription.usage"))
 		if len(args) == 0 {
-			return errors.New("missing subcommand (try 'everyapi subscription help')")
+			return errors.New("missing subcommand (try 'everyapi account subscription help')")
 		}
 		return nil
 	}

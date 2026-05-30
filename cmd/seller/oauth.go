@@ -145,7 +145,7 @@ func sellerAddOAuthCodex(args []string) error {
 	cliout.Printf("    Code: %s\n\n", start.UserCode)
 
 	if !*noBrowser {
-		// Same fail-soft approach as `everyapi login`: a missing
+		// Same fail-soft approach as `everyapi auth login`: a missing
 		// xdg-open / `open` shouldn't crash; the URL is already
 		// printed for the user to copy.
 		if berr := cliprompt.OpenBrowser(start.VerificationURI); berr == nil {

@@ -1,4 +1,4 @@
-// Package upstream wires `everyapi upstream` — a Statuspage-style
+// Package upstream wires `everyapi stats upstream` — a Statuspage-style
 // health rollup of the upstream providers the gateway relays to
 // (OpenAI / Anthropic / etc.). The endpoint is public, so this works
 // before login; pass --base to point at a non-default gateway.

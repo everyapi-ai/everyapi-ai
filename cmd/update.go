@@ -24,7 +24,7 @@ import (
 // Update — check the GitHub mirror for a newer release and run the
 // matching upgrade command on the install method we can detect.
 //
-// One command, one user action: typing `everyapi update` should
+// One command, one user action: typing `everyapi version update` should
 // finish the upgrade, not hand the user a list of commands to
 // copy-paste.
 //
@@ -289,7 +289,7 @@ func guessBinaryPath() string {
 
 // latestReleasePollURL is the GitHub Releases API endpoint for the
 // public CLI repo. Token-less GETs against this endpoint are
-// rate-limited but don't require auth, which is what `everyapi update`
+// rate-limited but don't require auth, which is what `everyapi version update`
 // relies on for the unauthenticated version check.
 // latestReleasePollURL hits the PUBLIC CLI mirror (everyapi-ai/
 // everyapi-ai) where the release pipeline actually publishes

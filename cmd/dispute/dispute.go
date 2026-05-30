@@ -1,4 +1,4 @@
-// Package dispute wires `everyapi dispute …` — open / list /
+// Package dispute wires `everyapi market dispute …` — open / list /
 // inspect marketplace disputes.
 package dispute
 
@@ -124,7 +124,7 @@ func runList(args []string) error {
 
 func runShow(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: everyapi dispute show <id>")
+		return errors.New("usage: everyapi market dispute show <id>")
 	}
 	id, err := strconv.Atoi(args[0])
 	if err != nil || id <= 0 {

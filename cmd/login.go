@@ -89,7 +89,7 @@ func Login(args []string) error {
 		if err := cliprompt.OpenBrowser(prefilledURL); err == nil {
 			cliout.Println(i18n.T("login.browser_opened"))
 		} else {
-			// stderr so a user piping `everyapi login | …` gets a clean
+			// stderr so a user piping `everyapi auth login | …` gets a clean
 			// stdout (the URL + code go through the cmd.Out writer
 			// above). xdg-open missing on a headless Linux desktop is
 			// the common case here.
@@ -132,7 +132,7 @@ func Login(args []string) error {
 	if err != nil {
 		switch err {
 		case api.ErrDeviceAuthExpired:
-			return fmt.Errorf("the code timed out before you authorized — run 'everyapi login' again")
+			return fmt.Errorf("the code timed out before you authorized — run 'everyapi auth login' again")
 		case api.ErrDeviceAuthDenied:
 			return fmt.Errorf("authorization was denied in the browser")
 		default:
@@ -151,7 +151,7 @@ func Login(args []string) error {
 	// help-text renderer can hide admin-only subcommands locally
 	// without per-help-render network traffic. A failure here is
 	// non-fatal — login itself succeeded; role defaults to 0
-	// (treated as non-admin), and the next `everyapi status` will
+	// (treated as non-admin), and the next `everyapi auth status` will
 	// retry the lookup.
 	//
 	// Reuse the SignalCtx so Ctrl+C still cancels (the device-auth

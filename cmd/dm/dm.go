@@ -1,4 +1,4 @@
-// Package dm wires `everyapi dm …` — direct messages between
+// Package dm wires `everyapi inbox dm …` — direct messages between
 // users in the marketplace (compensation discussions, support
 // threads, etc.). Read / open / send / messages / read.
 package dm
@@ -210,7 +210,7 @@ func runSend(args []string) error {
 		return err
 	}
 	if len(args) < 2 {
-		return errors.New("usage: everyapi dm send <thread_id> <body>")
+		return errors.New("usage: everyapi inbox dm send <thread_id> <body>")
 	}
 	body := args[1]
 	for _, extra := range args[2:] {

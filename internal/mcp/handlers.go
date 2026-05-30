@@ -7,7 +7,7 @@ package mcp
 //
 // V0 invariants for every handler:
 //   - First load credentials. ErrNoCredentials → friendly "run
-//     everyapi login first" error.
+//     everyapi auth login first" error.
 //   - 401 from backend → same error shape so the user-facing message
 //     is consistent.
 //   - All other errors → propagate via `error` return; protocol
@@ -28,7 +28,7 @@ import (
 // errNotLoggedIn is the canonical user-facing message for missing
 // credentials. Single constant so every tool reports the same fix
 // instruction.
-var errNotLoggedIn = errors.New("not logged in — run 'everyapi login' in your terminal first")
+var errNotLoggedIn = errors.New("not logged in — run 'everyapi auth login' in your terminal first")
 
 // loadCreds returns the on-disk credentials or errNotLoggedIn. Other
 // I/O errors (corrupt JSON, perm) bubble up so the user sees the
@@ -86,7 +86,7 @@ func classifyAPIErr(err error) error {
 		return nil
 	}
 	if api.IsUnauthorized(err) {
-		return errors.New("your session expired — run 'everyapi login' in your terminal to refresh credentials")
+		return errors.New("your session expired — run 'everyapi auth login' in your terminal to refresh credentials")
 	}
 	return err
 }
@@ -285,7 +285,7 @@ func handleSellerWithdraw(ctx context.Context, raw json.RawMessage) (string, err
 	//
 	// An unauthenticated caller hits errNotLoggedIn before they see
 	// the friction step, so the suggested fix-action is the right
-	// one ("run everyapi login") rather than the misleading "missing
+	// one ("run everyapi auth login") rather than the misleading "missing
 	// confirm". The friction gate's threat model assumes the caller
 	// already has credentials; protecting against unauthenticated
 	// callers is loadCreds's job, not the gate's.

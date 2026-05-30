@@ -1,6 +1,6 @@
 // everyapi — CLI for the EveryAPI AI API gateway.
 //
-// Covers the V1 buyer onboarding flow (login, logout, status, use)
+// Covers the V1 buyer onboarding flow (auth login/logout/status, use)
 // AND hosts the MCP server as the `mcp` subcommand — same Go
 // module, single binary, one install. See README.md for the full
 // command surface and the design rationale.
@@ -84,8 +84,10 @@ type command struct {
 	// menu shouldn't advertise actions that immediately fail.
 	requireLogin bool
 	// hideLoggedIn is the inverse — hides the row once credentials
-	// exist. Used for the `login` row so the launcher shows EITHER
-	// login OR logout, not both at once.
+	// exist. Currently unused: it gated the old top-level `login` row,
+	// but login moved under `auth` (whose subs aren't individually
+	// gated). Kept as a reusable gate for a future logged-out-only
+	// top-level command.
 	hideLoggedIn bool
 	// subs is the subcommand menu rendered when this command is
 	// picked from the launcher (or invoked bare on a TTY without
@@ -97,7 +99,15 @@ type command struct {
 	// stay command-line-only. Empty/nil means "no sub-menu — pick
 	// runs the command bare".
 	subs []subcommand
-	run  func(args []string) error
+	// headerFn, when set, prints a status header above the sub-picker
+	// each time the menu renders — for "stateful service" commands
+	// where the current state IS the thing you came to see (mcp: which
+	// clients are registered; proxy: is the sanitizer running). The
+	// `status` action then lives in this header instead of as a menu
+	// row, so the picker only lists the things you can DO. Reuses the
+	// command's own status printer, so it stays in sync.
+	headerFn func()
+	run      func(args []string) error
 }
 
 // subcommand is one row in a command group's sub-menu rendered by
@@ -118,7 +128,143 @@ type subcommand struct {
 var mcpSubs = []subcommand{
 	{name: "install", desc: "Auto-register everyapi as an MCP server (default: claude)", args: []string{"install"}},
 	{name: "uninstall", desc: "Remove the MCP registration", args: []string{"uninstall"}},
-	{name: "status", desc: "Show which MCP clients have everyapi registered", args: []string{"status"}},
+}
+
+// mcpHeader prints the current MCP-client registration status — the
+// header shown above the mcp sub-picker (the old `status` row is now
+// this header). Reuses the same code path as `everyapi mcp status`.
+func mcpHeader() { _ = runMCP([]string{"status"}) }
+
+// proxyHeader prints the sanitizer proxy's running status above the
+// proxy sub-picker — same code path as `everyapi proxy status`.
+func proxyHeader() { _ = proxy.Run([]string{"status"}) }
+
+// versionHeader prints the build version — the header above the version
+// sub-picker (update / uninstall).
+func versionHeader() { _ = cmd.Version(nil) }
+
+// walletRun folds the former top-level `topup` into wallet: `everyapi
+// wallet topup` routes to cmd.Topup; everything else (history / info /
+// bare) goes to the wallet package unchanged.
+func walletRun(args []string) error {
+	if len(args) > 0 && args[0] == "topup" {
+		return cmd.Topup(args[1:])
+	}
+	return wallet.Run(args)
+}
+
+func isHelpArg(s string) bool { return s == "help" || s == "--help" || s == "-h" }
+
+// accountRun folds user + subscription into one `account` namespace.
+// Their leaf actions have unique names, so they flatten directly
+// (`everyapi account 2fa`, `everyapi account plans`). The full leaf set
+// of each command is routed — not just the few shown in the launcher —
+// so nothing the old top-level `user`/`subscription` could do is lost.
+// The explicit `user`/`subscription` arms are a forward-proof wrap:
+// any leaf added to those commands later stays reachable via
+// `everyapi account user <new-sub>` without touching this switch.
+func accountRun(args []string) error {
+	if len(args) == 0 || isHelpArg(args[0]) {
+		cliout.Println(i18n.T("account.usage"))
+		return nil
+	}
+	switch args[0] {
+	case "user":
+		return usercmd.Run(args[1:])
+	case "subscription":
+		return subscription.Run(args[1:])
+	case "info", "2fa", "passkey", "oauth", "update", "passwd", "setting", "aff":
+		return usercmd.Run(args)
+	case "plans", "self", "preference":
+		return subscription.Run(args)
+	default:
+		cliout.Println(i18n.T("account.usage"))
+		return fmt.Errorf(i18n.T("account.unknown_sub"), args[0])
+	}
+}
+
+// statsRun groups the read-only observability commands. usage/perf/
+// upstream are leaves; log keeps its own subs (`stats log list`). Not
+// requireLogin — perf/upstream work logged-out; usage/log error on
+// their own if not.
+func statsRun(args []string) error {
+	if len(args) == 0 || isHelpArg(args[0]) {
+		cliout.Println(i18n.T("stats.usage"))
+		return nil
+	}
+	switch args[0] {
+	case "usage":
+		return usagecmd.Run(args[1:])
+	case "perf":
+		return perf.Run(args[1:])
+	case "upstream":
+		return upstream.Run(args[1:])
+	case "log":
+		return logcmd.Run(args[1:])
+	default:
+		cliout.Println(i18n.T("stats.usage"))
+		return fmt.Errorf(i18n.T("stats.unknown_sub"), args[0])
+	}
+}
+
+// marketRun groups the buyer-side marketplace commands (demand /
+// dispute) plus abuse reports. demand/dispute keep their subs
+// (`market demand list`).
+func marketRun(args []string) error {
+	if len(args) == 0 || isHelpArg(args[0]) {
+		cliout.Println(i18n.T("market.usage"))
+		return nil
+	}
+	switch args[0] {
+	case "demand":
+		return demand.Run(args[1:])
+	case "dispute":
+		return dispute.Run(args[1:])
+	case "report":
+		return report.Run(args[1:])
+	default:
+		cliout.Println(i18n.T("market.usage"))
+		return fmt.Errorf(i18n.T("market.unknown_sub"), args[0])
+	}
+}
+
+// inboxRun groups notifications + direct messages. Both keep their subs
+// (`inbox notify list`, `inbox dm threads`).
+func inboxRun(args []string) error {
+	if len(args) == 0 || isHelpArg(args[0]) {
+		cliout.Println(i18n.T("inbox.usage"))
+		return nil
+	}
+	switch args[0] {
+	case "notify":
+		return notify.Run(args[1:])
+	case "dm":
+		return dm.Run(args[1:])
+	default:
+		cliout.Println(i18n.T("inbox.usage"))
+		return fmt.Errorf(i18n.T("inbox.unknown_sub"), args[0])
+	}
+}
+
+// versionRun dispatches `everyapi version [update|uninstall]`. Bare
+// prints the version (same as the --version/-v flags); update/uninstall
+// route to their commands. help/unknown print usage.
+func versionRun(args []string) error {
+	if len(args) == 0 {
+		return cmd.Version(nil)
+	}
+	switch args[0] {
+	case "update":
+		return cmd.Update(args[1:])
+	case "uninstall":
+		return cmd.Uninstall(args[1:])
+	case "help", "--help", "-h":
+		cliout.Println(i18n.T("version.usage"))
+		return nil
+	default:
+		cliout.Println(i18n.T("version.usage"))
+		return fmt.Errorf(i18n.T("version.unknown_sub"), args[0])
+	}
 }
 
 // commands is the registered set, in the order they appear in the
@@ -126,11 +272,19 @@ var mcpSubs = []subcommand{
 // matches the documented order — keeps the "which command runs when
 // two names conflict" question impossible.
 var commands = []command{
-	{name: "login", desc: "Authenticate this device with EveryAPI", hideLoggedIn: true, run: cmd.Login},
-	{name: "logout", desc: "Remove this device's credentials", requireLogin: true, run: cmd.Logout},
-	{name: "status", desc: "Show current quota, usage, and balance", requireLogin: true, run: cmd.Status},
-	{name: "topup", desc: "Open the wallet top-up page (anti-phishing verification phrase)", requireLogin: true, run: cmd.Topup},
-	{name: "wallet", desc: "Payment history / methods / redemption keys", requireLogin: true, run: wallet.Run, subs: []subcommand{
+	// Session commands live under `auth` (everyapi auth login|logout|
+	// status) so the top level isn't cluttered with them. The parent has
+	// no requireLogin/hideLoggedIn gate — login must show logged-out,
+	// logout/status logged-in, and per-sub gating isn't supported — so
+	// it's always visible; the subs' own run funcs error cleanly when
+	// invoked in the wrong auth state.
+	{name: "auth", desc: "Sign in / out, session status", run: cmd.Auth, subs: []subcommand{
+		{name: "login", desc: "Authenticate this device with EveryAPI", args: []string{"login"}},
+		{name: "logout", desc: "Remove this device's credentials", args: []string{"logout"}},
+		{name: "status", desc: "Show current quota, usage, and balance", args: []string{"status"}},
+	}},
+	{name: "wallet", desc: "Top-up · payment history · methods · redemption keys", requireLogin: true, run: walletRun, subs: []subcommand{
+		{name: "topup", desc: "Open the wallet top-up page (anti-phishing verification phrase)", args: []string{"topup"}},
 		{name: "history", desc: "Paginated payment history", args: []string{"history"}},
 		{name: "info", desc: "Enabled payment methods + suggested amounts", args: []string{"info"}},
 	}},
@@ -138,12 +292,10 @@ var commands = []command{
 		{name: "claim", desc: "Claim today's reward", args: []string{"claim"}},
 		{name: "status", desc: "Show this month's check-in calendar", args: []string{"status"}},
 	}},
-	{name: "user", desc: "Profile / 2FA / passkey / oauth bindings / aff code", requireLogin: true, run: usercmd.Run, subs: []subcommand{
+	{name: "account", desc: "Profile / 2FA / aff · subscription plans / billing", requireLogin: true, run: accountRun, subs: []subcommand{
 		{name: "info", desc: "Rolled-up profile + security view", args: []string{"info"}},
 		{name: "2fa", desc: "2FA status", args: []string{"2fa"}},
 		{name: "aff", desc: "Show affiliate code", args: []string{"aff"}},
-	}},
-	{name: "subscription", desc: "Subscription plans / self / billing preference", requireLogin: true, run: subscription.Run, subs: []subcommand{
 		{name: "plans", desc: "List enabled subscription plans", args: []string{"plans"}},
 		{name: "self", desc: "Show your subscriptions", args: []string{"self"}},
 	}},
@@ -154,36 +306,32 @@ var commands = []command{
 		// flag or an id and stay command-line-only.
 		{name: "list", desc: "List your tokens (masked keys)", args: []string{"list"}},
 	}},
-	{name: "log", desc: "Request log: list / stat / summary", requireLogin: true, run: logcmd.Run, subs: []subcommand{
-		{name: "list", desc: "Recent log entries (newest first)", args: []string{"list"}},
-		{name: "stat", desc: "Quota / RPM / TPM totals for the window", args: []string{"stat"}},
-		{name: "summary", desc: "Per-model spend over the last 7d", args: []string{"summary"}},
+	{name: "stats", desc: "Usage / request log / model perf / upstream health", run: statsRun, subs: []subcommand{
+		{name: "usage", desc: "Day-by-day quota usage", args: []string{"usage"}},
+		{name: "log list", desc: "Recent log entries (newest first)", args: []string{"log", "list"}},
+		{name: "log stat", desc: "Quota / RPM / TPM totals for the window", args: []string{"log", "stat"}},
+		{name: "log summary", desc: "Per-model spend over the last 7d", args: []string{"log", "summary"}},
+		{name: "perf", desc: "Per-model performance (success rate / latency / throughput)", args: []string{"perf"}},
+		{name: "upstream", desc: "Upstream provider health (status-page rollup)", args: []string{"upstream"}},
 	}},
-	{name: "usage", desc: "Day-by-day quota usage", requireLogin: true, run: usagecmd.Run},
 	{name: "models", desc: "Model catalog: list / pricing / groups", requireLogin: true, run: models.Run, subs: []subcommand{
 		{name: "list", desc: "Print every model id your group can route to", args: []string{"list"}},
 		{name: "pricing", desc: "Per-model rate sheet", args: []string{"pricing"}},
 		{name: "groups", desc: "Routing groups your account can use", args: []string{"groups"}},
 	}},
-	{name: "upstream", desc: "Upstream provider health (status-page rollup)", run: upstream.Run},
-	{name: "perf", desc: "Per-model performance (success rate / latency / throughput)", run: perf.Run},
-	{name: "demand", desc: "Buyer-side marketplace postings (list / my / show / submit / cancel / remove)", requireLogin: true, run: demand.Run, subs: []subcommand{
-		{name: "list", desc: "Public marketplace feed", args: []string{"list"}},
-		{name: "my", desc: "Demands you've posted", args: []string{"my"}},
+	{name: "market", desc: "Demand posts · disputes · abuse reports", requireLogin: true, run: marketRun, subs: []subcommand{
+		{name: "demand list", desc: "Public marketplace feed", args: []string{"demand", "list"}},
+		{name: "demand my", desc: "Demands you've posted", args: []string{"demand", "my"}},
+		{name: "dispute my", desc: "List your open + resolved disputes", args: []string{"dispute", "my"}},
+		{name: "report", desc: "File an abuse / TOS-violation report", args: []string{"report"}},
 	}},
-	{name: "dispute", desc: "Open / list / inspect disputes", requireLogin: true, run: dispute.Run, subs: []subcommand{
-		{name: "my", desc: "List your open + resolved disputes", args: []string{"my"}},
-	}},
-	{name: "report", desc: "File an abuse / TOS-violation report", run: report.Run},
-	{name: "notify", desc: "In-app notifications (list / count / read / readall)", requireLogin: true, run: notify.Run, subs: []subcommand{
-		{name: "list", desc: "Recent notifications", args: []string{"list"}},
-		{name: "count", desc: "Just the unread count", args: []string{"count"}},
-		{name: "readall", desc: "Flip every unread to read", args: []string{"readall"}},
-	}},
-	{name: "dm", desc: "Direct messages (threads / open / send / messages / read)", requireLogin: true, run: dm.Run, subs: []subcommand{
-		{name: "threads", desc: "Your DM threads", args: []string{"threads"}},
-		{name: "contacts", desc: "Users you've messaged", args: []string{"contacts"}},
-		{name: "count", desc: "Unread DM count", args: []string{"count"}},
+	{name: "inbox", desc: "In-app notifications · direct messages", requireLogin: true, run: inboxRun, subs: []subcommand{
+		{name: "notify list", desc: "Recent notifications", args: []string{"notify", "list"}},
+		{name: "notify count", desc: "Just the unread count", args: []string{"notify", "count"}},
+		{name: "notify readall", desc: "Flip every unread to read", args: []string{"notify", "readall"}},
+		{name: "dm threads", desc: "Your DM threads", args: []string{"dm", "threads"}},
+		{name: "dm contacts", desc: "Users you've messaged", args: []string{"dm", "contacts"}},
+		{name: "dm count", desc: "Unread DM count", args: []string{"dm", "count"}},
 	}},
 	{name: "seller", desc: "Channel-marketplace seller commands", requireLogin: true, run: seller.Run, subs: []subcommand{
 		{name: "list", desc: "List the channels you've mounted", args: []string{"list"}},
@@ -209,47 +357,88 @@ var commands = []command{
 		{name: "marketplace on", desc: "Open the marketplace", args: []string{"marketplace", "on"}},
 		{name: "marketplace off", desc: "Close the marketplace", args: []string{"marketplace", "off"}},
 	}},
-	{name: "proxy", desc: "Local sanitizer proxy (privacy filter for SDK requests)", run: proxy.Run, subs: []subcommand{
+	{name: "proxy", desc: "Local sanitizer proxy (privacy filter for SDK requests)", run: proxy.Run, headerFn: proxyHeader, subs: []subcommand{
 		{name: "start", desc: "Run the sanitizer proxy (asks background vs foreground)", args: []string{"start"}},
 		{name: "stop", desc: "Stop the running proxy (uses PID file)", args: []string{"stop"}},
-		{name: "status", desc: "Show running stats", args: []string{"status"}},
 		{name: "configure", desc: "Interactive detector + custom-pattern setup", args: []string{"configure"}},
 	}},
-	{name: "mcp", desc: "MCP server for AI CLIs (Claude Code / Codex / Gemini)", run: runMCP, subs: mcpSubs},
+	{name: "mcp", desc: "MCP server for AI CLIs (Claude Code / Codex / Gemini)", run: runMCP, headerFn: mcpHeader, subs: mcpSubs},
 	{name: "doctor", desc: "Self-check (creds, gateway, sanitizer, tools)", run: doctor.Run},
 	{name: "events", desc: "Subscribe to the live event stream (SSE)", requireLogin: true, run: events.Run},
 	{name: "settings", desc: "View / change CLI preferences (language, …)", run: settings.Run},
-	{name: "update", desc: "Check for a newer release and run the matching upgrade", run: cmd.Update},
-	{name: "uninstall", desc: "Remove everyapi state and binary from this machine", run: cmd.Uninstall},
-	{name: "version", aliases: []string{"--version", "-v"}, desc: "Print the build version", run: cmd.Version},
+	// `version` shows the build version as a header, then offers the
+	// CLI-lifecycle actions (update / uninstall) as the menu. The bare
+	// `everyapi version` (and the --version/-v flags, special-cased in
+	// main) just print the version.
+	{name: "version", aliases: []string{"--version", "-v"}, desc: "Build version · update · uninstall", headerFn: versionHeader, run: versionRun, subs: []subcommand{
+		{name: "update", desc: "Check for a newer release and run the matching upgrade", args: []string{"update"}},
+		{name: "uninstall", desc: "Remove everyapi state and binary from this machine", args: []string{"uninstall"}},
+	}},
 }
 
-// adminBlockSentinel is the placeholder inside the launcher usage
-// string that renderUsage substitutes. A sentinel rather than a
-// text-anchor (e.g. strings.Index(usage, "  proxy <sub>")) is more
-// robust to future help-text reorders — the placeholder moves with
-// the help block, so reordering the COMMANDS section can't silently
-// orphan the admin block at the end.
-const adminBlockSentinel = "__ADMIN_BLOCK__\n"
-
-// renderUsage returns the usage block, substituting the admin block
-// into the sentinel iff the cached credential's Role indicates an
-// admin user. Non-admin / unauthenticated callers see the sentinel
-// stripped (no leak). Falls through to plain strip on any
-// credential-load error.
+// renderUsage builds the `everyapi help` / non-TTY usage text. The
+// command list is GENERATED from the `commands` registry (grouped by
+// category, descriptions via commandDesc) rather than hand-maintained
+// in the locale files — so it can never drift from the actual command
+// set, and adding/moving a command needs no help-text edit. Only the
+// header/footer prose is localized (launcher.usage_header/_footer). The
+// admin group is included only for admin users (admin commands are
+// adminOnly; usageCommandList drops them otherwise).
 func renderUsage() string {
-	base := i18n.T("launcher.usage")
-	adminBlock := i18n.T("launcher.usage_admin_block")
 	creds, err := config.Load()
-	var out string
-	if err != nil || !creds.IsAdmin() {
-		out = strings.Replace(base, adminBlockSentinel, "", 1)
-	} else {
-		out = strings.Replace(base, adminBlockSentinel, adminBlock, 1)
+	isAdmin := err == nil && creds != nil && creds.IsAdmin()
+	var b strings.Builder
+	b.WriteString(i18n.T("launcher.usage_header"))
+	b.WriteString("\n")
+	b.WriteString(usageCommandList(isAdmin))
+	b.WriteString(i18n.T("launcher.usage_footer"))
+	b.WriteString("\n")
+	// **keyword** markers render bold on a styled terminal and strip to
+	// plain text when piped / NO_COLOR.
+	return style.Emph(b.String())
+}
+
+// usageCommandList renders the registry as a grouped, aligned command
+// list for renderUsage. Mirrors the launcher's categories
+// (launcherGroupOrder + groupTitle) and reuses commandDesc for the
+// localized one-liners. adminOnly rows are dropped for non-admins.
+func usageCommandList(isAdmin bool) string {
+	var shown []command
+	maxName := 0
+	for _, c := range commands {
+		if c.adminOnly && !isAdmin {
+			continue
+		}
+		shown = append(shown, c)
+		if len(c.name) > maxName {
+			maxName = len(c.name)
+		}
 	}
-	// **keyword** markers in the usage blob render bold on a styled
-	// terminal and strip to plain text when piped / NO_COLOR.
-	return style.Emph(out)
+	byGroup := make(map[string][]command, len(launcherGroupOrder))
+	for _, c := range shown {
+		byGroup[groupOf(c.name)] = append(byGroup[groupOf(c.name)], c)
+	}
+	// Align descriptions past the widest "name <sub>" cell. " <sub>" (6
+	// cols) marks commands that have a subcommand menu.
+	const subTag = " <sub>"
+	descCol := maxName + len(subTag)
+	var b strings.Builder
+	for _, key := range launcherGroupOrder {
+		cs := byGroup[key]
+		if len(cs) == 0 {
+			continue
+		}
+		b.WriteString("\n" + groupTitle(key) + "\n")
+		for _, c := range cs {
+			tag := ""
+			if len(c.subs) > 0 {
+				tag = subTag
+			}
+			pad := strings.Repeat(" ", descCol-len(c.name)-len(tag))
+			b.WriteString("  " + style.Bold(c.name) + tag + pad + "  " + commandDesc(c) + "\n")
+		}
+	}
+	return b.String()
 }
 
 // lookup resolves a CLI-typed name (incl. aliases) to its command.
@@ -380,10 +569,12 @@ func runLauncher() error {
 			chosen = flat[idx]
 		}
 		err := dispatchInteractive(chosen, nil)
-		// A successful `login` clears the stale-session latch so the
-		// next iteration's rebuild shows the logged-in menu instead
-		// of staying stuck on the logged-out set.
-		if chosen.name == "login" && err == nil {
+		// A successful `auth` dispatch (login lives under it now) clears
+		// the stale-session latch so the next iteration's rebuild shows
+		// the logged-in menu instead of staying stuck on the logged-out
+		// set. Resetting on any clean auth run is fine: logout then drops
+		// creds so the next rebuild is logged-out anyway.
+		if chosen.name == "auth" && err == nil {
 			sessionDead = false
 		}
 		// Stay in the menu regardless of how the dispatched
@@ -456,7 +647,7 @@ const (
 // categories — high-frequency buyer commands first, role/utility
 // surfaces last. Each key resolves to a localized title via
 // `launcher.group.<key>`.
-var launcherGroupOrder = []string{"account", "api", "insights", "marketplace", "selling", "tools", "admin"}
+var launcherGroupOrder = []string{"account", "api", "marketplace", "tools", "admin"}
 
 // commandGroup maps every top-level command name to its launcher
 // category. Kept as a side table (not a field on command) so the big
@@ -464,22 +655,20 @@ var launcherGroupOrder = []string{"account", "api", "insights", "marketplace", "
 // this covers the registry exactly — a new command with no entry here
 // fails that test rather than silently landing in the fallback bucket.
 var commandGroup = map[string]string{
-	// Account & billing
-	"status": "account", "topup": "account", "wallet": "account",
-	"checkin": "account", "user": "account", "subscription": "account",
+	// Account & billing (auth=login/logout/status; account=user+
+	// subscription; wallet absorbs topup — see the dispatchers)
+	"auth": "account", "account": "account", "wallet": "account", "checkin": "account",
 	// Using the API
 	"use": "api", "token": "api", "models": "api",
-	// Usage & insights
-	"usage": "insights", "log": "insights", "perf": "insights", "upstream": "insights",
-	// Marketplace & messages
-	"demand": "marketplace", "dispute": "marketplace", "report": "marketplace",
-	"notify": "marketplace", "dm": "marketplace",
-	// Selling / supply
-	"seller": "selling", "edge": "selling",
-	// Tools & settings (incl. session)
-	"login": "tools", "logout": "tools", "mcp": "tools", "proxy": "tools",
+	// (stats merged into the API/data category — no separate insights group)
+	"stats": "api",
+	// Marketplace · messages · supply (market/inbox + seller/edge)
+	"market": "marketplace", "inbox": "marketplace",
+	"seller": "marketplace", "edge": "marketplace",
+	// Tools & settings
+	"mcp": "tools", "proxy": "tools",
 	"doctor": "tools", "events": "tools", "settings": "tools",
-	"update": "tools", "uninstall": "tools", "version": "tools",
+	"version": "tools", // version namespace = build version + update/uninstall
 	// Admin
 	"admin": "admin",
 }
@@ -702,6 +891,12 @@ func runSubPicker(c command) error {
 	prompt := fmt.Sprintf(i18n.T("common.pick_subcommand"), c.name)
 	lastSel := 0
 	for {
+		// Stateful commands (mcp/proxy) print their current status above
+		// the menu, refreshed each loop so it reflects the last action.
+		if c.headerFn != nil {
+			c.headerFn()
+			cliout.Println("")
+		}
 		idx, err := cliprompt.PickWithSelected(prompt, labels, lastSel)
 		if err != nil {
 			return err
@@ -737,7 +932,7 @@ func main() {
 	//   3. "en"
 	// A broken / missing settings file falls through to the env
 	// chain rather than failing startup — the user shouldn't be
-	// locked out of `everyapi login` because the preference file
+	// locked out of `everyapi auth login` because the preference file
 	// is corrupt.
 	resolveLanguage()
 
@@ -767,6 +962,14 @@ func main() {
 
 	if name == "help" || name == "--help" || name == "-h" {
 		fmt.Print(renderUsage())
+		return
+	}
+
+	// --version / -v are quick "just print the version" flags — they
+	// resolve to the `version` command but must NOT drop into its
+	// update/uninstall sub-picker on a TTY.
+	if name == "--version" || name == "-v" {
+		_ = cmd.Version(nil)
 		return
 	}
 
@@ -846,7 +1049,7 @@ func runMCP(args []string) error {
 		// slice from here would close the
 		// commands → runMCP → lookup → commands init cycle.
 		if cliprompt.IsInteractive() {
-			return runSubPicker(command{name: "mcp", subs: mcpSubs, run: runMCP})
+			return runSubPicker(command{name: "mcp", subs: mcpSubs, run: runMCP, headerFn: mcpHeader})
 		}
 		return mcp.Run(os.Stdin, os.Stdout, os.Stderr)
 	}
@@ -858,10 +1061,15 @@ func runMCP(args []string) error {
 	case "status":
 		return mcpcmd.Status(args[1:])
 	case "help", "--help", "-h":
-		// `everyapi mcp --help` used to fall through to the unknown-
-		// subcommand branch and exit 2 with a confusing message;
-		// keep parity with every other command's help-flag handling.
-		fmt.Print(renderUsage())
+		// mcp-specific usage (not the whole-CLI renderUsage — that would
+		// also reintroduce a commands→runMCP→renderUsage→commands init
+		// cycle now that renderUsage reads the registry).
+		fmt.Print("everyapi mcp — MCP server for AI CLIs\n\n" +
+			"USAGE\n" +
+			"  everyapi mcp                    run the stdio MCP server (for AI clients)\n" +
+			"  everyapi mcp install [client]   register everyapi with a client (claude/codex/gemini)\n" +
+			"  everyapi mcp uninstall [client] remove the registration\n" +
+			"  everyapi mcp status             show which clients have everyapi registered\n")
 		return nil
 	default:
 		fmt.Fprintf(os.Stderr, "unknown 'mcp' subcommand %q. Try 'everyapi mcp install' to register, 'everyapi mcp uninstall' to remove, 'everyapi mcp status' to check, or 'everyapi mcp' (no args) to run the server.\n", args[0])

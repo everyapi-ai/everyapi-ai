@@ -310,3 +310,50 @@ func TestLauncherSections_PartitionsInOrder(t *testing.T) {
 		}
 	}
 }
+
+// TestUsageCommandList_ShowsEveryCommand locks the drift-proof help: the
+// generated list must include EVERY registered command (so a new command
+// can never be silently missing from `everyapi help`), and adminOnly
+// commands appear only for admins.
+func TestUsageCommandList_ShowsEveryCommand(t *testing.T) {
+	full := usageCommandList(true)
+	for _, c := range commands {
+		if !strings.Contains(full, c.name) {
+			t.Errorf("usageCommandList(admin) is missing command %q", c.name)
+		}
+		if len(c.subs) > 0 && !strings.Contains(full, c.name+" <sub>") {
+			t.Errorf("command %q has subs but no <sub> tag in help", c.name)
+		}
+	}
+	// adminOnly gating: admin shows for admins, not for others.
+	if !strings.Contains(usageCommandList(true), "admin <sub>") {
+		t.Error("admin command should appear for admins")
+	}
+	if strings.Contains(usageCommandList(false), "admin <sub>") {
+		t.Error("admin command leaked to non-admin help")
+	}
+}
+
+// TestNamespaceDispatchers_Surface covers the network-free arms of the
+// namespace dispatchers introduced by the reorg: bare/help print usage
+// and return nil; an unknown subcommand errors and names the bad sub.
+// (Routing of real subs is verified end-to-end; here we pin the shape.)
+func TestNamespaceDispatchers_Surface(t *testing.T) {
+	for _, d := range []struct {
+		name string
+		run  func([]string) error
+	}{
+		{"account", accountRun}, {"stats", statsRun},
+		{"market", marketRun}, {"inbox", inboxRun}, {"version", versionRun},
+	} {
+		for _, args := range [][]string{{"help"}, {"--help"}} {
+			if err := d.run(args); err != nil {
+				t.Errorf("%sRun(%v) = %v, want nil", d.name, args, err)
+			}
+		}
+		err := d.run([]string{"definitely-not-a-sub"})
+		if err == nil || !strings.Contains(err.Error(), "definitely-not-a-sub") {
+			t.Errorf("%sRun(bogus) = %v, want an error naming the bad sub", d.name, err)
+		}
+	}
+}

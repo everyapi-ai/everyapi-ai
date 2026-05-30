@@ -154,7 +154,7 @@ func Use(args []string) error {
 			return fmt.Errorf(
 				"no enabled relay API key in group %q on your account. Create an\n"+
 					"API key assigned to that group in the EveryAPI dashboard (%s),\n"+
-					"then run 'everyapi login' again — or drop --group/--channel to use\n"+
+					"then run 'everyapi auth login' again — or drop --group/--channel to use\n"+
 					"the default key.",
 				group, api.WebOriginFromBase(creds.APIBase))
 		}
@@ -179,9 +179,9 @@ func Use(args []string) error {
 		return fmt.Errorf(
 			"EveryAPI rejected the relay API key — not launching %s, it would just\n"+
 				"loop on 401. The key is invalid, expired, disabled, or out of quota.\n"+
-				"  check:    everyapi status\n"+
+				"  check:    everyapi auth status\n"+
 				"  top up:   %s\n"+
-				"  refresh:  everyapi login",
+				"  refresh:  everyapi auth login",
 			t.ExecName, wallet)
 	}
 

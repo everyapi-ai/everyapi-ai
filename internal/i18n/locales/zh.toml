@@ -4,8 +4,10 @@
 # 两边都缺会返回 key 本身（开发期肉眼可见地失败）。
 
 [auth]
-not_logged_in = "未登录 — 先运行 'everyapi login'"
-session_expired = "登录已过期 — 重新运行 'everyapi login'"
+usage = "用法：everyapi auth <login|logout|status>"
+unknown_sub = "未知 auth 子命令 %q（可用：login, logout, status）"
+not_logged_in = "未登录 — 先运行 'everyapi auth login'"
+session_expired = "登录已过期 — 重新运行 'everyapi auth login'"
 
 [common]
 canceled = "已取消。"
@@ -22,6 +24,8 @@ cancelled_nothing_submitted = "已取消 — 未提交任何内容。"
 rows_of_total = "共 %d 行，总计 %d 行："
 
 [launcher]
+usage_header = "everyapi — EveryAPI 命令行\n\n用法\n  everyapi <命令> [参数]"
+usage_footer = "\n运行 'everyapi <命令> help' 查看子命令与参数。"
 welcome = "everyapi — 选一个命令："
 pick_category = "everyapi — 选一个类别："
 nav_hint = "↑/↓ 选择 · enter 确认 · esc 返回"
@@ -72,17 +76,19 @@ usage_admin_block = '''  admin <子>      运维命令（需要管理员角色�
 
 [launcher.group]
 account = "账户 / 计费"
-api = "调用 API"
+api = "调用 & 数据"
 insights = "用量与监控"
-marketplace = "市场与消息"
+marketplace = "市场 · 消息 · 供给"
 selling = "卖家 / 供给"
 tools = "工具与设置"
 admin = "管理"
 
 [launcher.desc]
-login = "登录此设备到 EveryAPI"
-logout = "清除本设备凭证"
-status = "显示当前额度、用量与余额"
+account = "个人信息 · 2FA · 订阅 · 计费"
+stats = "用量 · 日志 · 性能 · 上游"
+market = "需求贴 · 争议 · 举报"
+inbox = "通知 · 私信"
+auth = "登录 / 登出 / 会话状态"
 topup = "打开钱包充值页（反钓鱼校验短语）"
 wallet = "充值历史 / 支付方式 / 兑换码"
 checkin = "领取今日签到额度"
@@ -110,9 +116,48 @@ events = "订阅实时事件流（SSE）"
 settings = "查看 / 修改 CLI 偏好（语言等）"
 update = "检查新版本并执行匹配的升级"
 uninstall = "从此机器移除 everyapi 状态和二进制"
-version = "打印构建版本"
+version = "版本 · 升级 · 卸载"
+
+[launcher.subs.auth]
+login = "登录此设备到 EveryAPI"
+logout = "清除本设备凭证"
+status = "显示当前额度、用量与余额"
+
+[launcher.subs.version]
+update = "检查新版本并执行匹配的升级"
+uninstall = "从此机器移除 everyapi 状态和二进制"
+
+[launcher.subs.account]
+info = "汇总的个人信息 + 安全视图"
+"2fa" = "2FA 状态"
+aff = "显示推广码"
+plans = "列出已启用的订阅计划"
+self = "查看你的订阅"
+
+[launcher.subs.stats]
+usage = "按日额度用量"
+log_list = "最近的日志条目（按时间倒序）"
+log_stat = "时间窗内的额度 / RPM / TPM 汇总"
+log_summary = "近 7 天按模型的消耗汇总"
+perf = "按模型性能（成功率 / 时延 / 吞吐）"
+upstream = "上游提供商健康状态（状态页汇总）"
+
+[launcher.subs.market]
+demand_list = "公开需求贴信息流"
+demand_my = "你发布的需求贴"
+dispute_my = "你的已开启 + 已解决的争议"
+report = "举报滥用 / 违规"
+
+[launcher.subs.inbox]
+notify_list = "最近的通知"
+notify_count = "仅统计未读数"
+notify_readall = "把所有未读标记为已读"
+dm_threads = "你的私信会话"
+dm_contacts = "你私信过的用户"
+dm_count = "未读私信数"
 
 [launcher.subs.wallet]
+topup = "打开钱包充值页（反钓鱼校验短语）"
 history = "分页查看充值历史"
 info = "可用支付方式及推荐金额"
 
@@ -271,7 +316,7 @@ CREATE / UPDATE 参数
   --name <n>           显示名（create 必填；最长 50 字符）
   --group <g>          路由分组（默认 "" = 自动）
   --unlimited          无额度上限（覆盖 --quota）
-  --quota <int>        剩余额度（按网关单位；见 'everyapi status'）
+  --quota <int>        剩余额度（按网关单位；见 'everyapi auth status'）
   --expires <when>     "never"（create 默认）或绝对 Unix 秒
   --models <a,b,c>     限制为这些模型 id 的 CSV（不传 / 空 → 全部）
   --ip <cidr,cidr>     IP 白名单（不传 → 不限制）
@@ -313,10 +358,10 @@ expires_never = "永不"
 no_rows = "未匹配到日志行。"
 no_spend = "该时间窗内无消费记录。"
 usage = '''
-everyapi log — 你的请求日志
+everyapi stats log — 你的请求日志
 
 用法
-  everyapi log <子命令> [参数]
+  everyapi stats log <子命令> [参数]
 
 子命令
   list    [参数]    最近的日志条目（最新在前，默认 20 行）
@@ -381,7 +426,7 @@ everyapi wallet — 充值历史、支付方式、兑换码
   redeem <key>                                    使用充值码 / 兑换码
 
 说明
-  实际付款（Stripe / Creem / Waffo / EPay）请使用 'everyapi topup' —
+  实际付款（Stripe / Creem / Waffo / EPay）请使用 'everyapi wallet topup' —
   它会在 dashboard 打开带反钓鱼校验短语的页面。卡支付必须走浏览器，
   因为银行卡收单在带外完成。
 '''
@@ -541,10 +586,10 @@ cancelled = "需求 #%d 已取消。"
 removed = "需求 #%d 已删除。"
 remove_confirm = "永久删除需求 #%d？"
 usage = '''
-everyapi demand — 买方需求贴
+everyapi market demand — 买方需求贴
 
 用法
-  everyapi demand <子命令> [参数]
+  everyapi market demand <子命令> [参数]
 
 子命令
   list   [--state open|closed] [--page P] [--limit N]
@@ -562,10 +607,10 @@ everyapi demand — 买方需求贴
 no_rows = "无争议。"
 opened = "争议 #%d 已发起（状态=%s）。"
 usage = '''
-everyapi dispute — 发起 / 列出 / 查看争议
+everyapi market dispute — 发起 / 列出 / 查看争议
 
 用法
-  everyapi dispute <子命令> [参数]
+  everyapi market dispute <子命令> [参数]
 
 子命令
   submit --counterparty <uid> --type <类型> --target-kind <种类> --target <id> --description <描述> [--amount <额度>]
@@ -577,10 +622,10 @@ everyapi dispute — 发起 / 列出 / 查看争议
 [report]
 filed = "举报已提交。Abuse 团队会通过你填写的邮箱跟进。"
 usage = '''
-everyapi report — 提交滥用 / 违反 TOS 举报
+everyapi market report — 提交滥用 / 违反 TOS 举报
 
 用法
-  everyapi report --email <邮箱> --category <类别> --target-type <类型> --description <描述>
+  everyapi market report --email <邮箱> --category <类别> --target-type <类型> --description <描述>
                   [--target-id <id>] [--evidence <url>]
 
 说明
@@ -594,10 +639,10 @@ unread_count = "%d 条未读"
 marked_read = "已标记 #%d 为已读。"
 marked_all = "已标记 %d 条通知为已读。"
 usage = '''
-everyapi notify — 站内通知
+everyapi inbox notify — 站内通知
 
 用法
-  everyapi notify <子命令> [参数]
+  everyapi inbox notify <子命令> [参数]
 
 子命令
   list   [--unread] [--page P] [--limit N]   最近的通知
@@ -613,10 +658,10 @@ no_messages = "（无消息）"
 sent_at = "已发送 #%d（%s）"
 marked_read = "会话 #%d 已标记为已读。"
 usage = '''
-everyapi dm — 与其他用户的私信
+everyapi inbox dm — 与其他用户的私信
 
 用法
-  everyapi dm <子命令> [参数]
+  everyapi inbox dm <子命令> [参数]
 
 子命令
   threads  [--page P] [--limit N]      你的私信会话（最新在前）
@@ -633,7 +678,7 @@ everyapi dm — 与其他用户的私信
 account_header = "账户 #%d  %s  (%s)"
 passkey_use_dashboard = "(注册 / 删除需要浏览器流程 — 请使用 dashboard。)"
 passkey_none = "未注册 passkey。请在 dashboard 注册（仅浏览器流程）。"
-"2fa_disabled_msg" = "2FA 未启用。运行 'everyapi user 2fa enable' 开启。"
+"2fa_disabled_msg" = "2FA 未启用。运行 'everyapi account user 2fa enable' 开启。"
 "2fa_disabled" = "2FA 已关闭。"
 no_bindings = "无 OAuth 绑定。"
 bindings_count = "共 %d 个绑定："
@@ -642,16 +687,16 @@ unbind_confirm = "解绑 OAuth 提供商 #%d？解绑后将无法通过此提供
 aff_code = "推广码：%s"
 aff_new = "新推广码：%s"
 aff_rotated_warning = "嵌入旧推广码的链接将不再归属给你。"
-aff_transfer_usage = "用法：everyapi user aff transfer <数量> [-y]"
+aff_transfer_usage = "用法：everyapi account user aff transfer <数量> [-y]"
 aff_transfer_bad_amount = "无效数量 %q（必须是正整数，单位为网关额度）"
 aff_transfer_confirm = "把 $%.2f（%d 个额度）从推广返佣转入主余额？"
 aff_transfer_ok = "已转入 $%.2f 到主余额。"
-oauth_usage = "用法：everyapi user oauth {list|unbind <provider_id>}"
+oauth_usage = "用法：everyapi account user oauth {list|unbind <provider_id>}"
 passkey_dashboard_gated = "passkey 状态受 dashboard session cookie 限制 — 请通过网页 UI 管理 passkey"
 passkey_registered_last_used = "Passkey 已注册。上次使用：%s"
 "2fa_status" = "2FA：启用=%v 锁定=%v"
 "2fa_backup_remaining" = "备用码剩余：%d"
-"2fa_low_hint" = "  （较少 — 可考虑 'everyapi user 2fa backup --code <新-totp>' 重新生成）"
+"2fa_low_hint" = "  （较少 — 可考虑 'everyapi account user 2fa backup --code <新-totp>' 重新生成）"
 backup_regenerated = "已重新生成 %d 个备用码 — 请立即保存，不会再次显示："
 "2fa_enroll_intro" = "正在设置两步验证。"
 "2fa_scan_hint" = "用你的身份验证器 App 扫描此二维码（或手动输入下方密钥）："
@@ -673,15 +718,15 @@ passwd_ok = "密码已修改。"
 setting_bad_type = "无效的 --type %q（可选 email | webhook | bark | gotify）"
 setting_threshold_required = "--threshold 必须大于 0"
 setting_saved = "通知设置已保存。"
-setting_none = "尚未配置通知渠道。用 'everyapi user setting --type <渠道> ...' 设置。"
+setting_none = "尚未配置通知渠道。用 'everyapi account user setting --type <渠道> ...' 设置。"
 setting_header = "通知渠道：%s"
 setting_threshold = "阈值"
 setting_test_sent = "测试通知已发送 — 请查收。"
 usage = '''
-everyapi user — 个人信息 / 2FA / OAuth 绑定 / 推广码
+everyapi account user — 个人信息 / 2FA / OAuth 绑定 / 推广码
 
 用法
-  everyapi user <子命令> [参数]
+  everyapi account user <子命令> [参数]
 
 子命令
   info                                  汇总的个人信息 + 安全视图
@@ -713,10 +758,10 @@ preference_updated = "计费偏好已更新为 %q。"
 current_preference = "当前计费偏好：%s"
 set_hint = "使用 --set <value> 修改。未知值会被后端归一化到默认值。"
 usage = '''
-everyapi subscription — 订阅计划 / 我的订阅 / 计费偏好
+everyapi account subscription — 订阅计划 / 我的订阅 / 计费偏好
 
 用法
-  everyapi subscription <子命令> [参数]
+  everyapi account subscription <子命令> [参数]
 
 子命令
   plans                            列出已启用的订阅计划
@@ -726,7 +771,7 @@ everyapi subscription — 订阅计划 / 我的订阅 / 计费偏好
                                    后端会将未知值归一化。
 
 说明
-  购买计划仍是浏览器流程 — 使用 'everyapi topup' 打开带反钓鱼校验的
+  购买计划仍是浏览器流程 — 使用 'everyapi wallet topup' 打开带反钓鱼校验的
   dashboard 钱包页。
 '''
 
@@ -921,7 +966,7 @@ text = """everyapi edge —— BYO-GPU 供给方代理
         打印本帮助。
 
 首次运行
-  $ everyapi login                    # 如果还没登录
+  $ everyapi auth login                    # 如果还没登录
   $ everyapi edge register --name "rtx-4090-tokyo"
   $ everyapi edge start
   $ everyapi edge models pull llama3.1:8b
@@ -1073,7 +1118,7 @@ browser_opened = "浏览器已打开。请核对页面上的校验短语与上�
 [login]
 waiting = "等待授权中…（Ctrl+C 取消）"
 waiting_with_copy = "等待授权中…（Ctrl+C 取消，按 'c' 复制 URL）"
-next_hint = "下一步：试试 'everyapi status' 或 'everyapi use claude'。"
+next_hint = "下一步：试试 'everyapi auth status' 或 'everyapi use claude'。"
 url_copied = "URL 已复制到剪贴板。"
 url_copy_failed = "复制失败：%v"
 qr_hint = "用手机（或任意已登录 EveryAPI 的设备）扫描二维码："
@@ -1082,7 +1127,7 @@ url_hint = "授权此设备，请访问（验证码已内置）："
 code_hint = "若页面未自动填充，请输入验证码：%s"
 browser_opened = "浏览器已打开。请在浏览器或手机端完成授权；本机将自动继续。"
 no_relay_note_1 = "提示：你的账户尚未创建 relay API key。`everyapi use` 需要一个"
-no_relay_note_2 = "EveryAPI dashboard 创建后，下次 `everyapi use` 或 `everyapi status` 会自动拉取（无需重新登录）。"
+no_relay_note_2 = "EveryAPI dashboard 创建后，下次 `everyapi use` 或 `everyapi auth status` 会自动拉取（无需重新登录）。"
 logged_in_saved = "\n已以 %s 登录。凭证已保存到 %s/credentials.json\n"
 
 [logout]
@@ -1122,11 +1167,11 @@ launching_via = "正在启动 %s，目标 %s → %s"
 sanitizer_warn = "警告：脱敏代理未能启动（%v）。\n"
 fallback_direct = "已回退到直连模式 — 流量将直接到达 %s，不经过隐私过滤。\n"
 fallback_hint = "传入 --direct 可关闭此提示；或运行 'everyapi proxy start' 排查。\n\n"
-no_relay_keys = "你的账户没有可用的 relay API key 用于选择分组 — 请到 EveryAPI dashboard 创建，再运行 'everyapi login'"
+no_relay_keys = "你的账户没有可用的 relay API key 用于选择分组 — 请到 EveryAPI dashboard 创建，再运行 'everyapi auth login'"
 no_relay_key_long = '''
 账户上没有可用的 relay API key — `everyapi use` 需要它，
 它与你的登录 token 是分开的。请在 EveryAPI dashboard (%s) 创建一个 API key，
-然后重新运行 'everyapi login'。'''
+然后重新运行 'everyapi auth login'。'''
 unknown_flag = "未知 flag %q（在工具 flag 前加 `--`：`everyapi use <tool> -- %s ...`）"
 usage = "用法：everyapi use <tool> [--group <名称>|--channel <名称>] [--model <id>] [--direct] [-- 工具参数...]"
 model_picker = "为 %s 选择模型（经 EveryAPI 路由）："
@@ -1184,3 +1229,23 @@ done = "卸载完成。"
 [perf]
 none = "暂无性能数据。"
 header = "按模型性能（最近 %d 小时，按使用量排序）："
+
+[version]
+usage = "用法：everyapi version [update|uninstall]"
+unknown_sub = "未知 version 子命令 %q（可用：update, uninstall）"
+
+[account]
+usage = "用法： everyapi account <info|2fa|aff|plans|self>"
+unknown_sub = "未知 account 子命令 %q"
+
+[stats]
+usage = "用法： everyapi stats <usage|log|perf|upstream>"
+unknown_sub = "未知 stats 子命令 %q"
+
+[market]
+usage = "用法： everyapi market <demand|dispute|report>"
+unknown_sub = "未知 market 子命令 %q"
+
+[inbox]
+usage = "用法： everyapi inbox <notify|dm>"
+unknown_sub = "未知 inbox 子命令 %q"

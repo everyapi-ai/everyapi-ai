@@ -16,7 +16,7 @@ import (
 // The amounts are marked with **…** in status.remaining_used across
 // every locale; routing the formatted string through style.Emph bolds
 // them on a styled terminal and strips the markers to plain text when
-// output is piped / NO_COLOR — keeping `everyapi status | grep`
+// output is piped / NO_COLOR — keeping `everyapi auth status | grep`
 // parseable. Markers live in the format string, never in the data, so
 // formatting must happen before the Emph pass.
 func styledQuota(quotaUSD, usedUSD float64) string {
@@ -32,7 +32,7 @@ func styledQuota(quotaUSD, usedUSD float64) string {
 // no relay_key), resolveRelayKey resolves and caches the relay API
 // key, rewriting credentials.json. Subsequent runs are read-only.
 // We accept the asymmetry because the alternative — making the user
-// run `everyapi login` after upgrade — is worse UX, and the rewrite is
+// run `everyapi auth login` after upgrade — is worse UX, and the rewrite is
 // a one-time migration.
 func Status(args []string) error {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
@@ -63,7 +63,7 @@ func Status(args []string) error {
 	// Lazy-migrate the cached role for credentials.json files
 	// written before the Role field existed. Old creds end up with
 	// Role=0 (treated as non-admin → help hides admin block); the
-	// first `everyapi status` from an admin user repopulates it
+	// first `everyapi auth status` from an admin user repopulates it
 	// without needing them to re-login. Save errors are non-fatal —
 	// status display is the primary job here.
 	if self.Role != creds.Role {
@@ -108,7 +108,7 @@ func Status(args []string) error {
 	switch {
 	case errors.Is(rkErr, errNoRelayKey):
 		cliout.Printf("  relay:     %s — no relay API key on the account\n", style.Bold("NOT CONFIGURED"))
-		cliout.Printf("             create an API key in the dashboard, then 'everyapi login'\n")
+		cliout.Printf("             create an API key in the dashboard, then 'everyapi auth login'\n")
 	case rkErr != nil:
 		// Token lookup itself failed (transport, 5xx, etc.). Not a
 		// verdict on the key — just say we couldn't check.
@@ -120,7 +120,7 @@ func Status(args []string) error {
 			cliout.Printf("  relay:     %s\n", style.Bold("ok"))
 		case api.IsUnauthorized(perr):
 			cliout.Printf("  relay:     %s — relay key invalid / expired / disabled / out of quota\n", style.Bold("UNAVAILABLE"))
-			cliout.Printf("             (account quota above is separate; top up %s/wallet or run 'everyapi login')\n",
+			cliout.Printf("             (account quota above is separate; top up %s/wallet or run 'everyapi auth login')\n",
 				api.WebOriginFromBase(creds.APIBase))
 		default:
 			// Non-401 probe failure (5xx, network). The key may be

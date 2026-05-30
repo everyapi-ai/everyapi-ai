@@ -1,4 +1,4 @@
-// Package log wires `everyapi log …` — buyer-visible request log
+// Package log wires `everyapi stats log …` — buyer-visible request log
 // telemetry. Three subs: list (most recent rows), stat (totals over
 // a window), summary (per-model breakdown). All read-only and
 // auth-bound to the calling user.
@@ -22,7 +22,7 @@ func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
 		cliout.Println(i18n.T("log.usage"))
 		if len(args) == 0 {
-			return errors.New("missing subcommand (try 'everyapi log help')")
+			return errors.New("missing subcommand (try 'everyapi stats log help')")
 		}
 		return nil
 	}

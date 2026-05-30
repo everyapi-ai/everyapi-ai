@@ -226,7 +226,7 @@ func runKey(args []string) error {
 
 // runUsage queries GET /api/usage/token for one relay key. Unlike every
 // other token verb this authenticates with the KEY ITSELF, so it works
-// WITHOUT `everyapi login`: a bare key-holder (CI, a key handed down by
+// WITHOUT `everyapi auth login`: a bare key-holder (CI, a key handed down by
 // someone else) can check remaining quota by passing the key directly.
 func runUsage(args []string) error {
 	fs := flag.NewFlagSet("token usage", flag.ContinueOnError)

@@ -1,6 +1,6 @@
 // Package doctor wires `everyapi doctor` — local self-check that
 // bundles the diagnostics a user (or their support thread) would
-// otherwise piece together from `everyapi status` + `everyapi proxy
+// otherwise piece together from `everyapi auth status` + `everyapi proxy
 // status` + manual `which claude/codex/gemini`. Output is one row
 // per check with a clear [OK|WARN|FAIL] prefix so it can be pasted
 // into a support ticket without further annotation.
@@ -42,7 +42,7 @@ func Run(args []string) error {
 	report.run("credentials cached", func() (string, string, error) {
 		creds, err := config.Load()
 		if errors.Is(err, config.ErrNoCredentials) {
-			return "", "run 'everyapi login' first", err
+			return "", "run 'everyapi auth login' first", err
 		}
 		if err != nil {
 			return "", "", err
@@ -63,7 +63,7 @@ func Run(args []string) error {
 		self, err := client.GetSelf(ctx)
 		if err != nil {
 			if api.IsUnauthorized(err) {
-				return "", "re-run 'everyapi login'", err
+				return "", "re-run 'everyapi auth login'", err
 			}
 			return "", "", err
 		}

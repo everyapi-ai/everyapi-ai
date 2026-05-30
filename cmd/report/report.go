@@ -1,4 +1,4 @@
-// Package report wires `everyapi report` — submit an abuse /
+// Package report wires `everyapi market report` — submit an abuse /
 // TOS-violation report. Public endpoint, so this works without
 // being logged in.
 package report

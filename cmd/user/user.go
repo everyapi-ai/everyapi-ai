@@ -1,4 +1,4 @@
-// Package user wires `everyapi user …` — profile / 2FA / passkey
+// Package user wires `everyapi account user …` — profile / 2FA / passkey
 // status / OAuth bindings / affiliate code. Operations that need a
 // browser (passkey register, 2FA setup QR scan, email verification)
 // are intentionally out of scope; the CLI surfaces what it can do
@@ -30,7 +30,7 @@ func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
 		cliout.Println(i18n.T("user.usage"))
 		if len(args) == 0 {
-			return fmt.Errorf(i18n.T("common.missing_subcommand"), "everyapi user")
+			return fmt.Errorf(i18n.T("common.missing_subcommand"), "everyapi account user")
 		}
 		return nil
 	}
@@ -159,7 +159,7 @@ func runTwoFA(args []string) error {
 	case "backup":
 		return runTwoFABackup(args[1:])
 	case "help", "--help", "-h":
-		cliout.Println("everyapi user 2fa [enable|disable|backup] — see 'everyapi user help'")
+		cliout.Println("everyapi account user 2fa [enable|disable|backup] — see 'everyapi account user help'")
 		return nil
 	default:
 		// Bare `user 2fa` (with anything else) → status
@@ -328,7 +328,7 @@ func runPasskey(args []string) error {
 func runOAuth(args []string) error {
 	if len(args) == 0 {
 		cliout.Println(i18n.T("user.oauth_usage"))
-		return fmt.Errorf(i18n.T("common.missing_subcommand"), "everyapi user oauth")
+		return fmt.Errorf(i18n.T("common.missing_subcommand"), "everyapi account user oauth")
 	}
 	switch args[0] {
 	case "list":
@@ -366,7 +366,7 @@ func runOAuthList(args []string) error {
 
 func runOAuthUnbind(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: everyapi user oauth unbind <provider_id>")
+		return errors.New("usage: everyapi account user oauth unbind <provider_id>")
 	}
 	id, err := strconv.Atoi(args[0])
 	if err != nil || id <= 0 {

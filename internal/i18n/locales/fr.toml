@@ -19,8 +19,10 @@
 # constante Lang* et de son inclusion dans SupportedLanguages.
 
 [auth]
-not_logged_in = "non connecté — exécutez d'abord 'everyapi login'"
-session_expired = "votre session a expiré — exécutez 'everyapi login' à nouveau"
+usage = "utilisation : everyapi auth <login|logout|status>"
+unknown_sub = "sous-commande auth inconnue %q (essayez : login, logout, status)"
+not_logged_in = "non connecté — exécutez d'abord 'everyapi auth login'"
+session_expired = "votre session a expiré — exécutez 'everyapi auth login' à nouveau"
 
 [common]
 canceled = "Annulé."
@@ -37,6 +39,8 @@ cancelled_nothing_submitted = "Annulé — rien n'a été soumis."
 rows_of_total = "%d ligne(s) sur %d au total :"
 
 [launcher]
+usage_header = "everyapi — la CLI EveryAPI\n\nUTILISATION\n  everyapi <commande> [args]"
+usage_footer = "\nExécutez 'everyapi <commande> help' pour ses sous-commandes et options."
 welcome = "everyapi — choisissez une commande :"
 pick_category = "everyapi — choisissez une catégorie :"
 nav_hint = "↑/↓ sélectionner · entrée confirmer · échap retour"
@@ -87,17 +91,19 @@ usage_admin_block = '''  admin <sub>     Commandes opérateur (rôle admin requi
 
 [launcher.group]
 account = "Compte et facturation"
-api = "Utiliser l'API"
+api = "API & données"
 insights = "Usage et métriques"
-marketplace = "Marché et messages"
+marketplace = "Marché · messages · fourniture"
 selling = "Vente / fourniture"
 tools = "Outils et réglages"
 admin = "Administration"
 
 [launcher.desc]
-login = "Authentifier cet appareil auprès d'EveryAPI"
-logout = "Supprimer les identifiants de cet appareil"
-status = "Afficher quota, utilisation et solde actuels"
+account = "Profil · 2FA · abonnement · facturation"
+stats = "Usage · logs · perf · upstream"
+market = "Demande · litiges · signalements"
+inbox = "Notifications · messages directs"
+auth = "Connexion / déconnexion, état"
 topup = "Ouvrir la page de rechargement (phrase de vérification anti-phishing)"
 wallet = "Historique de paiements / méthodes / clés d'échange"
 checkin = "Réclamer le quota quotidien d'aujourd'hui"
@@ -125,9 +131,48 @@ events = "S'abonner au flux d'événements en direct (SSE)"
 settings = "Voir / modifier les préférences du CLI (langue, …)"
 update = "Vérifier une version plus récente et lancer la mise à niveau correspondante"
 uninstall = "Supprimer l'état everyapi et le binaire de cette machine"
-version = "Afficher la version du build"
+version = "Version · update · uninstall"
+
+[launcher.subs.auth]
+login = "Authentifier cet appareil auprès d'EveryAPI"
+logout = "Supprimer les identifiants de cet appareil"
+status = "Afficher quota, utilisation et solde actuels"
+
+[launcher.subs.version]
+update = "Vérifier une version plus récente et lancer la mise à niveau correspondante"
+uninstall = "Supprimer l'état everyapi et le binaire de cette machine"
+
+[launcher.subs.account]
+info = "Vue consolidée profil + sécurité"
+"2fa" = "État du 2FA"
+aff = "Afficher le code d'affiliation"
+plans = "Lister les plans d'abonnement actifs"
+self = "Afficher tes abonnements"
+
+[launcher.subs.stats]
+usage = "Utilisation de quota jour par jour"
+log_list = "Entrées de log récentes (les plus récentes d'abord)"
+log_stat = "Totaux de quota / RPM / TPM pour la fenêtre"
+log_summary = "Dépense par modèle sur les 7 derniers jours"
+perf = "Performance par modèle (taux de succès / latence / débit)"
+upstream = "Santé des fournisseurs upstream (synthèse de la page d'état)"
+
+[launcher.subs.market]
+demand_list = "Flux public du marketplace"
+demand_my = "Demandes que tu as publiées"
+dispute_my = "Lister tes litiges ouverts + résolus"
+report = "Déposer un signalement d'abus / violation des CGU"
+
+[launcher.subs.inbox]
+notify_list = "Notifications récentes"
+notify_count = "Juste le nombre de non lues"
+notify_readall = "Passer toutes les non lues en lues"
+dm_threads = "Tes fils de DM"
+dm_contacts = "Utilisateurs à qui tu as envoyé des messages"
+dm_count = "Nombre de DM non lus"
 
 [launcher.subs.wallet]
+topup = "Ouvrir la page de rechargement (phrase de vérification anti-phishing)"
 history = "Historique de paiements paginé"
 info = "Méthodes de paiement actives + montants suggérés"
 
@@ -287,7 +332,7 @@ OPTIONS CREATE / UPDATE
   --name <n>           Nom affiché (requis à la création ; max 50 caractères)
   --group <g>          Groupe de routage (par défaut "" = auto)
   --unlimited          Aucune limite de quota (écrase --quota)
-  --quota <int>        Quota restant (en unités gateway ; voir 'everyapi status')
+  --quota <int>        Quota restant (en unités gateway ; voir 'everyapi auth status')
   --expires <quand>    "never" (par défaut à la création) ou secondes Unix absolues
   --models <a,b,c>     Restreindre à ce CSV d'ids de modèles (omis / vide → tous)
   --ip <cidr,cidr>     Liste blanche d'IP (omis → aucune restriction)
@@ -329,10 +374,10 @@ expires_never = "jamais"
 no_rows = "Aucune ligne de log ne correspond."
 no_spend = "Aucune dépense enregistrée dans cette fenêtre."
 usage = '''
-everyapi log — votre journal de requêtes
+everyapi stats log — votre journal de requêtes
 
 UTILISATION
-  everyapi log <sous-commande> [options]
+  everyapi stats log <sous-commande> [options]
 
 SOUS-COMMANDES
   list    [options]   Entrées récentes (plus récentes en premier ; 20 lignes par défaut)
@@ -398,7 +443,7 @@ SOUS-COMMANDES
 
 NOTES
   Pour les vrais paiements (Stripe / Creem / Waffo / EPay), utilisez
-  'everyapi topup' — cela ouvre le dashboard avec la phrase de
+  'everyapi wallet topup' — cela ouvre le dashboard avec la phrase de
   vérification anti-phishing. Le passage au navigateur est requis là
   parce que la collecte de la carte se fait hors bande.
 '''
@@ -558,10 +603,10 @@ cancelled = "Demande #%d annulée."
 removed = "Demande #%d supprimée."
 remove_confirm = "Supprimer définitivement la demande #%d ?"
 usage = '''
-everyapi demand — annonces marketplace côté acheteur
+everyapi market demand — annonces marketplace côté acheteur
 
 UTILISATION
-  everyapi demand <sous-commande> [options]
+  everyapi market demand <sous-commande> [options]
 
 SOUS-COMMANDES
   list   [--state open|closed] [--page P] [--limit N]
@@ -579,10 +624,10 @@ SOUS-COMMANDES
 no_rows = "Aucun litige."
 opened = "Litige #%d ouvert (state=%s)."
 usage = '''
-everyapi dispute — ouvrir / lister / consulter les litiges
+everyapi market dispute — ouvrir / lister / consulter les litiges
 
 UTILISATION
-  everyapi dispute <sous-commande> [options]
+  everyapi market dispute <sous-commande> [options]
 
 SOUS-COMMANDES
   submit --counterparty <uid> --type <t> --target-kind <k> --target <id> --description <d> [--amount <quota>]
@@ -594,10 +639,10 @@ SOUS-COMMANDES
 [report]
 filed = "Signalement déposé. L'équipe abuse fera le suivi via l'email fourni."
 usage = '''
-everyapi report — déposer un signalement d'abus / violation des CGU
+everyapi market report — déposer un signalement d'abus / violation des CGU
 
 UTILISATION
-  everyapi report --email <e> --category <c> --target-type <t> --description <d>
+  everyapi market report --email <e> --category <c> --target-type <t> --description <d>
                   [--target-id <id>] [--evidence <url>]
 
 NOTES
@@ -613,10 +658,10 @@ unread_count = "%d non lue(s)"
 marked_read = "#%d marquée comme lue."
 marked_all = "%d notification(s) marquée(s) comme lues."
 usage = '''
-everyapi notify — notifications dans l'app
+everyapi inbox notify — notifications dans l'app
 
 UTILISATION
-  everyapi notify <sous-commande> [options]
+  everyapi inbox notify <sous-commande> [options]
 
 SOUS-COMMANDES
   list   [--unread] [--page P] [--limit N]   Notifications récentes
@@ -632,10 +677,10 @@ no_messages = "(aucun message)"
 sent_at = "Envoyé #%d à %s"
 marked_read = "Fil #%d marqué comme lu."
 usage = '''
-everyapi dm — messages directs avec d'autres utilisateurs
+everyapi inbox dm — messages directs avec d'autres utilisateurs
 
 UTILISATION
-  everyapi dm <sous-commande> [options]
+  everyapi inbox dm <sous-commande> [options]
 
 SOUS-COMMANDES
   threads  [--page P] [--limit N]      Vos fils de DM (plus récents en premier)
@@ -652,7 +697,7 @@ SOUS-COMMANDES
 account_header = "Compte #%d  %s  (%s)"
 passkey_use_dashboard = "(Enregistrement / suppression sont des flux navigateur — utilisez le dashboard.)"
 passkey_none = "Aucune passkey enregistrée. Enregistrez-en une dans le dashboard (flux navigateur uniquement)."
-"2fa_disabled_msg" = "La 2FA est désactivée. Activez-la avec 'everyapi user 2fa enable'."
+"2fa_disabled_msg" = "La 2FA est désactivée. Activez-la avec 'everyapi account user 2fa enable'."
 "2fa_disabled" = "2FA désactivée."
 no_bindings = "Aucune liaison OAuth."
 bindings_count = "%d liaison(s) :"
@@ -661,16 +706,16 @@ unbind_confirm = "Délier le fournisseur OAuth #%d ? Vous ne pourrez plus vous c
 aff_code = "Code d'affiliation : %s"
 aff_new = "Nouveau code d'affiliation : %s"
 aff_rotated_warning = "Les liens contenant le code précédent ne vous créditeront plus."
-aff_transfer_usage = "utilisation : everyapi user aff transfer <montant> [-y]"
+aff_transfer_usage = "utilisation : everyapi account user aff transfer <montant> [-y]"
 aff_transfer_bad_amount = "montant invalide %q (doit être un entier positif, en unités de quota gateway)"
 aff_transfer_confirm = "Transférer $%.2f (%d unités) des récompenses d'affiliation vers votre solde principal ?"
 aff_transfer_ok = "Transféré $%.2f vers votre solde principal."
-oauth_usage = "Utilisation : everyapi user oauth {list|unbind <provider_id>}"
+oauth_usage = "Utilisation : everyapi account user oauth {list|unbind <provider_id>}"
 passkey_dashboard_gated = "le statut passkey dépend du cookie de session du dashboard — utilisez l'UI web pour gérer les passkeys"
 passkey_registered_last_used = "Passkey enregistrée. Dernière utilisation : %s"
 "2fa_status" = "2FA : enabled=%v locked=%v"
 "2fa_backup_remaining" = "Codes de sauvegarde restants : %d"
-"2fa_low_hint" = "  (bas — envisagez 'everyapi user 2fa backup --code <new-totp>' pour régénérer)"
+"2fa_low_hint" = "  (bas — envisagez 'everyapi account user 2fa backup --code <new-totp>' pour régénérer)"
 backup_regenerated = "%d codes de sauvegarde régénérés — enregistrez-les maintenant, ils ne seront plus affichés :"
 "2fa_enroll_intro" = "Configuration de l'authentification à deux facteurs."
 "2fa_scan_hint" = "Scannez ce QR avec votre application d'authentification (ou saisissez le secret ci-dessous manuellement) :"
@@ -692,15 +737,15 @@ passwd_ok = "Mot de passe modifié."
 setting_bad_type = "--type %q invalide (utilisez email | webhook | bark | gotify)"
 setting_threshold_required = "--threshold doit être > 0"
 setting_saved = "Paramètres de notification enregistrés."
-setting_none = "Aucun canal de notification configuré. Définissez-en un avec 'everyapi user setting --type <ch> ...'."
+setting_none = "Aucun canal de notification configuré. Définissez-en un avec 'everyapi account user setting --type <ch> ...'."
 setting_header = "Canal de notification : %s"
 setting_threshold = "seuil"
 setting_test_sent = "Notification de test envoyée — vérifiez votre canal."
 usage = '''
-everyapi user — profil / 2FA / liaisons OAuth / code d'affiliation
+everyapi account user — profil / 2FA / liaisons OAuth / code d'affiliation
 
 UTILISATION
-  everyapi user <sous-commande> [options]
+  everyapi account user <sous-commande> [options]
 
 SOUS-COMMANDES
   info                                  Vue consolidée profil + sécurité
@@ -733,10 +778,10 @@ preference_updated = "Préférence de facturation mise à jour vers %q."
 current_preference = "Préférence de facturation actuelle : %s"
 set_hint = "Utilisez --set <valeur> pour modifier. Le backend normalise les valeurs inconnues vers la valeur par défaut."
 usage = '''
-everyapi subscription — plans d'abonnement / mon compte / préférence
+everyapi account subscription — plans d'abonnement / mon compte / préférence
 
 UTILISATION
-  everyapi subscription <sous-commande> [options]
+  everyapi account subscription <sous-commande> [options]
 
 SOUS-COMMANDES
   plans                            Lister les plans d'abonnement activés
@@ -746,7 +791,7 @@ SOUS-COMMANDES
                                    Le backend normalise les valeurs inconnues.
 
 NOTE
-  L'achat d'un plan reste un flux navigateur — utilisez 'everyapi topup'
+  L'achat d'un plan reste un flux navigateur — utilisez 'everyapi wallet topup'
   pour ouvrir le wallet du dashboard derrière la poignée de main
   anti-phishing.
 '''
@@ -955,7 +1000,7 @@ SOUS-COMMANDES
         Affiche ce message.
 
 PREMIÈRE EXÉCUTION
-  $ everyapi login                    # si ce n'est pas déjà fait
+  $ everyapi auth login                    # si ce n'est pas déjà fait
   $ everyapi edge register --name "rtx-4090-tokyo"
   $ everyapi edge start
   $ everyapi edge models pull llama3.1:8b
@@ -1107,7 +1152,7 @@ browser_opened = "Navigateur ouvert. Vérifiez que la phrase sur la page corresp
 [login]
 waiting = "En attente d'autorisation... (Ctrl+C pour annuler)"
 waiting_with_copy = "En attente d'autorisation... (Ctrl+C pour annuler, 'c' pour copier l'URL)"
-next_hint = "Suite : essayez 'everyapi status' ou 'everyapi use claude'."
+next_hint = "Suite : essayez 'everyapi auth status' ou 'everyapi use claude'."
 url_copied = "URL copiée dans le presse-papiers."
 url_copy_failed = "Impossible de copier : %v"
 qr_hint = "Scannez ce QR avec votre téléphone (ou tout appareil déjà connecté à EveryAPI) :"
@@ -1116,7 +1161,7 @@ url_hint = "Pour autoriser cet appareil, visitez (le code est intégré dans le 
 code_hint = "Si la page ne se pré-remplit pas, saisissez le code : %s"
 browser_opened = "Navigateur ouvert. Approuvez là-bas (ou terminez sur votre téléphone) ; ceci se terminera tout seul."
 no_relay_note_1 = "Note : votre compte n'a pas encore de relay API key. `everyapi use` en requiert une"
-no_relay_note_2 = "EveryAPI dashboard ; `everyapi use` ou `everyapi status` la récupérera automatiquement (pas besoin de se reconnecter)."
+no_relay_note_2 = "EveryAPI dashboard ; `everyapi use` ou `everyapi auth status` la récupérera automatiquement (pas besoin de se reconnecter)."
 logged_in_saved = "\nConnecté en tant que %s. Identifiants enregistrés dans %s/credentials.json\n"
 
 [logout]
@@ -1156,11 +1201,11 @@ launching_via = "Lancement de %s contre %s → %s"
 sanitizer_warn = "Avertissement : le proxy sanitizer n'a pas démarré (%v).\n"
 fallback_direct = "Bascule en mode direct — votre trafic atteindra %s sans le filtre de confidentialité.\n"
 fallback_hint = "Relancez avec --direct pour faire taire ce message, ou 'everyapi proxy start' pour déboguer.\n\n"
-no_relay_keys = "aucune relay API key activée sur votre compte pour choisir un groupe — créez-en une dans le dashboard EveryAPI, puis 'everyapi login'"
+no_relay_keys = "aucune relay API key activée sur votre compte pour choisir un groupe — créez-en une dans le dashboard EveryAPI, puis 'everyapi auth login'"
 no_relay_key_long = '''
 aucune clé API relais utilisable sur votre compte — `everyapi use` en a besoin,
 elle est distincte du jeton de connexion. Créez une clé API dans le
-tableau de bord EveryAPI (%s), puis relancez 'everyapi login'.'''
+tableau de bord EveryAPI (%s), puis relancez 'everyapi auth login'.'''
 unknown_flag = "flag inconnu %q (utilisez `--` avant les flags de l'outil : `everyapi use <tool> -- %s ...`)"
 usage = "utilisation : everyapi use <tool> [--group <nom>|--channel <nom>] [--model <id>] [--direct] [-- arguments de l'outil...]"
 model_picker = "Choisissez un modèle pour %s (routé via EveryAPI) :"
@@ -1218,3 +1263,23 @@ done = "Uninstall complete."
 [perf]
 none = "Aucune donnée de performance pour l'instant."
 header = "Performance par modèle (dernières %dh, les plus utilisés en premier) :"
+
+[version]
+usage = "utilisation : everyapi version [update|uninstall]"
+unknown_sub = "sous-commande version inconnue %q (essayez : update, uninstall)"
+
+[account]
+usage = "utilisation : everyapi account <info|2fa|aff|plans|self>"
+unknown_sub = "sous-commande account inconnue %q"
+
+[stats]
+usage = "utilisation : everyapi stats <usage|log|perf|upstream>"
+unknown_sub = "sous-commande stats inconnue %q"
+
+[market]
+usage = "utilisation : everyapi market <demand|dispute|report>"
+unknown_sub = "sous-commande market inconnue %q"
+
+[inbox]
+usage = "utilisation : everyapi inbox <notify|dm>"
+unknown_sub = "sous-commande inbox inconnue %q"

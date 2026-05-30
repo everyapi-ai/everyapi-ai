@@ -16,8 +16,10 @@
 # the Lang* const + including it in SupportedLanguages.
 
 [auth]
-not_logged_in = "not logged in — run 'everyapi login' first"
-session_expired = "your session expired — run 'everyapi login' again"
+usage = "usage: everyapi auth <login|logout|status>"
+unknown_sub = "unknown auth subcommand %q (try: login, logout, status)"
+not_logged_in = "not logged in — run 'everyapi auth login' first"
+session_expired = "your session expired — run 'everyapi auth login' again"
 
 [common]
 canceled = "Canceled."
@@ -34,6 +36,8 @@ cancelled_nothing_submitted = "Cancelled — nothing was submitted."
 rows_of_total = "%d row(s) of %d total:"
 
 [launcher]
+usage_header = "everyapi — the EveryAPI CLI\n\nUSAGE\n  everyapi <command> [args]"
+usage_footer = "\nRun 'everyapi <command> help' for a command's subcommands and flags."
 welcome = "everyapi — pick a command:"
 pick_category = "everyapi — pick a category:"
 nav_hint = "↑/↓ select · enter confirm · esc back"
@@ -44,26 +48,16 @@ USAGE
   everyapi <command> [flags]
 
 COMMANDS
-  **login**           Authenticate this **device** with EveryAPI
-  **logout**          Remove this device's **credentials**
-  **status**          Show current **quota**, usage, and balance
-  **topup**           Open the wallet **top-up** page (anti-phishing verification phrase)
+  **auth** <sub>      Sign in / out, session status
   **wallet** <sub>    **Payment** history / methods / redemption keys
+  **account** <sub>   Profile · 2FA · subscription · billing
+  **stats** <sub>   Usage · logs · perf · upstream
+  **market** <sub>   Demand · disputes · reports
+  **inbox** <sub>   Notifications · direct messages
   **checkin**         Claim today's **daily-grant** quota
-  **user** <sub>      **Profile** / 2FA / passkey / oauth bindings / aff code
-  **subscription** <sub>  **Subscription** plans / self / billing preference
   **use** <tool>      Launch a **third-party CLI** (claude / codex / gemini / hermes) via EveryAPI
   **token** <sub>     Manage relay **API tokens** (list / show / create / update / key / revoke / usage)
-  **log** <sub>       **Request log**: list / stat / summary
-  **usage**           **Day-by-day** quota usage
   **models** <sub>    **Model catalog**: list / pricing / groups
-  **upstream**        Upstream **provider health** (status-page rollup)
-  **perf**            Per-model **performance** (success rate / latency / throughput)
-  **demand** <sub>    Buyer-side **marketplace** postings (list / my / show / submit / cancel / remove)
-  **dispute** <sub>   Open / list / inspect **disputes**
-  **report**          File an **abuse / TOS-violation** report
-  **notify** <sub>    In-app **notifications** (list / count / read / readall)
-  **dm** <sub>        **Direct messages** (threads / open / send / messages / read)
   **seller** <sub>    **Channel-marketplace** seller commands
 __ADMIN_BLOCK__
   **edge** <sub>      **BYO-GPU** supplier agent (docker + ollama)
@@ -72,8 +66,7 @@ __ADMIN_BLOCK__
   **doctor**          **Self-check** (creds, gateway, sanitizer, tools)
   **events**          Subscribe to the **live event stream** (SSE)
   **settings**        View / change **CLI preferences** (language, …)
-  **update**          Check for a **newer release** and run the matching upgrade
-  **version**         Print the **build version**
+  **version** <sub>   Build version · update · uninstall
   **help**            Show this message
 
 Run 'everyapi <command> help' for subcommand details and flags
@@ -84,17 +77,19 @@ usage_admin_block = '''  **admin** <sub>     **Operator** commands (admin role r
 
 [launcher.group]
 account = "Account & Billing"
-api = "Using the API"
+api = "Using the API & data"
 insights = "Usage & Insights"
-marketplace = "Marketplace & Messages"
+marketplace = "Marketplace · messages · supply"
 selling = "Selling & Supply"
 tools = "Tools & Settings"
 admin = "Admin"
 
 [launcher.desc]
-login = "Authenticate this **device** with EveryAPI"
-logout = "Remove this device's **credentials**"
-status = "Show current **quota**, usage, and balance"
+account = "Profile · 2FA · subscription · billing"
+stats = "Usage · logs · perf · upstream"
+market = "Demand · disputes · reports"
+inbox = "Notifications · direct messages"
+auth = "Sign in / out, session status"
 topup = "Open the wallet **top-up** page (anti-phishing verification phrase)"
 wallet = "**Payment** history / methods / redemption keys"
 checkin = "Claim today's **daily-grant** quota"
@@ -122,9 +117,48 @@ events = "Subscribe to the **live event stream** (SSE)"
 settings = "View / change **CLI preferences** (language, …)"
 update = "Check for a **newer release** and run the matching upgrade"
 uninstall = "Remove everyapi **state and binary** from this machine"
-version = "Print the **build version**"
+version = "Build version · update · uninstall"
+
+[launcher.subs.auth]
+login = "Authenticate this **device** with EveryAPI"
+logout = "Remove this device's **credentials**"
+status = "Show current **quota**, usage, and balance"
+
+[launcher.subs.version]
+update = "Check for a **newer release** and run the matching upgrade"
+uninstall = "Remove everyapi **state and binary** from this machine"
+
+[launcher.subs.account]
+info = "Rolled-up profile + security view"
+"2fa" = "2FA status"
+aff = "Show affiliate code"
+plans = "List enabled subscription plans"
+self = "Show your subscriptions"
+
+[launcher.subs.stats]
+usage = "**Day-by-day** quota usage"
+log_list = "Recent log entries (newest first)"
+log_stat = "Quota / RPM / TPM totals for the window"
+log_summary = "Per-model spend over the last 7d"
+perf = "Per-model **performance** (success rate / latency / throughput)"
+upstream = "Upstream **provider health** (status-page rollup)"
+
+[launcher.subs.market]
+demand_list = "Public marketplace feed"
+demand_my = "Demands you've posted"
+dispute_my = "List your open + resolved disputes"
+report = "File an **abuse / TOS-violation** report"
+
+[launcher.subs.inbox]
+notify_list = "Recent notifications"
+notify_count = "Just the unread count"
+notify_readall = "Flip every unread to read"
+dm_threads = "Your DM threads"
+dm_contacts = "Users you've messaged"
+dm_count = "Unread DM count"
 
 [launcher.subs.wallet]
+topup = "Open the wallet **top-up** page (anti-phishing verification phrase)"
 history = "Paginated payment history"
 info = "Enabled payment methods + suggested amounts"
 
@@ -283,7 +317,7 @@ CREATE / UPDATE FLAGS
   --name <n>           Display name (required for create; max 50 chars)
   --group <g>          Routing group (default "" = auto)
   --unlimited          No quota cap (overrides --quota)
-  --quota <int>        Remaining quota (in gateway units; see 'everyapi status')
+  --quota <int>        Remaining quota (in gateway units; see 'everyapi auth status')
   --expires <when>     "never" (default for create) or absolute Unix seconds
   --models <a,b,c>     Restrict to this CSV of model ids (omit / empty → all)
   --ip <cidr,cidr>     IP allowlist (omit → no restriction)
@@ -325,10 +359,10 @@ expires_never = "never"
 no_rows = "No log rows match."
 no_spend = "No spend recorded in this window."
 usage = '''
-everyapi log — your request log
+everyapi stats log — your request log
 
 USAGE
-  everyapi log <subcommand> [flags]
+  everyapi stats log <subcommand> [flags]
 
 SUBCOMMANDS
   list    [flags]   Recent log entries (newest first; default 20 rows)
@@ -394,7 +428,7 @@ SUBCOMMANDS
 
 NOTES
   For actual money-in (Stripe / Creem / Waffo / EPay), use
-  'everyapi topup' — it opens the dashboard with the anti-phishing
+  'everyapi wallet topup' — it opens the dashboard with the anti-phishing
   verification phrase. Browser handoff is required there because
   card collection happens out-of-band.
 '''
@@ -554,10 +588,10 @@ cancelled = "Demand #%d cancelled."
 removed = "Demand #%d removed."
 remove_confirm = "Delete demand #%d permanently?"
 usage = '''
-everyapi demand — buyer-side marketplace postings
+everyapi market demand — buyer-side marketplace postings
 
 USAGE
-  everyapi demand <subcommand> [flags]
+  everyapi market demand <subcommand> [flags]
 
 SUBCOMMANDS
   list   [--state open|closed] [--page P] [--limit N]
@@ -575,10 +609,10 @@ SUBCOMMANDS
 no_rows = "No disputes."
 opened = "Dispute #%d opened (state=%s)."
 usage = '''
-everyapi dispute — open / list / inspect disputes
+everyapi market dispute — open / list / inspect disputes
 
 USAGE
-  everyapi dispute <subcommand> [flags]
+  everyapi market dispute <subcommand> [flags]
 
 SUBCOMMANDS
   submit --counterparty <uid> --type <t> --target-kind <k> --target <id> --description <d> [--amount <quota>]
@@ -590,10 +624,10 @@ SUBCOMMANDS
 [report]
 filed = "Report filed. The abuse desk will follow up via the email you provided."
 usage = '''
-everyapi report — file an abuse / TOS-violation report
+everyapi market report — file an abuse / TOS-violation report
 
 USAGE
-  everyapi report --email <e> --category <c> --target-type <t> --description <d>
+  everyapi market report --email <e> --category <c> --target-type <t> --description <d>
                   [--target-id <id>] [--evidence <url>]
 
 NOTES
@@ -608,10 +642,10 @@ unread_count = "%d unread"
 marked_read = "Marked #%d as read."
 marked_all = "Marked %d notification(s) as read."
 usage = '''
-everyapi notify — in-app notifications
+everyapi inbox notify — in-app notifications
 
 USAGE
-  everyapi notify <subcommand> [flags]
+  everyapi inbox notify <subcommand> [flags]
 
 SUBCOMMANDS
   list   [--unread] [--page P] [--limit N]   Recent notifications
@@ -627,10 +661,10 @@ no_messages = "(no messages)"
 sent_at = "Sent #%d at %s"
 marked_read = "Marked thread #%d as read."
 usage = '''
-everyapi dm — direct messages with other users
+everyapi inbox dm — direct messages with other users
 
 USAGE
-  everyapi dm <subcommand> [flags]
+  everyapi inbox dm <subcommand> [flags]
 
 SUBCOMMANDS
   threads  [--page P] [--limit N]      Your DM threads (newest first)
@@ -647,7 +681,7 @@ SUBCOMMANDS
 account_header = "Account #%d  %s  (%s)"
 passkey_use_dashboard = "(Register / delete are browser flows — use the dashboard.)"
 passkey_none = "No passkey registered. Register one in the dashboard (browser-only flow)."
-"2fa_disabled_msg" = "2FA is off. Turn it on with 'everyapi user 2fa enable'."
+"2fa_disabled_msg" = "2FA is off. Turn it on with 'everyapi account user 2fa enable'."
 "2fa_disabled" = "2FA disabled."
 no_bindings = "No OAuth bindings."
 bindings_count = "%d binding(s):"
@@ -656,16 +690,16 @@ unbind_confirm = "Unbind OAuth provider #%d? You won't be able to log in via thi
 aff_code = "Affiliate code: %s"
 aff_new = "New affiliate code: %s"
 aff_rotated_warning = "Any links embedding the previous code no longer credit you."
-aff_transfer_usage = "usage: everyapi user aff transfer <amount> [-y]"
+aff_transfer_usage = "usage: everyapi account user aff transfer <amount> [-y]"
 aff_transfer_bad_amount = "invalid amount %q (must be a positive integer, in gateway quota units)"
 aff_transfer_confirm = "Transfer $%.2f (%d units) from affiliate rewards to your main balance?"
 aff_transfer_ok = "Transferred $%.2f to your main balance."
-oauth_usage = "Usage: everyapi user oauth {list|unbind <provider_id>}"
+oauth_usage = "Usage: everyapi account user oauth {list|unbind <provider_id>}"
 passkey_dashboard_gated = "passkey status is gated on the dashboard session cookie — use the web UI for passkey management"
 passkey_registered_last_used = "Passkey registered. Last used: %s"
 "2fa_status" = "2FA: enabled=%v locked=%v"
 "2fa_backup_remaining" = "Backup codes remaining: %d"
-"2fa_low_hint" = "  (low — consider 'everyapi user 2fa backup --code <new-totp>' to regenerate)"
+"2fa_low_hint" = "  (low — consider 'everyapi account user 2fa backup --code <new-totp>' to regenerate)"
 backup_regenerated = "Regenerated %d backup codes — save these now, they won't be shown again:"
 "2fa_enroll_intro" = "Setting up two-factor authentication."
 "2fa_scan_hint" = "Scan this QR with your authenticator app (or enter the secret below manually):"
@@ -687,15 +721,15 @@ passwd_ok = "Password changed."
 setting_bad_type = "invalid --type %q (use email | webhook | bark | gotify)"
 setting_threshold_required = "--threshold must be > 0"
 setting_saved = "Notification settings saved."
-setting_none = "No notification channel configured. Set one with 'everyapi user setting --type <ch> ...'."
+setting_none = "No notification channel configured. Set one with 'everyapi account user setting --type <ch> ...'."
 setting_header = "Notification channel: %s"
 setting_threshold = "threshold"
 setting_test_sent = "Test notification sent — check your channel."
 usage = '''
-everyapi user — profile / 2FA / OAuth bindings / aff code
+everyapi account user — profile / 2FA / OAuth bindings / aff code
 
 USAGE
-  everyapi user <subcommand> [flags]
+  everyapi account user <subcommand> [flags]
 
 SUBCOMMANDS
   info                                  Rolled-up profile + security view
@@ -728,10 +762,10 @@ preference_updated = "Billing preference updated to %q."
 current_preference = "Current billing preference: %s"
 set_hint = "Use --set <value> to change. Backend normalises unknown values to the default."
 usage = '''
-everyapi subscription — subscription plans / self / preference
+everyapi account subscription — subscription plans / self / preference
 
 USAGE
-  everyapi subscription <subcommand> [flags]
+  everyapi account subscription <subcommand> [flags]
 
 SUBCOMMANDS
   plans                            List enabled subscription plans
@@ -741,7 +775,7 @@ SUBCOMMANDS
                                    Backend normalises unknown values.
 
 NOTE
-  Buying a plan is still a browser flow — use 'everyapi topup' to
+  Buying a plan is still a browser flow — use 'everyapi wallet topup' to
   open the dashboard wallet behind the anti-phishing handshake.
 '''
 
@@ -944,7 +978,7 @@ SUBCOMMANDS
         Print this message.
 
 FIRST RUN
-  $ everyapi login                    # if not already
+  $ everyapi auth login                    # if not already
   $ everyapi edge register --name "rtx-4090-tokyo"
   $ everyapi edge start
   $ everyapi edge models pull llama3.1:8b
@@ -1096,7 +1130,7 @@ browser_opened = "Browser opened. Verify the phrase on the page matches the one 
 [login]
 waiting = "Waiting for authorization... (Ctrl+C to cancel)"
 waiting_with_copy = "Waiting for authorization... (Ctrl+C to cancel, press 'c' to copy URL)"
-next_hint = "Next: try 'everyapi status' or 'everyapi use claude'."
+next_hint = "Next: try 'everyapi auth status' or 'everyapi use claude'."
 url_copied = "URL copied to clipboard."
 url_copy_failed = "Couldn't copy: %v"
 qr_hint = "Scan this QR with your phone (or any device already signed in to EveryAPI):"
@@ -1105,7 +1139,7 @@ url_hint = "To authorize this device, visit (code is baked into the link):"
 code_hint = "If the page doesn't pre-fill, enter the code: %s"
 browser_opened = "Browser opened. Approve there (or finish on your phone); this will finish on its own."
 no_relay_note_1 = "Note: your account has no relay API key yet. `everyapi use` needs one"
-no_relay_note_2 = "EveryAPI dashboard, then `everyapi use` or `everyapi status` will auto-fetch it (no re-login needed)."
+no_relay_note_2 = "EveryAPI dashboard, then `everyapi use` or `everyapi auth status` will auto-fetch it (no re-login needed)."
 logged_in_saved = "\nLogged in as %s. Credentials saved to %s/credentials.json\n"
 
 [logout]
@@ -1145,11 +1179,11 @@ launching_via = "Launching %s against %s → %s"
 sanitizer_warn = "Warning: sanitizer proxy didn't start (%v).\n"
 fallback_direct = "Falling back to direct mode — your traffic will reach %s without the privacy filter.\n"
 fallback_hint = "Re-run with --direct to silence this, or 'everyapi proxy start' to debug.\n\n"
-no_relay_keys = "no enabled relay API keys on your account to pick a group from — create one in the EveryAPI dashboard, then 'everyapi login'"
+no_relay_keys = "no enabled relay API keys on your account to pick a group from — create one in the EveryAPI dashboard, then 'everyapi auth login'"
 no_relay_key_long = '''
 no usable relay API key on your account — `everyapi use` needs one,
 and it's separate from your login token. Create an API key in the
-EveryAPI dashboard (%s), then run 'everyapi login' again.'''
+EveryAPI dashboard (%s), then run 'everyapi auth login' again.'''
 unknown_flag = "unknown flag %q (use `--` before tool flags: `everyapi use <tool> -- %s ...`)"
 usage = "usage: everyapi use <tool> [--group <name>|--channel <name>] [--model <id>] [--direct] [-- tool args...]"
 model_picker = "Pick a model for %s (routed via EveryAPI):"
@@ -1207,3 +1241,23 @@ done = "Uninstall complete."
 [perf]
 none = "No performance data yet."
 header = "Per-model performance (last %dh, most-used first):"
+
+[version]
+usage = "usage: everyapi version [update|uninstall]"
+unknown_sub = "unknown version subcommand %q (try: update, uninstall)"
+
+[account]
+usage = "usage: everyapi account <info|2fa|aff|plans|self>"
+unknown_sub = "unknown account subcommand %q"
+
+[stats]
+usage = "usage: everyapi stats <usage|log|perf|upstream>"
+unknown_sub = "unknown stats subcommand %q"
+
+[market]
+usage = "usage: everyapi market <demand|dispute|report>"
+unknown_sub = "unknown market subcommand %q"
+
+[inbox]
+usage = "usage: everyapi inbox <notify|dm>"
+unknown_sub = "unknown inbox subcommand %q"

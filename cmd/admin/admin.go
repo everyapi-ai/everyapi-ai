@@ -12,7 +12,7 @@
 //	everyapi admin marketplace off        PUT /api/option/ key=marketplace.enabled value=false
 //	everyapi admin help
 //
-// Auth: the same `sk-everyapi-` access token from 'everyapi login' —
+// Auth: the same `sk-everyapi-` access token from 'everyapi auth login' —
 // the user must already be an admin on the backend (role >=
 // RoleAdminUser); non-admin tokens get a 403 with the backend's
 // stock "unauthorized" message.
@@ -85,7 +85,7 @@ SUBCOMMANDS
                          Manage prepaid quota voucher codes (create mints + prints keys)
   help                   Print this message.
 
-Auth: re-uses your 'everyapi login' token. You must be an admin on
+Auth: re-uses your 'everyapi auth login' token. You must be an admin on
 the backend — non-admin tokens get a 403 with the backend's stock
 unauthorized message.
 

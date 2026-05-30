@@ -1,4 +1,4 @@
-// Package demand wires `everyapi demand …` — buyer-side
+// Package demand wires `everyapi market demand …` — buyer-side
 // marketplace postings ("I want model X under price ceiling Y").
 package demand
 
