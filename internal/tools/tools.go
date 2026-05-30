@@ -77,6 +77,16 @@ type Tool struct {
 	// switch at all.
 	YoloEnv string
 
+	// ModelEnv names the env var the tool's prepareFn reads to pin the
+	// upstream model. Set only for tools that don't carry their own
+	// vendor-default model and therefore need EveryAPI to choose one —
+	// hermes (provider=custom) reads EVERYAPI_HERMES_MODEL. When
+	// non-empty, 'everyapi use' offers a model picker (populated from
+	// the gateway's model catalog) before launch and honors a
+	// `--model <id>` flag. Empty for claude/codex/gemini, whose own
+	// CLIs default the model and route it by name through the gateway.
+	ModelEnv string
+
 	// envFn builds the env vars from the resolved API base + access
 	// token. Returns a map[name]value to merge into os.Environ before
 	// exec. Implemented as a function (not a static map) because the
@@ -222,6 +232,7 @@ var Registry = map[string]*Tool{
 		InstallCmdUnixOnly: true,
 		YoloEnv:            "HERMES_YOLO_MODE",
 		YoloLabel:          "yolo mode — disable all approval prompts (HERMES_YOLO_MODE)",
+		ModelEnv:           hermesModelEnv,
 		envFn: func(_, _ string) map[string]string {
 			// Routing is config-file driven; see prepareHermes.
 			return map[string]string{}

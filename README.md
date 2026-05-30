@@ -71,7 +71,8 @@ The main reason to install this CLI. It sets the target tool's env vars per the 
 everyapi use claude         # Claude Code → EveryAPI
 everyapi use codex          # OpenAI Codex CLI → EveryAPI
 everyapi use gemini         # Gemini CLI → EveryAPI
-everyapi use hermes         # Nous Research Hermes Agent → EveryAPI
+everyapi use hermes         # Nous Research Hermes Agent → EveryAPI (pick a model)
+everyapi use hermes --model gpt-5.1   # pin the model, skip the picker
 everyapi use                # no arg → interactive picker over installed tools
 ```
 
@@ -86,7 +87,7 @@ Each tool uses different conventions; the CLI remembers them:
 
 No more looking up which variable name each tool reads, whether you need to append `/v1`, or which auth-header style applies.
 
-**hermes model default**: `provider: custom` has no built-in model, so `everyapi use hermes` boots with `claude-sonnet-4-6` by default. Both claude and gpt families are reachable through the same `/v1` endpoint — switch at runtime with `hermes model`, or set a different boot default per launch: `EVERYAPI_HERMES_MODEL=gpt-5.1 everyapi use hermes`.
+**hermes model selection**: `provider: custom` has no built-in model, so EveryAPI picks one for it. On a TTY, `everyapi use hermes` opens a **model picker** populated from your account's catalog (`everyapi models list`), with the cursor defaulting to your previous choice. To skip the picker: pass `--model <id>`, or set `EVERYAPI_HERMES_MODEL=<id>`. In a non-interactive run with neither set, it falls back to `claude-sonnet-4-6`. claude/codex/gemini don't take `--model` — their own CLIs default the model; pass tool-specific model flags after `--`. Either way, all models (claude and gpt alike) ride the same `/v1` endpoint, so you can also switch in-session with `hermes model`.
 
 **hermes config isolation**: `everyapi use hermes` redirects `HERMES_HOME` to `~/.config/everyapi/hermes-home`, so its `config.yaml` (and the sessions/logs that accumulate there) are kept separate from your personal `~/.hermes` — a plain `hermes` invocation is untouched, and the two won't share session history. Bare `hermes` opens the interactive chat; pass `everyapi use hermes -- --tui` for the terminal UI.
 

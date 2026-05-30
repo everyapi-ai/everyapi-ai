@@ -1113,7 +1113,12 @@ no_relay_key_long = '''
 它与你的登录 token 是分开的。请在 EveryAPI dashboard (%s) 创建一个 API key，
 然后重新运行 'everyapi login'。'''
 unknown_flag = "未知 flag %q（在工具 flag 前加 `--`：`everyapi use <tool> -- %s ...`）"
-usage = "用法：everyapi use <tool> [--group <名称>|--channel <名称>] [--direct] [-- 工具参数...]"
+usage = "用法：everyapi use <tool> [--group <名称>|--channel <名称>] [--model <id>] [--direct] [-- 工具参数...]"
+model_picker = "为 %s 选择模型（经 EveryAPI 路由）："
+model_needs_value = "--model 需要一个值，例如 --model gpt-5.1"
+model_unsupported = "%s 使用它自带的模型——这里不支持 --model。\n请把工具自己的模型参数放在 `--` 之后，例如 everyapi use %s -- --model <id>"
+model_fetch_failed = "无法获取模型列表（%v）——将以默认模型启动 %s"
+model_none = "该 key 下没有可用模型——将以默认模型启动 %s"
 tool_not_installed = "%s 尚未安装。安装命令："
 install_prompt = "现在安装 %s 吗？"
 installing = "正在安装 %s ……"

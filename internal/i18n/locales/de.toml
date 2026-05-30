@@ -1142,7 +1142,12 @@ kein nutzbarer Relay-API-Schlüssel im Konto — `everyapi use` benötigt einen,
 unabhängig vom Login-Token. Erstelle einen API-Schlüssel im
 EveryAPI-Dashboard (%s) und führe dann 'everyapi login' erneut aus.'''
 unknown_flag = "unbekanntes Flag %q (verwende `--` vor Tool-Flags: `everyapi use <tool> -- %s ...`)"
-usage = "Verwendung: everyapi use <tool> [--group <Name>|--channel <Name>] [--direct] [-- Tool-Argumente...]"
+usage = "Verwendung: everyapi use <tool> [--group <Name>|--channel <Name>] [--model <id>] [--direct] [-- Tool-Argumente...]"
+model_picker = "Modell für %s auswählen (über EveryAPI geroutet):"
+model_needs_value = "--model benötigt einen Wert, z. B. --model gpt-5.1"
+model_unsupported = "%s wählt sein eigenes Modell — --model wird hier nicht unterstützt.\nÜbergib das Modell-Flag des Tools nach `--`, z. B. everyapi use %s -- --model <id>"
+model_fetch_failed = "Modellliste konnte nicht abgerufen werden (%v) — %s wird mit seinem Standardmodell gestartet"
+model_none = "keine Modelle für diesen Key verfügbar — %s wird mit seinem Standardmodell gestartet"
 tool_not_installed = "%s ist nicht installiert. Installationsbefehl:"
 install_prompt = "%s jetzt installieren?"
 installing = "Installiere %s ..."

@@ -1136,7 +1136,12 @@ no usable relay API key on your account — `everyapi use` needs one,
 and it's separate from your login token. Create an API key in the
 EveryAPI dashboard (%s), then run 'everyapi login' again.'''
 unknown_flag = "unknown flag %q (use `--` before tool flags: `everyapi use <tool> -- %s ...`)"
-usage = "usage: everyapi use <tool> [--group <name>|--channel <name>] [--direct] [-- tool args...]"
+usage = "usage: everyapi use <tool> [--group <name>|--channel <name>] [--model <id>] [--direct] [-- tool args...]"
+model_picker = "Pick a model for %s (routed via EveryAPI):"
+model_needs_value = "--model needs a value, e.g. --model gpt-5.1"
+model_unsupported = "%s selects its own model — --model isn't supported here.\nPass the tool's own model flag after `--`, e.g. everyapi use %s -- --model <id>"
+model_fetch_failed = "could not fetch your model list (%v) — launching %s on its default model"
+model_none = "no models available for this key — launching %s on its default model"
 tool_not_installed = "%s is not installed. Install command:"
 install_prompt = "Install %s now?"
 installing = "Installing %s ..."

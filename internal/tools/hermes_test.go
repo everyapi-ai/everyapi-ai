@@ -202,3 +202,33 @@ func TestHermesTool_PrepareWired(t *testing.T) {
 		t.Errorf("hermes tool.Prepare didn't run prepareHermes (HERMES_HOME=%q)", extra["HERMES_HOME"])
 	}
 }
+
+// TestHermesTool_ModelEnvWired pins that the Registry exposes the model
+// env var the picker drives — if this drops, `everyapi use hermes`
+// stops offering the model picker and silently snaps to the default.
+func TestHermesTool_ModelEnvWired(t *testing.T) {
+	tool, _ := Lookup("hermes")
+	if tool.ModelEnv != hermesModelEnv {
+		t.Errorf("hermes ModelEnv = %q, want %q", tool.ModelEnv, hermesModelEnv)
+	}
+}
+
+// TestLastHermesModel round-trips through the writer: the model pinned
+// in config.yaml is exactly what LastHermesModel reads back, so the
+// picker can default the cursor to the previous choice.
+func TestLastHermesModel(t *testing.T) {
+	hermesTestHome(t)
+
+	// No config yet → empty.
+	if got := LastHermesModel(); got != "" {
+		t.Errorf("LastHermesModel() with no config = %q, want empty", got)
+	}
+
+	t.Setenv(hermesModelEnv, "gpt-5.1")
+	if _, err := prepareHermes("https://api.everyapi.ai", "tok"); err != nil {
+		t.Fatalf("prepareHermes error: %v", err)
+	}
+	if got := LastHermesModel(); got != "gpt-5.1" {
+		t.Errorf("LastHermesModel() = %q, want %q", got, "gpt-5.1")
+	}
+}

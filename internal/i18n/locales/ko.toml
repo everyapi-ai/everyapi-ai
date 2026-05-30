@@ -1133,7 +1133,12 @@ no_relay_key_long = '''
 로그인 토큰과는 별개입니다. EveryAPI dashboard (%s) 에서 API 키를 생성한 후
 'everyapi login' 을 다시 실행하세요.'''
 unknown_flag = "알 수 없는 플래그 %q (도구 플래그 앞에 `--` 를 붙이세요: `everyapi use <tool> -- %s ...`)"
-usage = "사용법: everyapi use <tool> [--group <이름>|--channel <이름>] [--direct] [-- 도구 인자...]"
+usage = "사용법: everyapi use <tool> [--group <이름>|--channel <이름>] [--model <id>] [--direct] [-- 도구 인자...]"
+model_picker = "%s 에 사용할 모델을 선택하세요 (EveryAPI 경유):"
+model_needs_value = "--model 에는 값이 필요합니다. 예: --model gpt-5.1"
+model_unsupported = "%s 는 자체 모델을 선택합니다 — 여기서는 --model 을 지원하지 않습니다.\n도구 자체의 모델 플래그는 `--` 뒤에 전달하세요. 예: everyapi use %s -- --model <id>"
+model_fetch_failed = "모델 목록을 가져오지 못했습니다 (%v) — %s 를 기본 모델로 시작합니다"
+model_none = "이 key 로 사용할 수 있는 모델이 없습니다 — %s 를 기본 모델로 시작합니다"
 tool_not_installed = "%s 가 설치되어 있지 않습니다. 설치 명령:"
 install_prompt = "지금 %s 를 설치할까요?"
 installing = "%s 설치 중..."

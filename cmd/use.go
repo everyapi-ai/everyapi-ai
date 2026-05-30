@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -26,7 +27,7 @@ import (
 const useUsage = `everyapi use — launch a third-party CLI routed through EveryAPI
 
 USAGE
-  everyapi use [<tool>] [--group <name> | --channel <name>] [--direct] [-- tool args...]
+  everyapi use [<tool>] [--group <name> | --channel <name>] [--model <id>] [--direct] [-- tool args...]
 
 ARGUMENTS
   <tool>                 claude | codex | gemini | hermes
@@ -37,6 +38,10 @@ FLAGS
   --channel <name>       Alias of --group.
   (bare --group/--channel, no value) → interactive picker over your
                          enabled keys' routing groups.
+  --model <id>           hermes only: pin the upstream model, skipping the
+                         picker. Omit on a TTY to choose from your model
+                         catalog. claude/codex/gemini set their own model —
+                         pass model flags to them after -- instead.
   --direct               Bypass the local sanitizer proxy (no privacy filter).
   --                     End of everyapi's option parsing; remaining args are
                          forwarded verbatim to the tool's argv.
@@ -50,7 +55,8 @@ EXAMPLES
   everyapi use claude
   everyapi use codex --channel byteplus
   everyapi use claude -- --model opus
-  everyapi use hermes
+  everyapi use hermes                  (pick a model interactively)
+  everyapi use hermes --model gpt-5.1  (skip the picker)
 `
 
 // Use is the buyer onboarding bridge: verify credentials, configure
@@ -90,7 +96,7 @@ func Use(args []string) error {
 		return nil
 	}
 
-	toolName, group, pickGroup, direct, extraArgs, err := parseUseArgs(args)
+	toolName, group, pickGroup, direct, extraArgs, model, err := parseUseArgs(args)
 	if err != nil {
 		return err
 	}
@@ -120,6 +126,13 @@ func Use(args []string) error {
 	t, err := tools.Lookup(toolName)
 	if err != nil {
 		return err
+	}
+
+	// --model only applies to tools EveryAPI picks a model for (hermes).
+	// claude/codex/gemini default the model in their own CLI — pass tool
+	// model flags after `--` for those.
+	if model != "" && t.ModelEnv == "" {
+		return fmt.Errorf(i18n.T("use.model_unsupported"), t.ExecName, t.ExecName)
 	}
 
 	// Preflight: if the tool's binary isn't on PATH, offer to run
@@ -170,6 +183,17 @@ func Use(args []string) error {
 				"  top up:   %s\n"+
 				"  refresh:  everyapi login",
 			t.ExecName, wallet)
+	}
+
+	// Resolve the upstream model for tools EveryAPI picks for (hermes).
+	// Sets t.ModelEnv in this process so the tool's prepareFn reads it
+	// when generating its config. Runs after the relay-key probe so we
+	// don't prompt for a model only to bail on a dead key, and uses the
+	// relay key (not the management token) so the catalog is scoped to
+	// what this key/group can actually reach. No-op for
+	// claude/codex/gemini (ModelEnv == "").
+	if err := resolveToolModel(t, creds, relayKey, model); err != nil {
+		return err
 	}
 
 	// Sanitizer integration. Default is "on" — the proxy intercepts
@@ -470,7 +494,7 @@ func sanitizerHealthy(listen string) bool {
 // to the tool. Without `--`, unknown flags are an error — that's the
 // typo-catching surface we don't want to give up just to spare users
 // two characters when they want to pass `--dangerously-skip-permissions`.
-func parseUseArgs(args []string) (toolName, group string, pickGroup, direct bool, extraArgs []string, err error) {
+func parseUseArgs(args []string) (toolName, group string, pickGroup, direct bool, extraArgs []string, model string, err error) {
 	knownTool := func(s string) bool { _, e := tools.Lookup(s); return e == nil }
 
 	var positional []string
@@ -502,6 +526,31 @@ func parseUseArgs(args []string) (toolName, group string, pickGroup, direct bool
 			// api.everyapi.ai. Use when you're certain the prompt
 			// won't carry secrets, or when debugging proxy issues.
 			direct = true
+		case "model":
+			// Pin the upstream model for model-selectable tools
+			// (hermes), skipping the interactive picker. Validated
+			// against the tool's capability after Lookup. `=value`
+			// or space form; a bare/empty --model is an error since
+			// "no value" already has a meaning (the picker) reached
+			// by simply omitting the flag. The space form won't eat a
+			// not-yet-seen tool name (`--model hermes`) — that token
+			// is the tool, leaving --model dangling (the error path).
+			if hasEq {
+				if val == "" {
+					return "", "", false, false, nil, "", errors.New(i18n.T("use.model_needs_value"))
+				}
+				model = val
+				continue
+			}
+			if i+1 < len(args) {
+				nx := args[i+1]
+				if !strings.HasPrefix(nx, "-") && !(knownTool(nx) && len(positional) == 0) {
+					model = nx
+					i++
+					continue
+				}
+			}
+			return "", "", false, false, nil, "", errors.New(i18n.T("use.model_needs_value"))
 		case "group", "channel":
 			groupSeen = true
 			if hasEq {
@@ -518,18 +567,93 @@ func parseUseArgs(args []string) (toolName, group string, pickGroup, direct bool
 				}
 			}
 		default:
-			return "", "", false, false, nil, fmt.Errorf(i18n.T("use.unknown_flag"), a, a)
+			return "", "", false, false, nil, "", fmt.Errorf(i18n.T("use.unknown_flag"), a, a)
 		}
 	}
 
 	if len(positional) > 1 {
-		return "", "", false, false, nil, errors.New(i18n.T("use.usage"))
+		return "", "", false, false, nil, "", errors.New(i18n.T("use.usage"))
 	}
 	if len(positional) == 1 {
 		toolName = positional[0]
 	}
 	pickGroup = groupSeen && !groupHasVal
-	return toolName, group, pickGroup, direct, extraArgs, nil
+	return toolName, group, pickGroup, direct, extraArgs, model, nil
+}
+
+// resolveToolModel pins the upstream model for tools EveryAPI selects a
+// model for (those with Tool.ModelEnv set — hermes today). It exports
+// the resolved id into t.ModelEnv in THIS process so the tool's
+// prepareFn reads it when generating config. Precedence:
+//
+//  1. --model <id> (explicit flag) → use it, no prompt.
+//  2. t.ModelEnv already set in the environment → respect it, no prompt.
+//  3. interactive TTY → model picker over the gateway catalog.
+//  4. non-interactive with nothing set → no-op; prepareFn falls back to
+//     its built-in default (so scripts/CI still launch).
+//
+// A no-op for claude/codex/gemini, whose CLIs default the model
+// themselves and route it by name through the gateway.
+func resolveToolModel(t *tools.Tool, creds *config.Credentials, relayKey, modelFlag string) error {
+	if t.ModelEnv == "" {
+		return nil
+	}
+	if modelFlag != "" {
+		return os.Setenv(t.ModelEnv, modelFlag)
+	}
+	if os.Getenv(t.ModelEnv) != "" {
+		return nil // explicit env override; respect it
+	}
+	if !cliprompt.IsInteractive() {
+		return nil // let prepareFn use its built-in default
+	}
+	chosen, err := pickModelInteractive(t, creds, relayKey)
+	if err != nil {
+		return err
+	}
+	if chosen != "" {
+		return os.Setenv(t.ModelEnv, chosen)
+	}
+	return nil
+}
+
+// pickModelInteractive lists the models the relay key can route to
+// (GET /v1/models with the relay key — group-scoped, so the picker only
+// offers models the launched tool will really reach) and asks the user
+// to pick one. The cursor defaults to the model pinned on the last
+// launch when it's still offered. A catalog-fetch failure or an empty
+// catalog is non-fatal: it returns "" so the launch proceeds on the
+// tool's built-in default rather than blocking.
+func pickModelInteractive(t *tools.Tool, creds *config.Credentials, relayKey string) (string, error) {
+	models, err := api.New(creds.APIBase, relayKey).RelayModels(cliout.WithCtx())
+	if err != nil {
+		cliout.Printf(i18n.T("use.model_fetch_failed")+"\n", err, t.ExecName)
+		return "", nil
+	}
+	if len(models) == 0 {
+		cliout.Printf(i18n.T("use.model_none")+"\n", t.ExecName)
+		return "", nil
+	}
+	sort.Strings(models)
+	// Default the cursor to last launch's model when it's still in the
+	// catalog. LastHermesModel is hermes-specific, which is fine while
+	// hermes is the only ModelEnv tool; generalize if that changes.
+	initial := 0
+	if last := tools.LastHermesModel(); last != "" {
+		for i, m := range models {
+			if m == last {
+				initial = i
+				break
+			}
+		}
+	}
+	idx, err := cliprompt.PickWithSelected(
+		fmt.Sprintf(i18n.T("use.model_picker"), t.ExecName),
+		models, initial)
+	if err != nil {
+		return "", err
+	}
+	return models[idx], nil
 }
 
 // pickGroupInteractive lists the distinct routing groups the account's

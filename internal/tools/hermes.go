@@ -70,6 +70,50 @@ func prepareHermes(apiBase, token string) (map[string]string, error) {
 	return map[string]string{"HERMES_HOME": hermesHome}, nil
 }
 
+// LastHermesModel returns the model pinned in the most recently
+// generated hermes config.yaml, or "" if none exists yet (first run,
+// unreadable file, or no recognizable default: line). `everyapi use
+// hermes` uses it to default its model picker to your previous choice
+// instead of always snapping back to defaultHermesModel.
+func LastHermesModel() string {
+	cfgDir, err := config.ConfigDir()
+	if err != nil {
+		return ""
+	}
+	body, err := os.ReadFile(filepath.Join(cfgDir, "hermes-home", "config.yaml"))
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(body), "\n") {
+		// The writer emits exactly `  default: "<model>"`. Match the
+		// key, then pull the double-quoted scalar back out.
+		if !strings.HasPrefix(strings.TrimSpace(line), "default:") {
+			continue
+		}
+		lo := strings.IndexByte(line, '"')
+		hi := strings.LastIndexByte(line, '"')
+		if lo < 0 || hi <= lo {
+			return ""
+		}
+		return yamlUnquoteInner(line[lo+1 : hi])
+	}
+	return ""
+}
+
+// yamlUnquoteInner reverses yamlDoubleQuote's escaping for the inner
+// bytes of a double-quoted scalar (quotes already stripped). Kept in
+// lockstep with yamlDoubleQuote.
+func yamlUnquoteInner(s string) string {
+	r := strings.NewReplacer(
+		`\\`, `\`,
+		`\"`, `"`,
+		`\n`, "\n",
+		`\r`, "\r",
+		`\t`, "\t",
+	)
+	return r.Replace(s)
+}
+
 // writeHermesConfigYAML atomically writes config.yaml selecting the
 // everyapi custom provider as the main model. The file is FULLY
 // REGENERATED on every `everyapi use hermes` launch: any edits a user
