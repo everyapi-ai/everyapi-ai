@@ -238,11 +238,6 @@ pause = "Knoten manuell deaktivieren — bleibt über Reconnects hinweg bis 'res
 resume = "Manuelle Pause aufheben — Knoten tritt beim nächsten Heartbeat dem Routing wieder bei"
 remove = "Aktiven Node entfernen + Backend-Eintrag löschen"
 
-[launcher.subs.admin]
-marketplace_status = "marketplace.enabled-Flag anzeigen"
-marketplace_on = "Marketplace öffnen"
-marketplace_off = "Marketplace schließen"
-
 [launcher.subs.proxy]
 start = "Sanitizer-Proxy starten (fragt nach Hintergrund vs. Vordergrund)"
 stop = "Laufenden Proxy stoppen (nutzt PID-Datei)"
@@ -1325,3 +1320,45 @@ aws_access_key = "AWS-Zugriffsschlüssel-ID (AKIA/ASIA/AGPA/…)"
 pem_private_key = "PEM-codierter privater Schlüsselblock"
 luhn_credit_card = "Kreditkartennummer (13–19 Ziffern + Luhn-Prüfung)"
 chinese_id = "Chinesischer Personalausweis (18 Ziffern + ISO-7064-Prüfsumme)"
+
+[admin.area]
+marketplace = "Marktplatz-Schalter (öffnen/schließen)"
+user = "Benutzerkonten"
+channel = "Upstream-Kanäle"
+log = "Anfrageprotokoll durchsuchen"
+abuse = "Missbrauchsmeldungen"
+audit = "Admin-Audit-Protokoll"
+redemption = "Einlösecodes"
+
+[admin.act]
+marketplace_status = "Schalter anzeigen"
+on = "Öffnen"
+off = "Schließen"
+list = "Auflisten"
+search = "Nach Stichwort suchen"
+show = "Einen per id anzeigen"
+manage = "Aktivieren / deaktivieren / hochstufen / löschen"
+delete = "Per id löschen"
+test = "Per id Zustandsprüfung"
+tag = "Per Tag massenhaft aktivieren/deaktivieren"
+update = "Felder aktualisieren"
+create = "Neu erstellen (erzeugt und druckt Schlüssel)"
+status = "Aktivieren / deaktivieren"
+clear_invalid = "Benutzte/abgelaufene bereinigen"
+
+[admin.prompt]
+id = "ID:"
+keyword = "Stichwort:"
+user_action = "Aktion:"
+name = "Name:"
+state = "Status:"
+status = "Status:"
+note = "Notiz (optional):"
+quota = "Kontingent:"
+count = "Anzahl (optional, Standard 1):"
+expires = "Läuft ab (Unix-Sekunden oder leer = nie):"
+bad_id = "Bitte eine positive ganze Zahl als id eingeben."
+
+[admin.console]
+title_area = "admin — Bereich wählen:"
+title_action = "%s — Aktion wählen:"

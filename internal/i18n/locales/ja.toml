@@ -234,11 +234,6 @@ pause = "ノードを手動で無効化 — 'resume' まで再接続を跨いで
 resume = "手動 pause を解除 — 次のハートビートでルーティングに復帰"
 remove = "現在のノードを削除 + バックエンドの行を削除"
 
-[launcher.subs.admin]
-marketplace_status = "marketplace.enabled フラグを表示"
-marketplace_on = "マーケットプレイスを開く"
-marketplace_off = "マーケットプレイスを閉じる"
-
 [launcher.subs.proxy]
 start = "サニタイザプロキシを実行（背景 / 前景を尋ねます）"
 stop = "実行中のプロキシを停止（PID ファイル使用）"
@@ -1318,3 +1313,45 @@ aws_access_key = "AWS アクセスキー ID（AKIA/ASIA/AGPA/…）"
 pem_private_key = "PEM エンコードの秘密鍵ブロック"
 luhn_credit_card = "クレジットカード番号（13〜19 桁 + Luhn チェック）"
 chinese_id = "中国居民身分証（18 桁 + ISO-7064 チェックサム）"
+
+[admin.area]
+marketplace = "マーケットプレイス開閉スイッチ"
+user = "ユーザーアカウント"
+channel = "アップストリームチャネル"
+log = "リクエストログ検索"
+abuse = "通報"
+audit = "管理監査ログ"
+redemption = "引き換えコード"
+
+[admin.act]
+marketplace_status = "フラグを表示"
+on = "開く"
+off = "閉じる"
+list = "一覧"
+search = "キーワード検索"
+show = "id で 1 件表示"
+manage = "有効化/無効化/昇格/削除"
+delete = "id で削除"
+test = "id でヘルスチェック"
+tag = "タグで一括有効化/無効化"
+update = "フィールド更新"
+create = "新規作成（キーを生成・表示）"
+status = "有効化/無効化"
+clear_invalid = "使用済み/期限切れを削除"
+
+[admin.prompt]
+id = "ID:"
+keyword = "キーワード:"
+user_action = "操作:"
+name = "名前:"
+state = "状態:"
+status = "ステータス:"
+note = "メモ（任意）:"
+quota = "クォータ:"
+count = "件数（任意、既定 1）:"
+expires = "有効期限（Unix 秒、空欄=無期限）:"
+bad_id = "正の整数 id を入力してください。"
+
+[admin.console]
+title_area = "admin — 領域を選択:"
+title_action = "%s — 操作を選択:"

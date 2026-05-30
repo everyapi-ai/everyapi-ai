@@ -224,11 +224,6 @@ pause = "手動停用節點 —— 跨重連黏性保持直到 'resume'"
 resume = "解除手動停用 —— 下次心跳後節點重新加入路由"
 remove = "移除目前節點 + 刪除後端記錄"
 
-[launcher.subs.admin]
-marketplace_status = "查看 marketplace.enabled 開關"
-marketplace_on = "開啟市集"
-marketplace_off = "關閉市集"
-
 [launcher.subs.proxy]
 start = "啟動去敏代理（會詢問背景 / 前景）"
 stop = "停止執行中的代理（使用 PID 檔）"
@@ -1296,3 +1291,45 @@ aws_access_key = "AWS 存取金鑰 ID（AKIA/ASIA/AGPA/…）"
 pem_private_key = "PEM 編碼的私鑰區塊"
 luhn_credit_card = "信用卡號（13–19 位數字 + Luhn 校驗）"
 chinese_id = "中國居民身分證（18 位 + ISO-7064 校驗碼）"
+
+[admin.area]
+marketplace = "市場開關（開啟/關閉）"
+user = "使用者帳戶"
+channel = "上游通道"
+log = "請求日誌檢索"
+abuse = "檢舉"
+audit = "管理稽核日誌"
+redemption = "兌換碼"
+
+[admin.act]
+marketplace_status = "查看開關"
+on = "開啟"
+off = "關閉"
+list = "列表"
+search = "依關鍵字搜尋"
+show = "依 id 查看單筆"
+manage = "啟用/停用/提升/刪除"
+delete = "依 id 刪除"
+test = "依 id 健康檢查"
+tag = "依標籤批次啟用/停用"
+update = "更新欄位"
+create = "新建（產生並列印金鑰）"
+status = "啟用/停用"
+clear_invalid = "清理已用/過期"
+
+[admin.prompt]
+id = "ID："
+keyword = "關鍵字："
+user_action = "操作："
+name = "名稱："
+state = "狀態："
+status = "狀態："
+note = "備註（選填）："
+quota = "額度："
+count = "數量（選填，預設 1）："
+expires = "過期（Unix 秒，留空=永不）："
+bad_id = "請輸入正整數 id。"
+
+[admin.console]
+title_area = "admin — 選個領域："
+title_action = "%s — 選個動作："

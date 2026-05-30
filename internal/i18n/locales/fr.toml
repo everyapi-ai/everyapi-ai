@@ -239,11 +239,6 @@ pause = "Désactiver manuellement un nœud — persistant entre reconnexions jus
 resume = "Annuler une pause manuelle — le nœud rejoint le routage au prochain heartbeat"
 remove = "Retirer le nœud actif + supprimer la ligne backend"
 
-[launcher.subs.admin]
-marketplace_status = "Afficher le flag marketplace.enabled"
-marketplace_on = "Ouvrir le marketplace"
-marketplace_off = "Fermer le marketplace"
-
 [launcher.subs.proxy]
 start = "Lancer le proxy sanitizer (demande arrière-plan ou premier plan)"
 stop = "Arrêter le proxy en cours (utilise le fichier PID)"
@@ -1330,3 +1325,45 @@ aws_access_key = "ID de clé d'accès AWS (AKIA/ASIA/AGPA/…)"
 pem_private_key = "Bloc de clé privée encodé en PEM"
 luhn_credit_card = "Numéro de carte bancaire (13–19 chiffres + contrôle Luhn)"
 chinese_id = "Carte d'identité de résident chinois (18 chiffres + somme de contrôle ISO-7064)"
+
+[admin.area]
+marketplace = "Interrupteur d'ouverture/fermeture de la marketplace"
+user = "Comptes utilisateurs"
+channel = "Canaux en amont"
+log = "Recherche dans le journal des requêtes"
+abuse = "Signalements"
+audit = "Journal d'audit d'administration"
+redemption = "Codes de rachat"
+
+[admin.act]
+marketplace_status = "Afficher l'indicateur"
+on = "Ouvrir"
+off = "Fermer"
+list = "Lister"
+search = "Rechercher par mot-clé"
+show = "Afficher un par id"
+manage = "Activer / désactiver / promouvoir / supprimer"
+delete = "Supprimer par id"
+test = "Vérifier l'état par id"
+tag = "Activer/désactiver en masse par tag"
+update = "Mettre à jour les champs"
+create = "Créer (génère et imprime les clés)"
+status = "Activer / désactiver"
+clear_invalid = "Purger les utilisés/expirés"
+
+[admin.prompt]
+id = "ID :"
+keyword = "Mot-clé :"
+user_action = "Action :"
+name = "Nom :"
+state = "État :"
+status = "Statut :"
+note = "Note (facultatif) :"
+quota = "Quota :"
+count = "Nombre (facultatif, par défaut 1) :"
+expires = "Expiration (secondes Unix ou vide = jamais) :"
+bad_id = "Saisissez un id entier positif."
+
+[admin.console]
+title_area = "admin — choisissez un domaine :"
+title_action = "%s — choisissez une action :"

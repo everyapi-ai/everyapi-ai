@@ -114,14 +114,23 @@ type command struct {
 	// mutually exclusive) and flips the moment the user starts or stops
 	// the proxy. A command sets subs OR subsFn, not both.
 	subsFn func() []subcommand
-	run    func(args []string) error
+	// selfMenu marks a command that renders its OWN interactive menu
+	// inside run() (admin's operator console) rather than via the generic
+	// runSubPicker. It still earns the usage `<sub>` tag, but dispatch
+	// must NOT hand it to runSubPicker — run() drives the picker itself.
+	selfMenu bool
+	run      func(args []string) error
 }
 
-// hasSubmenu reports whether c offers a sub-picker — either a static
-// subs slice or a dynamic subsFn. Both the usage `<sub>` tag and the
-// interactive dispatch gate on this, so a subsFn-only command (proxy)
-// is treated identically to a statically-listed one.
-func (c command) hasSubmenu() bool { return len(c.subs) > 0 || c.subsFn != nil }
+// hasPicker reports whether the generic runSubPicker should drive c —
+// i.e. it has registry-declared rows (static subs or dynamic subsFn).
+func (c command) hasPicker() bool { return len(c.subs) > 0 || c.subsFn != nil }
+
+// hasSubmenu reports whether c offers ANY interactive sub-menu — a
+// runSubPicker one OR a self-rendered console (selfMenu). Drives the
+// usage `<sub>` tag, so admin still advertises its console even though
+// it isn't registry-driven.
+func (c command) hasSubmenu() bool { return c.hasPicker() || c.selfMenu }
 
 // subcommand is one row in a command group's sub-menu rendered by
 // runSubPicker. name is what the picker shows; desc is the help
@@ -408,11 +417,13 @@ var commands = []command{
 		{name: "resume", desc: "Clear a manual pause — node rejoins routing on next heartbeat", args: []string{"resume"}},
 		{name: "remove", desc: "Remove the active node + delete backend row", args: []string{"remove"}},
 	}},
-	{name: "admin", desc: "Operator commands", adminOnly: true, requireLogin: true, run: admin.Run, subs: []subcommand{
-		{name: "marketplace status", desc: "Show marketplace.enabled flag", args: []string{"marketplace", "status"}},
-		{name: "marketplace on", desc: "Open the marketplace", args: []string{"marketplace", "on"}},
-		{name: "marketplace off", desc: "Close the marketplace", args: []string{"marketplace", "off"}},
-	}},
+	// admin has no static subs: bare `everyapi admin` on a TTY launches
+	// admin's own two-level operator console (area → action → inline arg
+	// prompts) inside the admin package, since the keyed actions need
+	// values a flat picker row can't carry. selfMenu earns it the usage
+	// <sub> tag; dispatchInteractive sees hasPicker()==false and calls
+	// admin.Run (not runSubPicker), which handles the TTY/non-TTY split.
+	{name: "admin", desc: "Operator commands", adminOnly: true, requireLogin: true, selfMenu: true, run: admin.Run},
 	{name: "proxy", desc: "Local sanitizer proxy (privacy filter for SDK requests)", run: proxy.Run, headerFn: proxyHeader, subsFn: proxyMenuSubs},
 	{name: "mcp", desc: "MCP server for AI CLIs (Claude Code / Codex / Gemini)", run: runMCP, headerFn: mcpHeader, subs: mcpSubs},
 	{name: "doctor", desc: "Self-check (creds, gateway, sanitizer, tools)", run: doctor.Run},
@@ -927,7 +938,10 @@ func sessionRejected(creds *config.Credentials) bool {
 // command's original "no subcommand specified" usage text exactly
 // the way it printed before any of this picker code existed.
 func dispatchInteractive(c command, args []string) error {
-	if len(args) > 0 || !c.hasSubmenu() || !cliprompt.IsInteractive() {
+	// Only runSubPicker-driven commands (subs/subsFn) are intercepted
+	// here; a selfMenu command (admin) falls through to c.run, which
+	// renders its own console. hasPicker — not hasSubmenu — gates this.
+	if len(args) > 0 || !c.hasPicker() || !cliprompt.IsInteractive() {
 		return c.run(args)
 	}
 	return runSubPicker(c)

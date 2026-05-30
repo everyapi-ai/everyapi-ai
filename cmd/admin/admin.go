@@ -1,16 +1,13 @@
 // Package admin holds `everyapi admin ...`, the operator-side
-// subcommands gated by the backend's middleware.AdminAuth. The single
-// surface this PR adds is `admin marketplace {status|on|off}` — a
-// fast cli toggle for the marketplace.enabled flag so ops doesn't
-// have to round-trip through the dashboard panel for a 30-second
-// open-close-window during testing or maintenance.
+// subcommands gated by the backend's middleware.AdminAuth. It spans
+// seven areas — marketplace, user, channel, log, abuse, audit and
+// redemption (see adminUsage for the full verb list).
 //
-// Subcommands:
-//
-//	everyapi admin marketplace status     Print current marketplace.enabled
-//	everyapi admin marketplace on         PUT /api/option/ key=marketplace.enabled value=true
-//	everyapi admin marketplace off        PUT /api/option/ key=marketplace.enabled value=false
-//	everyapi admin help
+// Two entry points share one dispatch:
+//   - typed: `everyapi admin <area> <action> [flags]` → Run's switch.
+//   - interactive: bare `everyapi admin` on a TTY → runConsole (see
+//     console.go), a two-level area→action picker that prompts inline
+//     for any value an action needs and then feeds the same Run switch.
 //
 // Auth: the same `sk-everyapi-` access token from 'everyapi auth login' —
 // the user must already be an admin on the backend (role >=
@@ -22,10 +19,18 @@ import (
 	"fmt"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
 
 func Run(args []string) error {
+	// Bare `everyapi admin` on a TTY launches the interactive operator
+	// console (area → action → inline prompts). Non-TTY (scripts/CI) keeps
+	// the old "missing subcommand" usage so piped callers don't hang on a
+	// picker.
+	if len(args) == 0 && cliprompt.IsInteractive() {
+		return runConsole()
+	}
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
 		cliout.Println(adminUsage)
 		if len(args) == 0 {

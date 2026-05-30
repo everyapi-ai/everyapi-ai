@@ -225,11 +225,6 @@ pause = "Manually disable a node — sticky across reconnects until 'resume'"
 resume = "Clear a manual pause — node rejoins routing on next heartbeat"
 remove = "Remove the active node + delete backend row"
 
-[launcher.subs.admin]
-marketplace_status = "Show marketplace.enabled flag"
-marketplace_on = "Open the marketplace"
-marketplace_off = "Close the marketplace"
-
 [launcher.subs.proxy]
 start = "Run the sanitizer proxy (asks background vs foreground)"
 stop = "Stop the running proxy (uses PID file)"
@@ -1308,3 +1303,45 @@ aws_access_key = "AWS access key ID (AKIA/ASIA/AGPA/…)"
 pem_private_key = "PEM-encoded private key block"
 luhn_credit_card = "Credit card number (13–19 digits + Luhn check)"
 chinese_id = "Chinese resident ID (18 digits + ISO-7064 checksum)"
+
+[admin.area]
+marketplace = "Marketplace open/close switch"
+user = "User accounts"
+channel = "Upstream channels"
+log = "Request log search"
+abuse = "Abuse reports"
+audit = "Admin audit log"
+redemption = "Redemption (voucher) codes"
+
+[admin.act]
+marketplace_status = "Show the flag"
+on = "Open"
+off = "Close"
+list = "List"
+search = "Search by keyword"
+show = "Show one by id"
+manage = "Enable / disable / promote / delete"
+delete = "Delete by id"
+test = "Health-check by id"
+tag = "Bulk enable/disable by tag"
+update = "Update fields"
+create = "Create new (mints + prints keys)"
+status = "Enable / disable"
+clear_invalid = "Purge used/expired"
+
+[admin.prompt]
+id = "ID:"
+keyword = "Keyword:"
+user_action = "Action:"
+name = "Name:"
+state = "State:"
+status = "Status:"
+note = "Note (optional):"
+quota = "Quota:"
+count = "Count (optional, default 1):"
+expires = "Expires (Unix seconds or blank=never):"
+bad_id = "Please enter a positive integer id."
+
+[admin.console]
+title_area = "admin — pick an area:"
+title_action = "%s — pick an action:"

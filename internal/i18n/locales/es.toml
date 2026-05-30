@@ -240,11 +240,6 @@ pause = "Desactivar manualmente un nodo — persistente entre reconexiones hasta
 resume = "Limpiar una pausa manual — el nodo vuelve al enrutamiento en el próximo heartbeat"
 remove = "Quitar el nodo activo + eliminar la fila del backend"
 
-[launcher.subs.admin]
-marketplace_status = "Mostrar el flag marketplace.enabled"
-marketplace_on = "Abrir el marketplace"
-marketplace_off = "Cerrar el marketplace"
-
 [launcher.subs.proxy]
 start = "Ejecutar el proxy sanitizador (pregunta entre background y foreground)"
 stop = "Detener el proxy en ejecución (usa el archivo PID)"
@@ -1329,3 +1324,45 @@ aws_access_key = "ID de clave de acceso de AWS (AKIA/ASIA/AGPA/…)"
 pem_private_key = "Bloque de clave privada en formato PEM"
 luhn_credit_card = "Número de tarjeta de crédito (13–19 dígitos + comprobación Luhn)"
 chinese_id = "DNI de residente chino (18 dígitos + suma de control ISO-7064)"
+
+[admin.area]
+marketplace = "Interruptor de apertura/cierre del marketplace"
+user = "Cuentas de usuario"
+channel = "Canales upstream"
+log = "Búsqueda en el registro de solicitudes"
+abuse = "Reportes de abuso"
+audit = "Registro de auditoría de administración"
+redemption = "Códigos de canje"
+
+[admin.act]
+marketplace_status = "Mostrar el indicador"
+on = "Abrir"
+off = "Cerrar"
+list = "Listar"
+search = "Buscar por palabra clave"
+show = "Mostrar uno por id"
+manage = "Habilitar / deshabilitar / promover / eliminar"
+delete = "Eliminar por id"
+test = "Comprobar estado por id"
+tag = "Habilitar/deshabilitar en bloque por etiqueta"
+update = "Actualizar campos"
+create = "Crear nuevo (genera e imprime claves)"
+status = "Habilitar / deshabilitar"
+clear_invalid = "Purgar usados/caducados"
+
+[admin.prompt]
+id = "ID:"
+keyword = "Palabra clave:"
+user_action = "Acción:"
+name = "Nombre:"
+state = "Estado:"
+status = "Estado:"
+note = "Nota (opcional):"
+quota = "Cuota:"
+count = "Cantidad (opcional, por defecto 1):"
+expires = "Caduca (segundos Unix o vacío = nunca):"
+bad_id = "Introduce un id entero positivo."
+
+[admin.console]
+title_area = "admin — elige un área:"
+title_action = "%s — elige una acción:"

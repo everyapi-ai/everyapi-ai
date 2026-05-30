@@ -234,11 +234,6 @@ pause = "노드 수동 비활성화 — 'resume' 까지 재연결을 가로질�
 resume = "수동 일시중지 해제 — 다음 하트비트에서 노드가 라우팅에 복귀"
 remove = "현재 노드 제거 + 백엔드 행 삭제"
 
-[launcher.subs.admin]
-marketplace_status = "marketplace.enabled 플래그 표시"
-marketplace_on = "마켓플레이스 열기"
-marketplace_off = "마켓플레이스 닫기"
-
 [launcher.subs.proxy]
 start = "새너타이저 프록시 실행 (백그라운드 / 포그라운드 묻기)"
 stop = "실행 중인 프록시 중지 (PID 파일 사용)"
@@ -1316,3 +1311,45 @@ aws_access_key = "AWS 액세스 키 ID (AKIA/ASIA/AGPA/…)"
 pem_private_key = "PEM 인코딩된 개인 키 블록"
 luhn_credit_card = "신용카드 번호 (13–19자리 + Luhn 검사)"
 chinese_id = "중국 주민 신분증 (18자리 + ISO-7064 체크섬)"
+
+[admin.area]
+marketplace = "마켓플레이스 열기/닫기 스위치"
+user = "사용자 계정"
+channel = "업스트림 채널"
+log = "요청 로그 검색"
+abuse = "신고"
+audit = "관리 감사 로그"
+redemption = "교환 코드"
+
+[admin.act]
+marketplace_status = "플래그 표시"
+on = "열기"
+off = "닫기"
+list = "목록"
+search = "키워드 검색"
+show = "id로 단건 조회"
+manage = "활성/비활성/승격/삭제"
+delete = "id로 삭제"
+test = "id로 상태 점검"
+tag = "태그로 일괄 활성/비활성"
+update = "필드 수정"
+create = "새로 만들기(키 생성·출력)"
+status = "활성/비활성"
+clear_invalid = "사용됨/만료 정리"
+
+[admin.prompt]
+id = "ID:"
+keyword = "키워드:"
+user_action = "작업:"
+name = "이름:"
+state = "상태:"
+status = "상태:"
+note = "메모(선택):"
+quota = "쿼터:"
+count = "개수(선택, 기본 1):"
+expires = "만료(Unix 초, 비우면 무기한):"
+bad_id = "양의 정수 id를 입력하세요."
+
+[admin.console]
+title_area = "admin — 영역 선택:"
+title_action = "%s — 작업 선택:"

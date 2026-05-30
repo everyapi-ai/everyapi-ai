@@ -160,6 +160,29 @@ func Line(in *bufio.Reader, label, def string) (string, error) {
 	}
 }
 
+// LineOptional is Line for optional fields: a blank entry is allowed and
+// returns "" (meaning "skip / leave unchanged"), instead of Line's
+// required-value loop. TTY uses a huh input with no required-validator;
+// off-TTY reads a single line and an empty one is fine.
+func LineOptional(in *bufio.Reader, label string) (string, error) {
+	if isInteractive() {
+		v := ""
+		if err := runHuhField(huh.NewInput().Title(label).Value(&v)); err != nil {
+			if huhCancelled(err) {
+				return "", ErrPickCancelled
+			}
+			return "", err
+		}
+		return strings.TrimSpace(v), nil
+	}
+	cliout.Printf("%s ", label)
+	line, err := in.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+	return strings.TrimSpace(line), nil
+}
+
 // Choice asks for one of a fixed list of options. On a TTY this is
 // an arrow-key picker (charmbracelet/huh); off TTY it loops on
 // numbered input.
