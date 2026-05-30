@@ -140,3 +140,24 @@ func TestPickGrouped_NonTTYFallback(t *testing.T) {
 		t.Errorf("flat idx = %d, want 3 (use)", idx)
 	}
 }
+
+// TestGroupModel_ViewEmptyAfterQuit locks the menu-erase contract: once
+// the model quits (enter or esc), View() must render nothing so
+// bubbletea's final inline frame wipes the menu instead of leaving it
+// stacked above the next screen. Mirrors how huh's own form clears.
+func TestGroupModel_ViewEmptyAfterQuit(t *testing.T) {
+	m := newGroupModel("pick", twoGroups(), 0)
+	if m.View() == "" {
+		t.Fatal("View should be non-empty before quit")
+	}
+	for _, key := range []string{"enter", "esc"} {
+		out, _ := newGroupModel("pick", twoGroups(), 0).Update(keyMsg(key))
+		gm := out.(groupModel)
+		if !gm.done {
+			t.Errorf("%s: done not set", key)
+		}
+		if gm.View() != "" {
+			t.Errorf("%s: View() = %q after quit, want empty", key, gm.View())
+		}
+	}
+}

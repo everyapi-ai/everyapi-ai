@@ -68,6 +68,12 @@ type groupModel struct {
 	height     int // terminal height (0 until first WindowSizeMsg)
 	chosen     int // flat item index picked
 	canceled   bool
+	// done is set the moment we quit. View() then renders nothing, so
+	// bubbletea's final inline frame ERASES the menu instead of leaving
+	// it on screen — otherwise the launcher menu would stay visible
+	// stacked above whatever the chosen command renders next (e.g. a
+	// sub-picker).
+	done bool
 }
 
 func newGroupModel(title string, groups []MenuGroup, initial int) groupModel {
@@ -100,6 +106,7 @@ func (m groupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "esc", "q":
 			m.canceled = true
+			m.done = true
 			return m, tea.Quit
 		case "up", "k":
 			if m.cur > 0 {
@@ -117,6 +124,7 @@ func (m groupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.selectable) > 0 {
 				m.chosen = m.rows[m.selectable[m.cur]].itemIdx
 			}
+			m.done = true
 			return m, tea.Quit
 		}
 	}
@@ -134,6 +142,11 @@ var (
 )
 
 func (m groupModel) View() string {
+	if m.done {
+		// Final frame after quit: render nothing so bubbletea erases the
+		// menu instead of leaving it stacked above the next screen.
+		return ""
+	}
 	var b strings.Builder
 	if m.title != "" {
 		b.WriteString(gpTheme.Focused.Title.Render(m.title))
