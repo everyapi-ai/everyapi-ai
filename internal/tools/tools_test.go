@@ -9,7 +9,10 @@ import (
 // can be added freely; removing one should be a deliberate spec
 // change that breaks this test.
 func TestRegistry_HasExpectedTools(t *testing.T) {
-	want := []string{"claude", "codex", "gemini", "hermes"}
+	want := []string{
+		"claude", "codex", "gemini", "hermes",
+		"minimax", "qwen", "deepseek", "byteplus", "glm", "kimi",
+	}
 	got := Names()
 	if len(got) != len(want) {
 		t.Fatalf("want %d tools, got %d (%v)", len(want), len(got), got)
@@ -39,6 +42,63 @@ func TestEnv_Claude(t *testing.T) {
 	// No accidental OpenAI vars leaking through.
 	if _, ok := env["OPENAI_API_KEY"]; ok {
 		t.Error("claude env should not set OPENAI_API_KEY")
+	}
+}
+
+// TestClaudeProviderPreset verifies the third-party provider presets:
+// they launch the `claude` binary (Claude Code) and carry a ModelOwner
+// (the /v1/models `owned_by` cmd/use filters the picker on), but the
+// model itself is NOT baked into envFn — it's chosen at launch and
+// injected later. envFn must still honor claude's Anthropic env
+// contract (raw base URL, AUTH_TOKEN, no OpenAI vars, no premature
+// ANTHROPIC_MODEL).
+func TestClaudeProviderPreset(t *testing.T) {
+	wantOwner := map[string]string{
+		"minimax":  "minimax",
+		"qwen":     "ali",
+		"deepseek": "deepseek",
+		"byteplus": "byteplus",
+		"glm":      "zhipu_4v",
+		"kimi":     "moonshot",
+	}
+	for name, owner := range wantOwner {
+		tool, err := Lookup(name)
+		if err != nil {
+			t.Fatalf("Lookup(%q): %v", name, err)
+		}
+		if tool.ExecName != "claude" {
+			t.Errorf("%s ExecName = %q, want claude", name, tool.ExecName)
+		}
+		if tool.ModelOwner != owner {
+			t.Errorf("%s ModelOwner = %q, want %q", name, tool.ModelOwner, owner)
+		}
+		env := tool.Env("https://api.everyapi.ai", "my-token")
+		if got := env["ANTHROPIC_BASE_URL"]; got != "https://api.everyapi.ai" {
+			t.Errorf("%s ANTHROPIC_BASE_URL = %q", name, got)
+		}
+		if got := env["ANTHROPIC_AUTH_TOKEN"]; got != "my-token" {
+			t.Errorf("%s ANTHROPIC_AUTH_TOKEN = %q", name, got)
+		}
+		if _, ok := env["ANTHROPIC_MODEL"]; ok {
+			t.Errorf("%s envFn should not pin ANTHROPIC_MODEL (chosen at launch)", name)
+		}
+		if _, ok := env["OPENAI_API_KEY"]; ok {
+			t.Errorf("%s env should not set OPENAI_API_KEY", name)
+		}
+	}
+}
+
+// TestSetClaudeModel verifies the launch-time model injection points the
+// main model AND the background/"haiku" model (current + deprecated var)
+// at the same id — so Claude Code never falls back to a default haiku
+// the gateway can't route.
+func TestSetClaudeModel(t *testing.T) {
+	env := map[string]string{"ANTHROPIC_BASE_URL": "https://api.everyapi.ai"}
+	SetClaudeModel(env, "glm-5.1")
+	for _, k := range []string{"ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_SMALL_FAST_MODEL"} {
+		if env[k] != "glm-5.1" {
+			t.Errorf("%s = %q, want glm-5.1", k, env[k])
+		}
 	}
 }
 

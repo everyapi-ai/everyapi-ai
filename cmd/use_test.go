@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/tools"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -27,11 +28,11 @@ func TestParseUseArgs(t *testing.T) {
 		{"tool then bare group → picker", []string{"claude", "--group"}, "claude", "", true, false, nil, "", false},
 		{"bare channel only → picker, no tool", []string{"--channel"}, "", "", true, false, nil, "", false},
 		{"space value after tool", []string{"claude", "--channel", "byteplus"}, "claude", "byteplus", false, false, nil, "", false},
-		{"space value before tool", []string{"--channel", "byteplus", "claude"}, "claude", "byteplus", false, false, nil, "", false},
+		{"space value before tool", []string{"--channel", "team-a", "claude"}, "claude", "team-a", false, false, nil, "", false},
 		{"group alias space value", []string{"claude", "--group", "byteplus"}, "claude", "byteplus", false, false, nil, "", false},
 		{"eq value", []string{"claude", "--channel=byteplus"}, "claude", "byteplus", false, false, nil, "", false},
 		{"empty eq → picker", []string{"claude", "--channel="}, "claude", "", true, false, nil, "", false},
-		{"single dash space value", []string{"-channel", "byteplus", "codex"}, "codex", "byteplus", false, false, nil, "", false},
+		{"single dash space value", []string{"-channel", "team-a", "codex"}, "codex", "team-a", false, false, nil, "", false},
 		{"value position is known tool, no tool yet → it's the tool, picker", []string{"--channel", "claude"}, "claude", "", true, false, nil, "", false},
 		{"next token is a flag → picker", []string{"claude", "--channel", "--direct"}, "claude", "", true, true, nil, "", false},
 		{"direct flips direct=true", []string{"claude", "--direct"}, "claude", "", false, true, nil, "", false},
@@ -39,7 +40,9 @@ func TestParseUseArgs(t *testing.T) {
 		{"two positionals → error", []string{"claude", "extra"}, "", "", false, false, nil, "", true},
 		{"unknown flag → error", []string{"claude", "--bogus"}, "", "", false, false, nil, "", true},
 		{"ambiguous: group named like a tool before tool → error", []string{"--group", "codex", "claude"}, "", "", false, false, nil, "", true},
+		{"preset name as group before tool is also ambiguous → error", []string{"--group", "byteplus", "claude"}, "", "", false, false, nil, "", true},
 		{"eq form lets a tool-named group through", []string{"--channel=codex", "claude"}, "claude", "codex", false, false, nil, "", false},
+		{"eq form lets a preset-named group through", []string{"--channel=byteplus", "claude"}, "claude", "byteplus", false, false, nil, "", false},
 
 		// --model: pin the upstream model (hermes). Space + eq forms;
 		// a valueless --model is an error (omit it to get the picker).
@@ -60,7 +63,7 @@ func TestParseUseArgs(t *testing.T) {
 		// `--dangerously-bypass-approvals-and-sandbox`.
 		{"-- forwards a single flag", []string{"claude", "--", "--dangerously-skip-permissions"}, "claude", "", false, false, []string{"--dangerously-skip-permissions"}, "", false},
 		{"-- forwards multiple tokens verbatim", []string{"claude", "--", "--model", "opus", "prompt text"}, "claude", "", false, false, []string{"--model", "opus", "prompt text"}, "", false},
-		{"-- combined with --channel before tool", []string{"--channel", "byteplus", "claude", "--", "--dangerously-skip-permissions"}, "claude", "byteplus", false, false, []string{"--dangerously-skip-permissions"}, "", false},
+		{"-- combined with --channel before tool", []string{"--channel", "team-a", "claude", "--", "--dangerously-skip-permissions"}, "claude", "team-a", false, false, []string{"--dangerously-skip-permissions"}, "", false},
 		{"-- combined with --channel after tool", []string{"claude", "--channel=byteplus", "--", "--dangerously-skip-permissions"}, "claude", "byteplus", false, false, []string{"--dangerously-skip-permissions"}, "", false},
 		{"bare -- with no following args", []string{"claude", "--"}, "claude", "", false, false, nil, "", false},
 		{"-- shields what would otherwise be a everyapi flag", []string{"claude", "--", "--group", "byteplus"}, "claude", "", false, false, []string{"--group", "byteplus"}, "", false},
@@ -191,5 +194,35 @@ func TestWantsUseHelp(t *testing.T) {
 				t.Fatalf("wantsUseHelp(%q) = %v, want %v", c.args, got, c.want)
 			}
 		})
+	}
+}
+
+// TestProviderChatModels covers the preset picker filter: scope to one
+// provider's owned_by (case-insensitive), drop non-chat models
+// (image/embeddings/rerank/video) the launched claude can't drive, keep
+// models with no declared endpoint types (fail-open), and sort.
+func TestProviderChatModels(t *testing.T) {
+	catalog := []api.RelayModel{
+		{ID: "MiniMax-M2.7-highspeed", OwnedBy: "minimax", SupportedEndpointTypes: []string{"anthropic", "openai"}},
+		{ID: "MiniMax-M2.7", OwnedBy: "MiniMax", SupportedEndpointTypes: []string{"openai"}},        // owner case-insensitive
+		{ID: "speech-02", OwnedBy: "minimax", SupportedEndpointTypes: []string{"image-generation"}}, // non-chat → drop
+		{ID: "image-01", OwnedBy: "minimax", SupportedEndpointTypes: []string{"embeddings"}},        // non-chat → drop
+		{ID: "legacy-chat", OwnedBy: "minimax", SupportedEndpointTypes: nil},                        // unknown → keep
+		{ID: "glm-5.1", OwnedBy: "zhipu_4v", SupportedEndpointTypes: []string{"anthropic"}},         // other provider → drop
+	}
+	got := providerChatModels(catalog, "minimax")
+	want := []string{"MiniMax-M2.7", "MiniMax-M2.7-highspeed", "legacy-chat"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("providerChatModels = %v, want %v (sorted, chat-only, owner-scoped)", got, want)
+	}
+
+	// No models for an owner with only non-chat or no entries → empty,
+	// which the caller turns into the actionable "no models" error.
+	if got := providerChatModels(catalog, "moonshot"); len(got) != 0 {
+		t.Errorf("providerChatModels(moonshot) = %v, want empty", got)
+	}
+	onlyImage := []api.RelayModel{{ID: "img", OwnedBy: "minimax", SupportedEndpointTypes: []string{"image-generation"}}}
+	if got := providerChatModels(onlyImage, "minimax"); len(got) != 0 {
+		t.Errorf("providerChatModels(only-image) = %v, want empty", got)
 	}
 }

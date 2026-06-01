@@ -77,6 +77,17 @@ type Tool struct {
 	// switch at all.
 	YoloEnv string
 
+	// ModelOwner, when non-empty, marks a Claude Code preset that drives
+	// one upstream provider's models: `everyapi use <name>` shows a model
+	// picker scoped to the provider whose /v1/models `owned_by` equals
+	// this value (e.g. "zhipu_4v" for glm, "moonshot" for kimi), then
+	// launches the `claude` binary pinned to the chosen id. The preset's
+	// envFn sets only the base URL + token; cmd/use resolves the model
+	// (picker on a TTY, `--model` flag otherwise) and injects it via
+	// SetClaudeModel. Empty for the standalone agents
+	// (claude/codex/gemini/hermes), which pick their own model.
+	ModelOwner string
+
 	// ModelEnv names the env var the tool's prepareFn reads to pin the
 	// upstream model. Set only for tools that don't carry their own
 	// vendor-default model and therefore need EveryAPI to choose one —
@@ -146,6 +157,56 @@ func joinBase(base, suffix string) string {
 		suffix = "/" + suffix
 	}
 	return base + suffix
+}
+
+// claudeProviderPreset builds a Registry entry that launches the Claude
+// Code binary (`claude`) routed at one upstream provider — the "drive a
+// third-party model from Claude Code" shortcut (`everyapi use glm`,
+// `everyapi use kimi`, …). `owner` is the provider's /v1/models
+// `owned_by` value; cmd/use uses it to filter the live gateway catalog
+// down to that provider's models and pop a picker, so the model is
+// chosen at launch rather than hardcoded here. Each of these providers
+// exposes Anthropic-compatible chat behind the gateway, so Claude Code
+// runs unchanged once the base URL, relay token and model are set.
+// Routing is by model name only — no group is pinned, matching plain
+// `everyapi use claude`. Install / yolo behaviour is identical to the
+// claude entry since the launched binary IS claude.
+func claudeProviderPreset(name, owner string) *Tool {
+	return &Tool{
+		Name:               name,
+		ExecName:           "claude",
+		InstallHint:        "Install Claude Code: https://docs.claude.com/en/docs/claude-code/setup",
+		InstallCmd:         "curl -fsSL https://claude.ai/install.sh | bash",
+		InstallCmdUnixOnly: true,
+		YoloFlag:           "--dangerously-skip-permissions",
+		YoloLabel:          "skip all permission prompts (--dangerously-skip-permissions)",
+		ModelOwner:         owner,
+		envFn: func(apiBase, token string) map[string]string {
+			// Model is injected by cmd/use after the picker, see
+			// SetClaudeModel — envFn carries only the routing essentials.
+			return map[string]string{
+				"ANTHROPIC_BASE_URL":   joinBase(apiBase, ""),
+				"ANTHROPIC_AUTH_TOKEN": token,
+			}
+		},
+	}
+}
+
+// SetClaudeModel pins a resolved model into a Claude Code env map,
+// pointing both the main model AND the background/"haiku" model at the
+// same id. These providers ship a single flagship with no haiku-class
+// small model, so if the background model is left at Claude Code's
+// default (claude-3-5-haiku) its background tasks would call a model the
+// gateway can't route and fail.
+//
+// ANTHROPIC_DEFAULT_HAIKU_MODEL is the current var for the background /
+// `haiku` alias model; ANTHROPIC_SMALL_FAST_MODEL is its deprecated
+// predecessor — we set both so old and new Claude Code versions are
+// covered (each ignores the var it doesn't know).
+func SetClaudeModel(env map[string]string, model string) {
+	env["ANTHROPIC_MODEL"] = model
+	env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = model
+	env["ANTHROPIC_SMALL_FAST_MODEL"] = model
 }
 
 // Registry is the full set of supported tools, keyed by the name the
@@ -239,6 +300,20 @@ var Registry = map[string]*Tool{
 		},
 		prepareFn: prepareHermes,
 	},
+
+	// Claude Code presets that route the `claude` binary at a third-party
+	// provider through EveryAPI. `everyapi use <name>` pops a picker over
+	// that provider's models (filtered by the /v1/models `owned_by` value
+	// below) and launches claude pinned to the chosen one. The owner
+	// strings are the channel adaptor names the gateway reports — keep
+	// them in sync with backend channelkind families if a provider's
+	// adaptor name changes.
+	"minimax":  claudeProviderPreset("minimax", "minimax"),
+	"qwen":     claudeProviderPreset("qwen", "ali"),
+	"deepseek": claudeProviderPreset("deepseek", "deepseek"),
+	"byteplus": claudeProviderPreset("byteplus", "byteplus"),
+	"glm":      claudeProviderPreset("glm", "zhipu_4v"),
+	"kimi":     claudeProviderPreset("kimi", "moonshot"),
 }
 
 // Lookup returns the tool entry for `name`, or an error listing the
@@ -257,7 +332,11 @@ func Lookup(name string) (*Tool, error) {
 func Names() []string {
 	// Deterministic order matters for both the error message and the
 	// picker UX. Hand-coded to match the ordering most likely to
-	// reflect user demand (Claude first, then OpenAI, then Gemini,
-	// then Hermes).
-	return []string{"claude", "codex", "gemini", "hermes"}
+	// reflect user demand: the standalone agents first (Claude, OpenAI,
+	// Gemini, Hermes), then the Claude Code presets pinned to a
+	// third-party flagship.
+	return []string{
+		"claude", "codex", "gemini", "hermes",
+		"minimax", "qwen", "deepseek", "byteplus", "glm", "kimi",
+	}
 }
