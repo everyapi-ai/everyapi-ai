@@ -193,12 +193,28 @@ func authHeader() {
 // login and logout are mutually exclusive; status is no longer a row —
 // it's the header (see authHeader), shown on entry. Signed out → only
 // login; signed in → only logout. Re-evaluated on every sub-picker
-// re-render, so the menu flips the moment the user logs in or out. Gates
-// on stored-credential presence (config.Load) — the same lightweight
-// signal hideLoggedIn / requireLogin used before these moved under
-// `auth`.
+// re-render, so the menu flips the moment the user logs in or out.
+//
+// Offers logout only when a credential is present AND still
+// authenticates. An expired / revoked token leaves the credentials file
+// in place, so the old presence-only check showed "logout" to a user
+// who is effectively signed out and actually needs "login" — directly
+// contradicting the "session expired" header rendered right above it.
+// sessionRejected returns false for a nil / legacy (no user_id)
+// credential or any transport error, so those keep the historical
+// logout row rather than false-walling the user on a flaky probe.
 func authMenuSubs() []subcommand {
-	if creds, _ := config.Load(); creds != nil {
+	creds, _ := config.Load()
+	return authMenuSubsFor(creds, sessionRejected)
+}
+
+// authMenuSubsFor is the testable core of authMenuSubs: it owns the
+// login-vs-logout decision given the loaded credential and a session
+// probe, with the disk read (config.Load) and the real network probe
+// (sessionRejected) injected by the caller. logout requires a present
+// credential whose session the probe does NOT reject.
+func authMenuSubsFor(creds *config.Credentials, rejected func(*config.Credentials) bool) []subcommand {
+	if creds != nil && !rejected(creds) {
 		return []subcommand{
 			{name: "logout", desc: "Remove this device's credentials", args: []string{"logout"}},
 		}
@@ -632,13 +648,19 @@ func runLauncher() error {
 			chosen = flat[idx]
 		}
 		err := dispatchInteractive(chosen, nil)
-		// A successful `auth` dispatch (login lives under it now) clears
-		// the stale-session latch so the next iteration's rebuild shows
-		// the logged-in menu instead of staying stuck on the logged-out
-		// set. Resetting on any clean auth run is fine: logout then drops
-		// creds so the next rebuild is logged-out anyway.
-		if chosen.name == "auth" && err == nil {
+		// After visiting `auth` (login lives under it now), re-derive the
+		// session on the next iteration so the rebuilt menu reflects the
+		// new state. Clearing sessionDead alone isn't enough — the entry
+		// probe is one-shot (`probed`), so without re-arming it a login
+		// wouldn't be re-verified; clearing both forces a fresh probe of
+		// the (possibly changed) credentials. Crucially this is NOT gated
+		// on err == nil: leaving the auth sub-picker via Esc / the back row
+		// returns ErrPickCancelled (benign navigation, not failure), and
+		// the old `&& err == nil` gate left the launcher stuck on the
+		// logged-out menu after a successful login followed by Esc.
+		if chosen.name == "auth" {
 			sessionDead = false
+			probed = false
 		}
 		// Stay in the menu regardless of how the dispatched
 		// command returned. Real errors (not-logged-in,

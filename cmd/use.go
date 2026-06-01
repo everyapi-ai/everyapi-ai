@@ -170,6 +170,13 @@ func Use(args []string) error {
 		if errors.Is(err, errNoRelayKey) {
 			return fmt.Errorf(i18n.T("use.no_relay_key_long"), api.WebOriginFromBase(creds.APIBase))
 		}
+		// A 401 here means the management token expired while resolving the
+		// relay key (the uncached path calls ListTokens with it). Surface
+		// the actionable "re-login" line instead of the raw "look up relay
+		// API key: 401 …" wrap, which doesn't tell the user what to do.
+		if api.IsUnauthorized(err) {
+			return errors.New(i18n.T("auth.session_expired"))
+		}
 		return err
 	}
 

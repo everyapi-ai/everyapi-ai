@@ -414,3 +414,33 @@ func TestAuthMenuSubs_LoginLogoutMutuallyExclusive(t *testing.T) {
 		t.Errorf("auth menu action must be login or logout, got %q", subs[0].name)
 	}
 }
+
+// TestAuthMenuSubsFor pins the login-vs-logout decision: logout only
+// when a credential is present AND the session probe accepts it. An
+// expired/revoked token (present file, probe rejects) must offer login,
+// not logout — otherwise the menu contradicts the "session expired"
+// header and strands the user on a logout they don't need.
+func TestAuthMenuSubsFor(t *testing.T) {
+	creds := &config.Credentials{APIBase: "https://api.everyapi.ai", UserID: 1}
+	cases := []struct {
+		name     string
+		creds    *config.Credentials
+		rejected func(*config.Credentials) bool
+		want     string
+	}{
+		{"no creds → login", nil, func(*config.Credentials) bool { return false }, "login"},
+		{"present + live session → logout", creds, func(*config.Credentials) bool { return false }, "logout"},
+		{"present + expired session → login", creds, func(*config.Credentials) bool { return true }, "login"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			subs := authMenuSubsFor(tc.creds, tc.rejected)
+			if len(subs) != 1 {
+				t.Fatalf("want exactly one action, got %+v", subs)
+			}
+			if subs[0].name != tc.want {
+				t.Errorf("authMenuSubsFor = %q, want %q", subs[0].name, tc.want)
+			}
+		})
+	}
+}
