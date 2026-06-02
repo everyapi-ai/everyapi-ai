@@ -51,10 +51,10 @@ go install github.com/everyapi-ai/everyapi-ai@latest
 
 | Command | Purpose |
 |---|---|
-| `everyapi login` | Sign in to EveryAPI on this device |
-| `everyapi logout` | Clear local credentials |
-| `everyapi status` | Show balance, usage, quota |
-| `everyapi topup` | Open the topup page (with anti-phishing phrase check) |
+| `everyapi auth login` | Sign in to EveryAPI on this device |
+| `everyapi auth logout` | Clear local credentials |
+| `everyapi auth status` | Show balance, usage, quota |
+| `everyapi wallet topup` | Open the topup page (with anti-phishing phrase check) |
 | `everyapi use <tool>` | Set env and exec into a third-party CLI (pointed at EveryAPI) |
 | `everyapi seller <sub>` | Marketplace seller commands (list / withdraw / add-key / setup) |
 | `everyapi edge <sub>` | One-command deploy for the BYO-GPU supplier agent (register / start / status / logs / models / stop / update / remove) |
@@ -93,7 +93,7 @@ No more looking up which variable name each tool reads, whether you need to appe
 
 > ⚠️ **Subprocess env safety note**: the env vars above contain your relay API key. Third-party CLIs in debug / verbose mode may log env — before running `everyapi use`, make sure the debug flag you turn on does not leak `*_TOKEN` / `*_API_KEY`. Before sharing debug logs, run `sed -i 's/sk-everyapi-[A-Za-z0-9]*/REDACTED/g'`.
 
-### `everyapi login` — Device Authorization Grant + QR sign-in
+### `everyapi auth login` — Device Authorization Grant + QR sign-in
 
 Uses Device Authorization Grant (RFC 8628 style) + docs §7-5 Layer 1 "device-to-device QR sign-in":
 
@@ -102,10 +102,10 @@ Uses Device Authorization Grant (RFC 8628 style) + docs §7-5 Layer 1 "device-to
 3. The CLI receives the access token and stores it at `~/.config/everyapi/credentials.json` (mode 0600)
 
 ```bash
-everyapi login                                    # production; renders QR + opens browser by default
-everyapi login --api-base http://localhost:8787   # local dev / self-hosted
-everyapi login --no-browser                       # don't auto-open the browser (scan the QR)
-everyapi login --no-qr                            # don't render the QR (non-UTF-8 terminals / piping)
+everyapi auth login                                    # production; renders QR + opens browser by default
+everyapi auth login --api-base http://localhost:8787   # local dev / self-hosted
+everyapi auth login --no-browser                       # don't auto-open the browser (scan the QR)
+everyapi auth login --no-qr                            # don't render the QR (non-UTF-8 terminals / piping)
 ```
 
 Sample terminal QR rendering (Unicode half-block characters; ~18-20 rows tall):
@@ -210,7 +210,7 @@ Comparison with the other two providers:
 Onboard idle GPUs to sell compute through EveryAPI. The CLI condenses the deployment to 8 subcommands, sparing suppliers from hand-copying docker-compose, filling `.env`, or moving the registration token around:
 
 ```bash
-everyapi login                              # reuses existing login
+everyapi auth login                              # reuses existing login
 everyapi edge register --name "rtx-4090"    # calls /api/seller/edge/nodes for node_id + token, writes to ~/.local/share/everyapi/edge/<id>/
 everyapi edge start                         # auto-detects NVIDIA / ROCm / Apple Silicon / CPU, docker compose up -d
 everyapi edge models pull llama3.1:8b       # docker compose exec ollama ollama pull ...
@@ -226,9 +226,9 @@ Credential flow: CLI uses an existing `sk-everyapi-` Bearer to call `POST /api/s
 
 Requirements: `docker` + `docker compose v2` (v1 is EOL and not supported). On macOS, `brew install ollama && brew services start ollama` (Metal acceleration cannot run inside a docker container).
 
-### `everyapi topup` — topup redirect with anti-phishing phrase
+### `everyapi wallet topup` — topup redirect with anti-phishing phrase
 
-`everyapi topup` opens the dashboard topup page. Before redirecting, it goes through docs §7-5 Layer 3 verification:
+`everyapi wallet topup` opens the dashboard topup page. Before redirecting, it goes through docs §7-5 Layer 3 verification:
 
 1. CLI calls backend `POST /api/cli/jump-session` and receives a session id + a 4-emoji phrase string (e.g. `🌊 🦊 🍕 🚀`)
 2. CLI prints both the URL and the phrase to the terminal, telling the user "the same phrase should appear at the top of the page in a moment"
@@ -239,14 +239,14 @@ Requirements: `docker` + `docker compose v2` (v1 is EOL and not supported). On m
 Why this blocks phishing: the phrase lives in backend memory keyed by a random 32-hex session id; a phishing site has no auth path to fetch it, and an attacker's forged `wallet/topup?jump_session=<id>` cannot read the phrase either. Short TTL (10 min) + single-use (the session is deleted after the dashboard fetches it once) further limit reuse risk.
 
 ```bash
-everyapi topup                    # opens the browser by default
-everyapi topup --no-browser       # only print the URL, copy manually
+everyapi wallet topup                    # opens the browser by default
+everyapi wallet topup --no-browser       # only print the URL, copy manually
 ```
 
-### `everyapi status` — current balance / usage / quota
+### `everyapi auth status` — current balance / usage / quota
 
 ```
-$ everyapi status
+$ everyapi auth status
 
   alice (alice@example.com)
   quota:     $12.34 remaining   $5.67 used
@@ -301,19 +301,19 @@ $ everyapi settings reset                    # reset to default (en + LANG auto-
 **One-shot override**:
 
 ```bash
-EVERYAPI_LANG=zh everyapi status             # this one invocation shows in Chinese; not persisted
+EVERYAPI_LANG=zh everyapi auth status             # this one invocation shows in Chinese; not persisted
 ```
 
 **Translation example** (not-logged-in error, 7 languages × same line):
 
 ```
-en : Error: not logged in — run 'everyapi login' first
-zh : 错误: 未登录 — 先运行 'everyapi login'
-ja : エラー: ログインしていません — まず 'everyapi login' を実行してください
-ko : 오류: 로그인되어 있지 않습니다 — 먼저 'everyapi login' 을 실행하세요
-es : Error: no has iniciado sesión — ejecuta primero 'everyapi login'
-de : Fehler: nicht angemeldet — führe zuerst 'everyapi login' aus
-fr : Erreur: non connecté — exécutez d'abord 'everyapi login'
+en : Error: not logged in — run 'everyapi auth login' first
+zh : 错误: 未登录 — 先运行 'everyapi auth login'
+ja : エラー: ログインしていません — まず 'everyapi auth login' を実行してください
+ko : 오류: 로그인되어 있지 않습니다 — 먼저 'everyapi auth login' 을 실행하세요
+es : Error: no has iniciado sesión — ejecuta primero 'everyapi auth login'
+de : Fehler: nicht angemeldet — führe zuerst 'everyapi auth login' aus
+fr : Erreur: non connecté — exécutez d'abord 'everyapi auth login'
 ```
 
 Settings live in `~/.config/everyapi/settings.json` (same directory as `credentials.json`, but mode `0644` — no secrets).
@@ -322,13 +322,13 @@ Settings live in `~/.config/everyapi/settings.json` (same directory as `credenti
 
 ## Configuration files
 
-Credentials live in `~/.config/everyapi/credentials.json` (or `$XDG_CONFIG_HOME/everyapi/` if `$XDG_CONFIG_HOME` is set), file mode `0600`. Written by `everyapi login`, read by every other command.
+Credentials live in `~/.config/everyapi/credentials.json` (or `$XDG_CONFIG_HOME/everyapi/` if `$XDG_CONFIG_HOME` is set), file mode `0600`. Written by `everyapi auth login`, read by every other command.
 
 > ⚠️ **Tokens are stored in plaintext**. File mode `0600` + private `$HOME` path matches the convention of industry CLIs like `gh auth` / `aws configure`, but **for home-machine-theft / malware threat models**, any process that can read this file can call the EveryAPI API as you (including the MCP tools — see the §money-path friction step below). Recommended:
-> - Don't `everyapi login` on shared / public machines
-> - macOS users: consider `everyapi logout` before enabling FileVault
+> - Don't `everyapi auth login` on shared / public machines
+> - macOS users: consider `everyapi auth logout` before enabling FileVault
 > - Linux users: enable home-dir encryption (`ecryptfs` / LUKS)
-> - If you suspect leakage → `everyapi logout` immediately clears local credentials, and rotate the API key from the EveryAPI dashboard
+> - If you suspect leakage → `everyapi auth logout` immediately clears local credentials, and rotate the API key from the EveryAPI dashboard
 >
 > A platform keychain backend (macOS Keychain / Windows DPAPI / Linux Secret Service) is planned but not shipped.
 
@@ -396,7 +396,7 @@ Wiring into Cursor, Codex CLI, or other MCP clients is similar — point `comman
 
 ### Auth prerequisite
 
-You must have run `everyapi login` in a terminal at least once — the MCP server is a background process with no terminal interaction capability, so it cannot run the device-code flow itself. It reads `~/.config/everyapi/credentials.json` directly; if missing, every tool returns a `isError: true` "not logged in" message guiding the user to log in.
+You must have run `everyapi auth login` in a terminal at least once — the MCP server is a background process with no terminal interaction capability, so it cannot run the device-code flow itself. It reads `~/.config/everyapi/credentials.json` directly; if missing, every tool returns a `isError: true` "not logged in" message guiding the user to log in.
 
 ### Tools exposed in v1 (8 total)
 
@@ -444,7 +444,7 @@ make cli
 EOF
 ```
 
-You should see three JSON response lines: initialize result, list of 4 tools, status text (or a not-logged-in isError).
+You should see three JSON response lines: initialize result, list of 14 tools, status text (or a not-logged-in isError).
 
 ## What this binary does NOT include yet
 
@@ -458,7 +458,7 @@ Previously listed here but **now shipped** (don't treat as unimplemented):
 - ✅ Local sanitizer proxy — the command is `everyapi proxy {start,stop,status,configure}` (not `everyapi start`/`everyapi configure`); engine + 6 built-in detectors + custom regex + integrated into `everyapi use`
 - ✅ Seller OAuth onboarding across all three providers (codex device / claude paste / gemini loopback)
 - ✅ QR sign-in main path — `login` uses device-code **+ QR as the main path**, with `--no-qr` as fallback
-- ✅ Anti-phishing layers — phrase string (`everyapi topup`), PKCE/state strict-check, and cert pinning have all landed; cert pinning is **report-only** (silent on match / alert on mismatch / never refuses to connect), with the product decision being "alert only, do not enforce"
+- ✅ Anti-phishing layers — phrase string (`everyapi wallet topup`), PKCE/state strict-check, and cert pinning have all landed; cert pinning is **report-only** (silent on match / alert on mismatch / never refuses to connect), with the product decision being "alert only, do not enforce"
 
 ## Reporting vulnerabilities
 
