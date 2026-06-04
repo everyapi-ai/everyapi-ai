@@ -412,6 +412,48 @@ func TestMaybePromptUpdate_FailureBackoffExpired(t *testing.T) {
 	}
 }
 
+// TestMaybePromptUpdate_FailureBackoffExpired_FetchFails — pairs with
+// the success-case test above. After the backoff window expires AND
+// the new fetch also fails, MaybePromptUpdate must (1) call the
+// fetcher exactly once and (2) leave a refreshed failure marker on
+// disk so the NEXT 1h is again silent. Without this assertion, the
+// success-case test alone could pass even if the failure path
+// re-tried on every command.
+func TestMaybePromptUpdate_FailureBackoffExpired_FetchFails(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("EVERYAPI_NO_UPDATE_CHECK", "")
+	withInteractive(t, true)
+	withVersion(t, "v0.2.2")
+
+	oldAttempt := time.Now().Add(-2 * time.Hour).Unix()
+	if err := saveUpdateCheckCache(&updateCheckCache{
+		LastFetchAttemptAt: oldAttempt,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	calls := 0
+	withFetcher(t, func(ctx context.Context) (string, error) {
+		calls++
+		return "", errors.New("still offline")
+	})
+
+	_ = MaybePromptUpdate("status")
+
+	if calls != 1 {
+		t.Errorf("expected exactly one fetch attempt after backoff expiry, got %d", calls)
+	}
+	loaded, err := loadUpdateCheckCache()
+	if err != nil || loaded == nil {
+		t.Fatalf("backoff marker must persist after failed retry (err=%v, loaded=%+v)", err, loaded)
+	}
+	if loaded.LastFetchAttemptAt <= oldAttempt {
+		t.Errorf("LastFetchAttemptAt should advance on retry (was %d, now %d)",
+			oldAttempt, loaded.LastFetchAttemptAt)
+	}
+}
+
 // TestMaybePromptUpdate_EveryInvocationPolls pins the new contract:
 // there is no TTL gate, so an interactive non-skip command always
 // triggers the GitHub fetch as long as the failure backoff isn't

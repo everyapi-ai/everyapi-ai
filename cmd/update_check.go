@@ -114,7 +114,10 @@ func saveUpdateCheckCache(c *updateCheckCache) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	// 0o600 to match the parent dir (0o700) and credentials.json sitting
+	// next to it. The contents aren't secret, but consistency keeps the
+	// permission audit clean.
+	return os.WriteFile(path, data, 0o600)
 }
 
 // reportCacheSaveError surfaces a save failure once to stderr.
@@ -163,28 +166,28 @@ const (
 // stays bounded.
 //
 //   - isInteractiveFn   — lets tests bypass the TTY check so the
-//                         later guards (env / commandName / dev) can
-//                         actually be exercised. Without injection
-//                         every guard test would short-circuit on
-//                         the TTY-false branch and prove nothing.
+//     later guards (env / commandName / dev) can
+//     actually be exercised. Without injection
+//     every guard test would short-circuit on
+//     the TTY-false branch and prove nothing.
 //   - resolveVersionFn  — `go test` binaries report Version="dev"
-//                         which short-circuits MaybePromptUpdate;
-//                         tests that need to exercise the cache /
-//                         refresh / prompt paths swap in a real-
-//                         looking semver string.
+//     which short-circuits MaybePromptUpdate;
+//     tests that need to exercise the cache /
+//     refresh / prompt paths swap in a real-
+//     looking semver string.
 //   - fetchLatestTagFn  — swaps the live GitHub poll for a stub so
-//                         the refresh path doesn't escape the test
-//                         sandbox. The auto-check only needs the tag
-//                         (to compare + cache), so it routes through
-//                         fetchLatestTag — the github.com redirect
-//                         that never spends the api.github.com
-//                         60/hour rate-limit bucket. The changelog
-//                         body (API-only) is the manual `update`
-//                         flow's concern, not the silent check's.
+//     the refresh path doesn't escape the test
+//     sandbox. The auto-check only needs the tag
+//     (to compare + cache), so it routes through
+//     fetchLatestTag — the github.com redirect
+//     that never spends the api.github.com
+//     60/hour rate-limit bucket. The changelog
+//     body (API-only) is the manual `update`
+//     flow's concern, not the silent check's.
 //   - promptFn          — the update picker. A var so a test can
-//                         assert MaybePromptUpdate REACHED the prompt
-//                         (e.g. the launcher path) without a TTY; the
-//                         real cliprompt.Pick blocks on absent input.
+//     assert MaybePromptUpdate REACHED the prompt
+//     (e.g. the launcher path) without a TTY; the
+//     real cliprompt.Pick blocks on absent input.
 var (
 	isInteractiveFn  = cliprompt.IsInteractive
 	resolveVersionFn = version.Resolve
