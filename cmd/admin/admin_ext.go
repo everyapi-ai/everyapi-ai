@@ -200,13 +200,15 @@ func adminUserDelete(args []string) error {
 
 func adminChannel(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: everyapi admin channel {test|tag}")
+		return errors.New("usage: everyapi admin channel {test|tag|add-oauth}")
 	}
 	switch args[0] {
 	case "test":
 		return adminChannelTest(args[1:])
 	case "tag":
 		return adminChannelTag(args[1:])
+	case "add-oauth":
+		return adminChannelAddOAuth(args[1:])
 	default:
 		return fmt.Errorf("unknown 'admin channel' subcommand %q", args[0])
 	}

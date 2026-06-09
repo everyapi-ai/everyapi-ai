@@ -1418,6 +1418,10 @@ test_title = "Prueba del canal #%d:"
 empty_result = "(sin resultados)"
 tag_enabled = "Etiqueta %q habilitada."
 tag_disabled = "Etiqueta %q deshabilitada."
+oauth_usage = "uso: everyapi admin channel add-oauth antigravity --name <nombre> --models <modelos> [--group <grupo>] [--no-browser] [--timeout 5m]"
+oauth_unknown_provider = "proveedor desconocido %q (solo 'antigravity' admite OAuth de operador)"
+oauth_mounted = "\nCanal de operador #%d montado (%s, tipo=antigravity, grupo=%s).\n"
+oauth_verify_hint = "Estado: habilitado. Ejecuta 'everyapi admin channel test %d' para verificar.\n"
 
 [admin.help]
 usage = '''

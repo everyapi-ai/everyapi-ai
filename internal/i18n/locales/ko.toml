@@ -1405,6 +1405,10 @@ test_title = "채널 #%d 테스트:"
 empty_result = "(결과 없음)"
 tag_enabled = "태그 %q 활성화됨."
 tag_disabled = "태그 %q 비활성화됨."
+oauth_usage = "사용법: everyapi admin channel add-oauth antigravity --name <이름> --models <모델> [--group <그룹>] [--no-browser] [--timeout 5m]"
+oauth_unknown_provider = "알 수 없는 공급자 %q (운영자 OAuth는 'antigravity'만 지원)"
+oauth_mounted = "\n운영 채널 #%d 등록됨 (%s, type=antigravity, group=%s).\n"
+oauth_verify_hint = "상태: 활성화됨. 'everyapi admin channel test %d'로 확인하세요.\n"
 
 [admin.help]
 usage = '''

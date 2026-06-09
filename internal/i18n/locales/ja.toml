@@ -1407,6 +1407,10 @@ test_title = "チャネル #%d テスト:"
 empty_result = "（結果なし）"
 tag_enabled = "タグ %q を有効化しました。"
 tag_disabled = "タグ %q を無効化しました。"
+oauth_usage = "使い方: everyapi admin channel add-oauth antigravity --name <名前> --models <モデル> [--group <グループ>] [--no-browser] [--timeout 5m]"
+oauth_unknown_provider = "不明なプロバイダー %q（オペレーター OAuth に対応するのは 'antigravity' のみ）"
+oauth_mounted = "\n運用チャネル #%d を登録しました（%s、type=antigravity、group=%s）。\n"
+oauth_verify_hint = "ステータス: 有効。'everyapi admin channel test %d' で確認してください。\n"
 
 [admin.help]
 usage = '''

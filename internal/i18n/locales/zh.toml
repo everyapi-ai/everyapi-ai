@@ -1386,6 +1386,10 @@ test_title = "渠道 #%d 测试："
 empty_result = "（无结果）"
 tag_enabled = "标签 %q 已启用。"
 tag_disabled = "标签 %q 已禁用。"
+oauth_usage = "用法：everyapi admin channel add-oauth antigravity --name <名称> --models <模型> [--group <分组>] [--no-browser] [--timeout 5m]"
+oauth_unknown_provider = "未知的提供方 %q（仅 'antigravity' 支持运营方 OAuth）"
+oauth_mounted = "\n已挂载运营渠道 #%d（%s，类型=antigravity，分组=%s）。\n"
+oauth_verify_hint = "状态：已启用。运行 'everyapi admin channel test %d' 进行验证。\n"
 
 [admin.help]
 usage = '''

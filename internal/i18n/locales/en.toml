@@ -1398,6 +1398,10 @@ test_title = "Channel #%d test:"
 empty_result = "(empty result)"
 tag_enabled = "Tag %q enabled."
 tag_disabled = "Tag %q disabled."
+oauth_usage = "usage: everyapi admin channel add-oauth antigravity --name <name> --models <models> [--group <group>] [--no-browser] [--timeout 5m]"
+oauth_unknown_provider = "unknown provider %q (only 'antigravity' supports operator OAuth)"
+oauth_mounted = "\nMounted operator channel #%d (%s, type=antigravity, group=%s).\n"
+oauth_verify_hint = "Status: enabled. Run 'everyapi admin channel test %d' to verify.\n"
 
 [admin.help]
 usage = '''
