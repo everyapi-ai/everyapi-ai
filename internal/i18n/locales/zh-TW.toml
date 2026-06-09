@@ -528,8 +528,8 @@ PROVIDERS
 
 執行 'everyapi seller add-oauth <provider> --help' 查看具體參數。
 '''
-oauth_use_provider_help = "用法：everyapi seller add-oauth <provider> [參數]\nproviders: codex, claude, gemini"
-oauth_unknown_provider = "未知 provider %q — 支援：codex, claude, gemini"
+oauth_use_provider_help = "用法：everyapi seller add-oauth <provider> [參數]\nproviders: codex, claude, gemini, antigravity"
+oauth_unknown_provider = "未知 provider %q — 支援：codex, claude, gemini, antigravity"
 oauth_chatgpt_redirect = "provider %q 是 ChatGPT Plus — 上游與 codex 相同。請使用 `everyapi seller add-oauth codex`"
 oauth_missing_flags = "缺少必填參數：%s"
 oauth_codex_intro = "綁定 Codex / ChatGPT 訂閱，請前往以下 URL 並輸入 code："
@@ -555,6 +555,8 @@ oauth_waiting_redirect = "等待 127.0.0.1:%d 上的回呼中（逾時 %s）…�
 oauth_callback_no_code = "OAuth 回呼未帶授權 code"
 oauth_state_mismatch = "OAuth state 不符（收到 %q，預期 %q）— 請重新執行該命令"
 oauth_mounted_gemini = "\n已掛載頻道 #%d（%s，type=gemini）。\n"
+oauth_antigravity_intro = "連接 Antigravity（Google）帳號，請在此登入："
+oauth_mounted_antigravity = "\n已掛載頻道 #%d（%s，type=antigravity）。\n"
 gates_header = "Gates："
 gate_marketplace_enabled = "  marketplace_enabled : %v"
 gate_account_active = "  account_active      : %v"

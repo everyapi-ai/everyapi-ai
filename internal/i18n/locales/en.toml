@@ -519,9 +519,10 @@ USAGE
   everyapi seller add-oauth <provider> [flags]
 
 PROVIDERS
-  codex     Codex / ChatGPT subscription (RFC 8628 device flow)
-  claude    Anthropic Claude (browser-callback OAuth)
-  gemini    Google Gemini (browser-callback OAuth)
+  codex        Codex / ChatGPT subscription (RFC 8628 device flow)
+  claude       Anthropic Claude (browser-callback OAuth)
+  gemini       Google Gemini (loopback OAuth)
+  antigravity  Google Antigravity (loopback OAuth — local listener only, not web)
 
 COMMON FLAGS
   --name <n>      Channel display name (required)
@@ -530,8 +531,8 @@ COMMON FLAGS
 
 Run 'everyapi seller add-oauth <provider> --help' for provider-specific flags.
 '''
-oauth_use_provider_help = "usage: everyapi seller add-oauth <provider> [flags]\nproviders: codex, claude, gemini"
-oauth_unknown_provider = "unknown provider %q — supported: codex, claude, gemini"
+oauth_use_provider_help = "usage: everyapi seller add-oauth <provider> [flags]\nproviders: codex, claude, gemini, antigravity"
+oauth_unknown_provider = "unknown provider %q — supported: codex, claude, gemini, antigravity"
 oauth_chatgpt_redirect = "provider %q is ChatGPT Plus — same upstream as codex. Use `everyapi seller add-oauth codex` instead"
 oauth_missing_flags = "missing required flag(s): %s"
 oauth_codex_intro = "To bind your Codex / ChatGPT subscription, visit this URL and enter the code:"
@@ -557,6 +558,8 @@ oauth_waiting_redirect = "Waiting for the redirect on 127.0.0.1:%d (timeout %s).
 oauth_callback_no_code = "OAuth callback delivered no authorization code"
 oauth_state_mismatch = "OAuth state mismatch (got %q, expected %q) — re-run the command"
 oauth_mounted_gemini = "\nMounted channel #%d (%s, type=gemini).\n"
+oauth_antigravity_intro = "To connect your Antigravity (Google) account, sign in at:"
+oauth_mounted_antigravity = "\nMounted channel #%d (%s, type=antigravity).\n"
 gates_header = "Gates:"
 gate_marketplace_enabled = "  marketplace_enabled : %v"
 gate_account_active = "  account_active      : %v"

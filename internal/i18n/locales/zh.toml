@@ -517,9 +517,10 @@ oauth_usage = '''everyapi seller add-oauth — 通过 provider 的 OAuth 流程�
   everyapi seller add-oauth <provider> [参数]
 
 PROVIDERS
-  codex     Codex / ChatGPT 订阅（RFC 8628 device flow）
-  claude    Anthropic Claude（浏览器回调 OAuth）
-  gemini    Google Gemini（浏览器回调 OAuth）
+  codex        Codex / ChatGPT 订阅（RFC 8628 device flow）
+  claude       Anthropic Claude（浏览器回调 OAuth）
+  gemini       Google Gemini（loopback OAuth）
+  antigravity  Google Antigravity（loopback OAuth — 仅本地监听，网页里做不了）
 
 公共参数
   --name <n>      频道显示名（必填）
@@ -528,8 +529,8 @@ PROVIDERS
 
 运行 'everyapi seller add-oauth <provider> --help' 查看具体参数。
 '''
-oauth_use_provider_help = "用法：everyapi seller add-oauth <provider> [参数]\nproviders: codex, claude, gemini"
-oauth_unknown_provider = "未知 provider %q — 支持：codex, claude, gemini"
+oauth_use_provider_help = "用法：everyapi seller add-oauth <provider> [参数]\nproviders: codex, claude, gemini, antigravity"
+oauth_unknown_provider = "未知 provider %q — 支持：codex, claude, gemini, antigravity"
 oauth_chatgpt_redirect = "provider %q 是 ChatGPT Plus — 上游与 codex 相同。请使用 `everyapi seller add-oauth codex`"
 oauth_missing_flags = "缺少必填参数：%s"
 oauth_codex_intro = "绑定 Codex / ChatGPT 订阅，请访问以下 URL 并输入 code："
@@ -555,6 +556,8 @@ oauth_waiting_redirect = "等待 127.0.0.1:%d 上的回调中（超时 %s）…�
 oauth_callback_no_code = "OAuth 回调未带授权 code"
 oauth_state_mismatch = "OAuth state 不匹配（收到 %q，期望 %q）— 请重新运行该命令"
 oauth_mounted_gemini = "\n已挂载频道 #%d（%s，type=gemini）。\n"
+oauth_antigravity_intro = "连接 Antigravity（Google）账号，请在此登录："
+oauth_mounted_antigravity = "\n已挂载频道 #%d（%s，type=antigravity）。\n"
 gates_header = "Gates："
 gate_marketplace_enabled = "  marketplace_enabled : %v"
 gate_account_active = "  account_active      : %v"

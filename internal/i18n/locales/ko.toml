@@ -538,8 +538,8 @@ PROVIDERS
 
 provider별 플래그는 'everyapi seller add-oauth <provider> --help' 참고.
 '''
-oauth_use_provider_help = "사용법: everyapi seller add-oauth <provider> [플래그]\nproviders: codex, claude, gemini"
-oauth_unknown_provider = "알 수 없는 provider %q — 지원: codex, claude, gemini"
+oauth_use_provider_help = "사용법: everyapi seller add-oauth <provider> [플래그]\nproviders: codex, claude, gemini, antigravity"
+oauth_unknown_provider = "알 수 없는 provider %q — 지원: codex, claude, gemini, antigravity"
 oauth_chatgpt_redirect = "provider %q 는 ChatGPT Plus — codex 와 동일한 업스트림입니다. `everyapi seller add-oauth codex` 를 사용하세요"
 oauth_missing_flags = "필수 플래그 누락: %s"
 oauth_codex_intro = "Codex / ChatGPT 구독을 바인딩하려면 다음 URL을 방문하고 code를 입력하세요:"
@@ -565,6 +565,8 @@ oauth_waiting_redirect = "127.0.0.1:%d 리다이렉트 대기 중 (timeout %s)..
 oauth_callback_no_code = "OAuth callback에 인증 code가 포함되지 않음"
 oauth_state_mismatch = "OAuth state 불일치 (수신: %q, 예상: %q) — 명령을 다시 실행하세요"
 oauth_mounted_gemini = "\n채널 #%d (%s, type=gemini) 을(를) 마운트했습니다.\n"
+oauth_antigravity_intro = "Antigravity(Google) 계정을 연결하려면 여기에서 로그인하세요:"
+oauth_mounted_antigravity = "\n채널 #%d (%s, type=antigravity) 을(를) 마운트했습니다.\n"
 gates_header = "Gates:"
 gate_marketplace_enabled = "  marketplace_enabled : %v"
 gate_account_active = "  account_active      : %v"

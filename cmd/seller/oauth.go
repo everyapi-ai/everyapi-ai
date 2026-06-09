@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 	"github.com/everyapi-ai/everyapi-sdk/oauthloopback"
 )
@@ -36,26 +36,22 @@ func sellerExchangeCtx(parent context.Context) (context.Context, context.CancelF
 }
 
 // sellerAddOAuth is the seller OAuth-based onboarding bridge: the CLI
-// walks the seller through OpenAI's device-auth flow and the backend
+// walks the seller through the provider's OAuth flow and the backend
 // mounts the resulting credential as their channel — the seller
 // NEVER copies a token string by hand. docs/cli/channel-marketplace.md
 // §7-1 calls this the "game changer" for seller onboarding.
 //
-// V1 supports `codex` only (Codex / ChatGPT subscription, RFC 8628-ish
-// device flow — no local listener, just type the short user_code into
-// chatgpt.com). `claude` / `gemini` need browser-callback OAuth and
-// arrive in a follow-up.
+// Supported providers, each with its own flow shape:
+//   - codex       — RFC 8628 device flow (type the short user_code into chatgpt.com)
+//   - claude      — browser authorize + paste the code back (Anthropic pins its redirect)
+//   - gemini      — loopback OAuth (local listener, no paste)
+//   - antigravity — loopback OAuth (local listener); the ONLY feasible path
+//     since antigravity's Google client accepts no hosted/device redirect,
+//     which is why it can't be connected from the web dashboard
 //
 // Usage:
 //
-//	everyapi seller add-oauth codex --name <n> --models <m> [--no-browser]
-//
-// The flow:
-//  1. Eligibility pre-check (skip ahead of OpenAI hit if user can't mount)
-//  2. POST /api/seller/codex/device/start → user_code + verification_uri
-//  3. Print code + URL, open browser (unless --no-browser)
-//  4. Poll until success / expiry / deny — backend mints the channel
-//     server-side, so the CLI just reports the resulting channel id
+//	everyapi seller add-oauth <provider> --name <n> --models <m> [flags]
 func sellerAddOAuth(args []string) error {
 	if len(args) == 0 {
 		return errors.New(i18n.T("seller.oauth_use_provider_help"))
@@ -72,6 +68,8 @@ func sellerAddOAuth(args []string) error {
 		return sellerAddOAuthClaude(rest)
 	case "gemini":
 		return sellerAddOAuthGemini(rest)
+	case "antigravity":
+		return sellerAddOAuthAntigravity(rest)
 	case "chatgpt":
 		return fmt.Errorf(i18n.T("seller.oauth_chatgpt_redirect"), provider)
 	default:
@@ -414,6 +412,128 @@ func sellerAddOAuthGemini(args []string) error {
 	}
 
 	cliout.Printf(i18n.T("seller.oauth_mounted_gemini"), res.ChannelID, *name)
+	if res.ExpiresAt != "" {
+		cliout.Printf(i18n.T("seller.oauth_token_expires"), res.ExpiresAt)
+	}
+	cliout.Printf(i18n.T("seller.oauth_status_visit"), api.WebOriginFromBase(creds.APIBase))
+	return nil
+}
+
+// sellerAddOAuthAntigravity drives Google Antigravity's OAuth. It is the
+// SAME loopback flow as gemini — antigravity's Google client only accepts
+// http://127.0.0.1:<port>/callback redirects (no hosted-paste page, no
+// device flow), which is exactly why this can't be done from the web
+// dashboard and must run from a local listener here. The only wire
+// difference from gemini is the backend endpoint, which authorizes the
+// Antigravity desktop client (whose Code Assist tier serves the
+// antigravity model set).
+//
+// Usage:
+//
+//	everyapi seller add-oauth antigravity --name <n> --models <m> [--no-browser] [--timeout 5m]
+func sellerAddOAuthAntigravity(args []string) error {
+	fs := flag.NewFlagSet("seller add-oauth antigravity", flag.ContinueOnError)
+	name := fs.String("name", "", "channel display name")
+	models := fs.String("models", "", "comma-separated models this channel will serve (e.g. gemini-3.1-pro-low,claude-sonnet-4-6)")
+	noBrowser := fs.Bool("no-browser", false, "skip auto-opening the authorize URL")
+	timeout := fs.Duration("timeout", 5*time.Minute, "how long to wait for the OAuth callback before giving up")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	*name = strings.TrimSpace(*name)
+	*models = strings.TrimSpace(*models)
+	if *name == "" || *models == "" {
+		var missing []string
+		if *name == "" {
+			missing = append(missing, "--name")
+		}
+		if *models == "" {
+			missing = append(missing, "--models")
+		}
+		return fmt.Errorf(i18n.T("seller.oauth_missing_flags"), strings.Join(missing, ", "))
+	}
+
+	creds, err := config.Load()
+	if errors.Is(err, config.ErrNoCredentials) {
+		return errors.New(i18n.T("auth.not_logged_in"))
+	}
+	if err != nil {
+		return err
+	}
+	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID).WithCookieJar()
+
+	// Start the listener BEFORE eligibility — we need the loopback URL to
+	// hand to /start (same ordering as gemini).
+	listener, err := oauthloopback.Listen()
+	if err != nil {
+		return fmt.Errorf("loopback listen: %w", err)
+	}
+	defer listener.Close()
+
+	ctx, stop := cliout.SignalCtx()
+	defer stop()
+
+	ecx, ecancel := sellerExchangeCtx(ctx)
+	elig, err := client.GetSellerEligibility(ecx)
+	ecancel()
+	if err != nil {
+		return classifySellerErr(err)
+	}
+	if !elig.Eligible {
+		renderEligibility(elig)
+		cliout.Println("")
+		cliout.Println(i18n.T("seller.eligibility_check_failed"))
+		cliout.Printf(i18n.T("seller.dashboard_url_line")+"\n", api.WebOriginFromBase(creds.APIBase))
+		return errors.New(i18n.T("seller.not_eligible_error"))
+	}
+
+	scx, scancel := sellerExchangeCtx(ctx)
+	start, err := client.StartSellerAntigravityOAuth(scx, *name, *models, listener.URL())
+	scancel()
+	if err != nil {
+		return classifySellerErr(err)
+	}
+
+	cliout.Println("")
+	cliout.Println(i18n.T("seller.oauth_antigravity_intro"))
+	cliout.Printf("\n    %s\n\n", start.AuthorizeURL)
+	if !*noBrowser {
+		if berr := cliprompt.OpenBrowser(start.AuthorizeURL); berr == nil {
+			cliout.Println(i18n.T("seller.oauth_browser_sign_in"))
+		} else {
+			fmt.Fprintln(os.Stderr, i18n.T("common.browser_open_failed"))
+		}
+	}
+	cliout.Printf(i18n.T("seller.oauth_waiting_redirect"), listener.Port(), *timeout)
+
+	waitCtx, cancel := context.WithTimeout(ctx, *timeout)
+	defer cancel()
+	cb, err := listener.Wait(waitCtx)
+	if err != nil {
+		return fmt.Errorf("waiting for OAuth callback: %w", err)
+	}
+	if cb.Error != "" {
+		desc := cb.ErrorDesc
+		if desc == "" {
+			desc = cb.Error
+		}
+		return fmt.Errorf("authorization failed: %s", desc)
+	}
+	if cb.Code == "" {
+		return errors.New(i18n.T("seller.oauth_callback_no_code"))
+	}
+	if cb.State != start.State {
+		return fmt.Errorf(i18n.T("seller.oauth_state_mismatch"), cb.State, start.State)
+	}
+
+	gcx, gcancel := sellerExchangeCtx(ctx)
+	res, err := client.CompleteSellerAntigravityOAuth(gcx, cb.Code, cb.State)
+	gcancel()
+	if err != nil {
+		return classifySellerErr(err)
+	}
+
+	cliout.Printf(i18n.T("seller.oauth_mounted_antigravity"), res.ChannelID, *name)
 	if res.ExpiresAt != "" {
 		cliout.Printf(i18n.T("seller.oauth_token_expires"), res.ExpiresAt)
 	}

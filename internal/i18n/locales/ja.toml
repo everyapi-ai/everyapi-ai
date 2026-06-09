@@ -539,8 +539,8 @@ PROVIDERS
 
 provider 固有のフラグは 'everyapi seller add-oauth <provider> --help' を参照。
 '''
-oauth_use_provider_help = "使い方: everyapi seller add-oauth <provider> [フラグ]\nproviders: codex, claude, gemini"
-oauth_unknown_provider = "不明な provider %q — サポート: codex, claude, gemini"
+oauth_use_provider_help = "使い方: everyapi seller add-oauth <provider> [フラグ]\nproviders: codex, claude, gemini, antigravity"
+oauth_unknown_provider = "不明な provider %q — サポート: codex, claude, gemini, antigravity"
 oauth_chatgpt_redirect = "provider %q は ChatGPT Plus — codex と同じ上流です。`everyapi seller add-oauth codex` を使ってください"
 oauth_missing_flags = "必須フラグが不足: %s"
 oauth_codex_intro = "Codex / ChatGPT サブスクをバインドするには、次の URL を開き code を入力してください:"
@@ -566,6 +566,8 @@ oauth_waiting_redirect = "127.0.0.1:%d でのリダイレクト待機中（タ�
 oauth_callback_no_code = "OAuth callback に認可 code が含まれていません"
 oauth_state_mismatch = "OAuth state が一致しません（受信: %q、期待: %q）— コマンドを再実行してください"
 oauth_mounted_gemini = "\nチャネル #%d をマウントしました（%s、type=gemini）。\n"
+oauth_antigravity_intro = "Antigravity（Google）アカウントを接続するには、こちらでサインインしてください："
+oauth_mounted_antigravity = "\nチャネル #%d をマウントしました（%s、type=antigravity）。\n"
 gates_header = "Gates:"
 gate_marketplace_enabled = "  marketplace_enabled : %v"
 gate_account_active = "  account_active      : %v"

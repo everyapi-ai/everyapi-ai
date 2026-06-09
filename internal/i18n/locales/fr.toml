@@ -545,8 +545,8 @@ FLAGS COMMUNS
 
 Lancez 'everyapi seller add-oauth <provider> --help' pour les flags spécifiques au provider.
 '''
-oauth_use_provider_help = "utilisation : everyapi seller add-oauth <provider> [flags]\nproviders : codex, claude, gemini"
-oauth_unknown_provider = "provider %q inconnu — supportés : codex, claude, gemini"
+oauth_use_provider_help = "utilisation : everyapi seller add-oauth <provider> [flags]\nproviders : codex, claude, gemini, antigravity"
+oauth_unknown_provider = "provider %q inconnu — supportés : codex, claude, gemini, antigravity"
 oauth_chatgpt_redirect = "le provider %q est ChatGPT Plus — même upstream que codex. Utilisez `everyapi seller add-oauth codex` à la place"
 oauth_missing_flags = "flag(s) requis manquant(s) : %s"
 oauth_codex_intro = "Pour lier votre abonnement Codex / ChatGPT, visitez cette URL et entrez le code :"
@@ -572,6 +572,8 @@ oauth_waiting_redirect = "Attente de la redirection sur 127.0.0.1:%d (timeout %s
 oauth_callback_no_code = "le callback OAuth n'a pas livré de code d'autorisation"
 oauth_state_mismatch = "incohérence d'état OAuth (reçu %q, attendu %q) — relancez la commande"
 oauth_mounted_gemini = "\nCanal #%d monté (%s, type=gemini).\n"
+oauth_antigravity_intro = "Pour lier votre compte Antigravity (Google), connectez-vous à :"
+oauth_mounted_antigravity = "\nCanal #%d monté (%s, type=antigravity).\n"
 gates_header = "Gates :"
 gate_marketplace_enabled = "  marketplace_enabled : %v"
 gate_account_active = "  account_active      : %v"
