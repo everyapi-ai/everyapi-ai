@@ -187,3 +187,70 @@ func TestGatewayURLFromAPIBase(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderComposeWorkloads(t *testing.T) {
+	// Declared workloads render as a comma-joined EVERYAPI_WORKLOADS
+	// env in both the sidecar and macOS (host-native ollama) branches;
+	// an empty declaration omits the line entirely so older agents'
+	// compose files stay byte-identical.
+	withWl, err := renderCompose(composeData{
+		NodeID:            42,
+		Mode:              ModeNVIDIA,
+		Gateway:           "wss://api.everyapi.ai",
+		RegistrationToken: "rt_x",
+		Workloads:         []string{"coding", "image"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(withWl), `EVERYAPI_WORKLOADS: "coding,image"`) {
+		t.Errorf("missing EVERYAPI_WORKLOADS in nvidia render:\n%s", withWl)
+	}
+
+	macWl, err := renderCompose(composeData{
+		NodeID:            43,
+		Mode:              ModeMacOS,
+		Gateway:           "wss://api.everyapi.ai",
+		RegistrationToken: "rt_x",
+		Workloads:         []string{"chat"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(macWl), `EVERYAPI_WORKLOADS: "chat"`) {
+		t.Errorf("missing EVERYAPI_WORKLOADS in macos render:\n%s", macWl)
+	}
+
+	without, err := renderCompose(composeData{
+		NodeID:            44,
+		Mode:              ModeNVIDIA,
+		Gateway:           "wss://api.everyapi.ai",
+		RegistrationToken: "rt_x",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(without), "EVERYAPI_WORKLOADS") {
+		t.Errorf("EVERYAPI_WORKLOADS must be omitted when no declaration exists:\n%s", without)
+	}
+}
+
+func TestParseWorkloadsFlag(t *testing.T) {
+	got, err := parseWorkloadsFlag(" Coding, image ")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Join(got, ",") != "coding,image" {
+		t.Errorf("got %v, want [coding image]", got)
+	}
+
+	if got, err := parseWorkloadsFlag(""); err != nil || got != nil {
+		t.Errorf("empty flag should return nil, nil; got %v, %v", got, err)
+	}
+
+	if _, err := parseWorkloadsFlag("chat,mining"); err == nil {
+		t.Error("unknown value should error")
+	} else if !strings.Contains(err.Error(), "mining") {
+		t.Errorf("error should name the offending value, got: %v", err)
+	}
+}

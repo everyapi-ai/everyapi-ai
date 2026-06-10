@@ -32,7 +32,14 @@ func edgeRegister(args []string) error {
 	attachTo := fs.Int("attach-to-channel", 0,
 		"Channel ID to attach this node to as a sibling (multi-node load balancing). "+
 			"Omit to auto-create a fresh channel for this node.")
+	workloadsFlag := fs.String("workloads", "",
+		"Comma-separated capability declaration (allowed: "+strings.Join(api.KnownEdgeWorkloads, ", ")+"). "+
+			"Defaults to 'chat'. Routing prefers nodes that declared the request's workload.")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	workloads, err := parseWorkloadsFlag(*workloadsFlag)
+	if err != nil {
 		return err
 	}
 	nodeName := strings.TrimSpace(*name)
@@ -56,7 +63,7 @@ func edgeRegister(args []string) error {
 		return err
 	}
 
-	req := api.EdgeNodeCreate{Name: nodeName}
+	req := api.EdgeNodeCreate{Name: nodeName, Workloads: workloads}
 	if *country != "" || *region != "" {
 		req.Location = &api.EdgeLoc{CountryISO2: strings.ToUpper(*country), Region: *region}
 	}
@@ -94,6 +101,10 @@ func edgeRegister(args []string) error {
 		NodeName:          reg.Node.Name,
 		RegistrationToken: reg.RegistrationToken,
 		Gateway:           gatewayURLFromAPIBase(creds.APIBase),
+		// Server-normalized declaration (defaulted to ["chat"] when the
+		// flag was omitted) — persisted so `edge start` renders the same
+		// EVERYAPI_WORKLOADS the row carries.
+		Workloads: reg.Node.Workloads,
 	}
 	metaPath := filepath.Join(dir, "node.json")
 	mb, err := json.MarshalIndent(meta, "", "  ")
@@ -117,6 +128,33 @@ func edgeRegister(args []string) error {
 	cliout.Printf("%s", i18n.T("edge.register.set_active"))
 	cliout.Printf("%s", i18n.T("edge.register.next"))
 	return nil
+}
+
+// parseWorkloadsFlag splits and validates the --workloads value
+// against the SDK's mirror of the backend enum. Local validation so a
+// typo'd value fails with the allowed list in the message instead of
+// a round-trip to the server's 422. Empty input returns nil — the
+// backend defaults that to ["chat"].
+func parseWorkloadsFlag(raw string) ([]string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+	known := map[string]bool{}
+	for _, k := range api.KnownEdgeWorkloads {
+		known[k] = true
+	}
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		w := strings.ToLower(strings.TrimSpace(part))
+		if w == "" {
+			continue
+		}
+		if !known[w] {
+			return nil, fmt.Errorf(i18n.T("edge.register.unknown_workload"), w, strings.Join(api.KnownEdgeWorkloads, ", "))
+		}
+		out = append(out, w)
+	}
+	return out, nil
 }
 
 // validateAttachToChannel checks that the supplied channel id

@@ -71,6 +71,9 @@ func edgeList(args []string) error {
 		if len(n.Models) > 0 {
 			cliout.Printf("  %-12s%s\n", i18n.T("edge.field.models"), strings.Join(n.Models, ", "))
 		}
+		if len(n.Workloads) > 0 {
+			cliout.Printf("  %-12s%s\n", i18n.T("edge.field.workloads"), strings.Join(n.Workloads, ", "))
+		}
 	}
 	cliout.Println("")
 	cliout.Println(i18n.T("edge.list.active_marker"))

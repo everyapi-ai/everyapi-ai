@@ -59,6 +59,7 @@ func edgeStart(args []string) error {
 		RegistrationToken: meta.RegistrationToken,
 		AgentImage:        *agentImageFlag,
 		OllamaImage:       *ollamaImageFlag,
+		Workloads:         meta.Workloads,
 	}
 	composePath, err := writeCompose(dir, cd)
 	if err != nil {

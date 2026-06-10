@@ -16,11 +16,12 @@ import (
 // exists after `everyapi edge register`. File mode 0600 + parent dir
 // 0700; XDG-style location keeps it out of the cwd.
 type nodeMeta struct {
-	NodeID            int    `json:"node_id"`
-	NodeName          string `json:"node_name"`
-	RegistrationToken string `json:"registration_token"`
-	Gateway           string `json:"gateway"`
-	Mode              Mode   `json:"mode,omitempty"`
+	NodeID            int      `json:"node_id"`
+	NodeName          string   `json:"node_name"`
+	RegistrationToken string   `json:"registration_token"`
+	Gateway           string   `json:"gateway"`
+	Mode              Mode     `json:"mode,omitempty"`
+	Workloads         []string `json:"workloads,omitempty"` // declared at register time; rendered into the compose env
 }
 
 // dataRoot returns ~/.local/share/everyapi/edge (or the XDG override).

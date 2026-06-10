@@ -38,12 +38,19 @@ func edgeRename(args []string) error {
 	country := fs.String("country", "", "Two-letter country code. Updates location if set.")
 	region := fs.String("region", "", "Region label. Updates location if set.")
 	clearLoc := fs.Bool("clear-location", false, "Explicitly remove the declared location. Mutually exclusive with --country / --region.")
+	workloadsFlag := fs.String("workloads", "",
+		"Comma-separated capability declaration to replace the current one (allowed: "+
+			strings.Join(api.KnownEdgeWorkloads, ", ")+"). Empty leaves it unchanged.")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	workloads, err := parseWorkloadsFlag(*workloadsFlag)
+	if err != nil {
 		return err
 	}
 
 	trimmedName := strings.TrimSpace(*name)
-	if trimmedName == "" && *country == "" && *region == "" && !*clearLoc {
+	if trimmedName == "" && *country == "" && *region == "" && !*clearLoc && len(workloads) == 0 {
 		return errors.New(i18n.T("edge.rename.nothing_to_change"))
 	}
 	if *clearLoc && (*country != "" || *region != "") {
@@ -60,7 +67,7 @@ func edgeRename(args []string) error {
 		return err
 	}
 
-	req := api.EdgeNodeUpdate{Name: trimmedName}
+	req := api.EdgeNodeUpdate{Name: trimmedName, Workloads: workloads}
 	switch {
 	case *clearLoc:
 		// Explicit clear: send an empty Location object so the

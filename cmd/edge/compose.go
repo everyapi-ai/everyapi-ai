@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"text/template"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
@@ -81,6 +82,9 @@ services:
       OLLAMA_URL: http://ollama:11434
       EVERYAPI_IDENTITY_PATH: /var/lib/everyapi-edge/identity.json
       EVERYAPI_NODE_NAME: {{.NodeName | yamlStr}}
+      {{- if .Workloads }}
+      EVERYAPI_WORKLOADS: {{.Workloads | joinComma | yamlStr}}
+      {{- end }}
     volumes:
       - ./data/agent:/var/lib/everyapi-edge
 {{- else }}
@@ -103,6 +107,9 @@ services:
       OLLAMA_URL: http://host.docker.internal:11434
       EVERYAPI_IDENTITY_PATH: /var/lib/everyapi-edge/identity.json
       EVERYAPI_NODE_NAME: {{.NodeName | yamlStr}}
+      {{- if .Workloads }}
+      EVERYAPI_WORKLOADS: {{.Workloads | joinComma | yamlStr}}
+      {{- end }}
     volumes:
       - ./data/agent:/var/lib/everyapi-edge
 {{- end }}
@@ -119,6 +126,11 @@ type composeData struct {
 	AgentImage        string
 	OllamaImage       string
 	OllamaHostNative  bool // true for macOS — no ollama service in compose
+	// Workloads is the capability declaration persisted at register
+	// time. Rendered as EVERYAPI_WORKLOADS so the agent reports the
+	// same set the seller declared (used by the gateway only as a
+	// backfill for rows that predate the workloads column).
+	Workloads []string
 }
 
 // renderCompose returns the YAML bytes for the given node + mode. The
@@ -148,6 +160,9 @@ func renderCompose(d composeData) ([]byte, error) {
 	// backend) so a stray `:` / `#` / newline can't desync the YAML.
 	funcs := template.FuncMap{
 		"yamlStr": strconv.Quote,
+		"joinComma": func(parts []string) string {
+			return strings.Join(parts, ",")
+		},
 	}
 	tmpl, err := template.New("compose").Funcs(funcs).Parse(composeTemplate)
 	if err != nil {
