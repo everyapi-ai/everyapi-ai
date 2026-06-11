@@ -6,14 +6,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/internal/sellertype"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -622,94 +621,24 @@ func classifySellerErr(err error) error {
 	return err
 }
 
-// sellerChannelTypeAliases maps human names to the server's integer
-// channel type id. Curated to match the server-side allow-list for
-// seller-mounted channels — anything not in that allowed set would
-// 422 at submit, so listing it here would be misleading. Keep the
-// keys lowercase; lookup folds case.
-var sellerChannelTypeAliases = map[string]int{
-	"openai":    1,
-	"anthropic": 6,
-	"claude":    6,
-	"gemini":    13,
-	"aws":       18,
-	"bedrock":   18,
-	"vertex":    26,
-	"vertexai":  26,
-	"deepseek":  28,
-	"xai":       33,
-	"grok":      33,
-	"codex":     42,
-}
+// The alias map and its helpers live in internal/sellertype — shared
+// with the MCP seller tools so the two surfaces can't drift. These
+// package-local names are kept as thin delegates so call sites and
+// tests stay untouched; error wording (i18n) stays here because the
+// MCP side is English-only.
+var sellerChannelTypeAliases = sellertype.Aliases
 
-// resolveSellerType accepts either the alias name (openai / claude / …)
-// or a numeric id straight through. Numeric passthrough is the escape
-// hatch for any allowed type the alias map doesn't list yet, without
-// blocking the user on a CLI release.
 func resolveSellerType(s string) (int, error) {
+	if id, ok := sellertype.Resolve(s); ok {
+		return id, nil
+	}
 	s = strings.ToLower(strings.TrimSpace(s))
-	if id, ok := sellerChannelTypeAliases[s]; ok {
-		return id, nil
-	}
-	if id, err := strconv.Atoi(s); err == nil && id > 0 {
-		return id, nil
-	}
 	return 0, fmt.Errorf(i18n.T("seller.unknown_channel_type"), s, strings.Join(sellerTypeChoices(), ", "))
 }
 
-// sellerTypeChoices returns alias names in stable display order. We
-// dedupe across the alias map (claude/anthropic both → 6) and prefer
-// the marketing-recognisable spelling: "claude" not "anthropic",
-// "vertex" not "vertexai".
-func sellerTypeChoices() []string {
-	preferred := []string{"openai", "claude", "gemini", "codex", "vertex", "aws", "xai", "deepseek"}
-	// Sanity check that every preferred name resolves — guards against
-	// silent drift if the alias map is renamed without updating this list.
-	out := make([]string, 0, len(preferred))
-	for _, n := range preferred {
-		if _, ok := sellerChannelTypeAliases[n]; ok {
-			out = append(out, n)
-		}
-	}
-	return out
-}
+func sellerTypeChoices() []string { return sellertype.Choices() }
 
-// channelTypeLabel returns the human alias for a backend integer id,
-// for output rendering. Falls back to the raw id string when the
-// integer is outside our alias map (forward-compat with future types).
-func channelTypeLabel(id int) string {
-	type kv struct {
-		name string
-		id   int
-	}
-	pairs := make([]kv, 0, len(sellerChannelTypeAliases))
-	for n, i := range sellerChannelTypeAliases {
-		pairs = append(pairs, kv{n, i})
-	}
-	// Stable iteration so the label for id=6 is deterministically
-	// "claude" (the marketing name we prefer over "anthropic"), even
-	// though both alias to 6. Sort puts the alphabetically-first first;
-	// for the four ambiguous pairs ((anthropic, claude), (aws,
-	// bedrock), (vertex, vertexai), (xai, grok)) we want claude / aws /
-	// vertex / grok respectively. Hardcode the preferred display name
-	// instead of relying on alphabetic luck.
-	preferredFor := map[int]string{
-		6:  "claude",
-		18: "aws",
-		26: "vertex",
-		33: "xai",
-	}
-	if name, ok := preferredFor[id]; ok {
-		return name
-	}
-	sort.Slice(pairs, func(i, j int) bool { return pairs[i].name < pairs[j].name })
-	for _, p := range pairs {
-		if p.id == id {
-			return p.name
-		}
-	}
-	return fmt.Sprintf("type=%d", id)
-}
+func channelTypeLabel(id int) string { return sellertype.Label(id) }
 
 // Prompt helpers (Line, Optional, Choice, YesNo) live in
 // internal/cliprompt — shared with cmd/proxy and the login flow.

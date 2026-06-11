@@ -157,6 +157,9 @@ func TestRegisterTools_HasV0Set(t *testing.T) {
 		"everyapi_topup":           true,
 		"everyapi_seller_list":     true,
 		"everyapi_seller_withdraw": true,
+		// V3: plain-API-key seller onboarding
+		"everyapi_seller_eligibility": true,
+		"everyapi_seller_add_key":     true,
 		// V1: seller OAuth onboarding
 		"everyapi_seller_add_oauth_codex_start":     true,
 		"everyapi_seller_add_oauth_codex_poll":      true,

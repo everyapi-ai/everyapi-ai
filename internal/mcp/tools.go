@@ -41,14 +41,25 @@ package mcp
 //   - everyapi_admin_marketplace_status — read marketplace.enabled
 //   - everyapi_admin_marketplace_set    — open / close (confirm-gated)
 //
-// The remaining tools from the design list (sanitizer / seller setup
-// / add-key) await their CLI counterparts.
+// V3 adds plain-API-key seller onboarding, mirroring the CLI's
+// `seller add-key` / `seller setup` pair. There's no wizard tool —
+// the AI agent is the wizard: it checks eligibility, collects the
+// channel details in conversation, then mounts in one call.
+//
+//   - everyapi_seller_eligibility — read-only mount-gate checklist
+//   - everyapi_seller_add_key     — mount a channel with plain API key(s)
+//
+// The remaining tool from the design list (sanitizer) stays CLI-only —
+// it's a local daemon; what an AI agent controlling it would even
+// mean is still undecided.
 func registerTools() []Tool {
 	return []Tool{
 		toolStatus(),
 		toolTopup(),
 		toolSellerList(),
 		toolSellerWithdraw(),
+		toolSellerEligibility(),
+		toolSellerAddKey(),
 		toolSellerAddOAuthCodexStart(),
 		toolSellerAddOAuthCodexPoll(),
 		toolSellerAddOAuthClaudeStart(),
