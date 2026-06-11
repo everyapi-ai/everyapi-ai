@@ -729,15 +729,42 @@ var chatCapableEndpoints = map[string]bool{
 	"gemini":                  true,
 }
 
+// legacyOwnerAliases tolerates gateways that haven't shipped the
+// owned_by de-channelization. A preset owner is the model BRAND the
+// gateway now reports (e.g. "zhipu", "qwen"); an older gateway instead
+// reports the channel-adaptor name ("zhipu_4v", "ali"). Accepting both
+// lets `use glm`/`use qwen` work whichever the gateway emits, so the CLI
+// can roll out ahead of the backend. Remove once every gateway reports
+// brands.
+var legacyOwnerAliases = map[string][]string{
+	"zhipu": {"zhipu_4v"},
+	"qwen":  {"ali"},
+}
+
+// ownerMatches reports whether a model's owned_by belongs to the preset
+// owner — the brand slug itself or any legacy channel-name alias.
+func ownerMatches(ownedBy, owner string) bool {
+	if strings.EqualFold(ownedBy, owner) {
+		return true
+	}
+	for _, alias := range legacyOwnerAliases[owner] {
+		if strings.EqualFold(ownedBy, alias) {
+			return true
+		}
+	}
+	return false
+}
+
 // providerChatModels filters a relay catalog down to the chat-capable
-// model ids owned by `owner` (case-insensitive), sorted. A model that
+// model ids owned by `owner` (brand slug, case-insensitive; legacy
+// channel names tolerated via ownerMatches), sorted. A model that
 // declares no endpoint types is kept (fail-open) so missing metadata
 // never hides an otherwise-valid chat model — only a model that
 // explicitly serves ONLY non-chat endpoints is dropped.
 func providerChatModels(catalog []api.RelayModel, owner string) []string {
 	var ids []string
 	for _, m := range catalog {
-		if !strings.EqualFold(m.OwnedBy, owner) {
+		if !ownerMatches(m.OwnedBy, owner) {
 			continue
 		}
 		if !chatCapable(m.SupportedEndpointTypes) {

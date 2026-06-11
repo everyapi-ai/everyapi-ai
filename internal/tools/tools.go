@@ -80,7 +80,7 @@ type Tool struct {
 	// ModelOwner, when non-empty, marks a Claude Code preset that drives
 	// one upstream provider's models: `everyapi use <name>` shows a model
 	// picker scoped to the provider whose /v1/models `owned_by` equals
-	// this value (e.g. "zhipu_4v" for glm, "moonshot" for kimi), then
+	// this value (e.g. "zhipu" for glm, "moonshot" for kimi), then
 	// launches the `claude` binary pinned to the chosen id. The preset's
 	// envFn sets only the base URL + token; cmd/use resolves the model
 	// (picker on a TTY, `--model` flag otherwise) and injects it via
@@ -305,14 +305,18 @@ var Registry = map[string]*Tool{
 	// provider through EveryAPI. `everyapi use <name>` pops a picker over
 	// that provider's models (filtered by the /v1/models `owned_by` value
 	// below) and launches claude pinned to the chosen one. The owner
-	// strings are the channel adaptor names the gateway reports — keep
-	// them in sync with backend channelkind families if a provider's
-	// adaptor name changes.
+	// strings are the model BRAND the gateway reports in owned_by (derived
+	// from the model id, not the channel). Older gateways reported the
+	// channel-adaptor name instead ("ali" for qwen, "zhipu_4v" for glm);
+	// cmd/use's legacyOwnerAliases tolerates both during rollout. Aggregator
+	// channels are brand-narrow: `use byteplus` now lists only BytePlus-native
+	// ids (dola-seed*/bytedance-seed*/ark-code*) — DeepSeek/Kimi/GPT-OSS served
+	// via BytePlus report their own brand and are reached under those presets.
 	"minimax":  claudeProviderPreset("minimax", "minimax"),
-	"qwen":     claudeProviderPreset("qwen", "ali"),
+	"qwen":     claudeProviderPreset("qwen", "qwen"),
 	"deepseek": claudeProviderPreset("deepseek", "deepseek"),
 	"byteplus": claudeProviderPreset("byteplus", "byteplus"),
-	"glm":      claudeProviderPreset("glm", "zhipu_4v"),
+	"glm":      claudeProviderPreset("glm", "zhipu"),
 	"kimi":     claudeProviderPreset("kimi", "moonshot"),
 }
 

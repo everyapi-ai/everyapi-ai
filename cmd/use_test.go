@@ -226,3 +226,23 @@ func TestProviderChatModels(t *testing.T) {
 		t.Errorf("providerChatModels(only-image) = %v, want empty", got)
 	}
 }
+
+// TestProviderChatModelsLegacyOwnerAlias verifies the glm/qwen presets
+// match BOTH the new brand owned_by (zhipu/qwen) and the legacy
+// channel-adaptor name (zhipu_4v/ali) an un-upgraded gateway still emits,
+// so `use glm`/`use qwen` survive the rollout in either order.
+func TestProviderChatModelsLegacyOwnerAlias(t *testing.T) {
+	mixed := []api.RelayModel{
+		{ID: "glm-4.7", OwnedBy: "zhipu", SupportedEndpointTypes: []string{"anthropic"}},       // new gateway
+		{ID: "glm-5.1", OwnedBy: "zhipu_4v", SupportedEndpointTypes: []string{"anthropic"}},    // legacy gateway
+		{ID: "qwen-max", OwnedBy: "qwen", SupportedEndpointTypes: []string{"openai"}},          // new gateway
+		{ID: "qwen3-coder", OwnedBy: "ali", SupportedEndpointTypes: []string{"openai"}},        // legacy gateway
+		{ID: "deepseek-chat", OwnedBy: "deepseek", SupportedEndpointTypes: []string{"openai"}}, // unrelated
+	}
+	if got, want := providerChatModels(mixed, "zhipu"), []string{"glm-4.7", "glm-5.1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("providerChatModels(zhipu) = %v, want %v (brand + legacy zhipu_4v)", got, want)
+	}
+	if got, want := providerChatModels(mixed, "qwen"), []string{"qwen-max", "qwen3-coder"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("providerChatModels(qwen) = %v, want %v (brand + legacy ali)", got, want)
+	}
+}

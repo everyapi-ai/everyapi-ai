@@ -53,12 +53,17 @@ func TestEnv_Claude(t *testing.T) {
 // contract (raw base URL, AUTH_TOKEN, no OpenAI vars, no premature
 // ANTHROPIC_MODEL).
 func TestClaudeProviderPreset(t *testing.T) {
+	// Owners are the model BRAND the gateway reports in owned_by (derived
+	// from the model id), not the channel-adaptor name. qwen/glm moved off
+	// their old channel names ("ali"/"zhipu_4v") when owned_by was
+	// de-channelized; cmd/use's legacyOwnerAliases still tolerates the old
+	// values during rollout.
 	wantOwner := map[string]string{
 		"minimax":  "minimax",
-		"qwen":     "ali",
+		"qwen":     "qwen",
 		"deepseek": "deepseek",
 		"byteplus": "byteplus",
-		"glm":      "zhipu_4v",
+		"glm":      "zhipu",
 		"kimi":     "moonshot",
 	}
 	for name, owner := range wantOwner {
