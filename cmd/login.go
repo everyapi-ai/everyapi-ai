@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -54,7 +55,7 @@ func Login(args []string) error {
 	ctx, stop := cliout.SignalCtx()
 	defer stop()
 
-	start, err := client.DeviceAuthStart(ctx)
+	start, oauth2, err := startDeviceFlow(ctx, client)
 	if err != nil {
 		return fmt.Errorf("start device authorization: %w", err)
 	}
@@ -122,6 +123,12 @@ func Login(args []string) error {
 		stopWatcher = startLoginKeyWatcher(fd, prefilledURL, cancelPoll)
 	}
 	defer stopWatcher()
+
+	// OAuth2 fallback path: the access token is itself the relay key, so it's
+	// saved directly with no management session / relay-key resolution.
+	if oauth2 {
+		return finishOAuth2Login(pctx, *apiBase, client, start, stopWatcher)
+	}
 
 	res, err := client.PollUntilDone(pctx, start.DeviceCode, start.Interval)
 	// Restore terminal BEFORE further printing — the success / error
@@ -194,6 +201,71 @@ func Login(args []string) error {
 		cliout.Println(i18n.T("login.no_relay_note_2"))
 	}
 
+	cliout.Println(i18n.T("login.next_hint"))
+	return nil
+}
+
+// oauth2CLIClientID is the CLI's first-party OAuth2 client id (seeded in the
+// backend). Used only on the fallback path.
+const oauth2CLIClientID = "everyapi-cli"
+
+// startDeviceFlow begins device authorization, preferring the legacy
+// /api/cli/device-auth-* flow — which yields a management session the CLI's
+// status/token commands rely on — and falling back to the OAuth2 device grant
+// only when the legacy endpoint is absent (404). The bool reports whether the
+// OAuth2 flow was used.
+func startDeviceFlow(ctx context.Context, client *api.Client) (*api.DeviceAuthStartResp, bool, error) {
+	start, err := client.DeviceAuthStart(ctx)
+	if err == nil {
+		return start, false, nil
+	}
+	var ae *api.APIError
+	if errors.As(err, &ae) && ae.StatusCode == http.StatusNotFound {
+		oStart, oErr := client.OAuth2DeviceStart(ctx, oauth2CLIClientID)
+		if oErr == nil {
+			return oStart, true, nil
+		}
+		if !errors.Is(oErr, api.ErrOAuth2Unavailable) {
+			return nil, false, oErr
+		}
+		// OAuth2 also unavailable → fall through to the original legacy error.
+	}
+	return nil, false, err
+}
+
+// finishOAuth2Login completes the OAuth2 device flow. The issued access token
+// is itself a relay key (sk-everyapi-…), so it's stored as both the relay key
+// and the access token — the CLI is "logged in" and `everyapi use` relays.
+// There is no management session in this mode, so role lookup, status, and
+// token-admin commands are limited.
+func finishOAuth2Login(ctx context.Context, apiBase string, client *api.Client, start *api.DeviceAuthStartResp, stopWatcher func()) error {
+	tok, err := client.OAuth2PollUntilDone(ctx, oauth2CLIClientID, start.DeviceCode, start.Interval)
+	stopWatcher()
+	if err != nil {
+		switch err {
+		case api.ErrDeviceAuthExpired:
+			return fmt.Errorf("the code timed out before you authorized — run 'everyapi auth login' again")
+		case api.ErrDeviceAuthDenied:
+			return fmt.Errorf("authorization was denied in the browser")
+		default:
+			return fmt.Errorf("poll: %w", err)
+		}
+	}
+	// The access token is itself the relay key; keep the refresh token + expiry
+	// so ResolveRelayKey can renew it before the 90-day key lapses.
+	creds := &config.Credentials{
+		APIBase:           apiBase,
+		AccessToken:       tok.AccessToken,
+		RelayKey:          tok.AccessToken,
+		RefreshToken:      tok.RefreshToken,
+		RelayKeyExpiresAt: tok.ExpiresAt,
+		OAuthClientID:     oauth2CLIClientID,
+	}
+	if err := config.Save(creds); err != nil {
+		return fmt.Errorf("save credentials: %w", err)
+	}
+	dir, _ := config.ConfigDir()
+	cliout.Printf(i18n.T("login.logged_in_saved"), style.Bold("EveryAPI"), dir)
 	cliout.Println(i18n.T("login.next_hint"))
 	return nil
 }
