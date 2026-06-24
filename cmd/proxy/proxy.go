@@ -28,10 +28,10 @@ import (
 
 // Proxy is the dispatcher for `everyapi proxy <subcommand>`.
 //
-// V1 ships `start` and `status`. `stop` is intentionally NOT here —
-// `start` runs in the foreground in this MVP, so Ctrl+C is the stop
-// signal. Daemonisation + PID-file management land in the follow-up
-// session that also wires sanitizer auto-start into `everyapi use`.
+// `start` runs a standalone sanitizer proxy (foreground, or --detach'd
+// with a PID file for `stop`/`status`) for pointing your own SDK at it.
+// `everyapi use <tool>` does NOT drive this command — it runs its own
+// sanitizer in-process for the lifetime of the launched tool.
 func Run(args []string) error {
 	if len(args) == 0 {
 		return proxyUsageErr()
@@ -81,7 +81,8 @@ Detector toggles and custom regex patterns live in
 ~/.config/everyapi/sanitizer.json. Edit them with 'everyapi proxy configure'.
 
 Point your SDK at http://localhost:8888 (or whatever --listen) and the
-proxy handles the rest. 'everyapi use <tool>' wires this up automatically.
+proxy handles the rest. ('everyapi use <tool>' does NOT use this command —
+it runs its own sanitizer in-process for the launched tool's lifetime.)
 `
 
 func proxyUsageErr() error {
@@ -97,7 +98,7 @@ func proxyStart(args []string) error {
 	listen := fs.String("listen", "127.0.0.1:8888", "address to bind")
 	upstream := fs.String("upstream", "", "upstream gateway (default from credentials)")
 	detach := fs.Bool("detach", false, "run in background; write PID file; return immediately")
-	parentPID := fs.Int("parent-pid", 0, "shut down when this pid exits (used by `everyapi use` for auto-cleanup)")
+	parentPID := fs.Int("parent-pid", 0, "shut down when this pid exits (auto-cleanup for a script that --detach'd this proxy)")
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("%w\n\n%s", err, proxyUsage)
 	}
@@ -157,7 +158,7 @@ func proxyStart(args []string) error {
 		// Default 8888 collision (typical: a SearXNG / dev tool
 		// holding 8888). Quietly pick a free port instead of
 		// crashing — the chosen address ends up in the PID file
-		// so 'proxy status' / `use` find it automatically.
+		// so 'proxy status' / 'proxy stop' find it automatically.
 		port, err := pickFreePortLocal()
 		if err != nil {
 			return fmt.Errorf("default port %s is taken and no free fallback port found: %w", *listen, err)
@@ -748,11 +749,9 @@ func looksLikeSanitizerJSON(body []byte, contentType string) bool {
 	return len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[')
 }
 
-// portOccupied — local-to-package duplicate of cmd/use.go's
-// helper. Cheap 250 ms TCP dial; returns true iff something
-// accepts the connection. Kept here rather than imported so
-// cmd/proxy stays leaf-importable from cmd/use's spawn path
-// without an import cycle.
+// portOccupied — cheap 250 ms TCP dial; returns true iff something
+// accepts the connection. Used by `proxy start` to detect a default-port
+// collision before binding.
 func portOccupied(listen string) bool {
 	conn, err := net.DialTimeout("tcp", listen, 250*time.Millisecond)
 	if err != nil {

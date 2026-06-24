@@ -1,8 +1,10 @@
 package tools
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 )
 
@@ -19,12 +21,12 @@ func (e *ErrToolNotFound) Error() string {
 // mergeEnv overlays `set` onto os.Environ(): each key in `set`
 // replaces the existing var with the same name; keys not in `set`
 // pass through unchanged. Returns a fresh []string in KEY=VAL form
-// suitable for syscall.Exec / exec.Command.
+// suitable for exec.Command's Env.
 //
-// Why we don't `os.Setenv` and reuse os.Environ(): on Unix the
-// syscall.Exec child only sees the explicit env arg, not the
-// parent's mutated environ — passing the merged slice is the
-// correct contract. On Windows the same shape works for exec.Command.
+// Why build an explicit slice rather than os.Setenv + reuse os.Environ():
+// the child process only sees the env we hand exec.Command, so passing
+// the merged slice is the correct, side-effect-free contract on both
+// Unix and Windows.
 func mergeEnv(set map[string]string) []string {
 	out := make([]string, 0, len(os.Environ())+len(set))
 	overlaid := make(map[string]struct{}, len(set))
@@ -47,4 +49,21 @@ func mergeEnv(set map[string]string) []string {
 		out = append(out, k+"="+v)
 	}
 	return out
+}
+
+// exitCodeFromWait maps a cmd.Wait() error to the process exit code we
+// should propagate: 0 on clean exit, the child's own code on a normal
+// non-zero exit, and 1 for anything we can't classify. Shared by the
+// Unix and Windows launchers so both platforms agree on the common
+// cases; the Unix launcher layers signal-death mapping (128+signo) on
+// top before falling through to this (see exec_unix.go).
+func exitCodeFromWait(waitErr error) int {
+	if waitErr == nil {
+		return 0
+	}
+	var ee *exec.ExitError
+	if errors.As(waitErr, &ee) {
+		return ee.ExitCode()
+	}
+	return 1
 }

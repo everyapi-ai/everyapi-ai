@@ -12,7 +12,8 @@ import (
 // code. The cost is the extra `everyapi` process hangs around as a
 // parent until the tool exits; the gain is signal handling Just
 // Works (the child catches Ctrl+C; we wait for it; we exit with its
-// code).
+// code). Mirrors the Unix build's Start/Wait structure and shares
+// exitCodeFromWait so both platforms classify exits the same way.
 //
 // extraArgs are passed through as command-line args to the tool, so
 // callers can forward user-supplied flags (e.g.
@@ -23,18 +24,14 @@ func Exec(t *Tool, env map[string]string, extraArgs []string) error {
 		return &ErrToolNotFound{Tool: t}
 	}
 	cmd := exec.Command(path, extraArgs...)
+	cmd.Args = append([]string{t.ExecName}, extraArgs...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = mergeEnv(env)
-	if err := cmd.Run(); err != nil {
-		// Surface the child's exit code if it produced one; otherwise
-		// re-wrap. exec.ExitError carries ProcessState.ExitCode().
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			os.Exit(exitErr.ExitCode())
-		}
-		return fmt.Errorf("run %s: %w", t.ExecName, err)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start %s: %w", t.ExecName, err)
 	}
-	os.Exit(0)
+	os.Exit(exitCodeFromWait(cmd.Wait()))
 	return nil // unreachable
 }

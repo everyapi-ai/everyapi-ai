@@ -1,0 +1,70 @@
+//go:build !windows
+
+package tools
+
+import (
+	"errors"
+	"os"
+	"os/exec"
+	"testing"
+)
+
+// TestUnixExitCode covers the three classifications: clean exit, a
+// normal non-zero exit code, and termination by signal (128+signo).
+// unixExitCode is what the Unix Exec actually propagates; it layers the
+// signal mapping over the shared exitCodeFromWait.
+func TestUnixExitCode(t *testing.T) {
+	if got := unixExitCode(nil); got != 0 {
+		t.Errorf("nil wait err -> %d, want 0", got)
+	}
+
+	// Normal non-zero exit.
+	err := exec.Command("sh", "-c", "exit 7").Run()
+	if got := unixExitCode(err); got != 7 {
+		t.Errorf("`exit 7` -> %d, want 7", got)
+	}
+
+	// Killed by a signal: the shell SIGTERMs itself -> 128+15 = 143.
+	err = exec.Command("sh", "-c", "kill -TERM $$").Run()
+	if got := unixExitCode(err); got != 143 {
+		t.Errorf("self-SIGTERM -> %d, want 143 (128+SIGTERM)", got)
+	}
+
+	// The shared base mapping (no signal layer): signaled -> ExitCode()
+	// which is -1, normal exit -> its code, nil -> 0.
+	if got := exitCodeFromWait(nil); got != 0 {
+		t.Errorf("exitCodeFromWait(nil) -> %d, want 0", got)
+	}
+	if got := exitCodeFromWait(exec.Command("sh", "-c", "exit 7").Run()); got != 7 {
+		t.Errorf("exitCodeFromWait(`exit 7`) -> %d, want 7", got)
+	}
+}
+
+// TestExecPropagatesChildExitCode runs the test binary as a subprocess
+// that calls Exec with a fake "tool" (`sh -c 'exit 7'`). Exec launches
+// it as a child, waits, and os.Exits with its code — so the subprocess
+// must exit 7. This is the standard os/exec helper-process pattern; it
+// exercises the real Start/Wait/exit-code path without a TTY and without
+// killing the outer test process (Exec's os.Exit only fires in the
+// child). The helper branch is gated by an env var so it's inert under
+// normal `go test`.
+func TestExecPropagatesChildExitCode(t *testing.T) {
+	if os.Getenv("EVERYAPI_EXEC_HELPER") == "1" {
+		// Child mode: Exec should replace our exit code with the tool's.
+		_ = Exec(&Tool{Name: "sh", ExecName: "sh"}, nil, []string{"-c", "exit 7"})
+		// Exec os.Exits on success; reaching here means it returned.
+		os.Exit(99)
+		return
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestExecPropagatesChildExitCode$", "-test.v=false")
+	cmd.Env = append(os.Environ(), "EVERYAPI_EXEC_HELPER=1")
+	err := cmd.Run()
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) {
+		t.Fatalf("helper did not exit non-zero: %v", err)
+	}
+	if ee.ExitCode() != 7 {
+		t.Fatalf("helper exit code = %d, want 7 (child's code, not 99 'Exec returned')", ee.ExitCode())
+	}
+}

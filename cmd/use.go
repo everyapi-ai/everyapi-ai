@@ -2,15 +2,15 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +20,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/internal/tools"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
+	"github.com/everyapi-ai/everyapi-sdk/sanitizer"
 )
 
 // useUsage is split so the prose can embed literal backticks (e.g.
@@ -230,18 +231,30 @@ func Use(args []string) error {
 	// the tool's traffic, masks sensitive substrings before they
 	// reach the gateway, and restores them on the way back. The
 	// --direct flag bypasses it (the tool talks straight to the
-	// gateway, no privacy filter). Auto-start the proxy in detached
-	// mode when it isn't already up — `everyapi use` should be a one-
-	// command experience, not "remember to run two windows".
+	// gateway, no privacy filter).
+	//
+	// The proxy runs IN THIS PROCESS (a goroutine on an ephemeral
+	// loopback port), and `everyapi use` stays alive as the tool's
+	// parent (see tools.Exec). So the proxy's lifetime is exactly the
+	// tool's lifetime — no detached daemon, no pid file, no shared
+	// instance, and therefore none of the cross-session orphaning that
+	// a shared 127.0.0.1:8888 proxy suffered (kill the session that
+	// spawned it and every other session got connection-refused).
 	apiBaseForEnv := creds.APIBase
 	if !direct {
-		proxyAddr, perr := ensureSanitizerRunning(creds.APIBase)
+		proxyAddr, stop, perr := startInProcessSanitizer(creds.APIBase)
 		if perr != nil {
 			cliout.Printf(i18n.T("use.sanitizer_warn"), perr)
 			cliout.Printf(i18n.T("use.fallback_direct"), creds.APIBase)
 			cliout.Printf("%s", i18n.T("use.fallback_hint"))
 		} else {
 			apiBaseForEnv = proxyAddr
+			// Tear the in-process proxy down if Use returns BEFORE handing
+			// off to tools.Exec — a yolo-prompt cancel/EOF, a Prepare
+			// error, etc. (defers are function-scoped, so this fires on
+			// any such return). On the happy path tools.Exec os.Exits,
+			// which skips defers, so the proxy lives for the tool's life.
+			defer stop()
 		}
 	}
 
@@ -312,8 +325,8 @@ func Use(args []string) error {
 	}
 
 	// Surface the resolved base URL so an aspiring debugger knows
-	// where the requests are heading. One line, before the exec
-	// disappears the parent process.
+	// where the requests are heading. One line, just before we hand the
+	// terminal over to the tool.
 	if apiBaseForEnv != creds.APIBase {
 		cliout.Printf(i18n.T("use.launching_via")+"\n", t.ExecName, apiBaseForEnv, creds.APIBase)
 	} else {
@@ -321,7 +334,7 @@ func Use(args []string) error {
 	}
 	// Discard any terminal control-sequence reply (e.g. the OSC 11
 	// background-color report a huh picker triggered) still buffered on
-	// stdin, so it doesn't leak into the exec'd tool as phantom input.
+	// stdin, so it doesn't leak into the launched tool as phantom input.
 	cliprompt.DrainStdin()
 	return tools.Exec(t, env, extraArgs)
 }
@@ -373,131 +386,124 @@ func wantsUseHelp(args []string) bool {
 	return false
 }
 
-// ensureSanitizerRunning checks if a sanitizer proxy is already
-// listening on `listen`; if not, spawns one in detached mode pointing
-// at the given upstream. Returns the proxy's http URL (e.g.
-// "http://127.0.0.1:8888") that the caller should pass as apiBase
-// when building the tool's env vars.
+// startInProcessSanitizer launches the privacy sanitizer proxy as a
+// goroutine in THIS process and returns the loopback URL the tool should
+// use as its API base. Because the proxy shares our process and
+// `everyapi use` stays alive as the tool's parent (see tools.Exec), the
+// proxy lives for exactly the tool's lifetime: when the tool exits,
+// tools.Exec calls os.Exit and the goroutine — and its listener — go
+// with it. No detached daemon, no pid file, no shared instance, so the
+// whole cross-session orphaning class is gone.
 //
-// The detached proxy is tied to our pid via --parent-pid: when the
-// caller (this `everyapi use` invocation, then the tool that inherits
-// its pid via exec) exits, the proxy notices within ~2s and shuts
-// down. That implements spec §7-1 step 2's "父进程退出时清理" without
-// leaving a long-lived background proxy behind.
+// Returns an error (caller then falls back to launching directly against
+// the gateway) if the loopback listener can't be bound, the detector
+// config won't load, the proxy can't be constructed, or it doesn't come
+// up healthy in time — a launch with no privacy filter beats no launch
+// at all. Every failure path releases the listener and log handle so a
+// fall-back-to-direct session leaks neither.
 //
-// On any failure the caller is responsible for falling back to direct
-// mode — better to launch the tool against the gateway directly than
-// to refuse to launch at all.
-func ensureSanitizerRunning(upstream string) (string, error) {
-	// Pick the listen address. Three-tier resolution, prefer
-	// stable / discoverable answers first so a debugger landing
-	// on a running session doesn't have to chase ephemeral ports:
-	//
-	//   1. If sanitizer.pid records a listen and that address is
-	//      currently serving our sanitizer, reuse it. Same
-	//      process across multiple `use` invocations.
-	//   2. Else if 127.0.0.1:8888 is sanitizer-healthy already,
-	//      use it (covers the case where the PID file got cleared
-	//      but the proxy is still alive).
-	//   3. Else pick a fresh listen: 8888 if free, otherwise a
-	//      kernel-assigned ephemeral port. The chosen address
-	//      gets written into sanitizer.pid by 'proxy start', so
-	//      'proxy status' and the next 'use' both find it.
-	const defaultListen = "127.0.0.1:8888"
-	if listen := sanitizerListenFromPID(); listen != "" && sanitizerHealthy(listen) {
-		return "http://" + listen, nil
+// On success it also returns a stop func the caller MUST arrange to run
+// if it abandons the launch (see the call site's defer) — that's what
+// releases the goroutine, the bound port, and the log fd on a
+// fall-back-to-direct or an early return before tools.Exec.
+func startInProcessSanitizer(upstream string) (string, func(), error) {
+	// Bind the loopback listener OURSELVES and hold it. Owning the port
+	// end-to-end (rather than picking a free port, closing it, and letting
+	// the server re-bind) closes the TOCTOU window: no other process can
+	// grab the port in between, so the readiness probe below can only ever
+	// reach our own proxy — never a foreign sanitizer that would silently
+	// route this session's traffic (and relay key) through another
+	// account.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", nil, fmt.Errorf("bind loopback listener: %w", err)
 	}
-	if sanitizerHealthy(defaultListen) {
-		return "http://" + defaultListen, nil
+	listen := ln.Addr().String()
+
+	fc, err := sanitizer.LoadFileConfig()
+	if err != nil {
+		_ = ln.Close()
+		return "", nil, fmt.Errorf("load sanitizer config: %w", err)
 	}
-	listen := defaultListen
-	if portOccupied(listen) {
-		port, err := pickFreePort()
-		if err != nil {
-			return "", fmt.Errorf("port %s is held by another process and no free fallback port found: %w", defaultListen, err)
+	logger, closeLog := sanitizerLogger()
+	// Construct synchronously so a bad config (e.g. a non-loopback /
+	// malformed upstream) surfaces to the caller as a real error instead
+	// of vanishing into the background goroutine's log file.
+	srv, err := sanitizer.New(sanitizer.Config{
+		Listen:       listen,
+		UpstreamBase: upstream,
+		Detectors:    fc.BuildDetectors(),
+		Logger:       logger,
+	})
+	if err != nil {
+		_ = ln.Close()
+		closeLog()
+		return "", nil, fmt.Errorf("construct sanitizer: %w", err)
+	}
+
+	// Serve on the listener we own, for the life of this process.
+	served := make(chan struct{})
+	go func() {
+		defer close(served)
+		_ = srv.Serve(context.Background(), ln) // owns ln; closes it on return
+	}()
+	// stop unwinds everything: close the listener to make Serve return,
+	// wait for the goroutine, then close the log fd. Idempotent enough for
+	// our use (a second ln.Close is a harmless error). The happy path
+	// never calls it — tools.Exec os.Exits and the goroutine/listener/fd
+	// are reclaimed by process exit.
+	stop := func() {
+		_ = ln.Close()
+		<-served
+		closeLog()
+	}
+
+	// Hand the URL over only once the proxy is actually serving, so the
+	// tool doesn't race its first request into a connection-refused.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if sanitizerHealthy(listen) {
+			return "http://" + listen, stop, nil
 		}
-		listen = fmt.Sprintf("127.0.0.1:%d", port)
+		time.Sleep(50 * time.Millisecond)
 	}
-	url := "http://" + listen
-	exe, err := os.Executable()
-	if err != nil {
-		return "", fmt.Errorf("locate self: %w", err)
-	}
-	cmd := exec.Command(exe, "proxy", "start",
-		"--listen", listen,
-		"--upstream", upstream,
-		"--detach",
-		"--parent-pid", strconv.Itoa(os.Getpid()),
-	)
-	// Forward stderr so the user sees any startup errors.
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("spawn proxy: %w", err)
-	}
-	return url, nil
+	// Didn't come up in time: tear down (otherwise a fall-back-to-direct
+	// session would leak the goroutine, the bound port, and the fd for its
+	// whole, possibly hours-long, duration).
+	stop()
+	return "", nil, fmt.Errorf("sanitizer did not become healthy on %s within 2s", listen)
 }
 
-// pickFreePort asks the kernel for an unused ephemeral port by
-// binding 127.0.0.1:0 and reading back what we got. The listener
-// closes immediately — there's an inherent TOCTOU window before
-// the caller's spawned proxy re-binds, but it's measured in
-// microseconds on a typical desktop, vs. seconds for the
-// alternative of probing a hardcoded ladder (8889, 8890, …) and
-// hoping each one stays free.
-func pickFreePort() (int, error) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, err
-	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port, nil
-}
-
-// sanitizerListenFromPID reads the listen address recorded by
-// 'proxy start' into ~/.config/everyapi/sanitizer.pid. Returns
-// the empty string if the file is missing, malformed, or written
-// by an old binary that only persisted the PID — callers MUST
-// treat empty as "no recorded listen, pick one fresh".
+// sanitizerLogger returns a logger writing to
+// ~/.config/everyapi/sanitizer.log (appended) — the same place the
+// standalone `everyapi proxy` writes, so proxy events stay in one spot
+// for the diagnose tooling — plus a closer for the underlying file. It
+// MUST NOT log to stderr: that stream is shared with the interactive
+// tool's TUI and would corrupt the display. Falls back to discarding
+// (and a no-op closer) on any error.
 //
-// File format (from cmd/proxy/proxy.go writePIDFile):
-//
-//	"<pid> <listen-addr>\n"   (current)
-//	"<pid>\n"                  (legacy)
-func sanitizerListenFromPID() string {
+// The caller closes the file on a startup-failure path; on success the
+// handle is owned by the long-lived proxy goroutine and reclaimed when
+// the process exits.
+func sanitizerLogger() (*log.Logger, func()) {
+	discard := func() (*log.Logger, func()) { return log.New(io.Discard, "", 0), func() {} }
 	dir, err := config.ConfigDir()
 	if err != nil {
-		return ""
+		return discard()
 	}
-	data, err := os.ReadFile(strings.TrimRight(dir, "/") + "/sanitizer.pid")
+	dir = strings.TrimRight(dir, "/")
+	// Create the config dir if this is the first command to need it —
+	// otherwise a fresh install (where ~/.config/everyapi doesn't exist
+	// yet) drops every proxy log line on the floor.
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return discard()
+	}
+	f, err := os.OpenFile(dir+"/sanitizer.log",
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
-		return ""
+		return discard()
 	}
-	var pid int
-	var listen string
-	n, _ := fmt.Sscanf(strings.TrimSpace(string(data)), "%d %s", &pid, &listen)
-	if n < 2 || pid <= 0 {
-		return ""
-	}
-	return listen
-}
-
-// portOccupied returns true when SOMETHING accepts a TCP connection
-// to `listen` — without saying whether that something is the
-// EveryAPI sanitizer or an unrelated service. Use AFTER
-// sanitizerHealthy to discriminate "free port" from "someone else's
-// port"; the combination tells the caller whether spawning a fresh
-// sanitizer on this address can possibly succeed.
-//
-// 250 ms dial timeout matches sanitizerHealthy's HTTP probe budget:
-// we're answering the same "is anyone there" question at the
-// transport layer instead of the application layer.
-func portOccupied(listen string) bool {
-	conn, err := net.DialTimeout("tcp", listen, 250*time.Millisecond)
-	if err != nil {
-		return false
-	}
-	_ = conn.Close()
-	return true
+	return log.New(f, "", log.LstdFlags), func() { _ = f.Close() }
 }
 
 // sanitizerHealthy is a 250ms probe to /__sanitizer/health. Returns
