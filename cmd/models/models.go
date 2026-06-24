@@ -73,10 +73,14 @@ func runList(args []string) error {
 		cliout.Println(i18n.T("models.no_models"))
 		return nil
 	}
-	sort.Strings(ms)
+	sort.Slice(ms, func(i, j int) bool { return ms[i].ID < ms[j].ID })
 	cliout.Printf(i18n.T("models.count")+"\n", len(ms))
 	for _, m := range ms {
-		cliout.Printf("  %s\n", m)
+		if m.Vendor != "" {
+			cliout.Printf("  %-40s  %s\n", m.ID, m.Vendor)
+		} else {
+			cliout.Printf("  %s\n", m.ID)
+		}
 	}
 	return nil
 }
