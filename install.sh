@@ -512,9 +512,9 @@ if [ "$ON_PATH" -eq 0 ]; then
 fi
 
 echo "Next steps:"
-echo "  • Sign in:        everyapi login"
+echo "  • Sign in:        everyapi auth login"
 echo "  • Point a CLI:    everyapi use claude   # or codex / gemini"
-echo "  • Check balance:  everyapi status"
+echo "  • Check balance:  everyapi auth status"
 echo "  • Help:           everyapi help"
 
 } # end main

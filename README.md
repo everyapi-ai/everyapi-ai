@@ -45,7 +45,15 @@ To upgrade later, re-run the same command. The script resolves the latest releas
 go install github.com/everyapi-ai/everyapi-ai@latest
 ```
 
-**Windows / manual:** grab `everyapi_windows_amd64.zip` (or any other artifact) from the [Releases page](https://github.com/everyapi-ai/everyapi-ai/releases/latest) and verify against `SHA256SUMS` before placing the binary on `%PATH%`.
+**Windows (PowerShell):**
+
+```powershell
+irm https://everyapi.ai/install.ps1 | iex
+```
+
+Same flow as the shell script — resolves the latest tag, downloads `everyapi_windows_amd64.zip` + `SHA256SUMS`, verifies the hash (and the cosign signature when cosign is on `PATH`), installs `everyapi.exe` into `%LOCALAPPDATA%\everyapi\bin`, and adds it to your User `PATH`. To pin a version or pass other options, materialize the script first: `& ([scriptblock]::Create((irm https://everyapi.ai/install.ps1))) -Version v0.2.2`. It's also published in this repo at [`install.ps1`](install.ps1).
+
+**Windows (manual):** grab `everyapi_windows_amd64.zip` (or any other artifact) from the [Releases page](https://github.com/everyapi-ai/everyapi-ai/releases/latest) and verify against `SHA256SUMS` before placing the binary on `%PATH%`.
 
 ## Commands
 
