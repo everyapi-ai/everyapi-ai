@@ -857,7 +857,7 @@ prefix = "astuce : "
 logged_in = "connecté en tant que %s (id=%d)"
 tokens = "%d activés / %d au total"
 tokens_none = "%d token(s), 0 activé"
-proxy_down = "non démarré (--direct le contourne de toute façon)"
+proxy_down = "non démarré (l'assainisseur est optionnel, requis uniquement avec --sanitize)"
 proxy_unhealthy = "à l'écoute mais non sain (%s)"
 proxy_ok = "à l'écoute sur 127.0.0.1:8786"
 
@@ -1250,14 +1250,14 @@ launching = "Lancement de %s contre %s"
 launching_via = "Lancement de %s contre %s → %s"
 sanitizer_warn = "Avertissement : le proxy sanitizer n'a pas démarré (%v).\n"
 fallback_direct = "Bascule en mode direct — votre trafic atteindra %s sans le filtre de confidentialité.\n"
-fallback_hint = "Relancez avec --direct pour faire taire ce message, ou 'everyapi proxy start' pour déboguer.\n\n"
+fallback_hint = "Omettez --sanitize pour une connexion directe sans cet avertissement, ou 'everyapi proxy start' pour déboguer.\n\n"
 no_relay_keys = "aucune relay API key activée sur votre compte pour choisir un groupe — créez-en une dans le dashboard EveryAPI, puis 'everyapi auth login'"
 no_relay_key_long = '''
 aucune clé API relais utilisable sur votre compte — `everyapi use` en a besoin,
 elle est distincte du jeton de connexion. Créez une clé API dans le
 tableau de bord EveryAPI (%s), puis relancez 'everyapi auth login'.'''
 unknown_flag = "flag inconnu %q (utilisez `--` avant les flags de l'outil : `everyapi use <tool> -- %s ...`)"
-usage = "utilisation : everyapi use <tool> [--group <nom>|--channel <nom>] [--model <id>] [--direct] [-- arguments de l'outil...]"
+usage = "utilisation : everyapi use <tool> [--group <nom>|--channel <nom>] [--model <id>] [--sanitize] [-- arguments de l'outil...]"
 model_picker = "Choisissez un modèle pour %s (routé via EveryAPI) :"
 model_needs_value = "--model requiert une valeur, p. ex. --model gpt-5.1"
 model_unsupported = "%s choisit son propre modèle — --model n'est pas pris en charge ici.\nPassez le flag de modèle de l'outil après `--`, p. ex. everyapi use %s -- --model <id>"

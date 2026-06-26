@@ -28,7 +28,7 @@ import (
 const useUsage = `everyapi use — launch a third-party CLI routed through EveryAPI
 
 USAGE
-  everyapi use [<tool>] [--group <name> | --channel <name>] [--model <id>] [--direct] [-- tool args...]
+  everyapi use [<tool>] [--group <name> | --channel <name>] [--model <id>] [--sanitize] [-- tool args...]
 
 ARGUMENTS
   <tool>                 claude | codex | gemini | hermes
@@ -47,7 +47,7 @@ FLAGS
                          picker. Omit on a TTY to choose from your model
                          catalog. claude/codex/gemini set their own model —
                          pass model flags to them after -- instead.
-  --direct               Bypass the local sanitizer proxy (no privacy filter).
+  --sanitize             Opt in to the local sanitizer proxy (masks detected secrets before they reach the gateway). Off by default — the mask/restore step corrupts coding-agent sessions; for non-agentic SDK traffic use the standalone 'everyapi proxy' instead.
   --                     End of everyapi's option parsing; remaining args are
                          forwarded verbatim to the tool's argv.
 
@@ -82,8 +82,8 @@ EXAMPLES
 //	everyapi use claude --channel  (bare --group/--channel, no value →
 //	                              interactive picker over the routing
 //	                              groups your enabled keys are bound to)
-//	everyapi use claude --direct   (no-op today; flag reserved for the
-//	                              future sanitizer proxy bypass)
+//	everyapi use claude --sanitize (opt in to the local sanitizer proxy,
+//	                              which is off by default)
 //	everyapi use claude -- --dangerously-skip-permissions
 //	                              (everything after `--` is forwarded
 //	                              verbatim to the tool's argv)
@@ -105,7 +105,7 @@ func Use(args []string) error {
 		return nil
 	}
 
-	toolName, group, pickGroup, direct, extraArgs, model, err := parseUseArgs(args)
+	toolName, group, pickGroup, sanitize, extraArgs, model, err := parseUseArgs(args)
 	if err != nil {
 		return err
 	}
@@ -227,11 +227,13 @@ func Use(args []string) error {
 		}
 	}
 
-	// Sanitizer integration. Default is "on" — the proxy intercepts
-	// the tool's traffic, masks sensitive substrings before they
-	// reach the gateway, and restores them on the way back. The
-	// --direct flag bypasses it (the tool talks straight to the
-	// gateway, no privacy filter).
+	// Sanitizer integration. Off by default — opt in with --sanitize.
+	// When on, the proxy intercepts the tool's traffic, masks sensitive
+	// substrings before they reach the gateway, and restores them on the
+	// way back. It stays off by default because the mask/restore step
+	// corrupts coding-agent sessions: the model writes placeholders into
+	// code/files that escape the HTTP round-trip and leak into the
+	// transcript. 'everyapi proxy' is the home for non-agentic SDK traffic.
 	//
 	// The proxy runs IN THIS PROCESS (a goroutine on an ephemeral
 	// loopback port), and `everyapi use` stays alive as the tool's
@@ -241,7 +243,7 @@ func Use(args []string) error {
 	// a shared 127.0.0.1:8888 proxy suffered (kill the session that
 	// spawned it and every other session got connection-refused).
 	apiBaseForEnv := creds.APIBase
-	if !direct {
+	if sanitize {
 		proxyAddr, stop, perr := startInProcessSanitizer(creds.APIBase)
 		if perr != nil {
 			cliout.Printf(i18n.T("use.sanitizer_warn"), perr)
@@ -541,7 +543,7 @@ func sanitizerHealthy(listen string) bool {
 // to the tool. Without `--`, unknown flags are an error — that's the
 // typo-catching surface we don't want to give up just to spare users
 // two characters when they want to pass `--dangerously-skip-permissions`.
-func parseUseArgs(args []string) (toolName, group string, pickGroup, direct bool, extraArgs []string, model string, err error) {
+func parseUseArgs(args []string) (toolName, group string, pickGroup, sanitize bool, extraArgs []string, model string, err error) {
 	knownTool := func(s string) bool { _, e := tools.Lookup(s); return e == nil }
 
 	var positional []string
@@ -568,11 +570,13 @@ func parseUseArgs(args []string) (toolName, group string, pickGroup, direct bool
 			val, name, hasEq = name[eq+1:], name[:eq], true
 		}
 		switch name {
-		case "direct":
-			// Bypass the sanitizer proxy; the tool talks straight to
-			// api.everyapi.ai. Use when you're certain the prompt
-			// won't carry secrets, or when debugging proxy issues.
-			direct = true
+		case "sanitize":
+			// Opt in to the local sanitizer proxy (masks detected
+			// secrets before they reach the gateway). Off by default —
+			// the mask/restore step leaks placeholders into coding-agent
+			// sessions and corrupts them; non-agentic SDK traffic should
+			// use the standalone 'everyapi proxy' instead.
+			sanitize = true
 		case "model":
 			// Pin the upstream model for model-selectable tools
 			// (hermes), skipping the interactive picker. Validated
@@ -625,7 +629,7 @@ func parseUseArgs(args []string) (toolName, group string, pickGroup, direct bool
 		toolName = positional[0]
 	}
 	pickGroup = groupSeen && !groupHasVal
-	return toolName, group, pickGroup, direct, extraArgs, model, nil
+	return toolName, group, pickGroup, sanitize, extraArgs, model, nil
 }
 
 // resolveToolModel pins the upstream model for tools EveryAPI selects a

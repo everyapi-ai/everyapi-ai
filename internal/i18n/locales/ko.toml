@@ -847,7 +847,7 @@ prefix = "힌트: "
 logged_in = "%s 로 로그인됨 (id=%d)"
 tokens = "활성 %d / 전체 %d"
 tokens_none = "token %d 개, 활성 0"
-proxy_down = "실행 중 아님 (--direct 는 어차피 우회함)"
+proxy_down = "실행 중 아님 (새니타이저는 옵트인, --sanitize 사용 시에만 필요)"
 proxy_unhealthy = "수신 중이나 비정상 (%s)"
 proxy_ok = "127.0.0.1:8786 에서 수신 중"
 
@@ -1236,14 +1236,14 @@ launching = "%s 을 %s 에 대해 실행 중"
 launching_via = "%s 을 %s 에 대해 실행 중 → %s"
 sanitizer_warn = "경고: 새너타이저 프록시가 시작되지 않음 (%v).\n"
 fallback_direct = "직접 모드로 대체 — 트래픽이 프라이버시 필터 없이 %s 에 도달합니다.\n"
-fallback_hint = "이 메시지를 끄려면 --direct 를 사용하거나 'everyapi proxy start' 로 디버그하세요.\n\n"
+fallback_hint = "--sanitize 를 빼면 기본 직접 연결이 되어 이 경고가 표시되지 않습니다. 디버그는 'everyapi proxy start'.\n\n"
 no_relay_keys = "그룹을 선택할 활성 relay API key 가 계정에 없습니다 — EveryAPI 대시보드에서 생성한 뒤 'everyapi auth login' 을 실행하세요"
 no_relay_key_long = '''
 계정에 사용 가능한 relay API 키가 없습니다 — `everyapi use` 에 필요합니다.
 로그인 토큰과는 별개입니다. EveryAPI dashboard (%s) 에서 API 키를 생성한 후
 'everyapi auth login' 을 다시 실행하세요.'''
 unknown_flag = "알 수 없는 플래그 %q (도구 플래그 앞에 `--` 를 붙이세요: `everyapi use <tool> -- %s ...`)"
-usage = "사용법: everyapi use <tool> [--group <이름>|--channel <이름>] [--model <id>] [--direct] [-- 도구 인자...]"
+usage = "사용법: everyapi use <tool> [--group <이름>|--channel <이름>] [--model <id>] [--sanitize] [-- 도구 인자...]"
 model_picker = "%s 에 사용할 모델을 선택하세요 (EveryAPI 경유):"
 model_needs_value = "--model 에는 값이 필요합니다. 예: --model gpt-5.1"
 model_unsupported = "%s 는 자체 모델을 선택합니다 — 여기서는 --model 을 지원하지 않습니다.\n도구 자체의 모델 플래그는 `--` 뒤에 전달하세요. 예: everyapi use %s -- --model <id>"

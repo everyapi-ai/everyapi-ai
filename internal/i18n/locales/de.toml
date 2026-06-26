@@ -855,7 +855,7 @@ prefix = "Tipp: "
 logged_in = "angemeldet als %s (id=%d)"
 tokens = "%d aktiv / %d gesamt"
 tokens_none = "%d Token, 0 aktiv"
-proxy_down = "läuft nicht (--direct umgeht ihn ohnehin)"
+proxy_down = "läuft nicht (der Sanitizer ist optional, nur mit --sanitize nötig)"
 proxy_unhealthy = "lauscht, aber ungesund (%s)"
 proxy_ok = "lauscht auf 127.0.0.1:8786"
 
@@ -1245,14 +1245,14 @@ launching = "Starte %s gegen %s"
 launching_via = "Starte %s gegen %s → %s"
 sanitizer_warn = "Warnung: Sanitizer-Proxy ist nicht gestartet (%v).\n"
 fallback_direct = "Fallback auf Direktmodus — dein Traffic erreicht %s ohne den Privatsphäre-Filter.\n"
-fallback_hint = "Erneut mit --direct ausführen, um dies zu unterdrücken, oder 'everyapi proxy start' zum Debuggen.\n\n"
+fallback_hint = "Lassen Sie --sanitize weg für eine direkte Verbindung ohne diese Warnung, oder 'everyapi proxy start' zum Debuggen.\n\n"
 no_relay_keys = "keine aktivierten Relay-API-Keys in deinem Konto, um eine Gruppe auszuwählen — erstelle einen im EveryAPI-Dashboard und führe dann 'everyapi auth login' aus"
 no_relay_key_long = '''
 kein nutzbarer Relay-API-Schlüssel im Konto — `everyapi use` benötigt einen,
 unabhängig vom Login-Token. Erstelle einen API-Schlüssel im
 EveryAPI-Dashboard (%s) und führe dann 'everyapi auth login' erneut aus.'''
 unknown_flag = "unbekanntes Flag %q (verwende `--` vor Tool-Flags: `everyapi use <tool> -- %s ...`)"
-usage = "Verwendung: everyapi use <tool> [--group <Name>|--channel <Name>] [--model <id>] [--direct] [-- Tool-Argumente...]"
+usage = "Verwendung: everyapi use <tool> [--group <Name>|--channel <Name>] [--model <id>] [--sanitize] [-- Tool-Argumente...]"
 model_picker = "Modell für %s auswählen (über EveryAPI geroutet):"
 model_needs_value = "--model benötigt einen Wert, z. B. --model gpt-5.1"
 model_unsupported = "%s wählt sein eigenes Modell — --model wird hier nicht unterstützt.\nÜbergib das Modell-Flag des Tools nach `--`, z. B. everyapi use %s -- --model <id>"

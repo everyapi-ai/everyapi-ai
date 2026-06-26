@@ -837,7 +837,7 @@ prefix = "提示："
 logged_in = "已登录为 %s（id=%d）"
 tokens = "已启用 %d / 共 %d"
 tokens_none = "%d 个 token，0 个启用"
-proxy_down = "未运行（--direct 会绕过它）"
+proxy_down = "未运行（脱敏代理为 opt-in，仅 --sanitize 时需要）"
 proxy_unhealthy = "在监听但不健康（%s）"
 proxy_ok = "监听于 127.0.0.1:8786"
 
@@ -1217,14 +1217,14 @@ launching = "正在启动 %s，目标 %s"
 launching_via = "正在启动 %s，目标 %s → %s"
 sanitizer_warn = "警告：脱敏代理未能启动（%v）。\n"
 fallback_direct = "已回退到直连模式 — 流量将直接到达 %s，不经过隐私过滤。\n"
-fallback_hint = "传入 --direct 可关闭此提示；或运行 'everyapi proxy start' 排查。\n\n"
+fallback_hint = "去掉 --sanitize 即默认直连（不再有此提示）；或运行 'everyapi proxy start' 排查。\n\n"
 no_relay_keys = "你的账户没有可用的 relay API key 用于选择分组 — 请到 EveryAPI dashboard 创建，再运行 'everyapi auth login'"
 no_relay_key_long = '''
 账户上没有可用的 relay API key — `everyapi use` 需要它，
 它与你的登录 token 是分开的。请在 EveryAPI dashboard (%s) 创建一个 API key，
 然后重新运行 'everyapi auth login'。'''
 unknown_flag = "未知 flag %q（在工具 flag 前加 `--`：`everyapi use <tool> -- %s ...`）"
-usage = "用法：everyapi use <tool> [--group <名称>|--channel <名称>] [--model <id>] [--direct] [-- 工具参数...]"
+usage = "用法：everyapi use <tool> [--group <名称>|--channel <名称>] [--model <id>] [--sanitize] [-- 工具参数...]"
 model_picker = "为 %s 选择模型（经 EveryAPI 路由）："
 model_needs_value = "--model 需要一个值，例如 --model gpt-5.1"
 model_unsupported = "%s 使用它自带的模型——这里不支持 --model。\n请把工具自己的模型参数放在 `--` 之后，例如 everyapi use %s -- --model <id>"

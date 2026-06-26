@@ -106,8 +106,8 @@ func Run(args []string) error {
 	report.run(i18n.T("doctor.check.sanitizer"), func() (string, string, error) {
 		// Sanitizer is best-effort. Probe the default listen
 		// (loopback:8786 — current default) with a 1s timeout; if
-		// no socket answers we surface as WARN, not FAIL, because
-		// `--direct` mode bypasses it anyway.
+		// no socket answers we surface as WARN, not FAIL, because the
+		// sanitizer is opt-in (--sanitize) and off by default.
 		hc := &http.Client{Timeout: 1 * time.Second}
 		resp, err := hc.Get("http://127.0.0.1:8786/healthz")
 		if err != nil {

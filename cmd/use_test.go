@@ -12,15 +12,15 @@ import (
 
 func TestParseUseArgs(t *testing.T) {
 	cases := []struct {
-		name       string
-		args       []string
-		wantTool   string
-		wantGroup  string
-		wantPick   bool
-		wantDirect bool
-		wantExtra  []string
-		wantModel  string
-		wantErr    bool
+		name         string
+		args         []string
+		wantTool     string
+		wantGroup    string
+		wantPick     bool
+		wantSanitize bool
+		wantExtra    []string
+		wantModel    string
+		wantErr      bool
 	}{
 		{"bare tool", []string{"claude"}, "claude", "", false, false, nil, "", false},
 		{"no args", nil, "", "", false, false, nil, "", false},
@@ -34,9 +34,10 @@ func TestParseUseArgs(t *testing.T) {
 		{"empty eq → picker", []string{"claude", "--channel="}, "claude", "", true, false, nil, "", false},
 		{"single dash space value", []string{"-channel", "team-a", "codex"}, "codex", "team-a", false, false, nil, "", false},
 		{"value position is known tool, no tool yet → it's the tool, picker", []string{"--channel", "claude"}, "claude", "", true, false, nil, "", false},
-		{"next token is a flag → picker", []string{"claude", "--channel", "--direct"}, "claude", "", true, true, nil, "", false},
-		{"direct flips direct=true", []string{"claude", "--direct"}, "claude", "", false, true, nil, "", false},
-		{"direct + group", []string{"claude", "--direct", "--channel=byteplus"}, "claude", "byteplus", false, true, nil, "", false},
+		{"next token is a flag → picker", []string{"claude", "--channel", "--sanitize"}, "claude", "", true, true, nil, "", false},
+		{"--direct is no longer a flag → error", []string{"claude", "--direct"}, "", "", false, false, nil, "", true},
+		{"--sanitize opts in", []string{"claude", "--sanitize"}, "claude", "", false, true, nil, "", false},
+		{"--sanitize + group", []string{"claude", "--sanitize", "--channel=byteplus"}, "claude", "byteplus", false, true, nil, "", false},
 		{"two positionals → error", []string{"claude", "extra"}, "", "", false, false, nil, "", true},
 		{"unknown flag → error", []string{"claude", "--bogus"}, "", "", false, false, nil, "", true},
 		{"ambiguous: group named like a tool before tool → error", []string{"--group", "codex", "claude"}, "", "", false, false, nil, "", true},
@@ -52,7 +53,7 @@ func TestParseUseArgs(t *testing.T) {
 		{"model + channel", []string{"hermes", "--channel=byteplus", "--model", "gpt-5.1"}, "hermes", "byteplus", false, false, nil, "gpt-5.1", false},
 		{"bare model → error", []string{"hermes", "--model"}, "", "", false, false, nil, "", true},
 		{"empty eq model → error", []string{"hermes", "--model="}, "", "", false, false, nil, "", true},
-		{"model value missing, next is flag → error", []string{"hermes", "--model", "--direct"}, "", "", false, false, nil, "", true},
+		{"model value missing, next is flag → error", []string{"hermes", "--model", "--sanitize"}, "", "", false, false, nil, "", true},
 		{"model space value won't eat a not-yet-seen tool name → error", []string{"--model", "claude"}, "", "", false, false, nil, "", true},
 		{"model value after tool may be a tool-named id", []string{"hermes", "--model", "claude"}, "hermes", "", false, false, nil, "claude", false},
 
@@ -72,16 +73,16 @@ func TestParseUseArgs(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			tool, group, pick, direct, extra, model, err := parseUseArgs(c.args)
+			tool, group, pick, sanitize, extra, model, err := parseUseArgs(c.args)
 			if (err != nil) != c.wantErr {
 				t.Fatalf("err = %v, wantErr = %v", err, c.wantErr)
 			}
 			if c.wantErr {
 				return
 			}
-			if tool != c.wantTool || group != c.wantGroup || pick != c.wantPick || direct != c.wantDirect {
-				t.Fatalf("parseUseArgs(%q) = (tool %q, group %q, pick %v, direct %v), want (%q, %q, %v, %v)",
-					c.args, tool, group, pick, direct, c.wantTool, c.wantGroup, c.wantPick, c.wantDirect)
+			if tool != c.wantTool || group != c.wantGroup || pick != c.wantPick || sanitize != c.wantSanitize {
+				t.Fatalf("parseUseArgs(%q) = (tool %q, group %q, pick %v, sanitize %v), want (%q, %q, %v, %v)",
+					c.args, tool, group, pick, sanitize, c.wantTool, c.wantGroup, c.wantPick, c.wantSanitize)
 			}
 			if model != c.wantModel {
 				t.Fatalf("parseUseArgs(%q) model = %q, want %q", c.args, model, c.wantModel)
