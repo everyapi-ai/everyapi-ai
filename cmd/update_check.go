@@ -380,7 +380,12 @@ func handleUpdatePrompt(currentVer string, cache *updateCheckCache) bool {
 			fmt.Fprintf(os.Stderr, "update: %v\n", err)
 			return false
 		}
-		return true
+		// Only swallow the user's original command when an upgrade was
+		// actually dispatched. The unknown-install path (curl/install.sh
+		// — the most common cohort) just prints a manual hint and does
+		// nothing, so returning true there would discard the command the
+		// user actually typed. Let those fall through and still run it.
+		return detectInstallMethod() != installMethodUnknown
 	case choiceSkip:
 		cache.SkippedVersion = cache.LatestVersion
 		if err := saveUpdateCheckCache(cache); err != nil {

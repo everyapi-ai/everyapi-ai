@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -96,8 +96,8 @@ func runList(args []string) error {
 		cliout.Printf("  %s [#%d] %s  %s\n", marker, n.ID, when, title)
 		if n.Body != "" {
 			body := n.Body
-			if len(body) > 120 {
-				body = body[:120] + "…"
+			if r := []rune(body); len(r) > 120 {
+				body = string(r[:120]) + "…"
 			}
 			cliout.Printf("        %s\n", body)
 		}

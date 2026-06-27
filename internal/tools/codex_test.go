@@ -68,6 +68,10 @@ func TestPrepareCodex_WritesFiles(t *testing.T) {
 		`[model_providers.everyapi]`,
 		`base_url = "https://api.everyapi.ai/v1"`,
 		`env_key = "OPENAI_API_KEY"`,
+		// Pins the routing surface: omitting wire_api falls back to
+		// codex's Chat default (/v1/chat/completions) instead of the
+		// gateway's native /v1/responses.
+		`wire_api = "responses"`,
 	} {
 		if !strings.Contains(cfg, want) {
 			t.Errorf("config.toml missing %q\nFull config:\n%s", want, cfg)

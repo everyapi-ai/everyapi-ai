@@ -230,7 +230,7 @@ func runKey(args []string) error {
 // someone else) can check remaining quota by passing the key directly.
 func runUsage(args []string) error {
 	fs := flag.NewFlagSet("token usage", flag.ContinueOnError)
-	keyFlag := fs.String("key", "", "relay key to query (sk-…); or pass it as the first argument")
+	keyFlag := fs.String("key", "", "relay key to query (sk-…); or pass it as the first argument, or set $EVERYAPI_RELAY_KEY")
 	baseFlag := fs.String("base", "", "gateway base URL (default: your logged-in gateway, else the public gateway)")
 
 	// Accept both `token usage <key>` and `token usage --key <key>`.
@@ -246,6 +246,12 @@ func runUsage(args []string) error {
 	}
 	if *keyFlag != "" {
 		key = *keyFlag
+	}
+	// Fall back to the environment so the secret can stay off argv
+	// (visible in ps / /proc/<pid>/cmdline / shell history). The
+	// explicit positional/flag forms still win when given.
+	if key == "" {
+		key = os.Getenv("EVERYAPI_RELAY_KEY")
 	}
 	if key == "" {
 		return errors.New(i18n.T("token.usage_key_required"))

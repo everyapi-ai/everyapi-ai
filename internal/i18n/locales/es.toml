@@ -307,7 +307,7 @@ usage_remaining = "restante"
 usage_used = "usado"
 usage_granted = "otorgado"
 usage_unlimited = "ilimitado"
-usage_key_required = "se requiere una clave de relay: everyapi token usage <sk-...> (o --key)"
+usage_key_required = "se requiere una clave de relay: everyapi token usage <sk-...> (o --key, o $EVERYAPI_RELAY_KEY)"
 usage = '''
 everyapi token — gestionar tokens de relay (las claves que tus apps embeben)
 
@@ -860,7 +860,7 @@ tokens = "%d activos / %d en total"
 tokens_none = "%d token(s), 0 activos"
 proxy_down = "no en ejecución (el saneador es opcional, solo se necesita con --sanitize)"
 proxy_unhealthy = "escuchando pero no sano (%s)"
-proxy_ok = "escuchando en 127.0.0.1:8786"
+proxy_ok = "escuchando en 127.0.0.1:8888"
 
 [doctor.section]
 account = "Cuenta"
@@ -889,6 +889,7 @@ transport_err = "[transport] %s — reconectando"
 [mcp.status]
 count = "%d cliente(s) MCP conocido(s):"
 registered_count = "%d de %d registrados."
+none_registered = "ningún cliente MCP tiene registrado everyapi"
 state_registered = "registrado"
 state_not_registered = "no registrado"
 state_not_installed = "no instalado"
@@ -981,6 +982,7 @@ no_nodes = "No hay nodos edge registrados."
 register_hint = "Ejecuta 'everyapi edge register --name <nombre>' para crear uno."
 no_active_node = "no hay nodo edge activo — ejecuta primero 'everyapi edge register'"
 active_file_malformed = "el archivo de nodo activo está mal formado: %s"
+not_started = "ℹ El nodo #%d aún no se ha iniciado (sin archivo compose) — no hay nada en ejecución. Ejecuta primero 'everyapi edge start'.\n"
 
 [edge.usage]
 missing_subcommand = "falta el subcomando (prueba 'everyapi edge help')"
@@ -1078,6 +1080,15 @@ name_prompt = "Nombre del nodo (p. ej. rtx-4090-tokyo)"
 attach_unknown_channel = "--attach-to-channel=%d no es uno de tus canales edge (propios: %s). Ejecuta 'everyapi edge list' para ver el mapeo nodo→canal."
 persist_meta_failed = "no se pudieron guardar los metadatos del nodo: %w"
 set_active_failed = "no se pudo fijar el nodo activo: %w"
+token_rescue = """
+⚠ El nodo #%d se creó en el backend, pero no se pudo escribir node.json.
+Esta es la ÚNICA vez que se muestra el token de registro de un solo uso — cópialo ahora; no podrá recuperarse después:
+
+  Gateway:  %s
+  Token:    %s
+
+Para recuperarlo, crea %s a mano (modo de archivo 0600) como JSON con las claves node_id, node_name, registration_token (el token de arriba), gateway (la URL de arriba) y workloads, y luego ejecuta 'everyapi edge start'.
+"""
 registered = "✓ Nodo #%d (%s) registrado\n"
 saved = "✓ Token + metadatos guardados en %s\n"
 set_active = "✓ Fijado como nodo activo\n"
@@ -1138,7 +1149,7 @@ down_failed = "⚠ falló docker compose down (%v) — continuando de todos modo
 docker_unavailable = "(docker no disponible; omitiendo `docker compose down`)\n"
 delete_row_failed = "no se pudo eliminar la fila del nodo en el backend: %w"
 row_deleted = "✓ Fila del nodo %d eliminada del backend\n"
-workdir_failed = "⚠ no se pudo eliminar el workdir local %s (%v) — límpialo manualmente\n"
+workdir_failed = "⚠ no se pudo eliminar el workdir local %s (%v) — el contenedor de ollama escribe los datos del modelo como root, por lo que pueden quedar archivos propiedad de root. Elimínalos con: sudo rm -rf %s\n"
 workdir_removed = "✓ Workdir local %s eliminado\n"
 clear_active_failed = "⚠ no se pudo borrar el puntero del nodo activo (%v)\n"
 done = "Listo."
@@ -1181,12 +1192,14 @@ last_seen_line = "  %-12shace %s\n"
 active_marker = "'*' marca el nodo activo (usado por start/stop/status/logs por defecto)."
 
 [status]
+relay_key_mode = "  sesión iniciada con una clave de relay (OAuth2) — la cuota de la cuenta requiere un 'everyapi auth login' completo; mostrando solo el estado del relay:"
 quota = "cuota:"
 requests = "peticiones:"
 topup = "recarga:"
 remaining_used = "**$%.2f** restante   **$%.2f** usado"
 
 [topup]
+relay_key_mode = "la recarga requiere un inicio de sesión de gestión completo; esta cuenta solo tiene una clave de relay — ejecuta primero 'everyapi auth login'"
 before_open = "Antes de abrir el navegador, verifica que este es el dashboard real de EveryAPI."
 url_label = "URL:"
 phrase_label = "Frase:"
@@ -1214,6 +1227,7 @@ no_relay_note_2 = "EveryAPI dashboard, luego `everyapi use` o `everyapi auth sta
 logged_in_saved = "\nSesión iniciada como %s. Credenciales guardadas en %s/credentials.json\n"
 
 [logout]
+cached_key_warn = "  advertencia: no se pudieron eliminar las credenciales de herramienta en caché en %s (%v) — elimínalas manualmente"
 done = "Sesión cerrada."
 
 [update]
@@ -1242,6 +1256,7 @@ choice_later = "Recordar más tarde"
 choice_skip = "Omitir esta versión"
 
 [use]
+sanitize_bad_value = "--sanitize=%q no es un valor true/false válido — usa --sanitize o --sanitize=false"
 tool_picker = "Elige una herramienta:"
 group_picker = "Elige un grupo de enrutado:"
 yolo_prompt = "¿Habilitar %s? (omite todas las confirmaciones de seguridad)"

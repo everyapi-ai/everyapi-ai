@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
@@ -54,6 +55,17 @@ func composeOutput(workdir string, projectName string, args ...string) ([]byte, 
 	cmd := exec.Command("docker", append(base, args...)...)
 	cmd.Dir = workdir
 	return cmd.Output()
+}
+
+// composeFileExists reports whether the node's docker-compose.yml has
+// been rendered yet. Only `edge start` writes it (via writeCompose), so
+// a registered-but-never-started node has none — and invoking
+// `docker compose -f docker-compose.yml ...` against a missing file
+// aborts with a cryptic "no configuration file provided: not found".
+// Callers use this to no-op cleanly instead.
+func composeFileExists(workdir string) bool {
+	_, err := os.Stat(filepath.Join(workdir, "docker-compose.yml"))
+	return err == nil
 }
 
 // projectFor returns the stable -p name for a node. Keeping it derived

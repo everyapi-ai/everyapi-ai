@@ -290,7 +290,7 @@ usage_remaining = "剩餘"
 usage_used = "已用"
 usage_granted = "總額度"
 usage_unlimited = "無限制"
-usage_key_required = "需要提供中繼金鑰：everyapi token usage <sk-...>（或 --key）"
+usage_key_required = "需要提供中繼金鑰：everyapi token usage <sk-...>（或 --key，或 $EVERYAPI_RELAY_KEY）"
 usage = '''
 everyapi token — 管理 relay API token（應用程式嵌入的 key）
 
@@ -838,7 +838,7 @@ tokens = "已啟用 %d / 共 %d"
 tokens_none = "%d 個 token，0 個啟用"
 proxy_down = "未執行（脫敏代理為 opt-in，僅 --sanitize 時需要）"
 proxy_unhealthy = "在監聽但不健康（%s）"
-proxy_ok = "監聽於 127.0.0.1:8786"
+proxy_ok = "監聽於 127.0.0.1:8888"
 
 [doctor.section]
 account = "帳戶"
@@ -867,6 +867,7 @@ transport_err = "[傳輸] %s — 正在重新連線"
 [mcp.status]
 count = "已知 %d 個 MCP 用戶端："
 registered_count = "%d / %d 已註冊。"
+none_registered = "沒有任何 MCP 用戶端註冊了 everyapi"
 state_registered = "已註冊"
 state_not_registered = "未註冊"
 state_not_installed = "未安裝"
@@ -955,6 +956,7 @@ no_nodes = "未註冊任何 edge 節點。"
 register_hint = "執行 'everyapi edge register --name <node-name>' 建立一個。"
 no_active_node = "沒有作用中的 edge 節點 —— 請先執行 'everyapi edge register'"
 active_file_malformed = "作用中節點檔案格式有誤：%s"
+not_started = "ℹ 節點 #%d 尚未啟動（沒有 compose 檔案）—— 沒有任何執行中的容器。請先執行 'everyapi edge start'。\n"
 
 [edge.usage]
 missing_subcommand = "缺少子命令（試試 'everyapi edge help'）"
@@ -1045,6 +1047,15 @@ name_prompt = "節點名稱（例如 rtx-4090-tokyo）"
 attach_unknown_channel = "--attach-to-channel=%d 不是你的 edge 頻道（你擁有：%s）。執行 'everyapi edge list' 查看節點→頻道對應。"
 persist_meta_failed = "持久化節點中繼資料失敗：%w"
 set_active_failed = "設定作用中節點失敗：%w"
+token_rescue = """
+⚠ 節點 #%d 已在後端建立，但寫入 node.json 失敗。
+這是唯一一次顯示一次性註冊權杖的機會 —— 請立即複製；之後無法再取得：
+
+  Gateway:  %s
+  Token:    %s
+
+如要復原，請手動建立 %s（檔案權限 0600），內容為含有 node_id、node_name、registration_token（上方權杖）、gateway（上方網址）與 workloads 等鍵的 JSON，然後執行 'everyapi edge start'。
+"""
 registered = "✓ 已註冊節點 #%d（%s）\n"
 saved = "✓ 權杖 + 中繼資料已儲存到 %s\n"
 set_active = "✓ 已設為作用中節點\n"
@@ -1105,7 +1116,7 @@ down_failed = "⚠ docker compose down 失敗（%v）—— 仍繼續\n"
 docker_unavailable = "（無 docker；跳過 `docker compose down`）\n"
 delete_row_failed = "刪除後端節點記錄失敗：%w"
 row_deleted = "✓ 已刪除後端節點記錄 %d\n"
-workdir_failed = "⚠ 無法移除本機 workdir %s（%v）—— 請手動清理\n"
+workdir_failed = "⚠ 無法移除本機 workdir %s（%v）—— ollama 容器以 root 寫入模型資料，因此可能殘留 root 擁有的檔案。請執行：sudo rm -rf %s\n"
 workdir_removed = "✓ 已移除本機 workdir %s\n"
 clear_active_failed = "⚠ 無法清除作用中節點指標（%v）\n"
 done = "完成。"
@@ -1148,12 +1159,14 @@ last_seen_line = "  %-12s%s 前\n"
 active_marker = "'*' 標記作用中節點（start/stop/status/logs 預設使用它）。"
 
 [status]
+relay_key_mode = "  目前使用中繼金鑰（OAuth2）登入 — 帳戶額度需要完整的 'everyapi auth login'；這裡僅顯示中繼健康狀態："
 quota = "額度："
 requests = "請求數："
 topup = "儲值："
 remaining_used = "剩餘 **$%.2f**   已用 **$%.2f**"
 
 [topup]
+relay_key_mode = "儲值需要完整的管理登入；此帳戶僅使用中繼金鑰登入 — 請先執行 'everyapi auth login'"
 before_open = "開啟瀏覽器前，請確認這是真實的 EveryAPI dashboard。"
 url_label = "URL："
 phrase_label = "校驗短語："
@@ -1181,6 +1194,7 @@ no_relay_note_2 = "EveryAPI dashboard 建立後，下次 `everyapi use` 或 `eve
 logged_in_saved = "\n已以 %s 登入。憑證已儲存到 %s/credentials.json\n"
 
 [logout]
+cached_key_warn = "  警告：無法刪除位於 %s 的快取工具憑證（%v）— 請手動刪除"
 done = "已登出。"
 
 [update]
@@ -1209,6 +1223,7 @@ choice_later = "稍後提醒"
 choice_skip = "跳過此版本"
 
 [use]
+sanitize_bad_value = "--sanitize=%q 不是有效的 true/false 值 — 請使用 --sanitize 或 --sanitize=false"
 tool_picker = "選一個工具："
 group_picker = "選一個路由分組："
 yolo_prompt = "啟用 %s？（將略過所有安全確認）"

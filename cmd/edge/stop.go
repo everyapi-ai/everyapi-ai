@@ -28,6 +28,14 @@ func edgeStop(args []string) error {
 	if err != nil {
 		return err
 	}
+	// A registered-but-never-started node has no docker-compose.yml;
+	// `docker compose -f docker-compose.yml down` would abort with a
+	// cryptic "no configuration file provided". Treat it as a clean
+	// no-op instead.
+	if !composeFileExists(dir) {
+		cliout.Printf(i18n.T("edge.not_started"), nodeID)
+		return nil
+	}
 	cliout.Printf(i18n.T("edge.stop.down"), nodeID)
 	if err := runComposeCmd(dir, projectFor(nodeID), "down"); err != nil {
 		return fmt.Errorf(i18n.T("edge.stop.down_failed"), err)

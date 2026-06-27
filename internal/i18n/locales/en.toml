@@ -291,7 +291,7 @@ usage_remaining = "remaining"
 usage_used = "used"
 usage_granted = "granted"
 usage_unlimited = "unlimited"
-usage_key_required = "a relay key is required: everyapi token usage <sk-...> (or --key)"
+usage_key_required = "a relay key is required: everyapi token usage <sk-...> (or --key, or $EVERYAPI_RELAY_KEY)"
 usage = '''
 everyapi token — manage relay API tokens (the keys your apps embed)
 
@@ -843,7 +843,7 @@ tokens = "%d enabled / %d total"
 tokens_none = "%d token(s), 0 enabled"
 proxy_down = "not running (the sanitizer is opt-in, only needed with --sanitize)"
 proxy_unhealthy = "listening but unhealthy (%s)"
-proxy_ok = "listening on 127.0.0.1:8786"
+proxy_ok = "listening on 127.0.0.1:8888"
 
 [doctor.section]
 account = "Account"
@@ -872,6 +872,7 @@ transport_err = "[transport] %s — reconnecting"
 [mcp.status]
 count = "%d MCP client(s) known:"
 registered_count = "%d of %d registered."
+none_registered = "no MCP client has everyapi registered"
 state_registered = "registered"
 state_not_registered = "not registered"
 state_not_installed = "not installed"
@@ -964,6 +965,7 @@ no_nodes = "No edge nodes registered."
 register_hint = "Run 'everyapi edge register --name <node-name>' to create one."
 no_active_node = "no active edge node — run 'everyapi edge register' first"
 active_file_malformed = "active node file is malformed: %s"
+not_started = "ℹ Node #%d hasn't been started yet (no compose file) — nothing running. Run 'everyapi edge start' first.\n"
 
 [edge.usage]
 missing_subcommand = "missing subcommand (try 'everyapi edge help')"
@@ -1058,6 +1060,15 @@ name_prompt = "Node name (e.g. rtx-4090-tokyo)"
 attach_unknown_channel = "--attach-to-channel=%d is not one of your edge channels (owned: %s). Run 'everyapi edge list' to see node→channel mapping."
 persist_meta_failed = "persist node metadata: %w"
 set_active_failed = "set active node: %w"
+token_rescue = """
+⚠ Node #%d was created on the backend, but writing node.json failed.
+This is the ONLY time the one-time registration token is shown — copy it now; it cannot be retrieved later:
+
+  Gateway:  %s
+  Token:    %s
+
+To recover, create %s by hand (file mode 0600) as JSON with keys node_id, node_name, registration_token (the token above), gateway (the URL above) and workloads, then run 'everyapi edge start'.
+"""
 registered = "✓ Registered node #%d (%s)\n"
 saved = "✓ Token + metadata saved to %s\n"
 set_active = "✓ Set as active node\n"
@@ -1118,7 +1129,7 @@ down_failed = "⚠ docker compose down failed (%v) — continuing anyway\n"
 docker_unavailable = "(docker not available; skipping `docker compose down`)\n"
 delete_row_failed = "delete backend node row: %w"
 row_deleted = "✓ Backend node row %d deleted\n"
-workdir_failed = "⚠ couldn't remove local workdir %s (%v) — clean up manually\n"
+workdir_failed = "⚠ couldn't remove local workdir %s (%v) — the ollama container writes model data as root, so root-owned files may remain. Remove them with: sudo rm -rf %s\n"
 workdir_removed = "✓ Removed local workdir %s\n"
 clear_active_failed = "⚠ couldn't clear active-node pointer (%v)\n"
 done = "Done."
@@ -1161,12 +1172,14 @@ last_seen_line = "  %-12s%s ago\n"
 active_marker = "'*' marks the active node (used by start/stop/status/logs by default)."
 
 [status]
+relay_key_mode = "  signed in with a relay key (OAuth2) — account quota needs a full 'everyapi auth login'; showing relay health only:"
 quota = "quota:"
 requests = "requests:"
 topup = "topup:"
 remaining_used = "**$%.2f** remaining   **$%.2f** used"
 
 [topup]
+relay_key_mode = "top-up needs a full management login; this account is signed in with a relay key only — run 'everyapi auth login' first"
 before_open = "Before opening the browser, verify this is the real EveryAPI dashboard."
 url_label = "URL:"
 phrase_label = "Phrase:"
@@ -1194,6 +1207,7 @@ no_relay_note_2 = "EveryAPI dashboard, then `everyapi use` or `everyapi auth sta
 logged_in_saved = "\nLogged in as %s. Credentials saved to %s/credentials.json\n"
 
 [logout]
+cached_key_warn = "  warning: couldn't remove cached tool credentials at %s (%v) — delete it by hand"
 done = "Logged out."
 
 [update]
@@ -1222,6 +1236,7 @@ choice_later = "Remind me later"
 choice_skip = "Skip this version"
 
 [use]
+sanitize_bad_value = "--sanitize=%q is not a valid true/false value — use --sanitize or --sanitize=false"
 tool_picker = "Pick a tool:"
 group_picker = "Pick a routing group:"
 yolo_prompt = "Enable %s? (skips every safety prompt)"

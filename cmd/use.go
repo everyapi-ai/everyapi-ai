@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -576,6 +577,18 @@ func parseUseArgs(args []string) (toolName, group string, pickGroup, sanitize bo
 			// the mask/restore step leaks placeholders into coding-agent
 			// sessions and corrupts them; non-agentic SDK traffic should
 			// use the standalone 'everyapi proxy' instead.
+			//
+			// Honor an attached value so the standard `-flag=false`
+			// bool convention works (`--sanitize=false` must DISABLE,
+			// not silently enable). A bare `--sanitize` opts in.
+			if hasEq {
+				b, err := strconv.ParseBool(val)
+				if err != nil {
+					return "", "", false, false, nil, "", fmt.Errorf(i18n.T("use.sanitize_bad_value"), val)
+				}
+				sanitize = b
+				continue
+			}
 			sanitize = true
 		case "model":
 			// Pin the upstream model for model-selectable tools

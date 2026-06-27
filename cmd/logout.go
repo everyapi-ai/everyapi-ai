@@ -3,11 +3,21 @@ package cmd
 import (
 	"errors"
 	"flag"
+	"os"
+	"path/filepath"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
+
+// toolCredentialHomes are the per-tool config dirs that `everyapi use`
+// seeds with the resolved relay key (codex-home/auth.json holds it as
+// OPENAI_API_KEY; hermes-home/config.yaml inlines it as api_key). They
+// live next to credentials.json but config.Delete only removes the
+// latter, so logout must scrub these too — otherwise a fully working,
+// billable spend credential survives "logout" on disk.
+var toolCredentialHomes = []string{"codex-home", "hermes-home"}
 
 // Logout removes the on-disk credentials. Idempotent — calling it
 // twice doesn't error (config.Delete handles missing file as success).
@@ -28,6 +38,25 @@ func Logout(args []string) error {
 	if err := config.Delete(); err != nil {
 		return err
 	}
+	scrubToolCredentials()
 	cliout.Println(i18n.T("logout.done"))
 	return nil
+}
+
+// scrubToolCredentials removes the per-tool config homes seeded by
+// `everyapi use` so a working relay key never outlives logout. Best
+// effort: credentials.json is already gone by here, so a removal error
+// only warrants a warning (e.g. a file held open on Windows), not a
+// failed logout.
+func scrubToolCredentials() {
+	cfgDir, err := config.ConfigDir()
+	if err != nil {
+		return
+	}
+	for _, home := range toolCredentialHomes {
+		p := filepath.Join(cfgDir, home)
+		if err := os.RemoveAll(p); err != nil && !errors.Is(err, os.ErrNotExist) {
+			cliout.Printf(i18n.T("logout.cached_key_warn"), p, err)
+		}
+	}
 }

@@ -305,7 +305,7 @@ usage_remaining = "verbleibend"
 usage_used = "verwendet"
 usage_granted = "zugeteilt"
 usage_unlimited = "unbegrenzt"
-usage_key_required = "ein Relay-API-Key ist erforderlich: everyapi token usage <sk-...> (oder --key)"
+usage_key_required = "ein Relay-API-Key ist erforderlich: everyapi token usage <sk-...> (oder --key, oder $EVERYAPI_RELAY_KEY)"
 usage = '''
 everyapi token — Relay-API-Tokens verwalten (die Schlüssel, die deine Apps einbetten)
 
@@ -857,7 +857,7 @@ tokens = "%d aktiv / %d gesamt"
 tokens_none = "%d Token, 0 aktiv"
 proxy_down = "läuft nicht (der Sanitizer ist optional, nur mit --sanitize nötig)"
 proxy_unhealthy = "lauscht, aber ungesund (%s)"
-proxy_ok = "lauscht auf 127.0.0.1:8786"
+proxy_ok = "lauscht auf 127.0.0.1:8888"
 
 [doctor.section]
 account = "Konto"
@@ -886,6 +886,7 @@ transport_err = "[transport] %s — verbinde neu"
 [mcp.status]
 count = "%d bekannte MCP-Client(s):"
 registered_count = "%d von %d registriert."
+none_registered = "kein MCP-Client hat everyapi registriert"
 state_registered = "registriert"
 state_not_registered = "nicht registriert"
 state_not_installed = "nicht installiert"
@@ -979,6 +980,7 @@ no_nodes = "Keine Edge-Knoten registriert."
 register_hint = "Erstelle einen mit 'everyapi edge register --name <Knoten-Name>'."
 no_active_node = "kein aktiver Edge-Knoten — führe zuerst 'everyapi edge register' aus"
 active_file_malformed = "Datei des aktiven Knotens ist fehlerhaft: %s"
+not_started = "ℹ Knoten #%d wurde noch nicht gestartet (keine Compose-Datei) — es läuft nichts. Führe zuerst 'everyapi edge start' aus.\n"
 
 [edge.usage]
 missing_subcommand = "Unterbefehl fehlt (versuche 'everyapi edge help')"
@@ -1074,6 +1076,15 @@ name_prompt = "Knotenname (z. B. rtx-4090-tokyo)"
 attach_unknown_channel = "--attach-to-channel=%d ist keiner deiner Edge-Kanäle (eigene: %s). 'everyapi edge list' zeigt das Node→Kanal-Mapping."
 persist_meta_failed = "Knoten-Metadaten konnten nicht gespeichert werden: %w"
 set_active_failed = "aktiver Knoten konnte nicht gesetzt werden: %w"
+token_rescue = """
+⚠ Knoten #%d wurde im Backend erstellt, aber das Schreiben von node.json schlug fehl.
+Dies ist die EINZIGE Gelegenheit, das einmalige Registrierungs-Token anzuzeigen — kopiere es jetzt; es kann später nicht erneut abgerufen werden:
+
+  Gateway:  %s
+  Token:    %s
+
+Erstelle zur Wiederherstellung %s von Hand (Dateimodus 0600) als JSON mit den Schlüsseln node_id, node_name, registration_token (das Token oben), gateway (die URL oben) und workloads, und führe dann 'everyapi edge start' aus.
+"""
 registered = "✓ Knoten #%d (%s) registriert\n"
 saved = "✓ Token + Metadaten gespeichert unter %s\n"
 set_active = "✓ Als aktiver Knoten gesetzt\n"
@@ -1134,7 +1145,7 @@ down_failed = "⚠ docker compose down fehlgeschlagen (%v) — wird trotzdem for
 docker_unavailable = "(docker nicht verfügbar; `docker compose down` wird übersprungen)\n"
 delete_row_failed = "Knotenzeile im Backend konnte nicht gelöscht werden: %w"
 row_deleted = "✓ Backend-Knotenzeile %d gelöscht\n"
-workdir_failed = "⚠ lokales workdir %s konnte nicht entfernt werden (%v) — manuell aufräumen\n"
+workdir_failed = "⚠ lokales workdir %s konnte nicht entfernt werden (%v) — der ollama-Container schreibt Modelldaten als root, daher können root-eigene Dateien zurückbleiben. Entferne sie mit: sudo rm -rf %s\n"
 workdir_removed = "✓ Lokales workdir %s entfernt\n"
 clear_active_failed = "⚠ Zeiger auf aktiven Knoten konnte nicht gelöscht werden (%v)\n"
 done = "Fertig."
@@ -1177,12 +1188,14 @@ last_seen_line = "  %-12svor %s\n"
 active_marker = "'*' markiert den aktiven Knoten (wird standardmäßig von start/stop/status/logs genutzt)."
 
 [status]
+relay_key_mode = "  mit einem Relay-Schlüssel (OAuth2) angemeldet — das Kontoguthaben erfordert ein vollständiges 'everyapi auth login'; es wird nur der Relay-Status angezeigt:"
 quota = "Quota:"
 requests = "Anfragen:"
 topup = "Aufladung:"
 remaining_used = "**$%.2f** übrig   **$%.2f** verwendet"
 
 [topup]
+relay_key_mode = "Aufladen erfordert eine vollständige Verwaltungsanmeldung; dieses Konto ist nur mit einem Relay-Schlüssel angemeldet — führe zuerst 'everyapi auth login' aus"
 before_open = "Bevor du den Browser öffnest, überprüfe, dass dies das echte EveryAPI-Dashboard ist."
 url_label = "URL:"
 phrase_label = "Phrase:"
@@ -1210,6 +1223,7 @@ no_relay_note_2 = "EveryAPI-Dashboard, danach holen `everyapi use` oder `everyap
 logged_in_saved = "\nAls %s angemeldet. Credentials gespeichert in %s/credentials.json\n"
 
 [logout]
+cached_key_warn = "  Warnung: zwischengespeicherte Tool-Anmeldedaten unter %s konnten nicht entfernt werden (%v) — bitte manuell löschen"
 done = "Abgemeldet."
 
 [update]
@@ -1238,6 +1252,7 @@ choice_later = "Später erinnern"
 choice_skip = "Diese Version überspringen"
 
 [use]
+sanitize_bad_value = "--sanitize=%q ist kein gültiger true/false-Wert — verwende --sanitize oder --sanitize=false"
 tool_picker = "Tool auswählen:"
 group_picker = "Routing-Gruppe auswählen:"
 yolo_prompt = "%s aktivieren? (überspringt jede Sicherheitsabfrage)"

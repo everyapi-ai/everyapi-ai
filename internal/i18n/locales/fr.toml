@@ -306,7 +306,7 @@ usage_remaining = "restant"
 usage_used = "utilisé"
 usage_granted = "accordé"
 usage_unlimited = "illimité"
-usage_key_required = "une clé de relais est requise : everyapi token usage <sk-...> (ou --key)"
+usage_key_required = "une clé de relais est requise : everyapi token usage <sk-...> (ou --key, ou $EVERYAPI_RELAY_KEY)"
 usage = '''
 everyapi token — gérer les tokens de relais (les clés intégrées à vos apps)
 
@@ -859,7 +859,7 @@ tokens = "%d activés / %d au total"
 tokens_none = "%d token(s), 0 activé"
 proxy_down = "non démarré (l'assainisseur est optionnel, requis uniquement avec --sanitize)"
 proxy_unhealthy = "à l'écoute mais non sain (%s)"
-proxy_ok = "à l'écoute sur 127.0.0.1:8786"
+proxy_ok = "à l'écoute sur 127.0.0.1:8888"
 
 [doctor.section]
 account = "Compte"
@@ -888,6 +888,7 @@ transport_err = "[transport] %s — reconnexion"
 [mcp.status]
 count = "%d client(s) MCP connu(s) :"
 registered_count = "%d sur %d enregistrés."
+none_registered = "aucun client MCP n'a enregistré everyapi"
 state_registered = "enregistré"
 state_not_registered = "non enregistré"
 state_not_installed = "non installé"
@@ -981,6 +982,7 @@ no_nodes = "Aucun nœud edge enregistré."
 register_hint = "Lancez 'everyapi edge register --name <nom-du-nœud>' pour en créer un."
 no_active_node = "aucun nœud edge actif — lancez d'abord 'everyapi edge register'"
 active_file_malformed = "le fichier du nœud actif est mal formé : %s"
+not_started = "ℹ Le nœud #%d n'a pas encore été démarré (pas de fichier compose) — rien ne tourne. Lancez d'abord 'everyapi edge start'.\n"
 
 [edge.usage]
 missing_subcommand = "sous-commande manquante (essayez 'everyapi edge help')"
@@ -1079,6 +1081,15 @@ name_prompt = "Nom du nœud (p. ex. rtx-4090-tokyo)"
 attach_unknown_channel = "--attach-to-channel=%d n'est pas un de vos canaux edge (vos canaux : %s). Lancez 'everyapi edge list' pour voir la correspondance nœud→canal."
 persist_meta_failed = "échec de l'enregistrement des métadonnées du nœud : %w"
 set_active_failed = "échec de la définition du nœud actif : %w"
+token_rescue = """
+⚠ Le nœud #%d a été créé sur le backend, mais l'écriture de node.json a échoué.
+C'est la SEULE fois où le token d'enregistrement à usage unique est affiché — copiez-le maintenant ; il ne pourra pas être récupéré plus tard :
+
+  Gateway:  %s
+  Token:    %s
+
+Pour le récupérer, créez %s à la main (mode de fichier 0600) au format JSON avec les clés node_id, node_name, registration_token (le token ci-dessus), gateway (l'URL ci-dessus) et workloads, puis lancez 'everyapi edge start'.
+"""
 registered = "✓ Nœud #%d (%s) enregistré\n"
 saved = "✓ Token + métadonnées enregistrés dans %s\n"
 set_active = "✓ Défini comme nœud actif\n"
@@ -1139,7 +1150,7 @@ down_failed = "⚠ échec de docker compose down (%v) — on continue quand mêm
 docker_unavailable = "(docker non disponible ; `docker compose down` ignoré)\n"
 delete_row_failed = "échec de la suppression de la ligne du nœud côté backend : %w"
 row_deleted = "✓ Ligne du nœud %d supprimée côté backend\n"
-workdir_failed = "⚠ impossible de supprimer le workdir local %s (%v) — nettoyez manuellement\n"
+workdir_failed = "⚠ impossible de supprimer le workdir local %s (%v) — le conteneur ollama écrit les données de modèle en tant que root, des fichiers appartenant à root peuvent donc subsister. Supprimez-les avec : sudo rm -rf %s\n"
 workdir_removed = "✓ Workdir local %s supprimé\n"
 clear_active_failed = "⚠ impossible d'effacer le pointeur du nœud actif (%v)\n"
 done = "Terminé."
@@ -1182,12 +1193,14 @@ last_seen_line = "  %-12sil y a %s\n"
 active_marker = "'*' marque le nœud actif (utilisé par défaut par start/stop/status/logs)."
 
 [status]
+relay_key_mode = "  connecté avec une clé relais (OAuth2) — le quota du compte nécessite un 'everyapi auth login' complet ; affichage de l'état du relais uniquement :"
 quota = "quota :"
 requests = "requêtes :"
 topup = "rechargement :"
 remaining_used = "**$%.2f** restant   **$%.2f** utilisé"
 
 [topup]
+relay_key_mode = "la recharge nécessite une connexion de gestion complète ; ce compte est connecté uniquement avec une clé relais — exécutez d'abord 'everyapi auth login'"
 before_open = "Avant d'ouvrir le navigateur, vérifiez qu'il s'agit du vrai dashboard EveryAPI."
 url_label = "URL :"
 phrase_label = "Phrase :"
@@ -1215,6 +1228,7 @@ no_relay_note_2 = "EveryAPI dashboard ; `everyapi use` ou `everyapi auth status`
 logged_in_saved = "\nConnecté en tant que %s. Identifiants enregistrés dans %s/credentials.json\n"
 
 [logout]
+cached_key_warn = "  avertissement : impossible de supprimer les identifiants d'outil en cache dans %s (%v) — supprimez-les manuellement"
 done = "Déconnecté."
 
 [update]
@@ -1243,6 +1257,7 @@ choice_later = "Rappeler plus tard"
 choice_skip = "Ignorer cette version"
 
 [use]
+sanitize_bad_value = "--sanitize=%q n'est pas une valeur true/false valide — utilisez --sanitize ou --sanitize=false"
 tool_picker = "Choisissez un outil :"
 group_picker = "Choisissez un groupe de routage :"
 yolo_prompt = "Activer %s ? (saute toutes les confirmations de sécurité)"

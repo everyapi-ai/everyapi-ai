@@ -290,7 +290,7 @@ usage_remaining = "剩余"
 usage_used = "已用"
 usage_granted = "总额度"
 usage_unlimited = "无限制"
-usage_key_required = "需要提供中继密钥：everyapi token usage <sk-...>（或 --key）"
+usage_key_required = "需要提供中继密钥：everyapi token usage <sk-...>（或 --key，或 $EVERYAPI_RELAY_KEY）"
 usage = '''
 everyapi token — 管理 relay API token（应用嵌入的 key）
 
@@ -839,7 +839,7 @@ tokens = "已启用 %d / 共 %d"
 tokens_none = "%d 个 token，0 个启用"
 proxy_down = "未运行（脱敏代理为 opt-in，仅 --sanitize 时需要）"
 proxy_unhealthy = "在监听但不健康（%s）"
-proxy_ok = "监听于 127.0.0.1:8786"
+proxy_ok = "监听于 127.0.0.1:8888"
 
 [doctor.section]
 account = "账户"
@@ -868,6 +868,7 @@ transport_err = "[传输] %s — 正在重连"
 [mcp.status]
 count = "已知 %d 个 MCP 客户端："
 registered_count = "%d / %d 已注册。"
+none_registered = "没有任何 MCP 客户端注册了 everyapi"
 state_registered = "已注册"
 state_not_registered = "未注册"
 state_not_installed = "未安装"
@@ -956,6 +957,7 @@ no_nodes = "未注册任何 edge 节点。"
 register_hint = "运行 'everyapi edge register --name <node-name>' 创建一个。"
 no_active_node = "没有活动的 edge 节点 —— 请先运行 'everyapi edge register'"
 active_file_malformed = "活动节点文件格式有误：%s"
+not_started = "ℹ 节点 #%d 尚未启动（没有 compose 文件）—— 没有任何运行中的容器。请先执行 'everyapi edge start'。\n"
 
 [edge.usage]
 missing_subcommand = "缺少子命令（试试 'everyapi edge help'）"
@@ -1046,6 +1048,15 @@ name_prompt = "节点名称（例如 rtx-4090-tokyo）"
 attach_unknown_channel = "--attach-to-channel=%d 不是你的 edge 频道（你拥有：%s）。运行 'everyapi edge list' 查看节点→频道映射。"
 persist_meta_failed = "持久化节点元数据失败：%w"
 set_active_failed = "设置活动节点失败：%w"
+token_rescue = """
+⚠ 节点 #%d 已在后端创建，但写入 node.json 失败。
+这是唯一一次显示一次性注册令牌的机会 —— 请立即复制；之后无法再次获取：
+
+  Gateway:  %s
+  Token:    %s
+
+如需恢复，请手动创建 %s（文件权限 0600），内容为包含 node_id、node_name、registration_token（上方令牌）、gateway（上方网址）和 workloads 等键的 JSON，然后执行 'everyapi edge start'。
+"""
 registered = "✓ 已注册节点 #%d（%s）\n"
 saved = "✓ 令牌 + 元数据已保存到 %s\n"
 set_active = "✓ 已设为活动节点\n"
@@ -1106,7 +1117,7 @@ down_failed = "⚠ docker compose down 失败（%v）—— 仍继续\n"
 docker_unavailable = "（无 docker；跳过 `docker compose down`）\n"
 delete_row_failed = "删除后端节点记录失败：%w"
 row_deleted = "✓ 已删除后端节点记录 %d\n"
-workdir_failed = "⚠ 无法移除本地 workdir %s（%v）—— 请手动清理\n"
+workdir_failed = "⚠ 无法移除本地 workdir %s（%v）—— ollama 容器以 root 写入模型数据，因此可能残留 root 拥有的文件。请执行：sudo rm -rf %s\n"
 workdir_removed = "✓ 已移除本地 workdir %s\n"
 clear_active_failed = "⚠ 无法清除活动节点指针（%v）\n"
 done = "完成。"
@@ -1149,12 +1160,14 @@ last_seen_line = "  %-12s%s 前\n"
 active_marker = "'*' 标记活动节点（start/stop/status/logs 默认使用它）。"
 
 [status]
+relay_key_mode = "  当前使用中继密钥（OAuth2）登录 — 账户额度需要完整的 'everyapi auth login'；这里仅显示中继健康状态："
 quota = "额度："
 requests = "请求数："
 topup = "充值："
 remaining_used = "剩余 **$%.2f**   已用 **$%.2f**"
 
 [topup]
+relay_key_mode = "充值需要完整的管理登录；该账户仅使用中继密钥登录 — 请先运行 'everyapi auth login'"
 before_open = "打开浏览器前，请确认这是真实的 EveryAPI dashboard。"
 url_label = "URL："
 phrase_label = "校验短语："
@@ -1182,6 +1195,7 @@ no_relay_note_2 = "EveryAPI dashboard 创建后，下次 `everyapi use` 或 `eve
 logged_in_saved = "\n已以 %s 登录。凭证已保存到 %s/credentials.json\n"
 
 [logout]
+cached_key_warn = "  警告：无法删除位于 %s 的缓存工具凭据（%v）— 请手动删除"
 done = "已注销。"
 
 [update]
@@ -1210,6 +1224,7 @@ choice_later = "稍后提醒"
 choice_skip = "跳过此版本"
 
 [use]
+sanitize_bad_value = "--sanitize=%q 不是有效的 true/false 值 — 使用 --sanitize 或 --sanitize=false"
 tool_picker = "选一个工具："
 group_picker = "选一个路由分组："
 yolo_prompt = "启用 %s？（将跳过所有安全确认）"

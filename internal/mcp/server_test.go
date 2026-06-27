@@ -349,5 +349,150 @@ func TestServe_EmptyInputExits(t *testing.T) {
 	}
 }
 
+// ---- F1: handler panic recovery ------------------------------------
+
+func fakePanicHandler(msg string) ToolHandler {
+	return func(_ context.Context, _ json.RawMessage) (string, error) {
+		panic(msg)
+	}
+}
+
+func TestServe_ToolsCall_HandlerPanicBecomesIsError(t *testing.T) {
+	// A panicking handler must NOT unwind out of the serial dispatch
+	// loop and kill the long-lived server. It should surface as an
+	// isError tool result, and the server must keep serving the next
+	// request.
+	tools := []Tool{
+		{Name: "boom", Description: "boom", InputSchema: emptyObjectSchema, Handler: fakePanicHandler("kaboom")},
+		{Name: "echo", Description: "echo", InputSchema: emptyObjectSchema, Handler: fakeHandler("ok")},
+	}
+	input := strings.Join([]string{
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"boom","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{}}}`,
+		"",
+	}, "\n")
+	resps := runWithTools(t, input, tools)
+	if len(resps) != 2 {
+		t.Fatalf("want 2 replies (panic recovered + next request served), got %d", len(resps))
+	}
+
+	// First: panic surfaces as a tool-result error, not a JSON-RPC error.
+	r0 := decodeResp(t, resps[0])
+	if r0.Error != nil {
+		t.Fatalf("panic became a JSON-RPC error, want isError result: %+v", r0.Error)
+	}
+	var body0 struct {
+		Content []toolContent `json:"content"`
+		IsError bool          `json:"isError"`
+	}
+	if err := json.Unmarshal(r0.Result.(json.RawMessage), &body0); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !body0.IsError {
+		t.Errorf("panic did not surface as isError")
+	}
+	if len(body0.Content) == 0 || !strings.Contains(body0.Content[0].Text, "panicked") {
+		t.Errorf("panic text = %+v, want mention of panic", body0.Content)
+	}
+
+	// Second: server kept serving.
+	r1 := decodeResp(t, resps[1])
+	if r1.Error != nil {
+		t.Fatalf("second request errored after panic: %+v", r1.Error)
+	}
+	if string(r1.ID) != "2" {
+		t.Errorf("second reply id = %s, want 2 (server stopped serving?)", r1.ID)
+	}
+}
+
+// ---- F2: oversized line degrades to a per-request error ------------
+
+func TestServe_OversizedLine_DegradesPerRequest(t *testing.T) {
+	// A single message larger than the 1MB cap must NOT terminate the
+	// session (the old bufio.Scanner path returned bufio.ErrTooLong and
+	// the process exited). It should yield one per-request error and the
+	// server must keep serving the following message.
+	huge := strings.Repeat("x", (1<<20)+1024) // > maxMessageBytes
+	input := huge + "\n" +
+		`{"jsonrpc":"2.0","id":9,"method":"initialize"}` + "\n"
+	resps := runWithTools(t, input, nil)
+	if len(resps) != 2 {
+		t.Fatalf("want 2 replies (oversize error + initialize), got %d", len(resps))
+	}
+
+	r0 := decodeResp(t, resps[0])
+	if r0.Error == nil || r0.Error.Code != errInvalidRequest {
+		t.Fatalf("want invalid-request error for oversized line, got %+v", r0.Error)
+	}
+
+	r1 := decodeResp(t, resps[1])
+	if r1.Error != nil {
+		t.Fatalf("request after oversized line errored: %+v", r1.Error)
+	}
+	if string(r1.ID) != "9" {
+		t.Errorf("reply id = %s, want 9 (server stopped serving?)", r1.ID)
+	}
+}
+
+// ---- F3: notification-ness is decided by method, not id ------------
+
+func TestServe_RequestMethodWithoutID_NotExecuted(t *testing.T) {
+	// A side-effecting tools/call framed WITHOUT an id must NOT run the
+	// handler (the result/error envelope would otherwise be silently
+	// dropped). It should be refused with an invalid-request error, and
+	// the handler must never fire.
+	var called bool
+	tools := []Tool{
+		{
+			Name:        "everyapi_seller_withdraw",
+			Description: "withdraw",
+			InputSchema: emptyObjectSchema,
+			Handler: func(_ context.Context, _ json.RawMessage) (string, error) {
+				called = true
+				return "withdrew", nil
+			},
+		},
+	}
+	input := strings.Join([]string{
+		`{"jsonrpc":"2.0","method":"tools/call","params":{"name":"everyapi_seller_withdraw","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":11,"method":"initialize"}`,
+		"",
+	}, "\n")
+	resps := runWithTools(t, input, tools)
+
+	if called {
+		t.Fatal("side-effecting tools/call without id was executed")
+	}
+	if len(resps) != 2 {
+		t.Fatalf("want 2 replies (invalid-request + initialize), got %d", len(resps))
+	}
+	r0 := decodeResp(t, resps[0])
+	if r0.Error == nil || r0.Error.Code != errInvalidRequest {
+		t.Fatalf("want invalid-request for id-less tools/call, got %+v", r0.Error)
+	}
+	r1 := decodeResp(t, resps[1])
+	if r1.Error != nil || string(r1.ID) != "11" {
+		t.Errorf("server did not keep serving: id=%s err=%+v", r1.ID, r1.Error)
+	}
+}
+
+func TestServe_NotificationMethodWithoutID_RunsAndDrops(t *testing.T) {
+	// Genuine notifications/* methods still run for side effects and are
+	// dropped (no reply). Verified via a following real request.
+	input := strings.Join([]string{
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
+		`{"jsonrpc":"2.0","id":12,"method":"initialize"}`,
+		"",
+	}, "\n")
+	resps := runWithTools(t, input, nil)
+	if len(resps) != 1 {
+		t.Fatalf("want exactly 1 reply (notification dropped), got %d", len(resps))
+	}
+	r := decodeResp(t, resps[0])
+	if string(r.ID) != "12" {
+		t.Errorf("reply id = %s, want 12", r.ID)
+	}
+}
+
 // guards against go vet "unused" on io stdlib import in some refactors
 var _ io.Reader = (*strings.Reader)(nil)

@@ -8,11 +8,13 @@ import (
 	"errors"
 	"flag"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -163,6 +165,14 @@ func parseWindow(s string, now time.Time) (int64, error) {
 	}
 	if n, err := time.ParseDuration(s); err == nil {
 		return now.Add(-n).Unix(), nil
+	}
+	// Shorthand day windows: time.ParseDuration doesn't know the 'd'
+	// unit, so strip a trailing 'd' and multiply by 24h (mirrors
+	// cmd/log.parseWindow so `stats usage --since 7d` matches `stats log`).
+	if strings.HasSuffix(s, "d") {
+		if n, err := strconv.Atoi(s[:len(s)-1]); err == nil {
+			return now.Add(-time.Duration(n) * 24 * time.Hour).Unix(), nil
+		}
 	}
 	// Bare integer = absolute Unix seconds. time.Parse can't take
 	// it so call ParseInt directly.

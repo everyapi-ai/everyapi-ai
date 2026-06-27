@@ -82,6 +82,14 @@ func edgeStatus(args []string) error {
 	if err != nil {
 		return err
 	}
+	// Skip the local `compose ps` when the node was never started here
+	// (no docker-compose.yml) — otherwise compose aborts with "no
+	// configuration file provided" instead of cleanly reporting nothing
+	// is running locally. The backend view above is still printed.
+	if !composeFileExists(dir) {
+		cliout.Printf(i18n.T("edge.not_started"), nodeID)
+		return nil
+	}
 	cliout.Println(i18n.T("edge.status.local_containers"))
 	if err := runComposeCmd(dir, projectFor(nodeID), "ps"); err != nil {
 		return fmt.Errorf(i18n.T("edge.status.ps_failed"), err)

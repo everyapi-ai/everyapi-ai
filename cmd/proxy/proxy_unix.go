@@ -23,3 +23,11 @@ func startDetachedCommand(exe string, args []string, logFile *os.File) *exec.Cmd
 	}
 	return cmd
 }
+
+// terminateProcess asks the proxy to shut down. On Unix that's SIGTERM,
+// which the server traps for a graceful shutdown (see the
+// signal.NotifyContext in proxyStart). Split per-OS because Windows'
+// (*os.Process).Signal rejects SIGTERM — see proxy_windows.go.
+func terminateProcess(proc *os.Process) error {
+	return proc.Signal(syscall.SIGTERM)
+}

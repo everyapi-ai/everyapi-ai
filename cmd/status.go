@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -46,8 +47,23 @@ func Status(args []string) error {
 	if err != nil {
 		return err
 	}
-	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
 	ctx := cliout.WithCtx()
+
+	// OAuth2 relay-key logins (the fallback when the legacy
+	// /api/cli/device-auth-start is absent) carry no management session:
+	// the stored access token IS the relay key and there's no user id,
+	// so GetSelf/quota can't work. Don't mislead the user with the
+	// "session expired — re-login" string below (re-login via the same
+	// OAuth2 path reproduces this exact state). Show relay health only.
+	if creds.OAuthClientID != "" {
+		cliout.Println("")
+		cliout.Println(i18n.T("status.relay_key_mode"))
+		printRelayHealth(ctx, creds)
+		cliout.Println("")
+		return nil
+	}
+
+	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
 
 	status, err := client.GetStatus(ctx)
 	if err != nil {
@@ -97,19 +113,22 @@ func Status(args []string) error {
 	cliout.Printf("  %-10s %s\n", i18n.T("status.requests"), style.Bold(fmt.Sprintf("%d", self.RequestCount)))
 	cliout.Printf("  %-10s %s/wallet\n", i18n.T("status.topup"), api.WebOriginFromBase(creds.APIBase))
 
-	// The quota line above comes from /api/user/self (UserAuth) and
-	// says nothing about whether the RELAY works: the access token
-	// can't relay at all (different auth path), and a relay key can
-	// be dead while the account quota is fine. Resolve the relay key
-	// and probe the relay path so this distinction is visible — it's
-	// the exact confusion that sent us down a long debug rabbit hole.
-	//
-	// Always emit a `relay:` line — including a `unknown` line on
-	// transient lookup/probe failures — so the output shape is
-	// consistent. A blank section is ambiguous (still loading? not
-	// implemented?); "unknown — transient API error" is honest.
-	// status reports account-level relay health, not a per-group
-	// override — always the default key path (group "").
+	printRelayHealth(ctx, creds)
+
+	cliout.Println("")
+	return nil
+}
+
+// printRelayHealth resolves the account's relay key and probes the relay
+// path, emitting one `relay:` line. The quota line above comes from
+// /api/user/self (UserAuth) and says nothing about whether the RELAY
+// works: the access token can't relay at all (different auth path), and
+// a relay key can be dead while the account quota is fine. We always
+// emit a line — including `unknown` on transient lookup/probe failures —
+// so the output shape stays consistent (a blank section is ambiguous).
+// status reports account-level relay health, not a per-group override —
+// always the default key path (group "").
+func printRelayHealth(ctx context.Context, creds *config.Credentials) {
 	relayKey, rkErr := resolveRelayKey(creds, "")
 	switch {
 	case errors.Is(rkErr, errNoRelayKey):
@@ -135,7 +154,4 @@ func Status(args []string) error {
 			cliout.Printf("  relay:     %s — probe failed (%v)\n", style.Bold("unknown"), perr)
 		}
 	}
-
-	cliout.Println("")
-	return nil
 }

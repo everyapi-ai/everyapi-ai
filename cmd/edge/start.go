@@ -81,7 +81,12 @@ func edgeStart(args []string) error {
 		return fmt.Errorf(i18n.T("edge.start.pull_failed"), err)
 	}
 	cliout.Println(i18n.T("edge.start.up"))
-	if err := runComposeCmd(dir, projectFor(nodeID), "up", "-d"); err != nil {
+	// --remove-orphans so shrinking the service set (e.g. switching off an
+	// embedded-ollama mode to macos, which has no ollama service) tears
+	// down the now-stale container instead of leaking it (docker only
+	// warns about "orphan containers" otherwise). Scoped to this node's
+	// -p project, so it only touches this node's own containers.
+	if err := runComposeCmd(dir, projectFor(nodeID), "up", "-d", "--remove-orphans"); err != nil {
 		return fmt.Errorf(i18n.T("edge.start.up_failed"), err)
 	}
 

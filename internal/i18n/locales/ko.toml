@@ -300,7 +300,7 @@ usage_remaining = "남음"
 usage_used = "사용"
 usage_granted = "총 지급"
 usage_unlimited = "제한 없음"
-usage_key_required = "릴레이 키가 필요합니다: everyapi token usage <sk-...> (또는 --key)"
+usage_key_required = "릴레이 키가 필요합니다: everyapi token usage <sk-...> (또는 --key, 또는 $EVERYAPI_RELAY_KEY)"
 usage = '''
 everyapi token — 릴레이 API 토큰 관리 (앱에 임베드하는 키)
 
@@ -849,7 +849,7 @@ tokens = "활성 %d / 전체 %d"
 tokens_none = "token %d 개, 활성 0"
 proxy_down = "실행 중 아님 (새니타이저는 옵트인, --sanitize 사용 시에만 필요)"
 proxy_unhealthy = "수신 중이나 비정상 (%s)"
-proxy_ok = "127.0.0.1:8786 에서 수신 중"
+proxy_ok = "127.0.0.1:8888 에서 수신 중"
 
 [doctor.section]
 account = "계정"
@@ -878,6 +878,7 @@ transport_err = "[transport] %s — 재연결 중"
 [mcp.status]
 count = "알려진 MCP 클라이언트 %d 개:"
 registered_count = "%d / %d 등록됨."
+none_registered = "everyapi 가 등록된 MCP 클라이언트가 없습니다"
 state_registered = "등록됨"
 state_not_registered = "미등록"
 state_not_installed = "미설치"
@@ -970,6 +971,7 @@ no_nodes = "등록된 edge 노드가 없습니다."
 register_hint = "생성하려면 'everyapi edge register --name <node-name>' 를 실행하세요."
 no_active_node = "활성 edge 노드가 없습니다 — 먼저 'everyapi edge register' 를 실행하세요"
 active_file_malformed = "활성 노드 파일 형식이 잘못되었습니다: %s"
+not_started = "ℹ 노드 #%d 가 아직 시작되지 않았습니다 (compose 파일 없음) — 실행 중인 것이 없습니다. 먼저 'everyapi edge start' 를 실행하세요.\n"
 
 [edge.usage]
 missing_subcommand = "서브커맨드가 없습니다 ('everyapi edge help' 를 시도하세요)"
@@ -1065,6 +1067,15 @@ name_prompt = "노드 이름 (예: rtx-4090-tokyo)"
 attach_unknown_channel = "--attach-to-channel=%d 는 본인의 edge 채널이 아닙니다 (소유: %s). 'everyapi edge list' 로 노드→채널 매핑을 확인하세요."
 persist_meta_failed = "노드 메타데이터 저장 실패: %w"
 set_active_failed = "활성 노드 설정 실패: %w"
+token_rescue = """
+⚠ 노드 #%d 가 백엔드에 생성되었지만 node.json 쓰기에 실패했습니다.
+일회용 등록 토큰이 표시되는 것은 이번이 유일합니다 — 지금 복사하세요. 나중에는 다시 가져올 수 없습니다:
+
+  Gateway:  %s
+  Token:    %s
+
+복구하려면 %s 를 직접(파일 모드 0600) node_id, node_name, registration_token(위의 토큰), gateway(위의 URL), workloads 키를 가진 JSON 으로 만든 다음 'everyapi edge start' 를 실행하세요.
+"""
 registered = "✓ 노드 #%d (%s) 를 등록했습니다\n"
 saved = "✓ 토큰 + 메타데이터를 %s 에 저장했습니다\n"
 set_active = "✓ 활성 노드로 설정했습니다\n"
@@ -1125,7 +1136,7 @@ down_failed = "⚠ docker compose down 실패 (%v) — 계속 진행합니다\n"
 docker_unavailable = "(docker 사용 불가; `docker compose down` 건너뜀)\n"
 delete_row_failed = "백엔드 노드 행 삭제 실패: %w"
 row_deleted = "✓ 백엔드 노드 행 %d 삭제됨\n"
-workdir_failed = "⚠ 로컬 workdir %s 를 제거하지 못했습니다 (%v) — 수동으로 정리하세요\n"
+workdir_failed = "⚠ 로컬 workdir %s 를 제거하지 못했습니다 (%v) — ollama 컨테이너가 모델 데이터를 root 로 기록하므로 root 소유 파일이 남을 수 있습니다. 다음 명령으로 제거하세요: sudo rm -rf %s\n"
 workdir_removed = "✓ 로컬 workdir %s 제거됨\n"
 clear_active_failed = "⚠ 활성 노드 포인터를 지우지 못했습니다 (%v)\n"
 done = "완료."
@@ -1168,12 +1179,14 @@ last_seen_line = "  %-12s%s 전\n"
 active_marker = "'*' 는 활성 노드를 표시합니다 (기본적으로 start/stop/status/logs 가 사용)."
 
 [status]
+relay_key_mode = "  릴레이 키(OAuth2)로 로그인되어 있습니다 — 계정 잔액에는 전체 'everyapi auth login' 이 필요합니다. 여기서는 릴레이 상태만 표시합니다:"
 quota = "쿼터:"
 requests = "요청:"
 topup = "충전:"
 remaining_used = "**$%.2f** 남음   **$%.2f** 사용"
 
 [topup]
+relay_key_mode = "충전에는 전체 관리 로그인이 필요합니다. 이 계정은 릴레이 키로만 로그인되어 있습니다 — 먼저 'everyapi auth login' 을 실행하세요"
 before_open = "브라우저를 열기 전에, 이것이 실제 EveryAPI 대시보드인지 확인하세요."
 url_label = "URL:"
 phrase_label = "문구:"
@@ -1201,6 +1214,7 @@ no_relay_note_2 = "EveryAPI 대시보드에서 생성하면, 다음 `everyapi us
 logged_in_saved = "\n%s 로 로그인했습니다. 자격 증명이 %s/credentials.json 에 저장됨\n"
 
 [logout]
+cached_key_warn = "  경고: %s 의 캐시된 도구 자격 증명을 삭제하지 못했습니다 (%v) — 직접 삭제하세요"
 done = "로그아웃했습니다."
 
 [update]
@@ -1229,6 +1243,7 @@ choice_later = "나중에 알림"
 choice_skip = "이 버전 건너뛰기"
 
 [use]
+sanitize_bad_value = "--sanitize=%q 은(는) 유효한 true/false 값이 아닙니다 — --sanitize 또는 --sanitize=false 를 사용하세요"
 tool_picker = "도구 선택:"
 group_picker = "라우팅 그룹 선택:"
 yolo_prompt = "%s 을(를) 활성화하시겠습니까? (모든 안전 확인을 건너뜀)"

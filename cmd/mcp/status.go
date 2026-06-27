@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -93,6 +94,13 @@ func Status(args []string) error {
 		cliout.Printf("  %s  %-*s  %s\n", chip, nameW, n, extra)
 	}
 	cliout.Printf("\n"+i18n.T("mcp.status.registered_count")+"\n", registered, len(names))
+	// Honor the documented script-gate contract: a non-zero exit when
+	// no client has everyapi registered (main maps a returned error to
+	// os.Exit(1)). The table above already printed the human-readable
+	// detail; this only affects the exit code.
+	if registered == 0 {
+		return errors.New(i18n.T("mcp.status.none_registered"))
+	}
 	return nil
 }
 

@@ -114,9 +114,16 @@ func edgeRegister(args []string) error {
 		// and brick the next `everyapi edge start` (loadNodeMeta
 		// would decode the zero JSON into a zero-valued meta with
 		// no token, no gateway URL) with no visible root cause.
+		printTokenRescue(reg.Node.ID, meta.Gateway, reg.RegistrationToken, metaPath)
 		return fmt.Errorf(i18n.T("edge.register.persist_meta_failed"), err)
 	}
 	if err := os.WriteFile(metaPath, mb, 0o600); err != nil {
+		// The backend node row already exists and only stores the
+		// token's hash — the raw value lives nowhere else. If we
+		// can't persist it (ENOSPC / EACCES / disk-full) it is lost
+		// forever, so echo it to stdout first so the operator can
+		// hand-create node.json and still start the node.
+		printTokenRescue(reg.Node.ID, meta.Gateway, reg.RegistrationToken, metaPath)
 		return fmt.Errorf(i18n.T("edge.register.persist_meta_failed"), err)
 	}
 	if err := setActiveNodeID(reg.Node.ID); err != nil {
@@ -128,6 +135,15 @@ func edgeRegister(args []string) error {
 	cliout.Printf("%s", i18n.T("edge.register.set_active"))
 	cliout.Printf("%s", i18n.T("edge.register.next"))
 	return nil
+}
+
+// printTokenRescue echoes the one-time registration token (plus the
+// node id, gateway URL and the path node.json should live at) to stdout
+// when persisting node.json fails. The backend only keeps the token's
+// hash, so this print is the operator's last chance to capture the raw
+// secret before it's gone for good.
+func printTokenRescue(nodeID int, gateway, token, metaPath string) {
+	cliout.Printf(i18n.T("edge.register.token_rescue"), nodeID, gateway, token, metaPath)
 }
 
 // parseWorkloadsFlag splits and validates the --workloads value

@@ -300,7 +300,7 @@ usage_remaining = "残り"
 usage_used = "使用済み"
 usage_granted = "付与合計"
 usage_unlimited = "無制限"
-usage_key_required = "リレーキーが必要です: everyapi token usage <sk-...>（または --key）"
+usage_key_required = "リレーキーが必要です: everyapi token usage <sk-...>（または --key、または $EVERYAPI_RELAY_KEY）"
 usage = '''
 everyapi token — リレー API トークン管理（アプリに埋め込むキー）
 
@@ -850,7 +850,7 @@ tokens = "有効 %d / 合計 %d"
 tokens_none = "%d 個の token、有効 0"
 proxy_down = "未起動（サニタイザーはオプトイン、--sanitize 使用時のみ必要）"
 proxy_unhealthy = "待ち受け中だが異常 (%s)"
-proxy_ok = "127.0.0.1:8786 で待ち受け中"
+proxy_ok = "127.0.0.1:8888 で待ち受け中"
 
 [doctor.section]
 account = "アカウント"
@@ -879,6 +879,7 @@ transport_err = "[transport] %s — 再接続中"
 [mcp.status]
 count = "%d 個の MCP クライアントを認識:"
 registered_count = "%d / %d が登録済み。"
+none_registered = "everyapi を登録している MCP クライアントはありません"
 state_registered = "登録済み"
 state_not_registered = "未登録"
 state_not_installed = "未インストール"
@@ -971,6 +972,7 @@ no_nodes = "登録された edge ノードはありません。"
 register_hint = "作成するには 'everyapi edge register --name <node-name>' を実行してください。"
 no_active_node = "アクティブな edge ノードがありません — まず 'everyapi edge register' を実行してください"
 active_file_malformed = "アクティブノードファイルが不正です: %s"
+not_started = "ℹ ノード #%d はまだ起動されていません（compose ファイルなし）— 何も実行されていません。先に 'everyapi edge start' を実行してください。\n"
 
 [edge.usage]
 missing_subcommand = "サブコマンドがありません（'everyapi edge help' を試してください）"
@@ -1067,6 +1069,15 @@ name_prompt = "ノード名（例: rtx-4090-tokyo）"
 attach_unknown_channel = "--attach-to-channel=%d はあなたの edge チャンネル（所有: %s）ではありません。'everyapi edge list' でノード→チャンネルの対応を確認してください。"
 persist_meta_failed = "ノードのメタデータ保存に失敗: %w"
 set_active_failed = "アクティブノードの設定に失敗: %w"
+token_rescue = """
+⚠ ノード #%d はバックエンドに作成されましたが、node.json の書き込みに失敗しました。
+ワンタイムの登録トークンが表示されるのはこれが唯一の機会です — 今すぐコピーしてください。後から取得することはできません:
+
+  Gateway:  %s
+  Token:    %s
+
+復旧するには、%s を手動で（ファイルモード 0600）JSON として作成し、キー node_id、node_name、registration_token（上記のトークン）、gateway（上記の URL）、workloads を設定してから 'everyapi edge start' を実行してください。
+"""
 registered = "✓ ノード #%d（%s）を登録しました\n"
 saved = "✓ トークン + メタデータを %s に保存しました\n"
 set_active = "✓ アクティブノードに設定しました\n"
@@ -1127,7 +1138,7 @@ down_failed = "⚠ docker compose down に失敗（%v）— このまま続行�
 docker_unavailable = "（docker が利用できません。`docker compose down` をスキップ）\n"
 delete_row_failed = "バックエンドのノード行の削除に失敗: %w"
 row_deleted = "✓ バックエンドのノード行 %d を削除しました\n"
-workdir_failed = "⚠ ローカル workdir %s を削除できませんでした（%v）— 手動で削除してください\n"
+workdir_failed = "⚠ ローカル workdir %s を削除できませんでした（%v）— ollama コンテナはモデルデータを root として書き込むため、root 所有のファイルが残ることがあります。次のコマンドで削除してください: sudo rm -rf %s\n"
 workdir_removed = "✓ ローカル workdir %s を削除しました\n"
 clear_active_failed = "⚠ アクティブノードのポインタをクリアできませんでした（%v）\n"
 done = "完了。"
@@ -1170,12 +1181,14 @@ last_seen_line = "  %-12s%s 前\n"
 active_marker = "'*' はアクティブノードを示します（既定で start/stop/status/logs が使用）。"
 
 [status]
+relay_key_mode = "  リレーキー（OAuth2）でサインインしています — アカウント残高には完全な 'everyapi auth login' が必要です。ここではリレーの状態のみ表示します:"
 quota = "クォータ:"
 requests = "リクエスト:"
 topup = "入金:"
 remaining_used = "**$%.2f** 残り   **$%.2f** 使用"
 
 [topup]
+relay_key_mode = "チャージには完全な管理ログインが必要です。このアカウントはリレーキーのみでサインインしています — まず 'everyapi auth login' を実行してください"
 before_open = "ブラウザを開く前に、これが本物の EveryAPI ダッシュボードであることを確認してください。"
 url_label = "URL:"
 phrase_label = "フレーズ:"
@@ -1203,6 +1216,7 @@ no_relay_note_2 = "EveryAPI ダッシュボードで作成すれば、次の `ev
 logged_in_saved = "\n%s としてログインしました。認証情報は %s/credentials.json に保存されました\n"
 
 [logout]
+cached_key_warn = "  警告: %s のキャッシュされたツール認証情報を削除できませんでした (%v) — 手動で削除してください"
 done = "ログアウトしました。"
 
 [update]
@@ -1231,6 +1245,7 @@ choice_later = "後で通知"
 choice_skip = "このバージョンをスキップ"
 
 [use]
+sanitize_bad_value = "--sanitize=%q は有効な true/false の値ではありません — --sanitize または --sanitize=false を使用してください"
 tool_picker = "ツールを選択:"
 group_picker = "ルーティンググループを選択:"
 yolo_prompt = "%s を有効化しますか？ (すべての安全確認をスキップします)"

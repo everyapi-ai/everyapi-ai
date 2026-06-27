@@ -557,10 +557,13 @@ func resolveLanguage() {
 		lang = i18n.DetectFromEnv()
 	}
 	i18n.SetLanguage(lang)
-	// DetectFromEnv always returns at least LangEn, so lang is
-	// guaranteed non-empty here — set the env unconditionally so
-	// the SDK's per-request Accept-Language header has a value.
-	_ = os.Setenv("EVERYAPI_LANG", lang)
+	// Export the RESOLVED canonical tag, not the raw settings value:
+	// SetLanguage normalizes (folds zh_CN→zh, zh-Hant→zh-TW, drops
+	// unsupported tags to en), and the SDK forwards EVERYAPI_LANG
+	// verbatim as Accept-Language. Exporting the raw value would let
+	// the wire header diverge from the language the CLI resolved to.
+	// i18n.Language() is always non-empty after SetLanguage.
+	_ = os.Setenv("EVERYAPI_LANG", i18n.Language())
 }
 
 // Esc / Ctrl-C from a NESTED picker (a tool picker, group picker,

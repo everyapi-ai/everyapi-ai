@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 )
 
 // --- seller update -----------------------------------------------
@@ -370,8 +370,8 @@ func sellerCompensationList(args []string) error {
 			c.ID, filed, c.UpstreamProvider, c.Status, c.SuggestedCap, c.ApprovedAmount)
 		if c.Description != "" {
 			line := c.Description
-			if len(line) > 100 {
-				line = line[:100] + "…"
+			if r := []rune(line); len(r) > 100 {
+				line = string(r[:100]) + "…"
 			}
 			cliout.Printf("        %s\n", line)
 		}

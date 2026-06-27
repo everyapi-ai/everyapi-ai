@@ -6,14 +6,28 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 )
 
 // Exec on Windows can't execve, so we spawn + wait + propagate exit
 // code. The cost is the extra `everyapi` process hangs around as a
-// parent until the tool exits; the gain is signal handling Just
-// Works (the child catches Ctrl+C; we wait for it; we exit with its
-// code). Mirrors the Unix build's Start/Wait structure and shares
-// exitCodeFromWait so both platforms classify exits the same way.
+// parent until the tool exits; the gain is that the child stays in our
+// console process group, so a console Ctrl+C (CTRL_C_EVENT) is
+// delivered to the WHOLE group — the child gets it directly and handles
+// it itself (Claude Code traps ^C to interrupt, not exit). Mirrors the
+// Unix build's Start/Wait structure and shares exitCodeFromWait so both
+// platforms classify exits the same way.
+//
+// We must register an interrupt notifier BEFORE Start, otherwise the Go
+// runtime's default disposition kills THIS parent on the shared
+// CTRL_C_EVENT before cmd.Wait() returns — orphaning the still-running
+// child and losing its real exit code. Registering signal.Notify (and
+// then swallowing the signal, since the child already received it via
+// the group) overrides that default so the parent survives to reap the
+// child and exit with its code. Windows has no SIGQUIT/SIGHUP and the
+// console does not generate SIGTERM, so only the interrupt notifier is
+// needed (os.Interrupt maps to the console CTRL_C_EVENT; the stdlib
+// syscall package exposes no SIGBREAK constant on Windows to add).
 //
 // extraArgs are passed through as command-line args to the tool, so
 // callers can forward user-supplied flags (e.g.
@@ -29,9 +43,29 @@ func Exec(t *Tool, env map[string]string, extraArgs []string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = mergeEnv(env)
+
+	// Notify is installed BEFORE Start so there's no window where a
+	// console Ctrl+C lands on our default (fatal) disposition and
+	// orphans a just-started child.
+	sigCh := make(chan os.Signal, 8)
+	signal.Notify(sigCh, os.Interrupt)
 	if err := cmd.Start(); err != nil {
+		signal.Stop(sigCh)
 		return fmt.Errorf("start %s: %w", t.ExecName, err)
 	}
-	os.Exit(exitCodeFromWait(cmd.Wait()))
+	go func() {
+		// Drain and swallow: the child already received the event via
+		// the shared console group. We register only so the runtime
+		// doesn't terminate us before we reap the child.
+		for range sigCh {
+		}
+	}()
+
+	waitErr := cmd.Wait()
+	// Stop delivery, then close so the drain goroutine's range ends and
+	// it exits cleanly (signal.Stop alone doesn't close the channel).
+	signal.Stop(sigCh)
+	close(sigCh)
+	os.Exit(exitCodeFromWait(waitErr))
 	return nil // unreachable
 }

@@ -139,11 +139,28 @@ func adminUserManage(args []string) error {
 	action := fs.String("action", "", "enable / disable / delete / promote_admin / demote_admin")
 	value := fs.Int("value", 0, "action-specific value")
 	mode := fs.String("mode", "", "action-specific mode string")
+	yes := fs.Bool("y", false, "skip confirmation for destructive actions")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
 	if *action == "" {
 		return errors.New("--action is required")
+	}
+	// `delete` here routes to the same irreversible deletion as `admin user
+	// delete`, so gate it behind the identical interactive confirmation.
+	if *action == "delete" && !*yes && cliprompt.IsInteractive() {
+		ok, err := cliprompt.YesNo(
+			bufio.NewReader(os.Stdin),
+			fmt.Sprintf(i18n.T("admin.user.delete_confirm"), id),
+			false,
+		)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			cliout.Println(mutedText("common.canceled"))
+			return nil
+		}
 	}
 	client, err := newClient()
 	if err != nil {
@@ -332,9 +349,9 @@ func adminLogTail(args []string) error {
 		// amounts to USD cents would collapse them all to $0.00 — but
 		// gets thousands separators so it's not a wall of digits.
 		cliout.Printf("  %s  uid=%s  model=%s  quota=%s  tokens=%d/%d  ch=#%d\n",
-			style.Dim(ts), r.Username, r.ModelName, commaInt(int64(r.Quota)), r.PromptTokens, r.CompletionTokens, r.ChannelID)
+			style.Dim(ts), sanitize(r.Username), sanitize(r.ModelName), commaInt(int64(r.Quota)), r.PromptTokens, r.CompletionTokens, r.ChannelID)
 		if r.Content != "" {
-			cliout.Printf("    %s\n", r.Content)
+			cliout.Printf("    %s\n", sanitize(r.Content))
 		}
 	}
 	return nil
@@ -410,17 +427,17 @@ func adminAbuseList(args []string) error {
 	}
 	cells := make([][]string, len(rows))
 	for i, r := range rows {
-		by := r.ReporterEmail
-		if r.ReporterIP != "" {
+		by := sanitize(r.ReporterEmail)
+		if ip := sanitize(r.ReporterIP); ip != "" {
 			if by != "" {
 				by += " "
 			}
-			by += "(" + r.ReporterIP + ")"
+			by += "(" + ip + ")"
 		}
 		cells[i] = []string{
 			fmt.Sprintf("#%d", r.ID),
 			time.Unix(r.CreatedAt, 0).Format("01-02 15:04"),
-			r.Category, r.TargetType, r.Status, by,
+			sanitize(r.Category), sanitize(r.TargetType), sanitize(r.Status), by,
 		}
 	}
 	printTable(cols, cells, nil)
@@ -444,15 +461,15 @@ func adminAbuseShow(args []string) error {
 		return classifyErr(err)
 	}
 	var d detail
-	d.add("admin.abuse.f_status", r.Status)
+	d.add("admin.abuse.f_status", sanitize(r.Status))
 	d.add("admin.abuse.f_filed", time.Unix(r.CreatedAt, 0).Format("2006-01-02 15:04:05"))
-	d.add("admin.abuse.f_reporter", fmt.Sprintf("%s (%s) uid=%d", r.ReporterEmail, r.ReporterIP, r.ReporterUID))
-	d.add("admin.abuse.f_category", r.Category)
-	d.add("admin.abuse.f_target_type", r.TargetType)
-	d.add("admin.abuse.f_target_id", r.TargetID)
-	d.add("admin.abuse.f_evidence", r.EvidenceURL)
-	d.add("admin.abuse.f_description", r.Description)
-	d.add("admin.abuse.f_note", r.AdminNote)
+	d.add("admin.abuse.f_reporter", fmt.Sprintf("%s (%s) uid=%d", sanitize(r.ReporterEmail), sanitize(r.ReporterIP), r.ReporterUID))
+	d.add("admin.abuse.f_category", sanitize(r.Category))
+	d.add("admin.abuse.f_target_type", sanitize(r.TargetType))
+	d.add("admin.abuse.f_target_id", sanitize(r.TargetID))
+	d.add("admin.abuse.f_evidence", sanitize(r.EvidenceURL))
+	d.add("admin.abuse.f_description", sanitize(r.Description))
+	d.add("admin.abuse.f_note", sanitize(r.AdminNote))
 	printDetail("admin.abuse.detail_title", r.ID, d)
 	return nil
 }
@@ -512,11 +529,11 @@ func adminAudit(args []string) error {
 		// Label-free "·"-joined form (no English field tags): time ·
 		// action · actor (#id) · target. Values are backend strings.
 		cliout.Printf("  %s · %s · %s (#%d) · %s/%s\n",
-			style.Dim(when), r.Action, r.ActorName, r.ActorID, r.TargetType, r.TargetID)
+			style.Dim(when), sanitize(r.Action), sanitize(r.ActorName), r.ActorID, sanitize(r.TargetType), sanitize(r.TargetID))
 		if r.Payload != "" {
-			line := r.Payload
-			if len(line) > 200 {
-				line = line[:200] + "…"
+			line := sanitize(r.Payload)
+			if r := []rune(line); len(r) > 200 {
+				line = string(r[:200]) + "…"
 			}
 			cliout.Printf("    %s\n", style.Dim(line))
 		}

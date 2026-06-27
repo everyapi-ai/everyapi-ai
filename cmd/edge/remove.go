@@ -73,7 +73,7 @@ func edgeRemove(args []string) error {
 	dir, err := nodeDir(nodeID)
 	if err == nil {
 		if rmErr := os.RemoveAll(dir); rmErr != nil {
-			cliout.Printf(i18n.T("edge.remove.workdir_failed"), dir, rmErr)
+			cliout.Printf(i18n.T("edge.remove.workdir_failed"), dir, rmErr, dir)
 		} else {
 			cliout.Printf(i18n.T("edge.remove.workdir_removed"), dir)
 		}

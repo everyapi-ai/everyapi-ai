@@ -105,11 +105,12 @@ func Run(args []string) error {
 
 	report.run(i18n.T("doctor.check.sanitizer"), func() (string, string, error) {
 		// Sanitizer is best-effort. Probe the default listen
-		// (loopback:8786 — current default) with a 1s timeout; if
+		// (loopback:8888 — the proxy's default --listen) on its
+		// liveness path /__sanitizer/health with a 1s timeout; if
 		// no socket answers we surface as WARN, not FAIL, because the
 		// sanitizer is opt-in (--sanitize) and off by default.
 		hc := &http.Client{Timeout: 1 * time.Second}
-		resp, err := hc.Get("http://127.0.0.1:8786/healthz")
+		resp, err := hc.Get("http://127.0.0.1:8888/__sanitizer/health")
 		if err != nil {
 			return i18n.T("doctor.detail.proxy_down"),
 				i18n.T("doctor.hint.proxy_start"),

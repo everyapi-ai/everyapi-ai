@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -104,8 +104,8 @@ func runThreads(args []string) error {
 			marker = fmt.Sprintf("(%d)", t.UnreadCount)
 		}
 		preview := t.LastMessagePreview
-		if len(preview) > 80 {
-			preview = preview[:80] + "…"
+		if r := []rune(preview); len(r) > 80 {
+			preview = string(r[:80]) + "…"
 		}
 		cliout.Printf("  %s [#%d] %s with uid=%d (%s)\n",
 			marker, t.ID, when, t.OtherUserID, t.OtherUsername)

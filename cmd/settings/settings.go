@@ -110,7 +110,10 @@ func runSet(args []string) error {
 	// invocation alike) speaks the new language.
 	if key == "language" {
 		i18n.SetLanguage(value)
-		_ = os.Setenv("EVERYAPI_LANG", value)
+		// Export the resolved canonical tag (SetLanguage normalizes it),
+		// not the raw value — the SDK forwards EVERYAPI_LANG verbatim as
+		// Accept-Language, so the wire header must match what we resolved.
+		_ = os.Setenv("EVERYAPI_LANG", i18n.Language())
 	}
 	return nil
 }
@@ -200,7 +203,8 @@ func runInteractive() error {
 	// Apply the language immediately so the menu-layout picker below
 	// renders its labels in the just-chosen language.
 	i18n.SetLanguage(picked)
-	_ = os.Setenv("EVERYAPI_LANG", picked)
+	// Export the resolved canonical tag (normalized), not the raw pick.
+	_ = os.Setenv("EVERYAPI_LANG", i18n.Language())
 
 	// Second question: launcher menu layout (grouped single screen vs.
 	// nested category picker). Esc here keeps the language choice and

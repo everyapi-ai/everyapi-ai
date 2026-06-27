@@ -42,6 +42,14 @@ func Topup(args []string) error {
 	if err != nil {
 		return err
 	}
+	// OAuth2 relay-key logins carry no management session (no user id,
+	// the access token is a relay key), so CreateJumpSession would 401
+	// and surface the misleading "session expired — re-login" string
+	// that re-login via the same OAuth2 path can't fix. Tell the user
+	// plainly that top-up needs a full management login instead.
+	if creds.OAuthClientID != "" {
+		return errors.New(i18n.T("topup.relay_key_mode"))
+	}
 	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
 
 	res, err := client.CreateJumpSession(cliout.WithCtx())

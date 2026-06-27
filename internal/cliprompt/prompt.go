@@ -275,5 +275,14 @@ func OpenBrowser(url string) error {
 		cmd = "xdg-open"
 		args = []string{url}
 	}
-	return exec.Command(cmd, args...).Start()
+	c := exec.Command(cmd, args...)
+	if err := c.Start(); err != nil {
+		return err
+	}
+	// Reap the launcher in the background so it doesn't linger as a
+	// zombie / leaked os.Process handle for the (often minutes-long)
+	// OAuth wait. The helper detaches and exits almost immediately;
+	// we don't care about its exit status.
+	go func() { _ = c.Wait() }()
+	return nil
 }

@@ -23,3 +23,11 @@ func startDetachedCommand(exe string, args []string, logFile *os.File) *exec.Cmd
 	}
 	return cmd
 }
+
+// terminateProcess stops the proxy on Windows. (*os.Process).Signal only
+// supports os.Kill there — SIGTERM returns "not supported by windows" — so
+// we use Kill(), which maps to TerminateProcess. There's no graceful
+// SIGTERM equivalent for a detached console process on Windows.
+func terminateProcess(proc *os.Process) error {
+	return proc.Kill()
+}

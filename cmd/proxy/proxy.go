@@ -123,6 +123,24 @@ func proxyStart(args []string) error {
 		}
 	})
 
+	// Refuse to start if another instance is already running — checked
+	// BEFORE the port-conflict fallback and the --detach re-exec so a
+	// redundant `proxy start` (foreground or --detach) reports the clean
+	// "already running" message instead of auto-falling to an ephemeral
+	// port and spawning a doomed child that then times out unhealthy.
+	// A stale PID file (previous proxy died without cleanup) is cleared
+	// transparently; a live PID returns an error so the user knows. We
+	// use processAlive (not the health probe) here on purpose: refusing
+	// while *any* live process holds that recorded PID is the
+	// conservative choice against double-binding the port.
+	if pid, _, ok := readPIDFile(); ok {
+		if processAlive(pid) {
+			return fmt.Errorf("sanitizer proxy already running (pid=%d); use 'everyapi proxy stop' to stop it", pid)
+		}
+		// Stale; clear it before we claim ownership ourselves.
+		_ = removePIDFile()
+	}
+
 	// If the user didn't pass --detach explicitly AND we're on a
 	// TTY (so the launcher / a real shell, not a CI pipe), ask
 	// whether to detach. Default is Yes — picking "start" from a
@@ -175,18 +193,6 @@ func proxyStart(args []string) error {
 		return reexecDetached(*listen, resolvedUpstream, *parentPID)
 	}
 
-	// Refuse to start if another instance is already running. Both
-	// fast checks: stale PID file (process dead) is cleared
-	// transparently, but a live owner of the port returns an error
-	// so the user knows.
-	if pid, _, ok := readPIDFile(); ok {
-		if processAlive(pid) {
-			return fmt.Errorf("sanitizer proxy already running (pid=%d); use 'everyapi proxy stop' to stop it", pid)
-		}
-		// Stale; clear it before we claim ownership ourselves.
-		_ = removePIDFile()
-	}
-
 	// Load on-disk detector overrides if any. Missing file → default
 	// built-in set with no customs (LoadFileConfig returns an empty
 	// FileConfig + nil err in that case).
@@ -206,7 +212,22 @@ func proxyStart(args []string) error {
 		return err
 	}
 
+	// Bind the listener BEFORE advertising the PID. writePIDFile records
+	// our listen address so proxyStop/IsRunning can health-probe it; if we
+	// wrote the PID first (the old srv.Run path bound inside Run, after the
+	// file existed) a probe landing in the gap would see no listener, read
+	// that as "dead", and destructively remove a live proxy's PID file.
+	// With the socket already in LISTEN state, any probe arriving after the
+	// file exists connects and gets answered once Serve's Accept loop runs
+	// microseconds later. srv.Serve re-checks the loopback invariant against
+	// the actual listener (see sanitizer.Server.Serve).
+	listener, err := net.Listen("tcp", *listen)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", *listen, err)
+	}
+
 	if err := writePIDFile(os.Getpid(), *listen); err != nil {
+		_ = listener.Close()
 		return fmt.Errorf("write pid file: %w", err)
 	}
 	defer func() { _ = removePIDFile() }()
@@ -222,40 +243,67 @@ func proxyStart(args []string) error {
 	cliout.Println(i18n.T("proxy.start_ctrl_c"))
 	cliout.Println("")
 
-	return srv.Run(ctx)
+	return srv.Serve(ctx, listener)
 }
 
-// proxyStop reads the PID file and SIGTERMs the recorded process.
-// Silently succeeds when there's nothing running (a no-op is the
-// expected behaviour after a `Ctrl+C` exit that already cleared the
-// file). Surfaces an error only if the PID file points at a process
-// we can't signal.
+// proxyStop reads the PID file and asks the recorded process to shut
+// down (SIGTERM on Unix, TerminateProcess on Windows — see
+// terminateProcess). Silently succeeds when there's nothing running (a
+// no-op is the expected behaviour after a `Ctrl+C` exit that already
+// cleared the file). Surfaces an error only if the PID file points at a
+// still-alive process we couldn't signal — and in that case it leaves
+// the PID file in place so the still-running proxy keeps a CLI handle.
 func proxyStop(args []string) error {
 	fs := flag.NewFlagSet("proxy stop", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	pid, _, ok := readPIDFile()
+	pid, listen, ok := readPIDFile()
 	if !ok {
 		cliout.Println(i18n.T("proxy.stop_not_running"))
 		return nil
 	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		_ = removePIDFile()
-		return fmt.Errorf("find process %d: %w", pid, err)
-	}
-	if err := proc.Signal(syscall.SIGTERM); err != nil {
-		// Process probably already gone; clean up the stale file
-		// either way so the next start doesn't hit "already running".
-		_ = removePIDFile()
-		if strings.Contains(err.Error(), "process already finished") ||
-			strings.Contains(err.Error(), "no such process") {
+	// Don't signal a PID we can't confirm is our proxy. After a
+	// non-graceful death (SIGKILL/crash) the PID file is left behind, and
+	// the OS may have recycled that PID for an unrelated same-user
+	// process. When the PID file recorded a listen address (current
+	// format), probe its sanitizer health endpoint; only proceed if our
+	// proxy answers there. Legacy single-PID files (empty listen) fall
+	// back to a liveness-only check.
+	if listen != "" {
+		if !sanitizerHealthAt(listen) {
+			// Either gone, or the PID now belongs to something that isn't
+			// our proxy. Drop the stale file; never signal it.
+			_ = removePIDFile()
 			cliout.Println(i18n.T("proxy.stop_was_not_running"))
 			return nil
 		}
-		return fmt.Errorf("signal pid %d: %w", pid, err)
+	} else if !processAlive(pid) {
+		_ = removePIDFile()
+		cliout.Println(i18n.T("proxy.stop_was_not_running"))
+		return nil
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		// Unix never errors here; on Windows it means the process is
+		// already gone, so clearing the file is safe.
+		_ = removePIDFile()
+		return fmt.Errorf("find process %d: %w", pid, err)
+	}
+	if err := terminateProcess(proc); err != nil {
+		// If the process is genuinely still alive, the signal failed for
+		// some other reason (permission denied, etc.). Do NOT remove the
+		// PID file — that would orphan a still-running detached proxy
+		// with no CLI handle. Leave the file and surface the error.
+		if processAlive(pid) {
+			return fmt.Errorf("signal pid %d: %w", pid, err)
+		}
+		// Process is gone (raced us between the probe and the signal).
+		// Clean up the stale file.
+		_ = removePIDFile()
+		cliout.Println(i18n.T("proxy.stop_was_not_running"))
+		return nil
 	}
 	cliout.Printf(i18n.T("proxy.stop_sent_sigterm"), pid)
 	// Wait briefly for the process to actually exit before
@@ -451,18 +499,50 @@ func pidFilePath() (string, error) {
 // callers can fall back to the default port. Splitting on whitespace
 // (rather than JSON-encoding) keeps the read path Sscanf-trivial and
 // the file `cat`-friendly for ops debugging.
-// IsRunning reports whether a sanitizer proxy we can actually signal
-// is up — the pid file exists AND the process it points at is alive.
-// A bare pid-file check would lie when the previous proxy crashed
-// without cleanup; callers (`everyapi version uninstall`'s plan-render block)
-// rely on this returning false for stale-pid leftovers so the
+// IsRunning reports whether OUR sanitizer proxy is up. The pid file must
+// exist AND, when it recorded a listen address (current format), our
+// sanitizer must answer on its health endpoint — a bare pid-liveness
+// check would lie after the previous proxy crashed and the OS recycled
+// its PID for an unrelated process. Legacy single-PID files (empty
+// listen) fall back to a liveness-only check. A stale/foreign PID file is
+// removed as a side effect so the next caller doesn't keep seeing a
+// phantom proxy. Callers (`everyapi version uninstall`'s plan-render
+// block) rely on this returning false for stale leftovers so the
 // confirmation text isn't misleading.
 func IsRunning() bool {
-	pid, _, ok := readPIDFile()
+	pid, listen, ok := readPIDFile()
 	if !ok {
 		return false
 	}
+	if listen != "" {
+		if sanitizerHealthAt(listen) {
+			return true
+		}
+		// Not our proxy (dead, or PID reused). Drop the stale file.
+		_ = removePIDFile()
+		return false
+	}
 	return processAlive(pid)
+}
+
+// sanitizerHealthAt reports whether OUR sanitizer proxy answers at
+// http://<listen>/__sanitizer/health — a 200 with the "ok" body that
+// handleHealth serves. Anything else (network error, non-200, or a
+// foreign service squatting a reused port) is "not our proxy". This
+// mirrors cmd.sanitizerHealthy, replicated here because that helper is
+// unexported in a different package.
+func sanitizerHealthAt(listen string) bool {
+	client := &http.Client{Timeout: 250 * time.Millisecond}
+	resp, err := client.Get("http://" + listen + "/__sanitizer/health")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return false
+	}
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 16))
+	return strings.TrimSpace(string(body)) == "ok"
 }
 
 func readPIDFile() (pid int, listen string, ok bool) {

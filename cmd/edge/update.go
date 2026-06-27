@@ -34,7 +34,10 @@ func edgeUpdate(args []string) error {
 		return fmt.Errorf(i18n.T("edge.update.pull_failed"), err)
 	}
 	cliout.Println(i18n.T("edge.update.up"))
-	if err := runComposeCmd(dir, projectFor(nodeID), "up", "-d"); err != nil {
+	// --remove-orphans for defense-in-depth: keep the running set in sync
+	// with the (possibly shrunk) compose file. Scoped to this node's -p
+	// project, so it only removes this node's stale containers.
+	if err := runComposeCmd(dir, projectFor(nodeID), "up", "-d", "--remove-orphans"); err != nil {
 		return fmt.Errorf(i18n.T("edge.update.up_failed"), err)
 	}
 	cliout.Println(i18n.T("edge.update.updated"))

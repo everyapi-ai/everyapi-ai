@@ -3,6 +3,8 @@ package cliprompt
 import (
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"strconv"
 	"strings"
 
@@ -54,14 +56,45 @@ func PickWithSelected(prompt string, items []string, initial int) (int, error) {
 	return pickViaHuh(prompt, items, initial)
 }
 
+// readStdinLine reads one line from os.Stdin WITHOUT reading past the
+// newline. The numeric pickers are throwaway, per-call readers, so a
+// buffering bufio.Reader would read-ahead a whole chunk and then discard
+// the bytes after the newline — corrupting any caller that reads
+// os.Stdin again afterwards. That breaks scripted (piped) flows like
+// `proxy configure`, which runs PickMany and then reads further answers
+// (YesNo/Line) from its own reader. fmt.Scanln had this no-read-ahead
+// property but stopped at the first whitespace; reading byte-by-byte
+// keeps the whole line while leaving the rest of stdin intact. Returns
+// io.EOF (with any partial line) at end of stream.
+func readStdinLine() (string, error) {
+	var b []byte
+	var one [1]byte
+	for {
+		n, err := os.Stdin.Read(one[:])
+		if n > 0 {
+			if one[0] == '\n' {
+				return string(b), nil
+			}
+			b = append(b, one[0])
+		}
+		if err != nil {
+			return string(b), err
+		}
+	}
+}
+
 func pickByNumber(prompt string, items []string) (int, error) {
 	cliout.Println(prompt)
 	for i, n := range items {
 		cliout.Printf("  %d) %s\n", i+1, n)
 	}
 	cliout.Printf("%s", i18n.T("cliprompt.pick_enter_name_number"))
-	var choice string
-	if _, err := fmt.Scanln(&choice); err != nil {
+	// Read the whole line (not fmt.Scanln, which stops at the first
+	// whitespace) so multi-token answers survive. A non-empty line
+	// terminated by EOF (no trailing newline) still parses; only a
+	// genuinely empty EOF is a read failure.
+	choice, err := readStdinLine()
+	if err != nil && (err != io.EOF || choice == "") {
 		return -1, fmt.Errorf("read selection: %w", err)
 	}
 	choice = strings.TrimSpace(choice)
@@ -164,8 +197,12 @@ func pickManyByNumber(prompt string, labels, values, preselected []string) ([]st
 		cliout.Printf("  [%s] %d) %s\n", marker, i+1, labels[i])
 	}
 	cliout.Printf("%s", i18n.T("cliprompt.pick_toggle_csv"))
-	var line string
-	if _, err := fmt.Scanln(&line); err != nil {
+	// Read the whole line (not fmt.Scanln, which stops at the first
+	// whitespace and errors on the rest), so "1, 2, 3" / "1 2 3" parse
+	// the same as "1,2,3". A genuinely empty EOF means "no change"; a
+	// populated line is split on commas below and never dropped.
+	line, err := readStdinLine()
+	if err != nil && (err != io.EOF || line == "") {
 		// EOF on empty stdin → no change. Same shape as Pick.
 		return preselected, nil
 	}
