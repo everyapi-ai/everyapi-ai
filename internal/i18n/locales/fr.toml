@@ -1286,6 +1286,7 @@ install_prompt = "Installer %s maintenant ?"
 installing = "Installation de %s ..."
 installed = "%s installé."
 installed_not_on_path = "%s a été installé mais n'est pas encore dans $PATH. Ouvrez un nouveau shell ou ajoutez le répertoire bin de l'installateur à PATH."
+installer_missing = "%[1]s n'est pas installé, mais son installateur a besoin de %[2]q, qui n'est pas dans votre PATH (un npm fourni par un gestionnaire de versions uniquement sous forme de fonction shell ne sera pas visible ici). Installez %[2]s puis réessayez, ou installez %[1]s vous-même :\n  %[3]s"
 
 [upstream]
 none = "Aucun fournisseur upstream configuré."

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 )
 
 // IsInstalled reports whether the tool's ExecName is on the current
@@ -30,6 +31,47 @@ func CanAutoInstall(t *Tool) bool {
 		return false
 	}
 	return true
+}
+
+// InstallerMissing reports the command the tool's InstallCmd needs in
+// order to run (the leading word of InstallCmd — "npm" for `npm install
+// -g …`, "curl" for `curl … | bash`) when that command is NOT resolvable
+// on $PATH; it returns "" when the command is present, or when the tool
+// has no auto-installer to gate.
+//
+// Why this exists: RunInstall shells the InstallCmd out through a
+// non-interactive `sh -c`, which does NOT source the user's ~/.zshrc /
+// ~/.bashrc. A Node version manager (nvm/fnm/volta) commonly exposes
+// `npm` only as a shell function or via a PATH entry added in those rc
+// files, so a user whose interactive shell "has npm" can still hand
+// RunInstall a shell where `npm` resolves to nothing — yielding a
+// cryptic "npm: command not found" (exit 127). Detecting it up front
+// lets the caller print an actionable message instead.
+func InstallerMissing(t *Tool) string {
+	req := installRequires(t)
+	if req == "" {
+		return ""
+	}
+	if _, err := exec.LookPath(req); err == nil {
+		return ""
+	}
+	return req
+}
+
+// installRequires returns the leading command word of the tool's
+// InstallCmd (the binary that must be on $PATH for the installer to
+// run), or "" when there's no InstallCmd. InstallCmd is a compile-time
+// literal (see the SECURITY INVARIANT on Tool.InstallCmd), so its first
+// field is a stable, trustworthy command name.
+func installRequires(t *Tool) string {
+	if t == nil || t.InstallCmd == "" {
+		return ""
+	}
+	fields := strings.Fields(t.InstallCmd)
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
 }
 
 // RunInstall executes the tool's InstallCmd through the platform

@@ -117,6 +117,32 @@ func TestInstallPromptDefault(t *testing.T) {
 	}
 }
 
+// TestInstallerMissing covers the pre-install PATH probe that turns a
+// doomed `sh -c "npm install …"` (cryptic "npm: command not found") into
+// an actionable message. The probe targets the InstallCmd's leading word.
+func TestInstallerMissing(t *testing.T) {
+	// No InstallCmd → nothing to gate.
+	if got := InstallerMissing(&Tool{Name: "blank", ExecName: "blank"}); got != "" {
+		t.Errorf("InstallerMissing(no InstallCmd) = %q, want \"\"", got)
+	}
+	// Installer command present on PATH → "" (sh exists on Unix, cmd on
+	// Windows; both are guaranteed system binaries).
+	present := "sh"
+	if runtime.GOOS == "windows" {
+		present = "cmd"
+	}
+	withPresent := &Tool{Name: "present", ExecName: "x", InstallCmd: present + " -c true"}
+	if got := InstallerMissing(withPresent); got != "" {
+		t.Errorf("InstallerMissing(present installer %q) = %q, want \"\"", present, got)
+	}
+	// Installer command absent from PATH → its name is reported.
+	missingCmd := "definitely-not-a-real-pkg-manager-zzz"
+	withMissing := &Tool{Name: "missing", ExecName: "x", InstallCmd: missingCmd + " install -g foo"}
+	if got := InstallerMissing(withMissing); got != missingCmd {
+		t.Errorf("InstallerMissing(missing installer) = %q, want %q", got, missingCmd)
+	}
+}
+
 // TestRunInstall_RejectsWhenNoCmd guards the contract that callers
 // must gate with CanAutoInstall — but the inner check exists so a
 // future caller that forgets the gate gets a plain error instead of

@@ -1253,6 +1253,7 @@ install_prompt = "现在安装 %s 吗？"
 installing = "正在安装 %s ……"
 installed = "%s 已安装。"
 installed_not_on_path = "%s 已安装，但还不在 $PATH 中。请打开一个新 shell，或将安装器的 bin 目录加入 PATH。"
+installer_missing = "%[1]s 尚未安装，但其安装器需要 %[2]q，而它不在你的 PATH 中（通过版本管理器以 shell 函数形式提供的 npm 在这里不可见）。请先安装 %[2]s 再重试，或自行安装 %[1]s：\n  %[3]s"
 
 [upstream]
 none = "未配置上游提供商。"

@@ -921,6 +921,15 @@ func ensureToolInstalled(t *tools.Tool) error {
 	if !cliprompt.IsInteractive() || !tools.CanAutoInstall(t) {
 		return &tools.ErrToolNotFound{Tool: t}
 	}
+	// The auto-installer shells out to a package manager (npm) through a
+	// non-interactive shell that doesn't source the user's rc files. If
+	// that command isn't resolvable on PATH — the classic case being a
+	// version-manager npm exposed only as a shell function — offering the
+	// install just yields a cryptic "npm: command not found". Catch it
+	// here and tell the user exactly what to install first.
+	if missing := tools.InstallerMissing(t); missing != "" {
+		return fmt.Errorf(i18n.T("use.installer_missing"), t.ExecName, missing, t.InstallHint)
+	}
 	cliout.Printf(i18n.T("use.tool_not_installed")+"\n", t.ExecName)
 	cliout.Printf("  %s\n", t.InstallCmd)
 	ok, err := cliprompt.YesNo(
