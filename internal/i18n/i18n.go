@@ -176,6 +176,18 @@ func normalize(s string) string {
 	case strings.HasPrefix(s, "fr"):
 		return LangFr
 	}
+	// Fallback for a locale dropped in as {lang}.toml but not named in the
+	// switch above: honor it by bare subtag so adding a language needs no
+	// code edit here — the documented "drop a {lang}.toml and it just works"
+	// contract. The explicit cases above still win; they encode the zh
+	// Simplified/Traditional split a bare-subtag match can't express.
+	sub := s
+	if i := strings.Index(sub, "-"); i >= 0 {
+		sub = sub[:i]
+	}
+	if _, ok := locales[sub]; ok {
+		return sub
+	}
 	return ""
 }
 

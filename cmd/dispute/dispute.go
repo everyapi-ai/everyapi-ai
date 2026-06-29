@@ -36,15 +36,15 @@ func Run(args []string) error {
 	}
 }
 
-func newClient() (*api.Client, error) {
+func newClient() (*api.Client, *config.Credentials, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return nil, errors.New(i18n.T("auth.not_logged_in"))
+		return nil, nil, errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID), nil
+	return api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID), creds, nil
 }
 
 func classifyErr(err error) error {
@@ -71,7 +71,7 @@ func runSubmit(args []string) error {
 	if *typ == "" || *kind == "" || *tgt == "" || *desc == "" {
 		return errors.New("--type, --target-kind, --target, --description are required")
 	}
-	client, err := newClient()
+	client, _, err := newClient()
 	if err != nil {
 		return err
 	}
@@ -97,7 +97,7 @@ func runList(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	client, err := newClient()
+	client, creds, err := newClient()
 	if err != nil {
 		return err
 	}
@@ -109,12 +109,24 @@ func runList(args []string) error {
 		cliout.Println(i18n.T("dispute.no_rows"))
 		return nil
 	}
+	me := creds.UserID
 	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)
 	for _, d := range rows {
 		when := time.Unix(d.OpenedAt, 0).Format("2006-01-02")
-		side := "opener"
-		if d.CounterpartyUserID != 0 {
-			side = fmt.Sprintf("vs uid=%d", d.CounterpartyUserID)
+		// Describe the OTHER party relative to me, and which side I'm on.
+		// The list mixes disputes I opened with disputes filed against me;
+		// the old code always printed "vs uid=<counterparty>", which on a
+		// dispute filed against me is my OWN id.
+		var side string
+		switch {
+		case d.OpenerUserID == me:
+			if d.CounterpartyUserID != 0 {
+				side = fmt.Sprintf("you → uid=%d", d.CounterpartyUserID)
+			} else {
+				side = "opened by you"
+			}
+		default:
+			side = fmt.Sprintf("uid=%d → you", d.OpenerUserID)
 		}
 		cliout.Printf("  [#%d] %s/%s  state=%s  amount=%d  %s  opened %s\n",
 			d.ID, d.Type, d.TargetKind, d.State, d.AmountQuota, side, when)
@@ -130,7 +142,7 @@ func runShow(args []string) error {
 	if err != nil || id <= 0 {
 		return fmt.Errorf("invalid id %q", args[0])
 	}
-	client, err := newClient()
+	client, _, err := newClient()
 	if err != nil {
 		return err
 	}

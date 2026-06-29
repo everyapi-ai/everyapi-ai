@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mdp/qrterminal/v3"
 	"golang.org/x/term"
@@ -494,7 +495,9 @@ func runUpdate(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *username == "" && *displayName == "" {
+	u := strings.TrimSpace(*username)
+	d := strings.TrimSpace(*displayName)
+	if u == "" && d == "" {
 		return errors.New(i18n.T("user.update_no_fields"))
 	}
 	client, err := newClient()
@@ -502,8 +505,8 @@ func runUpdate(args []string) error {
 		return err
 	}
 	if err := client.UpdateProfile(cliout.WithCtx(), api.UpdateProfileRequest{
-		Username:    strings.TrimSpace(*username),
-		DisplayName: strings.TrimSpace(*displayName),
+		Username:    u,
+		DisplayName: d,
 	}); err != nil {
 		return classifyErr(err)
 	}
@@ -541,7 +544,7 @@ func runPasswd(args []string) error {
 	if newPw != confirm {
 		return errors.New(i18n.T("user.passwd_mismatch"))
 	}
-	if len(newPw) < 8 || len(newPw) > 20 {
+	if n := utf8.RuneCountInString(newPw); n < 8 || n > 20 {
 		return errors.New(i18n.T("user.passwd_length"))
 	}
 	client, err := newClient()

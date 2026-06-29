@@ -7,10 +7,13 @@
 package wallet
 
 import (
+	"bufio"
 	"errors"
 	"flag"
 	"fmt"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -145,7 +148,13 @@ func runInfo(args []string) error {
 		for k := range info.Discount {
 			keys = append(keys, k)
 		}
-		sort.Strings(keys)
+		// Tiers are numeric amount thresholds ("10","100","1000"); sort by
+		// value, not lexically, or "1000" would sort before "20".
+		sort.Slice(keys, func(i, j int) bool {
+			fi, _ := strconv.ParseFloat(keys[i], 64)
+			fj, _ := strconv.ParseFloat(keys[j], 64)
+			return fi < fj
+		})
 		cliout.Println("\n" + i18n.T("wallet.label.discount_tiers"))
 		for _, k := range keys {
 			cliout.Printf("  ≥%s → ×%g\n", k, info.Discount[k])
@@ -162,10 +171,38 @@ func runRedeem(args []string) error {
 	if len(args) == 0 {
 		return errors.New(i18n.T("wallet.usage_redeem"))
 	}
-	key := args[0]
-	rest := args[1:]
+	// Intercept help BEFORE treating args[0] as a key: fs.Parse below only
+	// sees args[1:], so without this `wallet redeem --help` would POST
+	// "--help" as a literal key and return "invalid redemption code".
+	switch args[0] {
+	case "-h", "--help", "help":
+		cliout.Println(i18n.T("wallet.usage_redeem"))
+		return nil
+	}
+	// A redemption key is a transferable bearer secret: taking it as a
+	// positional arg writes it into shell history and exposes it via
+	// `ps` / `/proc/<pid>/cmdline`. Accept `-` to read the key from stdin
+	// (one line) so it never lands in argv — the secure invocation,
+	// mirroring `docker login --password-stdin`. The positional form stays
+	// for back-compat.
+	var key string
+	if args[0] == "-" {
+		sc := bufio.NewScanner(os.Stdin)
+		if !sc.Scan() {
+			if err := sc.Err(); err != nil {
+				return fmt.Errorf("%s: %w", i18n.T("wallet.usage_redeem"), err)
+			}
+			return errors.New(i18n.T("wallet.usage_redeem"))
+		}
+		key = strings.TrimSpace(sc.Text())
+		if key == "" {
+			return errors.New(i18n.T("wallet.usage_redeem"))
+		}
+	} else {
+		key = args[0]
+	}
 	fs := flag.NewFlagSet("wallet redeem", flag.ContinueOnError)
-	if err := fs.Parse(rest); err != nil {
+	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
 	client, err := newClient()

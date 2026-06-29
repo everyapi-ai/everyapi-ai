@@ -370,6 +370,23 @@ func proxyConfigure(args []string) error {
 	for _, n := range fc.Disabled {
 		disabled[n] = true
 	}
+	enabled := make(map[string]bool, len(fc.Enabled))
+	for _, n := range fc.Enabled {
+		enabled[n] = true
+	}
+	// Two detector classes with OPPOSITE defaults: default-on built-ins are
+	// active unless listed in Disabled; opt-in detectors (high false-positive,
+	// e.g. luhn_credit_card) are inactive unless listed in Enabled. The wizard
+	// must track BOTH lists — previously it only rebuilt Disabled, so a
+	// toggled-on opt-in was silently dropped (never written to Enabled, so
+	// BuildDetectors never activated it) and was also mis-preselected as
+	// already active.
+	defaultOn := sanitizer.BuiltinDetectors()
+	optInNames := sanitizer.OptInDetectorNames()
+	isOptIn := make(map[string]bool, len(optInNames))
+	for _, n := range optInNames {
+		isOptIn[n] = true
+	}
 	allDetectors := sanitizer.AllBuiltinNames()
 	// Build "name  — description" labels so the user doesn't have
 	// to memorise what each detector catches. Name width is fixed
@@ -384,9 +401,15 @@ func proxyConfigure(args []string) error {
 	for i, name := range allDetectors {
 		labels[i] = fmt.Sprintf("%-*s — %s", nameWidth, name, builtinDetectorDesc(name))
 	}
+	// Preselect by each detector's real current state: a default-on detector
+	// iff it isn't disabled, an opt-in detector iff it's explicitly enabled.
 	preselected := make([]string, 0, len(allDetectors))
 	for _, name := range allDetectors {
-		if !disabled[name] {
+		if isOptIn[name] {
+			if enabled[name] {
+				preselected = append(preselected, name)
+			}
+		} else if !disabled[name] {
 			preselected = append(preselected, name)
 		}
 	}
@@ -396,13 +419,26 @@ func proxyConfigure(args []string) error {
 	if err != nil {
 		return err
 	}
-	// Rebuild the disabled set from the returned enabled set.
-	disabled = make(map[string]bool, len(allDetectors))
-	for _, name := range allDetectors {
-		disabled[name] = true
-	}
+	// Rebuild BOTH lists from the selection: a default-on name absent from
+	// the selection goes to Disabled; an opt-in name present in it goes to
+	// Enabled (a full rebuild, so an unchecked opt-in drops out of Enabled
+	// and thus turns off). Opt-in names are never written to Disabled, nor
+	// default-on names to Enabled.
+	selSet := make(map[string]bool, len(selectedEnabled))
 	for _, name := range selectedEnabled {
-		delete(disabled, name)
+		selSet[name] = true
+	}
+	fc.Disabled = fc.Disabled[:0]
+	for _, d := range defaultOn {
+		if name := d.Name(); !selSet[name] {
+			fc.Disabled = append(fc.Disabled, name)
+		}
+	}
+	fc.Enabled = fc.Enabled[:0]
+	for _, name := range optInNames {
+		if selSet[name] {
+			fc.Enabled = append(fc.Enabled, name)
+		}
 	}
 
 	// Phase 2: custom patterns. Repeated runs of the wizard should
@@ -456,12 +492,6 @@ func proxyConfigure(args []string) error {
 		if err != nil {
 			return err
 		}
-	}
-
-	// Rebuild the disabled list from the map and persist.
-	fc.Disabled = fc.Disabled[:0]
-	for name := range disabled {
-		fc.Disabled = append(fc.Disabled, name)
 	}
 
 	if err := sanitizer.SaveFileConfig(fc); err != nil {

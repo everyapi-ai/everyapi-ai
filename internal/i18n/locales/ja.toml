@@ -278,6 +278,7 @@ everyapi settings — CLI 設定の表示 / 変更
 '''
 
 [token]
+revoke_needs_confirm = "確認なしの取り消しを拒否しました。非対話的に取り消すには -y を指定してください。"
 no_tokens = "トークンがまだありません。'everyapi token create --name <名前>' を実行してください。"
 count = "%d 個のトークン:"
 full_keys_hint = "\n完全なキーは 'everyapi token key <id>' で取得できます。"
@@ -1201,6 +1202,7 @@ copy_url = "上記の URL をブラウザにコピーしてください。"
 browser_opened = "ブラウザを開きました。ページ上のフレーズが上記と一致するか確認してください。"
 
 [login]
+cancelled = "ログインをキャンセルしました。"
 waiting = "認証待機中... (Ctrl+C でキャンセル)"
 waiting_with_copy = "認証待機中... (Ctrl+C でキャンセル、'c' で URL コピー)"
 next_hint = "次は 'everyapi auth status' か 'everyapi use claude' を試してください。"
@@ -1307,6 +1309,8 @@ delete_confirm = "引換コード #%d を削除しますか？この操作は取
 clear_confirm = "使用済み / 無効 / 期限切れの引換コードをすべて削除しますか？この操作は取り消せません。"
 
 [uninstall]
+binary_remove_failed = "バイナリを削除できませんでした：%v"
+hint_binary_manual = "手動で削除してください：%s"
 plan_header = "以下を削除します："
 plan_proxy_running = "Sanitizer プロキシが実行中 — 先に停止します"
 plan_remove_marker = "[-]"

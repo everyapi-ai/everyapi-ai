@@ -1,9 +1,11 @@
 package edge
 
 import (
+	"context"
 	"errors"
 	"os/exec"
 	"runtime"
+	"time"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
@@ -44,7 +46,12 @@ func detectMode() Mode {
 // machines with WSL2 + Windows driver shim leave the binary present
 // but failing. The -L flag is the cheapest sanity query.
 func nvidiaQueryOK() bool {
-	cmd := exec.Command("nvidia-smi", "-L")
+	// Bound the probe: a wedged driver (WSL2 shim, hung GPU) can make
+	// nvidia-smi block indefinitely, which would hang `edge start`. On
+	// timeout we treat it as "no usable GPU" and fall through to rocm/cpu.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "nvidia-smi", "-L")
 	out, err := cmd.Output()
 	if err != nil || len(out) == 0 {
 		return false

@@ -8,6 +8,7 @@ package checkin
 import (
 	"errors"
 	"flag"
+	"fmt"
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
@@ -31,6 +32,13 @@ func Run(args []string) error {
 			// `claim` surfaces the claim action in the picker too;
 			// bare-form invocation stays valid.
 			return runCheckin()
+		default:
+			// An unknown subcommand must NOT silently fall through to a
+			// state-changing claim (e.g. `everyapi checkin staus` would
+			// quietly burn today's check-in). Surface it like the other
+			// subcommands do.
+			cliout.Println(i18n.T("checkin.usage"))
+			return fmt.Errorf(i18n.T("common.unknown_subcommand"), "checkin", args[0])
 		}
 	}
 	return runCheckin()

@@ -283,6 +283,7 @@ das CLI liest die Datei beim nächsten Aufruf neu.
 '''
 
 [token]
+revoke_needs_confirm = "Widerruf ohne Bestätigung abgelehnt; mit -y nicht interaktiv widerrufen."
 no_tokens = "Noch keine Tokens. Verwende 'everyapi token create --name <n>'."
 count = "%d Token:"
 full_keys_hint = "\nVolle Schlüssel mit 'everyapi token key <id>'."
@@ -1208,6 +1209,7 @@ copy_url = "Kopiere die obige URL in deinen Browser."
 browser_opened = "Browser geöffnet. Vergewissere dich, dass die Phrase auf der Seite mit der obigen übereinstimmt."
 
 [login]
+cancelled = "Anmeldung abgebrochen."
 waiting = "Warte auf Autorisierung... (Ctrl+C zum Abbrechen)"
 waiting_with_copy = "Warte auf Autorisierung... (Ctrl+C zum Abbrechen, 'c' zum URL-Kopieren drücken)"
 next_hint = "Als Nächstes: probiere 'everyapi auth status' oder 'everyapi use claude'."
@@ -1314,6 +1316,8 @@ delete_confirm = "Einlöse-Code #%d löschen? Dies kann nicht rückgängig gemac
 clear_confirm = "ALLE verwendeten / deaktivierten / abgelaufenen Codes löschen? Dies kann nicht rückgängig gemacht werden."
 
 [uninstall]
+binary_remove_failed = "Binärdatei konnte nicht entfernt werden: %v"
+hint_binary_manual = "Löschen Sie sie manuell: %s"
 plan_header = "The following will be removed:"
 plan_proxy_running = "sanitizer proxy is running — will be stopped first"
 plan_remove_marker = "[-]"

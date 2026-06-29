@@ -40,6 +40,7 @@ func sellerUpdate(args []string) error {
 	remark := fs.String("remark", "", "free-form note")
 	testModel := fs.String("test-model", "", "model used by channel health checks")
 	modelMapping := fs.String("model-mapping", "", "JSON model remap")
+	statusCodeMap := fs.String("status-code-mapping", "", "JSON status-code remap")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -66,13 +67,20 @@ func sellerUpdate(args []string) error {
 	if cur == nil {
 		return fmt.Errorf(i18n.T("seller.channel_not_found"), id)
 	}
+	// Seed EVERY editable field from the current row, then overlay only the
+	// flags the caller actually passed (fs.Visit-tracked in `seen`).
+	// Previously test-model / model-mapping / remark were written from their
+	// flag values unconditionally — and status-code-mapping had no flag at
+	// all — so any edit that didn't re-supply them blanked the channel's
+	// existing values.
 	req := api.SellerChannelUpdate{
-		Name:         cur.Name,
-		Models:       cur.Models,
-		Status:       cur.Status,
-		TestModel:    *testModel,
-		ModelMapping: *modelMapping,
-		Remark:       *remark,
+		Name:          cur.Name,
+		Models:        cur.Models,
+		Status:        cur.Status,
+		TestModel:     cur.TestModel,
+		ModelMapping:  cur.ModelMapping,
+		StatusCodeMap: cur.StatusCodeMap,
+		Remark:        cur.Remark,
 	}
 	if seen["name"] {
 		req.Name = *name
@@ -82,6 +90,25 @@ func sellerUpdate(args []string) error {
 	}
 	if seen["status"] {
 		req.Status = *status
+	} else if req.Status != 1 && req.Status != 2 {
+		// cur.Status is auto-disabled (3): the seller-update endpoint only
+		// accepts 1/2, so forwarding 3 (which a field-only edit does, since
+		// req.Status is seeded from cur) is rejected. Default to 2 (manually
+		// disabled) so editing a remark/model on an auto-disabled channel
+		// works — it stays disabled but in a seller-settable state.
+		req.Status = 2
+	}
+	if seen["remark"] {
+		req.Remark = *remark
+	}
+	if seen["test-model"] {
+		req.TestModel = *testModel
+	}
+	if seen["model-mapping"] {
+		req.ModelMapping = *modelMapping
+	}
+	if seen["status-code-mapping"] {
+		req.StatusCodeMap = *statusCodeMap
 	}
 	if err := client.UpdateSellerChannel(cliout.WithCtx(), id, req); err != nil {
 		return classifySellerErr(err)

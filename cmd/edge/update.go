@@ -18,7 +18,8 @@ func edgeUpdate(args []string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := loadNodeMeta(nodeID); err != nil {
+	meta, err := loadNodeMeta(nodeID)
+	if err != nil {
 		return err
 	}
 	if err := ensureDocker(); err != nil {
@@ -26,6 +27,30 @@ func edgeUpdate(args []string) error {
 	}
 	dir, err := nodeDir(nodeID)
 	if err != nil {
+		return err
+	}
+
+	// Re-render docker-compose.yml from persisted meta BEFORE pulling. A new
+	// CLI (shipped via `everyapi update`) can carry a changed compose
+	// template; without re-rendering, `edge update` would only pull images
+	// and leave the node on a stale compose — contradicting the generated
+	// file's own "re-render on update" note. meta.Mode was persisted by
+	// `edge start`; fall back to detection for legacy nodes predating it.
+	// Image fields stay at their writeCompose defaults, matching `edge
+	// start` when no --agent-image / --ollama-image override is given.
+	mode := meta.Mode
+	if mode == "" {
+		mode = resolveMode(ModeAuto)
+	}
+	cd := composeData{
+		NodeID:            nodeID,
+		NodeName:          meta.NodeName,
+		Mode:              mode,
+		Gateway:           meta.Gateway,
+		RegistrationToken: meta.RegistrationToken,
+		Workloads:         meta.Workloads,
+	}
+	if _, err := writeCompose(dir, cd); err != nil {
 		return err
 	}
 

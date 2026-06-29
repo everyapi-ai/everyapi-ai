@@ -34,10 +34,16 @@ func Run(args []string) error {
 	// Build a client. The abuse endpoint is TryUserAuth — works
 	// without credentials, but if we have them we'll send them so
 	// the backend can capture our user_id.
-	apiBase := "https://api.everyapi.ai"
+	apiBase := config.DefaultAPIBase
 	token := ""
 	userID := 0
-	if creds, err := config.Load(); err == nil && creds != nil {
+	creds, err := config.Load()
+	if err != nil && !errors.Is(err, config.ErrNoCredentials) {
+		// A corrupt/unreadable config is worth surfacing, not silently
+		// falling back to an anonymous report against the default base.
+		return err
+	}
+	if creds != nil {
 		apiBase = creds.APIBase
 		token = creds.AccessToken
 		userID = creds.UserID

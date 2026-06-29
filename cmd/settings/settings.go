@@ -251,16 +251,23 @@ func readKey(s *config.Settings, key string) (string, bool) {
 func writeKey(s *config.Settings, key, value string) error {
 	switch key {
 	case "language":
-		v := strings.ToLower(strings.TrimSpace(value))
+		// Match case-insensitively and persist the canonical tag the locale
+		// list advertises (e.g. "zh-TW"), so `settings set language zh-TW` —
+		// or any case variant — is accepted and `settings get` echoes the
+		// canonical form. The old lowercase-then-exact compare wrongly
+		// rejected the only mixed-case tag, zh-TW.
+		v := strings.TrimSpace(value)
 		supported := i18n.SupportedLanguages()
-		if !contains(supported, v) {
-			// Build the supported-list dynamically so the message stays
-			// truthful when a locale is added or removed without anyone
-			// remembering to retranslate the static lang_invalid copy.
-			return fmt.Errorf("%s: %s", i18n.T("settings.lang_invalid"), strings.Join(supported, ", "))
+		for _, sup := range supported {
+			if strings.EqualFold(sup, v) {
+				s.Language = sup
+				return nil
+			}
 		}
-		s.Language = v
-		return nil
+		// Build the supported-list dynamically so the message stays
+		// truthful when a locale is added or removed without anyone
+		// remembering to retranslate the static lang_invalid copy.
+		return fmt.Errorf("%s: %s", i18n.T("settings.lang_invalid"), strings.Join(supported, ", "))
 	case "menu_layout":
 		v := strings.ToLower(strings.TrimSpace(value))
 		if v != "grouped" && v != "nested" {
@@ -289,15 +296,6 @@ func labelMenuLayout(v string) string {
 		return i18n.T("settings.menu_nested")
 	}
 	return i18n.T("settings.menu_grouped")
-}
-
-func contains(haystack []string, needle string) bool {
-	for _, h := range haystack {
-		if h == needle {
-			return true
-		}
-	}
-	return false
 }
 
 // labelLanguage renders an unset Language as "(default)" + the

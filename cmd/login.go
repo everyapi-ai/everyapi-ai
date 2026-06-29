@@ -143,6 +143,13 @@ func Login(args []string) error {
 		case api.ErrDeviceAuthDenied:
 			return fmt.Errorf("authorization was denied in the browser")
 		default:
+			if errors.Is(err, context.Canceled) {
+				// Ctrl+C during the poll cancels the context; the UI told the
+				// user "Ctrl+C to cancel", so exit cleanly instead of dumping
+				// "Error: poll: context canceled" with a non-zero status.
+				cliout.Println(i18n.T("login.cancelled"))
+				return nil
+			}
 			return fmt.Errorf("poll: %w", err)
 		}
 	}
@@ -248,6 +255,13 @@ func finishOAuth2Login(ctx context.Context, apiBase string, client *api.Client, 
 		case api.ErrDeviceAuthDenied:
 			return fmt.Errorf("authorization was denied in the browser")
 		default:
+			if errors.Is(err, context.Canceled) {
+				// Ctrl+C during the poll cancels the context; the UI told the
+				// user "Ctrl+C to cancel", so exit cleanly instead of dumping
+				// "Error: poll: context canceled" with a non-zero status.
+				cliout.Println(i18n.T("login.cancelled"))
+				return nil
+			}
 			return fmt.Errorf("poll: %w", err)
 		}
 	}

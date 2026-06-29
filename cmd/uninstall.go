@@ -263,10 +263,15 @@ func executeUninstallPlan(p uninstallPlan) error {
 		existed := pathExists(p.binaryPath)
 		if err := binaryRemover(p.binaryPath); err != nil {
 			if !errors.Is(err, os.ErrNotExist) {
-				return fmt.Errorf("remove %s: %w", p.binaryPath, err)
+				// Binary removal is the LAST step and nothing depends on it.
+				// A failure here — Windows can't unlink a running image, or a
+				// read-only mount / root-owned path on Unix — must not abort
+				// after config + data are already gone. Downgrade to a warning
+				// + manual-delete hint and fall through to the done message.
+				cliout.Printf("  %s\n", fmt.Sprintf(i18n.T("uninstall.binary_remove_failed"), err))
+				cliout.Printf("  %s\n", fmt.Sprintf(i18n.T("uninstall.hint_binary_manual"), p.binaryPath))
 			}
-		}
-		if existed {
+		} else if existed {
 			cliout.Printf("  %s %s\n", i18n.T("uninstall.removed_marker"), p.binaryPath)
 		}
 	}

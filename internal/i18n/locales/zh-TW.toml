@@ -268,6 +268,7 @@ CLI 下次啟動時會重新讀取。
 '''
 
 [token]
+revoke_needs_confirm = "未確認，已拒絕撤銷；非互動環境請加 -y 重新執行。"
 no_tokens = "尚無 token。執行 'everyapi token create --name <名稱>' 建立。"
 count = "共 %d 個 token："
 full_keys_hint = "\n查看完整 key：'everyapi token key <id>'。"
@@ -1179,6 +1180,7 @@ copy_url = "請將上方 URL 複製到瀏覽器開啟。"
 browser_opened = "瀏覽器已開啟。請核對頁面上的校驗短語與上方一致。"
 
 [login]
+cancelled = "已取消登入。"
 waiting = "等待授權中…（Ctrl+C 取消）"
 waiting_with_copy = "等待授權中…（Ctrl+C 取消，按 'c' 複製 URL）"
 next_hint = "下一步：試試 'everyapi auth status' 或 'everyapi use claude'。"
@@ -1285,6 +1287,8 @@ delete_confirm = "刪除兌換碼 #%d？此操作不可撤銷。"
 clear_confirm = "刪除所有已用 / 停用 / 過期的兌換碼？此操作不可撤銷。"
 
 [uninstall]
+binary_remove_failed = "無法刪除二進位檔案：%v"
+hint_binary_manual = "請手動刪除：%s"
 plan_header = "將移除以下內容："
 plan_proxy_running = "Sanitizer 代理正在執行 — 將先停止"
 plan_remove_marker = "[-]"

@@ -259,6 +259,9 @@ func pausedSuffix(paused bool) string {
 // stays compact. Sub-second precision wouldn't survive the chat-
 // rendered roundtrip anyway and would just be noise.
 func humanDuration(d time.Duration) string {
+	if d < 0 {
+		d = 0 // a future / clock-skewed last_seen would otherwise render "-3s"
+	}
 	switch {
 	case d < time.Minute:
 		return fmt.Sprintf("%ds", int(d.Seconds()))

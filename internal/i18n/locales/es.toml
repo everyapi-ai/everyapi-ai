@@ -285,6 +285,7 @@ leerlo en la siguiente invocación.
 '''
 
 [token]
+revoke_needs_confirm = "Se rechazó la revocación sin confirmación; use -y para revocar de forma no interactiva."
 no_tokens = "Aún no hay tokens. Usa 'everyapi token create --name <n>'."
 count = "%d token(s):"
 full_keys_hint = "\nObtén las claves completas con 'everyapi token key <id>'."
@@ -1212,6 +1213,7 @@ copy_url = "Copia la URL de arriba en tu navegador."
 browser_opened = "Navegador abierto. Verifica que la frase de la página coincide con la de arriba."
 
 [login]
+cancelled = "Inicio de sesión cancelado."
 waiting = "Esperando autorización... (Ctrl+C para cancelar)"
 waiting_with_copy = "Esperando autorización... (Ctrl+C para cancelar, pulsa 'c' para copiar URL)"
 next_hint = "Siguiente: prueba 'everyapi auth status' o 'everyapi use claude'."
@@ -1318,6 +1320,8 @@ delete_confirm = "¿Eliminar el código de canje #%d? Esto no se puede deshacer.
 clear_confirm = "¿Eliminar TODOS los códigos usados / deshabilitados / expirados? Esto no se puede deshacer."
 
 [uninstall]
+binary_remove_failed = "No se pudo eliminar el binario: %v"
+hint_binary_manual = "Elimínelo manualmente: %s"
 plan_header = "The following will be removed:"
 plan_proxy_running = "sanitizer proxy is running — will be stopped first"
 plan_remove_marker = "[-]"

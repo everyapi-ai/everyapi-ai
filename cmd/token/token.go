@@ -506,7 +506,12 @@ func runRevoke(args []string) error {
 	if err != nil {
 		return err
 	}
-	if !skip && cliprompt.IsInteractive() {
+	if !skip {
+		if !cliprompt.IsInteractive() {
+			// Destructive + no TTY to confirm on: fail closed rather than
+			// silently revoking. Require explicit -y for non-interactive use.
+			return errors.New(i18n.T("token.revoke_needs_confirm"))
+		}
 		t, err := client.GetToken(cliout.WithCtx(), id)
 		if err != nil {
 			return classifyErr(err)

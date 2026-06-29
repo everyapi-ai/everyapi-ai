@@ -103,12 +103,12 @@ func runThreads(args []string) error {
 		if t.UnreadCount > 0 {
 			marker = fmt.Sprintf("(%d)", t.UnreadCount)
 		}
-		preview := t.LastMessagePreview
+		preview := cliout.Sanitize(t.LastMessagePreview)
 		if r := []rune(preview); len(r) > 80 {
 			preview = string(r[:80]) + "…"
 		}
 		cliout.Printf("  %s [#%d] %s with uid=%d (%s)\n",
-			marker, t.ID, when, t.OtherUserID, t.OtherUsername)
+			marker, t.ID, when, t.OtherUserID, cliout.Sanitize(t.OtherUsername))
 		if preview != "" {
 			cliout.Printf("        %s\n", preview)
 		}
@@ -135,7 +135,7 @@ func runContacts(args []string) error {
 	}
 	cliout.Printf("%d contact(s):\n", len(rows))
 	for _, r := range rows {
-		cliout.Printf("  uid=%d  %s\n", r.UserID, r.Username)
+		cliout.Printf("  uid=%d  %s\n", r.UserID, cliout.Sanitize(r.Username))
 	}
 	return nil
 }
@@ -166,7 +166,7 @@ func runOpen(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Thread #%d  with uid=%d (%s)\n", t.ID, t.OtherUserID, t.OtherUsername)
+	cliout.Printf("Thread #%d  with uid=%d (%s)\n", t.ID, t.OtherUserID, cliout.Sanitize(t.OtherUsername))
 	return nil
 }
 
@@ -199,7 +199,7 @@ func runMessages(args []string) error {
 		if m.ReadAt == 0 {
 			marker = "•"
 		}
-		cliout.Printf("  %s [#%d] %s  uid=%d: %s\n", marker, m.ID, when, m.SenderID, m.Body)
+		cliout.Printf("  %s [#%d] %s  uid=%d: %s\n", marker, m.ID, when, m.SenderID, cliout.Sanitize(m.Body))
 	}
 	return nil
 }

@@ -78,6 +78,9 @@ func parseWindow(s string, now time.Time) (int64, error) {
 	if strings.HasSuffix(durStr, "d") {
 		n, err := strconv.Atoi(durStr[:len(durStr)-1])
 		if err == nil {
+			if n < 0 || n > 36500 {
+				return 0, fmt.Errorf("--since/--until: %q day count out of range (0–36500)", s)
+			}
 			return now.Add(-time.Duration(n) * 24 * time.Hour).Unix(), nil
 		}
 	}
@@ -140,18 +143,18 @@ func runList(args []string) error {
 	cliout.Printf(i18n.T("log.label.rows_window")+"\n", len(rows), total)
 	for _, r := range rows {
 		ts := time.Unix(r.CreatedAt, 0).Format("01-02 15:04:05")
-		model := r.ModelName
+		model := cliout.Sanitize(r.ModelName)
 		if model == "" {
 			model = "-"
 		}
 		cliout.Printf("  %s  [#%d] %s via %s — quota=%d, tokens=%d/%d, %dms, ch=#%d\n",
-			ts, r.ID, model, emptyAs(r.TokenName, "(default)"),
+			ts, r.ID, model, emptyAs(cliout.Sanitize(r.TokenName), "(default)"),
 			r.Quota, r.PromptTokens, r.CompletionTokens, r.UseTime, r.ChannelID)
 		if r.RequestID != "" {
-			cliout.Printf("    request_id: %s\n", r.RequestID)
+			cliout.Printf("    request_id: %s\n", cliout.Sanitize(r.RequestID))
 		}
 		if r.Content != "" {
-			cliout.Printf("    %s\n", r.Content)
+			cliout.Printf("    %s\n", cliout.Sanitize(r.Content))
 		}
 	}
 	return nil
@@ -217,7 +220,7 @@ func runSummary(args []string) error {
 		totalQuota += r.Quota
 	}
 	for _, r := range rows {
-		kind := r.ChannelKindSlug
+		kind := cliout.Sanitize(r.ChannelKindSlug)
 		if kind == "" {
 			kind = "(legacy)"
 		}
@@ -226,7 +229,7 @@ func runSummary(args []string) error {
 			pct = 100.0 * float64(r.Quota) / float64(totalQuota)
 		}
 		cliout.Printf("  %-30s  quota=%-10d  count=%-6d  %5.1f%%  upstream=%s\n",
-			r.ModelName, r.Quota, r.Count, pct, kind)
+			cliout.Sanitize(r.ModelName), r.Quota, r.Count, pct, kind)
 	}
 	cliout.Printf("  total: quota=%d\n", totalQuota)
 	return nil

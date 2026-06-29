@@ -171,17 +171,18 @@ func parseWindow(s string, now time.Time) (int64, error) {
 	// cmd/log.parseWindow so `stats usage --since 7d` matches `stats log`).
 	if strings.HasSuffix(s, "d") {
 		if n, err := strconv.Atoi(s[:len(s)-1]); err == nil {
+			if n < 0 || n > 36500 {
+				return 0, errors.New("--since/--until: day count out of range (0–36500)")
+			}
 			return now.Add(-time.Duration(n) * 24 * time.Hour).Unix(), nil
 		}
 	}
-	// Bare integer = absolute Unix seconds. time.Parse can't take
-	// it so call ParseInt directly.
-	var ts int64
-	for _, ch := range s {
-		if ch < '0' || ch > '9' {
-			return 0, errors.New("--since/--until: must be a Go duration (e.g. 24h) or Unix-seconds integer")
-		}
-		ts = ts*10 + int64(ch-'0')
+	// Bare integer = absolute Unix seconds. strconv.ParseInt reports
+	// overflow, unlike the old hand-rolled digit loop which silently
+	// wrapped on out-of-range input.
+	ts, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0, errors.New("--since/--until: must be a Go duration (e.g. 24h) or Unix-seconds integer")
 	}
 	return ts, nil
 }

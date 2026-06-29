@@ -278,6 +278,7 @@ everyapi settings — CLI 환경설정 조회 / 변경
 '''
 
 [token]
+revoke_needs_confirm = "확인 없이 취소를 거부했습니다. 비대화식으로 취소하려면 -y를 사용하세요."
 no_tokens = "토큰이 없습니다. 'everyapi token create --name <이름>' 으로 생성하세요."
 count = "%d 개의 토큰:"
 full_keys_hint = "\n전체 키는 'everyapi token key <id>' 로 확인하세요."
@@ -1199,6 +1200,7 @@ copy_url = "위의 URL 을 브라우저에 복사하세요."
 browser_opened = "브라우저를 열었습니다. 페이지의 문구가 위와 일치하는지 확인하세요."
 
 [login]
+cancelled = "로그인이 취소되었습니다."
 waiting = "인증 대기 중... (Ctrl+C 로 취소)"
 waiting_with_copy = "인증 대기 중... (Ctrl+C 로 취소, 'c' 키로 URL 복사)"
 next_hint = "다음: 'everyapi auth status' 또는 'everyapi use claude' 를 시도하세요."
@@ -1305,6 +1307,8 @@ delete_confirm = "교환 코드 #%d 을 삭제하시겠습니까? 되돌릴 수 
 clear_confirm = "사용됨 / 비활성화 / 만료된 코드를 모두 삭제하시겠습니까? 되돌릴 수 없습니다."
 
 [uninstall]
+binary_remove_failed = "바이너리를 제거할 수 없습니다: %v"
+hint_binary_manual = "수동으로 삭제하세요: %s"
 plan_header = "The following will be removed:"
 plan_proxy_running = "sanitizer proxy is running — will be stopped first"
 plan_remove_marker = "[-]"

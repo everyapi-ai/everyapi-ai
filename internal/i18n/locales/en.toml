@@ -269,6 +269,7 @@ prints. Hand-editing is fine; the CLI re-reads on next invocation.
 '''
 
 [token]
+revoke_needs_confirm = "Refusing to revoke without confirmation; pass -y to revoke non-interactively."
 no_tokens = "No tokens yet. Use 'everyapi token create --name <n>'."
 count = "%d token(s):"
 full_keys_hint = "\nFull keys with 'everyapi token key <id>'."
@@ -1192,6 +1193,7 @@ copy_url = "Copy the URL above into your browser."
 browser_opened = "Browser opened. Verify the phrase on the page matches the one above."
 
 [login]
+cancelled = "Login cancelled."
 waiting = "Waiting for authorization... (Ctrl+C to cancel)"
 waiting_with_copy = "Waiting for authorization... (Ctrl+C to cancel, press 'c' to copy URL)"
 next_hint = "Next: try 'everyapi auth status' or 'everyapi use claude'."
@@ -1298,6 +1300,8 @@ delete_confirm = "Delete redemption #%d? This cannot be undone."
 clear_confirm = "Delete ALL used / disabled / expired codes? This cannot be undone."
 
 [uninstall]
+binary_remove_failed = "Could not remove the binary: %v"
+hint_binary_manual = "Delete it manually: %s"
 plan_header = "The following will be removed:"
 plan_proxy_running = "sanitizer proxy is running — will be stopped first"
 plan_remove_marker = "[-]"

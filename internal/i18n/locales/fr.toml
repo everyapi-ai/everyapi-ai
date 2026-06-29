@@ -284,6 +284,7 @@ relit le fichier à la prochaine invocation.
 '''
 
 [token]
+revoke_needs_confirm = "Révocation refusée sans confirmation ; utilisez -y pour révoquer en mode non interactif."
 no_tokens = "Pas encore de tokens. Utilisez 'everyapi token create --name <n>'."
 count = "%d token(s) :"
 full_keys_hint = "\nClés complètes avec 'everyapi token key <id>'."
@@ -1213,6 +1214,7 @@ copy_url = "Copiez l'URL ci-dessus dans votre navigateur."
 browser_opened = "Navigateur ouvert. Vérifiez que la phrase sur la page correspond à celle ci-dessus."
 
 [login]
+cancelled = "Connexion annulée."
 waiting = "En attente d'autorisation... (Ctrl+C pour annuler)"
 waiting_with_copy = "En attente d'autorisation... (Ctrl+C pour annuler, 'c' pour copier l'URL)"
 next_hint = "Suite : essayez 'everyapi auth status' ou 'everyapi use claude'."
@@ -1319,6 +1321,8 @@ delete_confirm = "Supprimer l'échange #%d ? Cette action est irréversible."
 clear_confirm = "Supprimer TOUS les codes utilisés / désactivés / expirés ? Cette action est irréversible."
 
 [uninstall]
+binary_remove_failed = "Impossible de supprimer le binaire : %v"
+hint_binary_manual = "Supprimez-le manuellement : %s"
 plan_header = "The following will be removed:"
 plan_proxy_running = "sanitizer proxy is running — will be stopped first"
 plan_remove_marker = "[-]"

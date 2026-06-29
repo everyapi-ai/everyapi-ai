@@ -329,11 +329,12 @@ func handleSellerWithdraw(ctx context.Context, raw json.RawMessage) (string, err
 		return "", classifyAPIErr(err)
 	}
 	status, sErr := client.GetStatus(ctx)
-	perUnit := 1.0
-	if sErr == nil && status.QuotaPerUnit > 0 {
-		perUnit = status.QuotaPerUnit
+	if sErr != nil || status.QuotaPerUnit <= 0 {
+		// Without a real quota→USD divisor, float64(quota)/1.0 would render
+		// raw gateway units as if they were dollars. Report success plainly.
+		return "Transferred your pending seller balance to your main balance.", nil
 	}
-	return fmt.Sprintf("Transferred $%.2f from seller balance to main balance.", float64(quota)/perUnit), nil
+	return fmt.Sprintf("Transferred $%.2f from seller balance to main balance.", float64(quota)/status.QuotaPerUnit), nil
 }
 
 // isJSONNull is a quick check for the literal `null` payload that

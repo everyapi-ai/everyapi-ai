@@ -22,6 +22,11 @@ func Run(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if *hours <= 0 {
+		// A non-positive window would print a misleading header (e.g. "0h")
+		// while the backend silently falls back to its default; normalize.
+		*hours = 24
+	}
 
 	models, err := api.New(config.ResolveAPIBase(*baseFlag), "").GetPerfSummary(cliout.WithCtx(), *hours)
 	if err != nil {

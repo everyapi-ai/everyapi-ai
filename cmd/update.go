@@ -76,6 +76,14 @@ func Update(args []string) error {
 	// and fetched best-effort in the outdated branch below.
 	latest, err := fetchLatestTag(ctx)
 	if err != nil {
+		if *checkOnly {
+			// --check is cron/CI-facing: exit 0 = up-to-date, 1 = outdated.
+			// A lookup failure must NOT masquerade as "outdated" (exit 1), or
+			// a transient network blip reads as an available upgrade. Reserve
+			// exit 2 for "couldn't determine" and say why on stderr.
+			fmt.Fprintf(os.Stderr, "could not check latest version: %v\n", err)
+			os.Exit(2)
+		}
 		return fmt.Errorf("check latest version: %w", err)
 	}
 
