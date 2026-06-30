@@ -56,6 +56,47 @@ func newClient() (*api.Client, error) {
 	return api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID), nil
 }
 
+// myUserID loads the caller's own user id from saved credentials. It
+// returns 0 when the id isn't known (no credentials, or an OAuth2
+// login that didn't persist a user id) — threadCounterpart treats 0
+// as "viewer unknown" and shows both participants rather than guessing
+// which side is "us".
+func myUserID() int {
+	creds, err := config.Load()
+	if err != nil {
+		return 0
+	}
+	return creds.UserID
+}
+
+// threadCounterpart renders the *other* participant of a thread
+// relative to the viewer `me`. The backend stores the pair unordered
+// as UserA / UserB and does not pre-compute an "other" side, so we
+// pick it here. We show both participants when we can't pin "us" to one
+// side: `me` is 0 (unknown viewer — e.g. an OAuth2 login that didn't
+// persist a user id) OR `me` matches neither participant (stale or
+// hand-edited credentials, an account/token swap). The old code's final
+// fall-through returned UserA unconditionally, which on a neither-match
+// mislabeled an arbitrary side as "the counterpart".
+func threadCounterpart(t api.DMThread, me int) string {
+	both := func() string {
+		return fmt.Sprintf("uid=%d (%s) ↔ uid=%d (%s)",
+			t.UserAID, cliout.Sanitize(t.UserAUsername),
+			t.UserBID, cliout.Sanitize(t.UserBUsername))
+	}
+	if me <= 0 {
+		return both()
+	}
+	switch me {
+	case t.UserAID:
+		return fmt.Sprintf("uid=%d (%s)", t.UserBID, cliout.Sanitize(t.UserBUsername))
+	case t.UserBID:
+		return fmt.Sprintf("uid=%d (%s)", t.UserAID, cliout.Sanitize(t.UserAUsername))
+	default:
+		return both()
+	}
+}
+
 func classifyErr(err error) error {
 	if err == nil {
 		return nil
@@ -97,20 +138,17 @@ func runThreads(args []string) error {
 		return nil
 	}
 	cliout.Printf("%d thread(s) of %d total:\n", len(rows), total)
+	me := myUserID()
 	for _, t := range rows {
 		when := time.Unix(t.LastMessageAt, 0).Format("01-02 15:04")
 		marker := " "
-		if t.UnreadCount > 0 {
-			marker = fmt.Sprintf("(%d)", t.UnreadCount)
+		if t.UnreadForViewer > 0 {
+			marker = fmt.Sprintf("(%d)", t.UnreadForViewer)
 		}
-		preview := cliout.Sanitize(t.LastMessagePreview)
-		if r := []rune(preview); len(r) > 80 {
-			preview = string(r[:80]) + "…"
-		}
-		cliout.Printf("  %s [#%d] %s with uid=%d (%s)\n",
-			marker, t.ID, when, t.OtherUserID, cliout.Sanitize(t.OtherUsername))
-		if preview != "" {
-			cliout.Printf("        %s\n", preview)
+		cliout.Printf("  %s [#%d] %s with %s\n",
+			marker, t.ID, when, threadCounterpart(t, me))
+		if t.Subject != "" {
+			cliout.Printf("        %s\n", cliout.Sanitize(t.Subject))
 		}
 	}
 	return nil
@@ -166,7 +204,7 @@ func runOpen(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Thread #%d  with uid=%d (%s)\n", t.ID, t.OtherUserID, cliout.Sanitize(t.OtherUsername))
+	cliout.Printf("Thread #%d  with %s\n", t.ID, threadCounterpart(*t, myUserID()))
 	return nil
 }
 
@@ -193,13 +231,23 @@ func runMessages(args []string) error {
 		cliout.Println(i18n.T("dm.no_messages"))
 		return nil
 	}
+	// The backend tracks read state per-thread (a per-user read pointer),
+	// not per-message — there is no read_at on a message — so a "read/unread"
+	// dot here would be meaningless (always the same). Mark direction instead:
+	// → sent by you, ← received. When the viewer id is unknown (OAuth2 login
+	// that didn't persist one) we can't attribute a side, so leave it blank.
+	me := myUserID()
 	for _, m := range rows {
 		when := time.Unix(m.CreatedAt, 0).Format("01-02 15:04")
-		marker := " "
-		if m.ReadAt == 0 {
-			marker = "•"
+		dir := " "
+		switch {
+		case me <= 0:
+		case m.SenderID == me:
+			dir = "→"
+		default:
+			dir = "←"
 		}
-		cliout.Printf("  %s [#%d] %s  uid=%d: %s\n", marker, m.ID, when, m.SenderID, cliout.Sanitize(m.Body))
+		cliout.Printf("  %s [#%d] %s  uid=%d: %s\n", dir, m.ID, when, m.SenderID, cliout.Sanitize(m.Body))
 	}
 	return nil
 }

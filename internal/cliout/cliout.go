@@ -75,9 +75,15 @@ func Sanitize(s string) string {
 		switch {
 		case c == 0x1b: // ESC — start of an escape sequence
 			i = skipEscape(s, i)
-		case c < 0x20: // C0 controls — keep only tab
-			if c == '\t' {
+		case c < 0x20: // C0 controls — keep tab; fold CR/LF to a space so a
+			// multi-line untrusted field renders readably on one line (its
+			// lines were otherwise concatenated with no separator) while still
+			// collapsing to a single line; drop the rest.
+			switch c {
+			case '\t':
 				b.WriteByte(c)
+			case '\n', '\r':
+				b.WriteByte(' ')
 			}
 			i++
 		case c < 0x80: // remaining printable ASCII (drop DEL)

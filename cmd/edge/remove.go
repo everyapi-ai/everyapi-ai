@@ -17,6 +17,10 @@ func edgeRemove(args []string) error {
 	nodeFlag := fs.Int("node", 0, "Operate on this node id (default: active node)")
 	keepBackend := fs.Bool("keep-backend", false, "Skip the DELETE /api/seller/edge/nodes/<id> call (useful when re-pointing the node at a different host)")
 	yes := fs.Bool("yes", false, "Skip the interactive confirmation")
+	// `-y` writes the same *bool via fs.BoolVar so either --yes or -y
+	// skips the prompt, matching the other destructive commands
+	// (uninstall / pause / stop).
+	fs.BoolVar(yes, "y", false, "alias for --yes")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

@@ -200,6 +200,7 @@ func Use(args []string) error {
 	if t.ModelOwner == "" || model != "" {
 		if perr := api.New(creds.APIBase, relayKey).
 			ProbeRelayToken(cliout.WithCtx()); perr != nil && api.IsUnauthorized(perr) {
+			invalidateCachedKeyOnReject(creds, group)
 			return relayKeyRejectedErr(t.ExecName, creds.APIBase)
 		}
 	}
@@ -222,7 +223,7 @@ func Use(args []string) error {
 	// proxy behind. The chosen id is injected into the tool env below.
 	presetModel := ""
 	if t.ModelOwner != "" {
-		presetModel, err = resolveClaudePresetModel(t, creds, relayKey, model)
+		presetModel, err = resolveClaudePresetModel(t, creds, relayKey, model, group)
 		if err != nil {
 			return err
 		}
@@ -707,6 +708,30 @@ func relayKeyRejectedErr(execName, apiBase string) error {
 		execName, wallet)
 }
 
+// invalidateCachedKeyOnReject clears the cached default-group relay key
+// after the pre-launch relay check came back a definitive 401, so the
+// next `everyapi use` re-resolves to a live sibling token instead of
+// re-handing-out the dead cached key (the bug this guards: a token
+// disabled/revoked/expired server-side leaves the default-group cache
+// pointing at a key the gateway now rejects, with nothing to teach it
+// otherwise).
+//
+// Gated on group == "": only the default-group path caches its key. A
+// --group/--channel key is resolved fresh and never cached, so its
+// rejection must NOT wipe the unrelated (possibly still-valid) default
+// cache. The on-disk clear is best-effort — the user is being told to
+// re-login/refresh anyway (which rewrites credentials.json) — so a Save
+// failure is surfaced as a warning rather than masking the real
+// "key rejected" error we're about to return.
+func invalidateCachedKeyOnReject(creds *config.Credentials, group string) {
+	if group != "" {
+		return
+	}
+	if err := api.InvalidateCachedRelayKey(creds); err != nil {
+		fmt.Fprintln(os.Stderr, "warning: could not clear the rejected relay key from credentials.json:", err)
+	}
+}
+
 // resolveClaudePresetModel picks the upstream model for a Claude Code
 // provider preset (Tool.ModelOwner set — glm/kimi/minimax/…). Precedence:
 //
@@ -720,7 +745,7 @@ func relayKeyRejectedErr(execName, apiBase string) error {
 // here: the whole point of `everyapi use glm` is to run a glm model, so
 // silently falling back to Claude Code's default Anthropic model would
 // be a worse surprise than a clear "no glm models reachable" error.
-func resolveClaudePresetModel(t *tools.Tool, creds *config.Credentials, relayKey, modelFlag string) (string, error) {
+func resolveClaudePresetModel(t *tools.Tool, creds *config.Credentials, relayKey, modelFlag, group string) (string, error) {
 	if modelFlag != "" {
 		return modelFlag, nil
 	}
@@ -731,8 +756,12 @@ func resolveClaudePresetModel(t *tools.Tool, creds *config.Credentials, relayKey
 	if err != nil {
 		// This fetch doubles as the relay-key probe for presets (Use
 		// skips the standalone probe when we'll reach here), so a 401
-		// gets the same actionable "dead key" guidance.
+		// gets the same actionable "dead key" guidance — and, when the
+		// rejected key was the default-group cache, clears it so the
+		// next run re-resolves to a live token instead of re-handing-out
+		// the dead one.
 		if api.IsUnauthorized(err) {
+			invalidateCachedKeyOnReject(creds, group)
 			return "", relayKeyRejectedErr(t.ExecName, creds.APIBase)
 		}
 		return "", fmt.Errorf(i18n.T("use.preset_catalog_failed"), t.Name, err)

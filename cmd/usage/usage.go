@@ -194,9 +194,11 @@ func parseWindow(s string, now time.Time) (int64, error) {
 	}
 	// Bare integer = absolute Unix seconds. strconv.ParseInt reports
 	// overflow, unlike the old hand-rolled digit loop which silently
-	// wrapped on out-of-range input.
+	// wrapped on out-of-range input. ParseInt also accepts a leading
+	// '-', so reject negative values — a negative Unix timestamp is
+	// never a valid window bound and would otherwise sail through.
 	ts, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
+	if err != nil || ts < 0 {
 		return 0, errors.New("--since/--until: must be a Go duration (e.g. 24h) or Unix-seconds integer")
 	}
 	return ts, nil

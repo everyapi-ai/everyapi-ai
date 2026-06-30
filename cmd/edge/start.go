@@ -102,12 +102,13 @@ func edgeStart(args []string) error {
 		return fmt.Errorf(i18n.T("edge.start.up_failed"), err)
 	}
 
-	// Persist the resolved mode AND any pinned images so `status` /
+	// Persist the resolved mode and operator overrides so `status` /
 	// `update` / `remove` re-render the same compose variant without
-	// re-detecting hardware or silently reverting a pin back to :latest.
-	// Best effort — a write failure here doesn't unwind the running
-	// containers, so we warn instead of fail.
+	// re-detecting hardware or silently reverting gateway/image pins back
+	// to defaults. Best effort — a write failure here doesn't unwind the
+	// running containers, so we warn instead of fail.
 	meta.Mode = resolved
+	meta.Gateway = gateway
 	meta.AgentImage = agentImage
 	meta.OllamaImage = ollamaImage
 	if err := saveNodeMeta(nodeID, meta); err != nil {

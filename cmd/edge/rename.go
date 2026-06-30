@@ -85,15 +85,22 @@ func edgeRename(args []string) error {
 		return err
 	}
 
-	// Update the on-disk meta if the name changed — `everyapi edge
-	// status` reads the cached NodeName, and a stale name on disk
-	// would confuse the user. Best-effort: server is the source of
-	// truth, so a meta-save failure doesn't undo the rename, but
-	// surface it so the user knows the local cache is stale rather
-	// than silently displaying the old name on the next `status`.
-	if trimmedName != "" {
+	// Mirror the change into on-disk meta so the next compose re-render
+	// (`edge start` / `edge update`) emits the same EVERYAPI_WORKLOADS and
+	// `edge status` shows the same name the backend now has. Persist when
+	// EITHER --name or --workloads changed: gating only on the name (the
+	// old behaviour) left meta.Workloads stale, so the next re-render kept
+	// shipping the old capability set. Best-effort: server is the source
+	// of truth, so a meta-save failure doesn't undo the rename, but
+	// surface it so the user knows the local cache is stale.
+	if trimmedName != "" || len(workloads) > 0 {
 		if meta, mErr := loadNodeMeta(nodeID); mErr == nil {
-			meta.NodeName = trimmedName
+			if trimmedName != "" {
+				meta.NodeName = trimmedName
+			}
+			if len(workloads) > 0 {
+				meta.Workloads = workloads
+			}
 			if sErr := saveNodeMeta(nodeID, meta); sErr != nil {
 				cliout.Printf(i18n.T("edge.rename.meta_save_warn"), sErr)
 			}

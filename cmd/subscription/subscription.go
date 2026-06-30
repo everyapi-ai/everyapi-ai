@@ -11,9 +11,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -133,16 +133,17 @@ func runSelf(args []string) error {
 	}
 	cliout.Printf("%d %s subscription(s):\n", len(rows), label)
 	for _, s := range rows {
+		sub := s.Subscription
 		expires := "never"
-		if s.ExpiresAt > 0 {
-			expires = time.Unix(s.ExpiresAt, 0).Format("2006-01-02")
+		if sub.EndTime > 0 {
+			expires = time.Unix(sub.EndTime, 0).Format("2006-01-02")
 		}
 		started := "?"
-		if s.StartAt > 0 {
-			started = time.Unix(s.StartAt, 0).Format("2006-01-02")
+		if sub.StartTime > 0 {
+			started = time.Unix(sub.StartTime, 0).Format("2006-01-02")
 		}
-		cliout.Printf("  [#%d] %s  source=%s  status=%s  %s → %s\n",
-			s.ID, cliout.Sanitize(s.PlanTitle), cliout.Sanitize(s.Source), cliout.Sanitize(s.Status), started, expires)
+		cliout.Printf("  [#%d] plan=%d  source=%s  status=%s  %s → %s\n",
+			sub.ID, sub.PlanID, cliout.Sanitize(sub.Source), cliout.Sanitize(sub.Status), started, expires)
 	}
 	return nil
 }

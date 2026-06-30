@@ -216,7 +216,12 @@ func runRemove(args []string) error {
 	if err := fs.Parse(rest); err != nil {
 		return err
 	}
-	if !*yes && cliprompt.IsInteractive() {
+	if !*yes {
+		if !cliprompt.IsInteractive() {
+			// Destructive + no TTY to confirm on: fail closed rather than
+			// silently removing. Require explicit -y for non-interactive use.
+			return errors.New("refusing to remove without confirmation; pass -y to remove non-interactively")
+		}
 		ok, err := cliprompt.YesNo(
 			bufio.NewReader(os.Stdin),
 			fmt.Sprintf(i18n.T("demand.remove_confirm"), id),

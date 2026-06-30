@@ -119,6 +119,16 @@ func runList(args []string) error {
 		// dispute filed against me is my OWN id.
 		var side string
 		switch {
+		case me == 0:
+			// creds.UserID is unset (e.g. an OAuth2 login that never recorded
+			// it, or pre-UserID credentials.json) — "me" matches nothing, so
+			// show both parties neutrally instead of guessing a direction that
+			// would mislabel the user's own disputes as filed against them.
+			if d.CounterpartyUserID != 0 {
+				side = fmt.Sprintf("opener uid=%d vs uid=%d", d.OpenerUserID, d.CounterpartyUserID)
+			} else {
+				side = fmt.Sprintf("opener uid=%d", d.OpenerUserID)
+			}
 		case d.OpenerUserID == me:
 			if d.CounterpartyUserID != 0 {
 				side = fmt.Sprintf("you → uid=%d", d.CounterpartyUserID)
@@ -155,7 +165,7 @@ func runShow(args []string) error {
 	if d.CounterpartyUserID != 0 {
 		cliout.Printf("  counterparty:  uid=%d\n", d.CounterpartyUserID)
 	}
-	cliout.Printf("  target id:     %s\n", d.TargetID)
+	cliout.Printf("  target id:     %s\n", cliout.Sanitize(d.TargetID))
 	cliout.Printf("  amount:        %d quota\n", d.AmountQuota)
 	cliout.Printf("  opened:        %s\n", time.Unix(d.OpenedAt, 0).Format("2006-01-02 15:04:05"))
 	if d.UpdatedAt > 0 {
@@ -165,7 +175,7 @@ func runShow(args []string) error {
 		cliout.Printf("  resolved:      %s\n", time.Unix(d.ResolvedAt, 0).Format("2006-01-02 15:04:05"))
 	}
 	if d.Description != "" {
-		cliout.Printf("  description:\n    %s\n", d.Description)
+		cliout.Printf("  description:\n    %s\n", cliout.Sanitize(d.Description))
 	}
 	return nil
 }

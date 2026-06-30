@@ -21,9 +21,14 @@ type nodeMeta struct {
 	RegistrationToken string   `json:"registration_token"`
 	Gateway           string   `json:"gateway"`
 	Mode              Mode     `json:"mode,omitempty"`
-	AgentImage        string   `json:"agent_image,omitempty"`  // pinned via `edge start --agent-image`; empty = writeCompose default
-	OllamaImage       string   `json:"ollama_image,omitempty"` // pinned via `edge start --ollama-image`; empty = writeCompose default
-	Workloads         []string `json:"workloads,omitempty"`    // declared at register time; rendered into the compose env
+	Workloads         []string `json:"workloads,omitempty"` // declared at register time; rendered into the compose env
+	// AgentImage / OllamaImage persist the operator's `edge start
+	// --agent-image / --ollama-image` overrides so a later `edge update`
+	// re-renders the same images instead of reverting to the writeCompose
+	// defaults. Empty means "use the default" — same semantics as the
+	// flags being omitted.
+	AgentImage  string `json:"agent_image,omitempty"`
+	OllamaImage string `json:"ollama_image,omitempty"`
 }
 
 // dataRoot returns ~/.local/share/everyapi/edge (or the XDG override).

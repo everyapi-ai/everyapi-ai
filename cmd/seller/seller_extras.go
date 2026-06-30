@@ -91,12 +91,13 @@ func sellerUpdate(args []string) error {
 	if seen["status"] {
 		req.Status = *status
 	} else if req.Status != 1 && req.Status != 2 {
-		// cur.Status is auto-disabled (3): the seller-update endpoint only
-		// accepts 1/2, so forwarding 3 (which a field-only edit does, since
-		// req.Status is seeded from cur) is rejected. Default to 2 (manually
-		// disabled) so editing a remark/model on an auto-disabled channel
-		// works — it stays disabled but in a seller-settable state.
-		req.Status = 2
+		// cur.Status is auto-disabled (3) and no --status was given. The
+		// seller-update endpoint only accepts 1/2, but silently forwarding 2
+		// (manually-disabled) would strip the channel of health-check
+		// auto-recovery — the backend only auto-re-enables status 3 — so a
+		// field-only edit (e.g. a remark change) would permanently strand an
+		// auto-disabled channel. Refuse and make the seller decide explicitly.
+		return errors.New("channel is auto-disabled by health checks; pass --status 1 to re-enable it or --status 2 to keep it manually disabled (a field-only edit cannot safely change auto-disabled status)")
 	}
 	if seen["remark"] {
 		req.Remark = *remark

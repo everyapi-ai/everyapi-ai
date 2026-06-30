@@ -83,6 +83,25 @@ func classifyErr(err error) error {
 	return err
 }
 
+// clearCachedRelayKey wipes the cached relay key from credentials.json so the
+// next `everyapi use` re-resolves to a live sibling token instead of handing
+// out the key just disabled/revoked. Delegates to api.InvalidateCachedRelayKey
+// so the OAuth2-mode guard (there the cached key IS the refreshable access
+// token — never wipe it) and the nil/empty checks live in one place.
+//
+// It deliberately does NOT first confirm the cached plaintext belongs to THIS
+// token: that confirmation needs a TokenKey fetch, which the backend
+// audit-logs as a key disclosure, so a routine disable/revoke would emit a
+// spurious "key disclosed" event (and pull the plaintext into the CLI for no
+// reason). Clearing unconditionally is safe — re-resolution is cheap and only
+// the next `use` pays for it. Best-effort: a Save failure is warned to stderr
+// but never turns a successful disable/revoke into a command error.
+func clearCachedRelayKey(creds *config.Credentials) {
+	if err := api.InvalidateCachedRelayKey(creds); err != nil {
+		fmt.Fprintln(os.Stderr, "warning: could not clear the cached relay key from credentials.json:", err)
+	}
+}
+
 func parseID(args []string, verb string) (int, []string, error) {
 	if len(args) == 0 {
 		return 0, nil, fmt.Errorf(i18n.T("token.usage_arg_id"), verb)
@@ -480,13 +499,21 @@ func runSetStatus(args []string, status int) (err error) {
 	if err != nil {
 		return err
 	}
-	client, _, err := newClient()
+	client, creds, err := newClient()
 	if err != nil {
 		return err
 	}
 	out, err := client.SetTokenStatus(cliout.WithCtx(), id, status)
 	if err != nil {
 		return classifyErr(err)
+	}
+	// A disable kills the key for relay use; if `everyapi use` cached a key,
+	// drop it so the next run re-resolves to a live sibling instead of the
+	// just-disabled one. Cleared unconditionally (not gated on "is this the
+	// cached token") to avoid the TokenKey disclosure that gating would need —
+	// see clearCachedRelayKey. Enable is not a kill — never invalidate on it.
+	if status == api.TokenStatusDisabled {
+		clearCachedRelayKey(creds)
 	}
 	cliout.Printf(i18n.T("token.status_changed")+"\n", out.ID, statusLabel(out.Status))
 	return nil
@@ -509,7 +536,7 @@ func runRevoke(args []string) error {
 		return err
 	}
 	skip := *yes || *yesLong
-	client, _, err := newClient()
+	client, creds, err := newClient()
 	if err != nil {
 		return err
 	}
@@ -539,6 +566,12 @@ func runRevoke(args []string) error {
 	if err := client.DeleteToken(cliout.WithCtx(), id); err != nil {
 		return classifyErr(err)
 	}
+	// A revoke kills the key; if `everyapi use` cached one, drop it so the next
+	// run re-resolves to a live sibling. Cleared unconditionally rather than
+	// gated on a TokenKey check (which the backend audit-logs as a disclosure)
+	// — see clearCachedRelayKey. No TokenKey call also means the now-deleted
+	// row's missing key endpoint is irrelevant.
+	clearCachedRelayKey(creds)
 	cliout.Printf(i18n.T("token.revoked")+"\n", id)
 	return nil
 }

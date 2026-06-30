@@ -34,10 +34,11 @@ func edgeUpdate(args []string) error {
 	// CLI (shipped via `everyapi update`) can carry a changed compose
 	// template; without re-rendering, `edge update` would only pull images
 	// and leave the node on a stale compose — contradicting the generated
-	// file's own "re-render on update" note. meta.Mode and the pinned
-	// AgentImage/OllamaImage were persisted by `edge start`; carrying them
-	// through here is what keeps a pinned image from silently reverting to
-	// :latest on update.
+	// file's own "re-render on update" note. meta.Mode was persisted by
+	// `edge start`; fall back to detection for legacy nodes predating it.
+	// Gateway + image overrides are seeded from meta too, so an `edge start
+	// --gateway / --agent-image / --ollama-image` survives a later `edge
+	// update` instead of reverting to the writeCompose defaults.
 	mode := meta.Mode
 	persistMode := false
 	if mode == "" {

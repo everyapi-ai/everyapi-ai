@@ -382,7 +382,12 @@ func runOAuthUnbind(args []string) error {
 	if err != nil {
 		return err
 	}
-	if !*yes && cliprompt.IsInteractive() {
+	if !*yes {
+		if !cliprompt.IsInteractive() {
+			// Destructive + no TTY to confirm on: fail closed rather than
+			// silently unbinding. Require explicit -y for non-interactive use.
+			return errors.New("refusing to unbind without confirmation; pass -y to unbind non-interactively")
+		}
 		ok, err := cliprompt.YesNo(
 			bufio.NewReader(os.Stdin),
 			fmt.Sprintf(i18n.T("user.unbind_confirm"), id),
@@ -466,7 +471,12 @@ func runAffTransfer(client *api.Client, args []string) error {
 		perUnit = status.QuotaPerUnit
 	}
 	usd := float64(amount) / perUnit
-	if !yes && cliprompt.IsInteractive() {
+	if !yes {
+		if !cliprompt.IsInteractive() {
+			// Financial + no TTY to confirm on: fail closed rather than
+			// silently transferring. Require explicit -y for non-interactive use.
+			return errors.New("refusing to transfer without confirmation; pass -y to transfer non-interactively")
+		}
 		ok, err := cliprompt.YesNo(bufio.NewReader(os.Stdin), fmt.Sprintf(i18n.T("user.aff_transfer_confirm"), usd, amount), false)
 		if err != nil {
 			return err

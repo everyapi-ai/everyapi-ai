@@ -202,6 +202,12 @@ func runSummary(args []string) error {
 	if err != nil {
 		return err
 	}
+	if end == 0 {
+		// Empty --until means "now"; the backend rejects an open upper bound
+		// (endTimestamp <= 0) with "time span too large", so the default
+		// `stats log summary` would always error. Bound it to now.
+		end = now.Unix()
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
