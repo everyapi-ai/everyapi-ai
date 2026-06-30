@@ -220,11 +220,11 @@ func sellerRefresh(args []string) error {
 	if res.Email != "" {
 		cliout.Printf(i18n.T("seller.refresh_account_label")+"\n", res.Email)
 	}
-	if res.ExpiresAt > 0 {
-		cliout.Printf(i18n.T("seller.refresh_expires_label")+"\n", time.Unix(res.ExpiresAt, 0).Format("2006-01-02 15:04:05"))
+	if res.ExpiresAt != "" {
+		cliout.Printf(i18n.T("seller.refresh_expires_label")+"\n", res.ExpiresAt)
 	}
-	if res.LastRefresh > 0 {
-		cliout.Printf(i18n.T("seller.refresh_last_refresh_label")+"\n", time.Unix(res.LastRefresh, 0).Format("2006-01-02 15:04:05"))
+	if res.LastRefresh != "" {
+		cliout.Printf(i18n.T("seller.refresh_last_refresh_label")+"\n", res.LastRefresh)
 	}
 	return nil
 }

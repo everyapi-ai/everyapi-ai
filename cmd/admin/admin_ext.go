@@ -368,6 +368,9 @@ func parseWindow(s string, now time.Time) (int64, error) {
 	// rejects "d" so we strip + multiply manually.
 	if len(s) > 1 && s[len(s)-1] == 'd' {
 		if n, err := strconv.Atoi(s[:len(s)-1]); err == nil {
+			if n < 0 || n > 36500 {
+				return 0, fmt.Errorf("--since: %q day count out of range (0-36500)", s)
+			}
 			return now.Add(-time.Duration(n) * 24 * time.Hour).Unix(), nil
 		}
 	}

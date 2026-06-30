@@ -112,6 +112,9 @@ func max1(v int) int {
 }
 
 func formatDuration(d time.Duration) string {
+	if d < 0 {
+		d = 0 // a future / clock-skewed timestamp would otherwise render "-Ns"
+	}
 	if d < time.Minute {
 		return fmt.Sprintf("%ds", int(d.Seconds()))
 	}

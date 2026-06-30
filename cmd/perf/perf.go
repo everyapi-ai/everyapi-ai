@@ -1,8 +1,10 @@
 // Package perf wires `everyapi stats perf` — a per-model performance summary
 // (success rate / latency / throughput) of the gateway's relay traffic.
-// Complements `everyapi stats upstream` (provider-side status). The endpoint
-// is a global aggregate with optional auth, so this works before login;
-// pass --base to point at a non-default gateway.
+// Complements `everyapi stats upstream` (provider-side status). The
+// /api/perf-metrics/summary endpoint is admin-only (it exposes internal
+// upstream channel topology and runs heavy log scans), so this sends the
+// logged-in credentials and an anonymous call gets 401; pass --base to point
+// at a non-default gateway.
 package perf
 
 import (
@@ -28,7 +30,14 @@ func Run(args []string) error {
 		*hours = 24
 	}
 
-	models, err := api.New(config.ResolveAPIBase(*baseFlag), "").GetPerfSummary(cliout.WithCtx(), *hours)
+	// /api/perf-metrics/summary is admin-only — send credentials when present
+	// so a logged-in admin gets data instead of a 401.
+	base := config.ResolveAPIBase(*baseFlag)
+	client := api.New(base, "")
+	if creds, lerr := config.Load(); lerr == nil && creds != nil {
+		client = api.New(base, creds.AccessToken).WithUserID(creds.UserID)
+	}
+	models, err := client.GetPerfSummary(cliout.WithCtx(), *hours)
 	if err != nil {
 		return err
 	}

@@ -37,7 +37,7 @@ func marketplaceStatus() error {
 	}
 	val, found, err := client.GetOption(cliout.WithCtx(), marketplaceOptionKey)
 	if err != nil {
-		return err
+		return classifyErr(err)
 	}
 	if !found {
 		cliout.Printf("%s", i18n.T("admin.marketplace.status_unset"))
@@ -62,10 +62,10 @@ func marketplaceSet(target bool) error {
 	// command — there is no batch use case for this.
 	prev, _, err := client.GetOption(cliout.WithCtx(), marketplaceOptionKey)
 	if err != nil {
-		return err
+		return classifyErr(err)
 	}
 	if err := client.SetBoolOption(cliout.WithCtx(), marketplaceOptionKey, target); err != nil {
-		return err
+		return classifyErr(err)
 	}
 	if prev == targetStr {
 		cliout.Printf(i18n.T("admin.marketplace.no_change"), boolState(targetStr))

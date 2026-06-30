@@ -45,6 +45,9 @@ func Run(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if *days < 0 || *days > 36500 {
+		return errors.New("--days out of range (0-36500)")
+	}
 	now := time.Now()
 	start := now.Add(-time.Duration(*days) * 24 * time.Hour).Unix()
 	if *sinceStr != "" {
