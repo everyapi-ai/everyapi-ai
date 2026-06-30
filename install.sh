@@ -1,31 +1,31 @@
 #!/usr/bin/env bash
 # EveryAPI CLI — one-shot installer for Linux / macOS.
 #
-# Canonical source:  everyapi-ai/everyapi  → clients/cli/install.sh
-# Distribution copy: everyapi-ai/everyapi-web → apps/landingpage/public/install.sh
-# (served at https://everyapi.ai/install.sh). When editing, update the
-# canonical first, then copy the file verbatim into the landing page repo.
+# Canonical source: everyapi-ai/everyapi → clients/cli/install.sh
 #
-# The two copies are currently kept in sync by hand. Because this file
-# is a curl|bash installer — i.e. arbitrary code we ask users to pipe
-# into a shell — drift between the repos is a real supply-chain
-# concern: a stale or tampered web copy would ship to every new
-# installer. A `diff` gate in everyapi-web's CI (failing the build if
-# apps/landingpage/public/install.sh diverges from the latest copy
-# fetched from this repo) is the intended long-term fix. Until that
-# lands, treat any edit here as a two-PR change: this one, then the
-# byte-identical mirror PR against everyapi-web.
+# Distribution: cli-release.yml publishes this file (plus the release
+# artifacts and a `latest` pointer) to the Aliyun OSS mirror on every
+# release, served at https://dl.everyapi.ai/install.sh — the one install
+# command, worldwide. It works from mainland China (the OSS mirror) and
+# overseas (GitHub), self-routing the artifact downloads at runtime, so
+# there is no separate "China command".
+#
+# everyapi-ai/everyapi-web also serves a verbatim copy at
+# https://everyapi.ai/install.sh (marketing site, overseas alias). Because
+# this is a curl|bash installer — arbitrary code piped into a shell —
+# drift is a supply-chain risk: edit the canonical here first, then mirror
+# it byte-for-byte into everyapi-web.
 #
 # Usage:
 #
 #   # Latest stable, smart prefix (~/.local/bin for non-root, /usr/local/bin for root)
-#   curl -fsSL https://everyapi.ai/install.sh | bash
+#   curl -fsSL https://dl.everyapi.ai/install.sh | bash
 #
 #   # Pin a specific version
-#   curl -fsSL https://everyapi.ai/install.sh | bash -s -- --version v0.2.2
+#   curl -fsSL https://dl.everyapi.ai/install.sh | bash -s -- --version v0.2.2
 #
 #   # Force a specific prefix (script picks the bin/ subdir under it)
-#   curl -fsSL https://everyapi.ai/install.sh | bash -s -- --prefix /usr/local
+#   curl -fsSL https://dl.everyapi.ai/install.sh | bash -s -- --prefix /usr/local
 #
 # What it does:
 #
@@ -67,6 +67,7 @@ main() {
 
 REPO="everyapi-ai/everyapi-ai"
 VERSION=""
+VERSION_PINNED=0   # 1 when --version was passed: never silently substitute it
 PREFIX=""
 FORCE=0
 VERIFY_SIGNATURE="auto"   # auto | required | skip
@@ -106,7 +107,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --version)
       need_value "$1" "$#" "${2:-}" || exit 1
-      VERSION="$2"; shift 2 ;;
+      VERSION="$2"; VERSION_PINNED=1; shift 2 ;;
     --prefix)
       need_value "$1" "$#" "${2:-}" || exit 1
       PREFIX="$2"; shift 2 ;;
@@ -123,8 +124,8 @@ while [ $# -gt 0 ]; do
 EveryAPI CLI installer — Linux / macOS
 
 Usage:
-  curl -fsSL https://everyapi.ai/install.sh | bash
-  curl -fsSL https://everyapi.ai/install.sh | bash -s -- [options]
+  curl -fsSL https://dl.everyapi.ai/install.sh | bash
+  curl -fsSL https://dl.everyapi.ai/install.sh | bash -s -- [options]
 
 Options:
   --version vX.Y.Z       Pin a specific release tag (default: latest).
@@ -204,24 +205,81 @@ case "$UNAME_M" in
 esac
 ok "platform: ${OS}_${ARCH}"
 
-# ----- Resolve version -------------------------------------------------------
+# ----- Choose download source + resolve version ------------------------------
+#
+# One command, everywhere. EVERYAPI_DOWNLOAD_BASE (if set) forces a mirror.
+# Otherwise GitHub Releases is the default, with the built-in Aliyun OSS mirror
+# as the fallback for mainland China (where github.com is slow/blocked). We
+# decide by REACHABILITY, not geo-IP — resolving the latest tag from GitHub
+# doubles as the reachability test, so the happy path is a single request and a
+# GitHub failure (timeout/blocked) drops transparently to the mirror's
+# "<base>/latest" pointer. A non-empty DOWNLOAD_BASE routes downloads through
+# "<base>/<tag>/"; empty means GitHub. Every network call here is time-bounded
+# so a throttled-to-a-trickle CN link errors (and falls back) instead of
+# hanging forever.
+MIRROR_BASE="https://dl.everyapi.ai"
 
-if [ -z "$VERSION" ]; then
-  info "resolving latest release tag from ${REPO}…"
-  # /releases/latest 302-redirects to the latest tag's release page;
-  # we follow the redirect with -L and read the final URL via
-  # %{url_effective}, then strip the trailing path component to get
-  # the tag. This avoids hitting api.github.com (which would require
-  # parsing JSON and is rate-limited per IP for anonymous calls), and
-  # keeps the resolution to a single HEAD request against the
-  # github.com web origin.
-  LATEST_URL=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
-    "https://github.com/$REPO/releases/latest" || true)
-  VERSION="${LATEST_URL##*/}"
-  if [ -z "$VERSION" ] || [ "$VERSION" = "latest" ]; then
-    err "could not resolve latest version — is the public mirror up?"
-    err "try passing --version vX.Y.Z explicitly"
-    exit 1
+# gh_latest: echo the latest v* tag via the github.com web redirect (NOT
+# api.github.com — that path is separately rate-limited/blocked), or empty on
+# any failure/timeout. /releases/latest 302s to /releases/tag/<tag>; we read the
+# Location with %{url_effective} and strip to the tag.
+gh_latest() {
+  local _url
+  _url=$(curl -fsSLI --connect-timeout 5 --max-time 8 -o /dev/null \
+    -w '%{url_effective}' "https://github.com/$REPO/releases/latest" 2>/dev/null || true)
+  case "$_url" in
+    */releases/tag/v*) printf '%s' "${_url##*/}" ;;
+  esac
+}
+
+# mirror_latest: echo the latest tag from the mirror's plain-text /latest, or
+# empty. Used for mirror-mode resolution and the fetch() release-window fallback.
+mirror_latest() {
+  curl -fsSL --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 8 \
+    "$MIRROR_BASE/latest" 2>/dev/null | head -n1 | tr -d '[:space:]' || true
+}
+
+if [ -n "${EVERYAPI_DOWNLOAD_BASE:-}" ]; then
+  DOWNLOAD_BASE="${EVERYAPI_DOWNLOAD_BASE%/}"
+  info "download source: mirror (EVERYAPI_DOWNLOAD_BASE=$DOWNLOAD_BASE)"
+  if [ -z "$VERSION" ]; then
+    info "resolving latest release tag from mirror…"
+    VERSION=$(curl -fsSL --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 8 \
+      "$DOWNLOAD_BASE/latest" 2>/dev/null | head -n1 | tr -d '[:space:]' || true)
+    if [ -z "$VERSION" ]; then
+      err "could not resolve latest version from mirror ($DOWNLOAD_BASE/latest)"
+      err "try passing --version vX.Y.Z explicitly"
+      exit 1
+    fi
+  fi
+elif [ -n "$VERSION" ]; then
+  # Version pinned — no resolution needed. Pick a source with a quick (timed)
+  # github.com reachability probe; fetch() still falls back per download.
+  if curl -fsS --connect-timeout 5 --max-time 8 -o /dev/null -I \
+       "https://github.com/$REPO/releases/latest" 2>/dev/null; then
+    DOWNLOAD_BASE=""
+    info "download source: GitHub Releases"
+  else
+    DOWNLOAD_BASE="$MIRROR_BASE"
+    warn "github.com is slow or unreachable — using the mainland mirror ($MIRROR_BASE)"
+  fi
+else
+  # Resolve the latest tag; a successful resolve doubles as the reachability
+  # probe (one request, not two), and a failure drops to the mirror.
+  info "resolving latest release tag…"
+  VERSION=$(gh_latest)
+  if [ -n "$VERSION" ]; then
+    DOWNLOAD_BASE=""
+    info "download source: GitHub Releases ($VERSION)"
+  else
+    DOWNLOAD_BASE="$MIRROR_BASE"
+    warn "github.com is slow or unreachable — using the mainland mirror ($MIRROR_BASE)"
+    VERSION=$(mirror_latest)
+    if [ -z "$VERSION" ]; then
+      err "could not resolve latest version from GitHub or the mirror"
+      err "try passing --version vX.Y.Z explicitly"
+      exit 1
+    fi
   fi
 fi
 case "$VERSION" in
@@ -288,7 +346,11 @@ fi
 
 TARBALL="everyapi_${OS}_${ARCH}.tar.gz"
 SUMS="SHA256SUMS"
-BASE_URL="https://github.com/$REPO/releases/download/$VERSION"
+if [ -n "$DOWNLOAD_BASE" ]; then
+  BASE_URL="$DOWNLOAD_BASE/$VERSION"
+else
+  BASE_URL="https://github.com/$REPO/releases/download/$VERSION"
+fi
 
 # Explicit-path mktemp invocation. `mktemp -d -t TEMPLATE` is one of
 # the few mktemp flags that splits hard between GNU and BSD: GNU treats
@@ -301,15 +363,62 @@ TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/everyapi-install.XXXXXX")
 # error doesn't leave the tmpdir behind to accumulate under /tmp.
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+# dl: curl with the download hardening shared by every fetch. --connect-timeout
+# bounds the handshake; --speed-limit/--speed-time abort a transfer that drops
+# below 1 KB/s for 20s, so a throttled-to-a-trickle CN link ERRORS (and triggers
+# the retry/fallback below) instead of hanging forever — there is deliberately
+# no overall --max-time, since a large binary on a slow-but-healthy link is fine.
+dl() {
+  curl -fsSL --proto '=https' --tlsv1.2 \
+    --connect-timeout 10 --speed-limit 1024 --speed-time 20 "$@"
+}
+
+# fetch <name> <outfile>: download $BASE_URL/<name>. Retry the primary source a
+# few times first — a transient blip on a REACHABLE GitHub should not silently
+# reroute trust to the mirror — then, only if the primary was GitHub, fall back
+# to the mirror once. That fallback is the mainland case where the github.com
+# probe passed but the asset host (objects.githubusercontent.com) is blocked.
+# On fallback DOWNLOAD_BASE/BASE_URL flip to the mirror so the checksum + cosign
+# fetches that follow stay consistent; and if the mirror doesn't have the
+# GitHub-resolved tag yet (decoupled mirror job still running after a release),
+# it drops to the mirror's own latest instead of 404-ing.
+fetch() {
+  local _name="$1" _out="$2" _try
+  for _try in 1 2 3; do
+    if dl -o "$_out" "$BASE_URL/$_name"; then
+      return 0
+    fi
+    [ "$_try" -lt 3 ] && sleep 1
+  done
+  [ -n "$DOWNLOAD_BASE" ] && return 1   # already on a mirror — nothing to fall back to
+  warn "github.com download failed — falling back to the mainland mirror"
+  DOWNLOAD_BASE="$MIRROR_BASE"
+  BASE_URL="$MIRROR_BASE/$VERSION"
+  if dl -o "$_out" "$BASE_URL/$_name"; then
+    return 0
+  fi
+  [ "$VERSION_PINNED" -eq 1 ] && return 1   # explicit --version: don't substitute
+  local _ml
+  _ml=$(mirror_latest)
+  if [ -n "$_ml" ] && [ "$_ml" != "$VERSION" ]; then
+    warn "mirror has no $VERSION yet — using the mirror's latest ($_ml)"
+    VERSION="$_ml"
+    BASE_URL="$MIRROR_BASE/$VERSION"
+    dl -o "$_out" "$BASE_URL/$_name"
+    return $?
+  fi
+  return 1
+}
+
 info "downloading ${TARBALL}…"
-curl -fsSL --proto '=https' --tlsv1.2 -o "$TMP_DIR/$TARBALL" "$BASE_URL/$TARBALL" || {
-  err "failed to download $BASE_URL/$TARBALL"
-  err "double-check that $VERSION is published at https://github.com/$REPO/releases"
+fetch "$TARBALL" "$TMP_DIR/$TARBALL" || {
+  err "failed to download $TARBALL from GitHub and the mirror"
+  err "check your connection, or pin a known version with --version vX.Y.Z"
   exit 1
 }
 info "downloading ${SUMS}…"
-curl -fsSL --proto '=https' --tlsv1.2 -o "$TMP_DIR/$SUMS" "$BASE_URL/$SUMS" || {
-  err "failed to download $BASE_URL/$SUMS — refusing to install without checksum"
+fetch "$SUMS" "$TMP_DIR/$SUMS" || {
+  err "failed to download $SUMS — refusing to install without checksum"
   exit 1
 }
 
@@ -377,8 +486,7 @@ ok "SHA256 verified"
 if [ "$VERIFY_SIGNATURE" != "skip" ]; then
   if command -v cosign >/dev/null 2>&1; then
     info "downloading cosign signature + certificate…"
-    curl -fsSL --proto '=https' --tlsv1.2 \
-      -o "$TMP_DIR/$SUMS.sig" "$BASE_URL/$SUMS.sig" || {
+    dl -o "$TMP_DIR/$SUMS.sig" "$BASE_URL/$SUMS.sig" || {
       if [ "$VERIFY_SIGNATURE" = "required" ]; then
         err "signature download failed and --require-signature is set"
         exit 1
@@ -386,8 +494,7 @@ if [ "$VERIFY_SIGNATURE" != "skip" ]; then
       warn "signature not available for $VERSION — skipping cosign verify"
     }
     if [ -f "$TMP_DIR/$SUMS.sig" ]; then
-      curl -fsSL --proto '=https' --tlsv1.2 \
-        -o "$TMP_DIR/$SUMS.pem" "$BASE_URL/$SUMS.pem" || {
+      dl -o "$TMP_DIR/$SUMS.pem" "$BASE_URL/$SUMS.pem" || {
         if [ "$VERIFY_SIGNATURE" = "required" ]; then
           err "certificate download failed and --require-signature is set"
           exit 1

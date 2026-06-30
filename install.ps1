@@ -9,18 +9,20 @@
   SHA256 (and the cosign keyless signature when cosign is present), then drop
   everyapi.exe on the user's PATH.
 
-  Canonical source:  everyapi-ai/everyapi  -> clients/cli/install.ps1
-  Served at:         https://everyapi.ai/install.ps1 (the landing worker
-                     proxies the public mirror everyapi-ai/everyapi-ai, which
-                     cli-release.yml snapshots clients/cli/ into). Edit the
-                     canonical file here; the release pipeline mirrors it.
+  Canonical source: everyapi-ai/everyapi -> clients/cli/install.ps1
+  Distribution:     cli-release.yml publishes this file to the Aliyun OSS
+                    mirror on every release, served at
+                    https://dl.everyapi.ai/install.ps1 — one command,
+                    worldwide (mainland China via the mirror, overseas via
+                    GitHub; self-routed at runtime). everyapi.ai/install.ps1
+                    is an overseas alias kept in sync. Edit the canonical here.
 
 .EXAMPLE
-  irm https://everyapi.ai/install.ps1 | iex
+  irm https://dl.everyapi.ai/install.ps1 | iex
 
 .EXAMPLE
   # Pass options by materializing the script first:
-  & ([scriptblock]::Create((irm https://everyapi.ai/install.ps1))) -Version v0.2.2
+  & ([scriptblock]::Create((irm https://dl.everyapi.ai/install.ps1))) -Version v0.2.2
 #>
 [CmdletBinding()]
 param(
@@ -51,6 +53,7 @@ try {
 }
 
 $Repo = 'everyapi-ai/everyapi-ai'
+$MirrorBase = 'https://dl.everyapi.ai'
 
 function Write-Info($m) { Write-Host "> $m" -ForegroundColor Cyan }
 function Write-Ok($m)   { Write-Host "+ $m" -ForegroundColor Green }
@@ -63,15 +66,31 @@ function Write-Warn($m) { Write-Host "! $m" -ForegroundColor Yellow }
 function Die($m) { throw $m }
 
 function Get-LatestTag {
-  # Ask the API for the latest release tag. Unlike install.sh (which follows
-  # the /releases/latest web redirect to dodge anonymous rate limits), a one-
-  # shot installer makes a single call, so the 60/hr anonymous budget is a
-  # non-issue and the JSON path needs no cross-version redirect handling.
+  # Mirror mode (parity with install.sh): read the tag from a plain-text
+  # "<base>/latest" pointer the release pipeline writes next to the artifacts.
+  if ($DownloadBase) {
+    try {
+      return ((Invoke-WebRequest -Uri "$DownloadBase/latest" -TimeoutSec 8 -UseBasicParsing).Content).Trim()
+    } catch {
+      Die "could not resolve the latest version from mirror ($DownloadBase/latest). Pass -Version vX.Y.Z explicitly. ($($_.Exception.Message))"
+    }
+  }
+  # GitHub mode. NOTE: api.github.com is a DIFFERENT host than the github.com
+  # reachability probe and is independently blocked/throttled in mainland China,
+  # so a passing probe does not guarantee this resolves. On failure, fall back to
+  # the mirror's /latest and route the rest of the install through the mirror too
+  # (set $script:DownloadBase) — the parity of install.sh's resolve fallback.
   $headers = @{ 'User-Agent' = 'everyapi-install.ps1'; 'Accept' = 'application/vnd.github+json' }
   try {
-    return (Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -Headers $headers).tag_name
+    return (Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -Headers $headers -TimeoutSec 8).tag_name
   } catch {
-    Die "could not resolve the latest version (is the public mirror up?). Pass -Version vX.Y.Z explicitly. ($($_.Exception.Message))"
+    Write-Warn "github.com version lookup failed — using the mainland mirror ($MirrorBase)"
+    $script:DownloadBase = $MirrorBase
+    try {
+      return ((Invoke-WebRequest -Uri "$MirrorBase/latest" -TimeoutSec 8 -UseBasicParsing).Content).Trim()
+    } catch {
+      Die "could not resolve the latest version from GitHub or the mirror. Pass -Version vX.Y.Z explicitly. ($($_.Exception.Message))"
+    }
   }
 }
 
@@ -134,7 +153,7 @@ function Invoke-Install {
   # ----- Download ------------------------------------------------------------
   $zipName = "everyapi_windows_${arch}.zip"
   $sumsName = 'SHA256SUMS'
-  $baseUrl = "https://github.com/$Repo/releases/download/$ver"
+  $baseUrl = if ($DownloadBase) { "$DownloadBase/$ver" } else { "https://github.com/$Repo/releases/download/$ver" }
 
   $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("everyapi-install." + [System.IO.Path]::GetRandomFileName())
   New-Item -ItemType Directory -Force -Path $tmp | Out-Null
@@ -142,18 +161,36 @@ function Invoke-Install {
     $zipPath = Join-Path $tmp $zipName
     $sumsPath = Join-Path $tmp $sumsName
 
+    # Download with parity to install.sh's fetch(): retry the primary a few
+    # times (a transient blip on a reachable GitHub shouldn't reroute trust to
+    # the mirror), then — only if the primary was GitHub — fall back to the
+    # mirror once. The mainland case is a passing github.com probe but a blocked
+    # asset host (objects.githubusercontent.com). -TimeoutSec bounds a stalled
+    # transfer so it errors (and falls back) instead of hanging. On fallback we
+    # flip $script:DownloadBase; $baseUrl is recomputed afterward for cosign.
+    function Get-Asset($name, $out) {
+      $primary = if ($DownloadBase) { "$DownloadBase/$ver" } else { "https://github.com/$Repo/releases/download/$ver" }
+      for ($i = 1; $i -le 3; $i++) {
+        try { Invoke-WebRequest -Uri "$primary/$name" -OutFile $out -TimeoutSec 120 -UseBasicParsing; return $true } catch { }
+        if ($i -lt 3) { Start-Sleep -Seconds 1 }
+      }
+      if ($DownloadBase) { return $false }   # already on a mirror — no further fallback
+      Write-Warn 'github.com download failed — falling back to the mainland mirror'
+      $script:DownloadBase = $MirrorBase
+      try { Invoke-WebRequest -Uri "$MirrorBase/$ver/$name" -OutFile $out -TimeoutSec 120 -UseBasicParsing; return $true } catch { return $false }
+    }
+
     Write-Info "downloading $zipName..."
-    try {
-      Invoke-WebRequest -Uri "$baseUrl/$zipName" -OutFile $zipPath -UseBasicParsing
-    } catch {
-      Die "failed to download $baseUrl/$zipName — double-check that $ver is published at https://github.com/$Repo/releases"
+    if (-not (Get-Asset $zipName $zipPath)) {
+      Die "failed to download $zipName from GitHub and the mirror — check your connection, or pass -Version vX.Y.Z"
     }
     Write-Info "downloading $sumsName..."
-    try {
-      Invoke-WebRequest -Uri "$baseUrl/$sumsName" -OutFile $sumsPath -UseBasicParsing
-    } catch {
-      Die "failed to download $baseUrl/$sumsName — refusing to install without a checksum"
+    if (-not (Get-Asset $sumsName $sumsPath)) {
+      Die "failed to download $sumsName — refusing to install without a checksum"
     }
+    # Whatever source the downloads settled on (a fallback may have flipped it),
+    # point $baseUrl there so the cosign sig/cert come from the same place.
+    $baseUrl = if ($DownloadBase) { "$DownloadBase/$ver" } else { "https://github.com/$Repo/releases/download/$ver" }
 
     # ----- Verify SHA256 -----------------------------------------------------
     #
@@ -189,8 +226,8 @@ function Invoke-Install {
         $sigOk = $false
         try {
           Write-Info 'downloading cosign signature + certificate...'
-          Invoke-WebRequest -Uri "$baseUrl/$sumsName.sig" -OutFile "$sumsPath.sig" -UseBasicParsing
-          Invoke-WebRequest -Uri "$baseUrl/$sumsName.pem" -OutFile "$sumsPath.pem" -UseBasicParsing
+          Invoke-WebRequest -Uri "$baseUrl/$sumsName.sig" -OutFile "$sumsPath.sig" -TimeoutSec 30 -UseBasicParsing
+          Invoke-WebRequest -Uri "$baseUrl/$sumsName.pem" -OutFile "$sumsPath.pem" -TimeoutSec 30 -UseBasicParsing
           Write-Info 'verifying cosign signature...'
           # Pin the OIDC issuer to GitHub Actions AND the cert identity to the
           # exact release workflow (cli-release.yml on everyapi-ai/everyapi) —
@@ -270,6 +307,25 @@ function Invoke-Install {
   Write-Host '  - Point a CLI:    everyapi use claude   # or codex / gemini'
   Write-Host '  - Check balance:  everyapi auth status'
   Write-Host '  - Help:           everyapi help'
+}
+
+# One command, everywhere (parity with install.sh). EVERYAPI_DOWNLOAD_BASE
+# overrides; otherwise probe github.com and fall back to the Aliyun OSS mirror
+# when it's unreachable (mainland China). Reachability, not geo-IP — what
+# matters is "can this host reach GitHub". A non-empty $DownloadBase makes
+# Get-LatestTag + the download step read from the mirror; empty means GitHub.
+$DownloadBase = $env:EVERYAPI_DOWNLOAD_BASE
+if ($DownloadBase) {
+  $DownloadBase = $DownloadBase.TrimEnd('/')
+  Write-Info "download source: mirror ($DownloadBase)"
+} else {
+  try {
+    Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" -Method Head -TimeoutSec 4 -UseBasicParsing | Out-Null
+    $DownloadBase = ''
+  } catch {
+    $DownloadBase = $MirrorBase
+    Write-Warn "github.com is slow or unreachable — using the mainland mirror ($MirrorBase)"
+  }
 }
 
 try {

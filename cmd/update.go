@@ -269,7 +269,7 @@ func printUnknownInstallHint(latest string) {
 	// curl command upgrades in place, so it's the closest thing to
 	// a one-liner upgrade for non-brew/non-go users.
 	cliout.Printf("  # Install script (Linux / macOS — re-run to upgrade in place)\n")
-	cliout.Printf("  curl -fsSL https://everyapi.ai/install.sh | bash\n\n")
+	cliout.Printf("  curl -fsSL https://dl.everyapi.ai/install.sh | bash\n\n")
 	cliout.Printf("  # Homebrew (after `brew tap everyapi-ai/tap`)\n")
 	cliout.Printf("  brew update && brew upgrade everyapi\n\n")
 	cliout.Printf("  # go install\n")

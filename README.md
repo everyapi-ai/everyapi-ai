@@ -23,18 +23,20 @@ brew update && brew upgrade everyapi
 **Linux / macOS (install script):**
 
 ```bash
-curl -fsSL https://everyapi.ai/install.sh | bash
+curl -fsSL https://dl.everyapi.ai/install.sh | bash
 ```
 
-The script auto-detects OS + arch, downloads the matching `everyapi_{os}_{arch}.tar.gz` from the public release mirror, verifies the SHA256, and installs to `~/.local/bin` (or `/usr/local/bin` when run as root). If [cosign](https://github.com/sigstore/cosign) is installed it also verifies the keyless signature — pass `--require-signature` to make that step mandatory (recommended for CI / supply-chain-sensitive setups).
+The script auto-detects OS + arch, downloads the matching `everyapi_{os}_{arch}.tar.gz`, verifies the SHA256, and installs to `~/.local/bin` (or `/usr/local/bin` when run as root). If [cosign](https://github.com/sigstore/cosign) is installed it also verifies the keyless signature — pass `--require-signature` to make that step mandatory (recommended for CI / supply-chain-sensitive setups).
+
+One command, worldwide: the script picks its download source at runtime — GitHub Releases where reachable, and a mainland-China mirror when GitHub is slow or blocked — so the same line installs from inside China as well as overseas. Set `EVERYAPI_DOWNLOAD_BASE` to force a specific mirror.
 
 Common flags:
 
 ```bash
-curl -fsSL https://everyapi.ai/install.sh | bash -s -- --version v0.2.2     # pin a version
-curl -fsSL https://everyapi.ai/install.sh | bash -s -- --prefix /usr/local  # custom prefix
-curl -fsSL https://everyapi.ai/install.sh | bash -s -- --require-signature  # fail if cosign verify fails
-curl -fsSL https://everyapi.ai/install.sh | bash -s -- --force              # reinstall the same version
+curl -fsSL https://dl.everyapi.ai/install.sh | bash -s -- --version v0.2.2     # pin a version
+curl -fsSL https://dl.everyapi.ai/install.sh | bash -s -- --prefix /usr/local  # custom prefix
+curl -fsSL https://dl.everyapi.ai/install.sh | bash -s -- --require-signature  # fail if cosign verify fails
+curl -fsSL https://dl.everyapi.ai/install.sh | bash -s -- --force              # reinstall the same version
 ```
 
 To upgrade later, re-run the same command. The script resolves the latest release tag and replaces the binary in place when a newer one exists; if the installed binary is already at the resolved target version, it exits with `already at vX.Y.Z — nothing to do` (safe to put in setup scripts / dotfiles). Pass `--force` to reinstall on top (useful for verifying integrity or recovering a damaged file). The script is also published in this repo at [`install.sh`](install.sh) if you'd rather download + read it first.
@@ -48,10 +50,10 @@ go install github.com/everyapi-ai/everyapi-ai@latest
 **Windows (PowerShell):**
 
 ```powershell
-irm https://everyapi.ai/install.ps1 | iex
+irm https://dl.everyapi.ai/install.ps1 | iex
 ```
 
-Same flow as the shell script — resolves the latest tag, downloads `everyapi_windows_amd64.zip` + `SHA256SUMS`, verifies the hash (and the cosign signature when cosign is on `PATH`), installs `everyapi.exe` into `%LOCALAPPDATA%\everyapi\bin`, and adds it to your User `PATH`. To pin a version or pass other options, materialize the script first: `& ([scriptblock]::Create((irm https://everyapi.ai/install.ps1))) -Version v0.2.2`. It's also published in this repo at [`install.ps1`](install.ps1).
+Same flow as the shell script — resolves the latest tag, downloads `everyapi_windows_amd64.zip` + `SHA256SUMS`, verifies the hash (and the cosign signature when cosign is on `PATH`), installs `everyapi.exe` into `%LOCALAPPDATA%\everyapi\bin`, and adds it to your User `PATH`. To pin a version or pass other options, materialize the script first: `& ([scriptblock]::Create((irm https://dl.everyapi.ai/install.ps1))) -Version v0.2.2`. It's also published in this repo at [`install.ps1`](install.ps1).
 
 **Windows (manual):** grab `everyapi_windows_amd64.zip` (or any other artifact) from the [Releases page](https://github.com/everyapi-ai/everyapi-ai/releases/latest) and verify against `SHA256SUMS` before placing the binary on `%PATH%`.
 
