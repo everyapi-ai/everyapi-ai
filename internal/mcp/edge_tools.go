@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 )
 
@@ -55,7 +56,7 @@ func handleEdgeList(ctx context.Context, _ json.RawMessage) (string, error) {
 	fmt.Fprintf(&b, "%d edge node(s):\n", len(nodes))
 	for _, n := range nodes {
 		fmt.Fprintf(&b, "  [#%d] %s — status=%s%s",
-			n.ID, n.Name, n.Status, pausedSuffix(n.Paused))
+			n.ID, cliout.Sanitize(n.Name), cliout.Sanitize(n.Status), pausedSuffix(n.Paused))
 		if n.ChannelID != nil {
 			fmt.Fprintf(&b, " channel=#%d", *n.ChannelID)
 		}
@@ -65,7 +66,7 @@ func handleEdgeList(ctx context.Context, _ json.RawMessage) (string, error) {
 		}
 		b.WriteByte('\n')
 		if len(n.Models) > 0 {
-			fmt.Fprintf(&b, "        models: %s\n", strings.Join(n.Models, ", "))
+			fmt.Fprintf(&b, "        models: %s\n", cliout.Sanitize(strings.Join(n.Models, ", ")))
 		}
 	}
 	return strings.TrimRight(b.String(), "\n"), nil
@@ -122,8 +123,8 @@ func handleEdgeStatus(ctx context.Context, raw json.RawMessage) (string, error) 
 		return "", classifyAPIErr(err)
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "Edge node #%d: %s\n", node.ID, node.Name)
-	fmt.Fprintf(&b, "  status:    %s%s\n", node.Status, pausedSuffix(node.Paused))
+	fmt.Fprintf(&b, "Edge node #%d: %s\n", node.ID, cliout.Sanitize(node.Name))
+	fmt.Fprintf(&b, "  status:    %s%s\n", cliout.Sanitize(node.Status), pausedSuffix(node.Paused))
 	if node.ChannelID != nil {
 		fmt.Fprintf(&b, "  channel:   #%d\n", *node.ChannelID)
 	}
@@ -133,10 +134,10 @@ func handleEdgeStatus(ctx context.Context, raw json.RawMessage) (string, error) 
 			humanDuration(time.Since(time.Unix(node.LastSeenAt, 0))))
 	}
 	if node.AgentVer != "" {
-		fmt.Fprintf(&b, "  agent ver: %s\n", node.AgentVer)
+		fmt.Fprintf(&b, "  agent ver: %s\n", cliout.Sanitize(node.AgentVer))
 	}
 	if len(node.Models) > 0 {
-		fmt.Fprintf(&b, "  models:    %s\n", strings.Join(node.Models, ", "))
+		fmt.Fprintf(&b, "  models:    %s\n", cliout.Sanitize(strings.Join(node.Models, ", ")))
 	}
 	if node.Hardware != nil && node.Hardware.GPUModel != "" {
 		count := node.Hardware.GPUCount
@@ -144,10 +145,10 @@ func handleEdgeStatus(ctx context.Context, raw json.RawMessage) (string, error) 
 			count = 1
 		}
 		fmt.Fprintf(&b, "  hardware:  %s × %d (%dGB VRAM)\n",
-			node.Hardware.GPUModel, count, node.Hardware.VRAMTotalGB)
+			cliout.Sanitize(node.Hardware.GPUModel), count, node.Hardware.VRAMTotalGB)
 	}
 	if node.Location != nil && (node.Location.CountryISO2 != "" || node.Location.Region != "") {
-		fmt.Fprintf(&b, "  location:  %s/%s\n", node.Location.CountryISO2, node.Location.Region)
+		fmt.Fprintf(&b, "  location:  %s/%s\n", cliout.Sanitize(node.Location.CountryISO2), cliout.Sanitize(node.Location.Region))
 	}
 	// Live telemetry — nil pointers mean "no heartbeat yet" or
 	// "offline"; only render if the agent actually reported. A 0%

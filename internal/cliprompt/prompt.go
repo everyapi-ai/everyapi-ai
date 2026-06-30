@@ -99,7 +99,12 @@ func Optional(in *bufio.Reader, label string) (string, error) {
 	}
 	cliout.Printf("%s: ", label)
 	line, err := in.ReadString('\n')
-	if err != nil && (err != io.EOF || line == "") {
+	// Empty is a legal answer for Optional, and EOF (scripted stdin
+	// exhausted at this prompt, with or without a trailing newline) is the
+	// non-TTY way to skip it — treat it as a successful empty/partial
+	// answer, mirroring LineOptional, instead of surfacing io.EOF to a
+	// caller that does `if err != nil { return err }`.
+	if err != nil && err != io.EOF {
 		return "", err
 	}
 	return strings.TrimSpace(line), nil

@@ -487,6 +487,7 @@ usage_compensation = "사용법: everyapi seller compensation {submit|list} [fla
 usage_compensation_help = "everyapi seller compensation {submit|list} — 보상 신청 제출 / 조회"
 withdraw_nothing = "출금할 금액이 없습니다 — 셀러 잔액이 $0 입니다."
 withdraw_done = "셀러 잔액에서 메인 잔액으로 $%.2f 을(를) 이체했습니다.\n"
+withdraw_done_no_usd = "%d 쿼터 단위를 판매자 잔액에서 기본 잔액으로 이체했습니다 (USD 환산 불가 — 지갑을 확인하세요).\n"
 withdraw_check_url = "확인: %s/wallet\n"
 eligibility_header = "Marketplace 자격:"
 eligibility_marketplace_enabled = "  %s marketplace 활성화됨"
@@ -850,7 +851,7 @@ tokens = "활성 %d / 전체 %d"
 tokens_none = "token %d 개, 활성 0"
 proxy_down = "실행 중 아님 (새니타이저는 옵트인, --sanitize 사용 시에만 필요)"
 proxy_unhealthy = "수신 중이나 비정상 (%s)"
-proxy_ok = "127.0.0.1:8888 에서 수신 중"
+proxy_ok = "%s 에서 수신 중"
 
 [doctor.section]
 account = "계정"

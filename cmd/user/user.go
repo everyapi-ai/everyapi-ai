@@ -95,7 +95,7 @@ func runInfo(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf(i18n.T("user.account_header")+"\n", self.ID, self.Username, self.Email)
+	cliout.Printf(i18n.T("user.account_header")+"\n", self.ID, cliout.Sanitize(self.Username), cliout.Sanitize(self.Email))
 	cliout.Printf("  role:           %d\n", self.Role)
 	cliout.Printf("  quota:          remain=%d  used=%d  requests=%d\n", self.Quota, self.UsedQuota, self.RequestCount)
 	if self.SellerQuota > 0 {
@@ -129,12 +129,12 @@ func runInfo(args []string) error {
 		} else {
 			cliout.Printf("  oauth bindings: %d\n", len(bs))
 			for _, b := range bs {
-				cliout.Printf("    - [#%d] %s (%s)\n", b.ProviderID, b.ProviderName, b.ProviderSlug)
+				cliout.Printf("    - [#%d] %s (%s)\n", b.ProviderID, cliout.Sanitize(b.ProviderName), cliout.Sanitize(b.ProviderSlug))
 			}
 		}
 	}
 	if aff, err := client.GetAffCode(ctx); err == nil && aff != "" {
-		cliout.Printf("  aff code:       %s\n", aff)
+		cliout.Printf("  aff code:       %s\n", cliout.Sanitize(aff))
 	}
 	return nil
 }
@@ -360,7 +360,7 @@ func runOAuthList(args []string) error {
 	}
 	cliout.Printf(i18n.T("user.bindings_count")+"\n", len(bs))
 	for _, b := range bs {
-		cliout.Printf("  [#%d] %s (%s) — provider user id: %s\n", b.ProviderID, b.ProviderName, b.ProviderSlug, b.ProviderUserID)
+		cliout.Printf("  [#%d] %s (%s) — provider user id: %s\n", b.ProviderID, cliout.Sanitize(b.ProviderName), cliout.Sanitize(b.ProviderSlug), cliout.Sanitize(b.ProviderUserID))
 	}
 	return nil
 }

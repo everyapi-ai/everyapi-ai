@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -186,9 +187,9 @@ func handleSellerList(ctx context.Context, _ json.RawMessage) (string, error) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%d seller channel(s):\n", len(channels))
 	for _, ch := range channels {
-		fmt.Fprintf(&b, "  [#%d] %s — type=%d status=%s\n", ch.ID, ch.Name, ch.Type, statusLabel(ch.Status))
+		fmt.Fprintf(&b, "  [#%d] %s — type=%d status=%s\n", ch.ID, cliout.Sanitize(ch.Name), ch.Type, statusLabel(ch.Status))
 		if ch.Models != "" {
-			fmt.Fprintf(&b, "        models: %s\n", ch.Models)
+			fmt.Fprintf(&b, "        models: %s\n", cliout.Sanitize(ch.Models))
 		}
 	}
 	return strings.TrimRight(b.String(), "\n"), nil
@@ -313,6 +314,14 @@ func handleSellerWithdraw(ctx context.Context, raw json.RawMessage) (string, err
 	// requires a numeric quota arg.
 	var quota int
 	if args.Quota != nil {
+		if *args.Quota <= 0 {
+			// Explicit 0 / negative. The schema declares minimum:1, but MCP
+			// input schemas are advisory and most clients don't enforce
+			// them, so guard locally instead of forwarding a confusing value
+			// upstream (the backend's `binding:required` treats integer 0 as
+			// "missing" → a generic validation error).
+			return "Nothing to withdraw — quota must be a positive integer.", nil
+		}
 		quota = *args.Quota
 	} else {
 		self, err := client.GetSelf(ctx)

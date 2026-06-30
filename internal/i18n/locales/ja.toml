@@ -488,6 +488,7 @@ usage_compensation = "使用法: everyapi seller compensation {submit|list} [fla
 usage_compensation_help = "everyapi seller compensation {submit|list} — 補償申請を起票 / 表示"
 withdraw_nothing = "出金できる金額がありません — セラー残高は $0 です。"
 withdraw_done = "セラー残高からメイン残高へ $%.2f を振り替えました。\n"
+withdraw_done_no_usd = "%d クォータ単位を販売者残高からメイン残高に振り替えました（USD換算は利用不可 — ウォレットをご確認ください）。\n"
 withdraw_check_url = "確認: %s/wallet\n"
 eligibility_header = "Marketplace 適格性:"
 eligibility_marketplace_enabled = "  %s marketplace 有効"
@@ -851,7 +852,7 @@ tokens = "有効 %d / 合計 %d"
 tokens_none = "%d 個の token、有効 0"
 proxy_down = "未起動（サニタイザーはオプトイン、--sanitize 使用時のみ必要）"
 proxy_unhealthy = "待ち受け中だが異常 (%s)"
-proxy_ok = "127.0.0.1:8888 で待ち受け中"
+proxy_ok = "%s で待ち受け中"
 
 [doctor.section]
 account = "アカウント"

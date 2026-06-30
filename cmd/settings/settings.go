@@ -14,7 +14,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
@@ -309,14 +308,4 @@ func labelLanguage(v string) string {
 		return fmt.Sprintf(i18n.T("settings.default_label"), live)
 	}
 	return v
-}
-
-// keys exists for picker enumeration (today unused, kept private
-// so the test file can rely on its presence and the dispatcher
-// can grow into "everyapi settings list --keys" later without
-// reorganising).
-var _ = func() []string {
-	out := []string{"language"}
-	sort.Strings(out)
-	return out
 }

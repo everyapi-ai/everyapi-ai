@@ -181,15 +181,20 @@ func sellerWithdraw(args []string) error {
 		return classifySellerErr(err)
 	}
 
-	// Render the transferred amount in USD so the user sees the same
-	// units the dashboard / `everyapi auth status` use. perUnit is a free
-	// /api/status round-trip; tolerate a failure (rare) by falling back
-	// to raw DB units rather than aborting after a successful transfer.
-	perUnit := 1.0
+	// Render the transferred amount in USD so the user sees the same units
+	// the dashboard / `everyapi auth status` use. perUnit is a free
+	// /api/status round-trip; on failure (rare) report success WITHOUT
+	// misrendering raw DB units as dollars.
 	if status, sErr := client.GetStatus(cliout.WithCtx()); sErr == nil && status.QuotaPerUnit > 0 {
-		perUnit = status.QuotaPerUnit
+		cliout.Printf(i18n.T("seller.withdraw_done"), float64(amount)/status.QuotaPerUnit)
+	} else {
+		// No quota→USD divisor available: dividing raw DB units by 1.0 and
+		// labelling the result "$" overstates the value by QuotaPerUnit
+		// (default 500000), so a $1 withdrawal would print "$500000.00".
+		// Show a unit-neutral line instead; the wallet link below carries
+		// the real figure.
+		cliout.Printf(i18n.T("seller.withdraw_done_no_usd"), amount)
 	}
-	cliout.Printf(i18n.T("seller.withdraw_done"), float64(amount)/perUnit)
 	cliout.Printf(i18n.T("seller.withdraw_check_url"), api.WebOriginFromBase(creds.APIBase))
 	return nil
 }
@@ -615,7 +620,13 @@ func classifySellerErr(err error) error {
 	if err == nil {
 		return nil
 	}
-	if api.IsUnauthorized(err) {
+	// A stale token surfaces as a 401 OR, the legacy way, an HTTP-200
+	// envelope rejection (EnvelopeError) — e.g. GetSelf in the no-quota
+	// branch. Both mean "re-login", same as `everyapi auth status` /
+	// doctor; without the EnvelopeError arm a withdraw on an expired
+	// token would leak the raw backend envelope instead.
+	var envErr *api.EnvelopeError
+	if api.IsUnauthorized(err) || errors.As(err, &envErr) {
 		return errors.New(i18n.T("auth.session_expired"))
 	}
 	return err

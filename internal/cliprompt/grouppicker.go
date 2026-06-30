@@ -1,6 +1,7 @@
 package cliprompt
 
 import (
+	"errors"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -39,6 +40,13 @@ func PickGrouped(title string, groups []MenuGroup, initial int) (int, error) {
 		return pickByNumber(title, flat)
 	}
 	m := newGroupModel(title, groups, initial)
+	if len(m.selectable) == 0 {
+		// Every group was empty — nothing to pick. Match the non-TTY
+		// pickByNumber path (which errors on an empty list) instead of
+		// running the model and returning a bogus flat index 0 that the
+		// caller would dereference into an empty command slice.
+		return -1, errors.New("nothing to pick from")
+	}
 	res, err := tea.NewProgram(m).Run()
 	if err != nil {
 		return -1, err

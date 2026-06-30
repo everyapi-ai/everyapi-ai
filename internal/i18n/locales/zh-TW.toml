@@ -477,6 +477,7 @@ usage_compensation = "用法：everyapi seller compensation {submit|list} [參�
 usage_compensation_help = "everyapi seller compensation {submit|list} — 提交 / 查看賠付申請"
 withdraw_nothing = "無可提領金額 — 你的賣方餘額為 $0。"
 withdraw_done = "已從賣方餘額轉出 $%.2f 到主餘額。\n"
+withdraw_done_no_usd = "已將 %d 配額單位從賣家餘額轉入主餘額（暫時無法換算美元 — 請查看錢包）。\n"
 withdraw_check_url = "查看：%s/wallet\n"
 eligibility_header = "Marketplace 資格："
 eligibility_marketplace_enabled = "  %s marketplace 已啟用"
@@ -839,7 +840,7 @@ tokens = "已啟用 %d / 共 %d"
 tokens_none = "%d 個 token，0 個啟用"
 proxy_down = "未執行（脫敏代理為 opt-in，僅 --sanitize 時需要）"
 proxy_unhealthy = "在監聽但不健康（%s）"
-proxy_ok = "監聽於 127.0.0.1:8888"
+proxy_ok = "監聽於 %s"
 
 [doctor.section]
 account = "帳戶"

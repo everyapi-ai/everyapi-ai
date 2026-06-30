@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -154,19 +153,15 @@ func proxyStart(args []string) error {
 			true,
 		)
 		if perr != nil {
-			if !errors.Is(perr, cliprompt.ErrPickCancelled) && !errors.Is(perr, io.EOF) {
-				return perr
-			}
-			// Treat cancel as "don't change the choice" — fall
-			// through with the parsed *detach value (false by
-			// default), which is the safer "stay in foreground"
-			// option from a "didn't decide" standpoint.
-			if errors.Is(perr, cliprompt.ErrPickCancelled) {
-				return perr
-			}
-		} else {
-			*detach = bg
+			// Any error here — including an Esc/cancel — aborts `proxy
+			// start`, the same as every other interactive prompt in the
+			// CLI. (This branch is interactive-only, where YesNo returns
+			// nil or ErrPickCancelled; io.EOF arises solely on the non-TTY
+			// ReadString path, which is gated out here, so there is no EOF
+			// "fall through to foreground" case to handle.)
+			return perr
 		}
+		*detach = bg
 	}
 	if portOccupied(*listen) {
 		if listenExplicit {
@@ -597,6 +592,18 @@ func readPIDFile() (pid int, listen string, ok bool) {
 	return p, l, true
 }
 
+// ResolveListen returns the address the running proxy recorded in its
+// PID file — it may have picked a free port when the 127.0.0.1:8888
+// default was already taken — falling back to that default only when no
+// PID file is on disk. Exported so out-of-package diagnostics (cmd/doctor)
+// probe the same address `proxy status` does instead of hardcoding 8888.
+func ResolveListen() string {
+	if _, recorded, ok := readPIDFile(); ok && recorded != "" {
+		return recorded
+	}
+	return "127.0.0.1:8888"
+}
+
 func writePIDFile(pid int, listen string) error {
 	path, err := pidFilePath()
 	if err != nil {
@@ -699,16 +706,15 @@ func reexecDetached(listen, upstream string, parentPID int) error {
 	// failed start a 5-second pause. A healthy fresh sanitizer
 	// usually answers in under 200 ms.
 	deadline := time.Now().Add(2 * time.Second)
-	client := &http.Client{Timeout: 250 * time.Millisecond}
 	for time.Now().Before(deadline) {
-		resp, err := client.Get("http://" + listen + "/__sanitizer/health")
-		if err == nil {
-			_ = resp.Body.Close()
-			if resp.StatusCode == 200 {
-				cliout.Printf(i18n.T("proxy.started_pid")+"\n", cmd.Process.Pid, listen)
-				cliout.Printf(i18n.T("proxy.started_logs")+"\n", logPath)
-				return nil
-			}
+		// Match the stop/status liveness criterion (HTTP 200 AND body
+		// "ok"), not just any 200 — a foreign service squatting <listen>
+		// can also answer 200 on this path, and we must not report its
+		// presence as our detached proxy having come up.
+		if sanitizerHealthAt(listen) {
+			cliout.Printf(i18n.T("proxy.started_pid")+"\n", cmd.Process.Pid, listen)
+			cliout.Printf(i18n.T("proxy.started_logs")+"\n", logPath)
+			return nil
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -739,11 +745,7 @@ func proxyStatus(args []string) error {
 	}
 	addr := *listen
 	if addr == "" {
-		if _, recorded, ok := readPIDFile(); ok && recorded != "" {
-			addr = recorded
-		} else {
-			addr = "127.0.0.1:8888"
-		}
+		addr = ResolveListen()
 	}
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get("http://" + addr + "/__sanitizer/status")

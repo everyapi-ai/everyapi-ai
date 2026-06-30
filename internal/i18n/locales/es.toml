@@ -495,6 +495,7 @@ usage_compensation = "uso: everyapi seller compensation {submit|list} [opciones]
 usage_compensation_help = "everyapi seller compensation {submit|list} — presentar / ver solicitudes de compensación"
 withdraw_nothing = "Nada que retirar — tu saldo de vendedor es $0."
 withdraw_done = "Transferidos $%.2f del saldo de vendedor al saldo principal.\n"
+withdraw_done_no_usd = "Se transfirieron %d unidades de cuota del saldo de vendedor al saldo principal (valor en USD no disponible — consulta tu monedero).\n"
 withdraw_check_url = "Compruébalo: %s/wallet\n"
 eligibility_header = "Elegibilidad para Marketplace:"
 eligibility_marketplace_enabled = "  %s marketplace habilitado"
@@ -861,7 +862,7 @@ tokens = "%d activos / %d en total"
 tokens_none = "%d token(s), 0 activos"
 proxy_down = "no en ejecución (el saneador es opcional, solo se necesita con --sanitize)"
 proxy_unhealthy = "escuchando pero no sano (%s)"
-proxy_ok = "escuchando en 127.0.0.1:8888"
+proxy_ok = "escuchando en %s"
 
 [doctor.section]
 account = "Cuenta"

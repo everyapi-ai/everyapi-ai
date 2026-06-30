@@ -89,41 +89,49 @@ func edgeRegister(args []string) error {
 	// Persist meta BEFORE writing the active pointer — if disk write
 	// fails after, the user can re-run register without ending up with
 	// a dangling active pointer to a node whose token wasn't saved.
+	//
+	// The backend node row already exists and stores only the token's
+	// sha256, so reg.RegistrationToken is the ONLY copy of the raw secret
+	// from here on. Resolve the gateway + intended node.json path up front
+	// so EVERY post-registration failure below — including nodeDir() and
+	// MkdirAll(), not just the later marshal/write — can echo the one-time
+	// token via printTokenRescue instead of losing it forever.
+	gateway := gatewayURLFromAPIBase(creds.APIBase)
 	dir, err := nodeDir(reg.Node.ID)
 	if err != nil {
+		printTokenRescue(reg.Node.ID, gateway, reg.RegistrationToken, "")
 		return err
 	}
+	metaPath := filepath.Join(dir, "node.json")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
+		printTokenRescue(reg.Node.ID, gateway, reg.RegistrationToken, metaPath)
 		return err
 	}
 	meta := nodeMeta{
 		NodeID:            reg.Node.ID,
 		NodeName:          reg.Node.Name,
 		RegistrationToken: reg.RegistrationToken,
-		Gateway:           gatewayURLFromAPIBase(creds.APIBase),
+		Gateway:           gateway,
 		// Server-normalized declaration (defaulted to ["chat"] when the
 		// flag was omitted) — persisted so `edge start` renders the same
 		// EVERYAPI_WORKLOADS the row carries.
 		Workloads: reg.Node.Workloads,
 	}
-	metaPath := filepath.Join(dir, "node.json")
 	mb, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
-		// Should not happen with the small, fixed nodeMeta struct,
-		// but swallowing this would silently write an empty file
-		// and brick the next `everyapi edge start` (loadNodeMeta
-		// would decode the zero JSON into a zero-valued meta with
-		// no token, no gateway URL) with no visible root cause.
-		printTokenRescue(reg.Node.ID, meta.Gateway, reg.RegistrationToken, metaPath)
+		// Should not happen with the small, fixed nodeMeta struct, but
+		// swallowing this would silently write an empty file and brick the
+		// next `everyapi edge start` (loadNodeMeta would decode the zero
+		// JSON into a zero-valued meta with no token, no gateway URL) with
+		// no visible root cause.
+		printTokenRescue(reg.Node.ID, gateway, reg.RegistrationToken, metaPath)
 		return fmt.Errorf(i18n.T("edge.register.persist_meta_failed"), err)
 	}
 	if err := os.WriteFile(metaPath, mb, 0o600); err != nil {
-		// The backend node row already exists and only stores the
-		// token's hash — the raw value lives nowhere else. If we
-		// can't persist it (ENOSPC / EACCES / disk-full) it is lost
-		// forever, so echo it to stdout first so the operator can
-		// hand-create node.json and still start the node.
-		printTokenRescue(reg.Node.ID, meta.Gateway, reg.RegistrationToken, metaPath)
+		// Disk write failed (ENOSPC / EACCES / disk-full). The raw token
+		// lives nowhere else, so echo it to stdout first so the operator
+		// can hand-create node.json and still start the node.
+		printTokenRescue(reg.Node.ID, gateway, reg.RegistrationToken, metaPath)
 		return fmt.Errorf(i18n.T("edge.register.persist_meta_failed"), err)
 	}
 	if err := setActiveNodeID(reg.Node.ID); err != nil {
@@ -143,6 +151,11 @@ func edgeRegister(args []string) error {
 // hash, so this print is the operator's last chance to capture the raw
 // secret before it's gone for good.
 func printTokenRescue(nodeID int, gateway, token, metaPath string) {
+	if metaPath == "" {
+		// nodeDir() couldn't resolve the edge data dir (e.g. no HOME); give
+		// a generic location hint so the rescue message still reads cleanly.
+		metaPath = fmt.Sprintf("<edge data dir>/%d/node.json", nodeID)
+	}
 	cliout.Printf(i18n.T("edge.register.token_rescue"), nodeID, gateway, token, metaPath)
 }
 

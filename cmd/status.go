@@ -105,9 +105,9 @@ func Status(args []string) error {
 
 	cliout.Println("")
 	if self.Email != "" {
-		cliout.Printf("  %s (%s)\n", style.Bold(self.Username), self.Email)
+		cliout.Printf("  %s (%s)\n", style.Bold(cliout.Sanitize(self.Username)), cliout.Sanitize(self.Email))
 	} else {
-		cliout.Printf("  %s\n", style.Bold(self.Username))
+		cliout.Printf("  %s\n", style.Bold(cliout.Sanitize(self.Username)))
 	}
 	cliout.Printf("  %-10s %s\n", i18n.T("status.quota"), styledQuota(quotaUSD, usedUSD))
 	cliout.Printf("  %-10s %s\n", i18n.T("status.requests"), style.Bold(fmt.Sprintf("%d", self.RequestCount)))

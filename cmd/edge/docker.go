@@ -47,16 +47,6 @@ func runComposeCmd(workdir string, projectName string, args ...string) error {
 	return cmd.Run()
 }
 
-// composeOutput is the same as runComposeCmd but captures stdout. Used
-// by `edge status` to render in a custom format rather than letting
-// docker write directly to the terminal.
-func composeOutput(workdir string, projectName string, args ...string) ([]byte, error) {
-	base := []string{"compose", "-p", projectName, "-f", "docker-compose.yml"}
-	cmd := exec.Command("docker", append(base, args...)...)
-	cmd.Dir = workdir
-	return cmd.Output()
-}
-
 // composeFileExists reports whether the node's docker-compose.yml has
 // been rendered yet. Only `edge start` writes it (via writeCompose), so
 // a registered-but-never-started node has none — and invoking

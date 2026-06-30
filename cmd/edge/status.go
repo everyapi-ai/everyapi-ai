@@ -34,22 +34,22 @@ func edgeStatus(args []string) error {
 	if rErr != nil {
 		cliout.Printf(i18n.T("edge.status.lookup_failed"), rErr)
 	} else {
-		cliout.Printf(" — %s\n", remote.Name)
-		cliout.Printf("  %-12s%s%s\n", i18n.T("edge.field.status"), remote.Status, pauseSuffix(remote.Paused))
+		cliout.Printf(" — %s\n", cliout.Sanitize(remote.Name))
+		cliout.Printf("  %-12s%s%s\n", i18n.T("edge.field.status"), cliout.Sanitize(remote.Status), pauseSuffix(remote.Paused))
 		if remote.LastSeenAt > 0 {
 			cliout.Printf(i18n.T("edge.status.last_seen_line"), i18n.T("edge.field.last_seen"),
 				time.Unix(remote.LastSeenAt, 0).Format(time.RFC3339),
 				formatDuration(time.Since(time.Unix(remote.LastSeenAt, 0))))
 		}
 		if remote.AgentVer != "" {
-			cliout.Printf("  %-12s%s\n", i18n.T("edge.field.agent_ver"), remote.AgentVer)
+			cliout.Printf("  %-12s%s\n", i18n.T("edge.field.agent_ver"), cliout.Sanitize(remote.AgentVer))
 		}
 		if len(remote.Models) > 0 {
-			cliout.Printf("  %-12s%s\n", i18n.T("edge.field.models"), strings.Join(remote.Models, ", "))
+			cliout.Printf("  %-12s%s\n", i18n.T("edge.field.models"), cliout.Sanitize(strings.Join(remote.Models, ", ")))
 		}
 		if remote.Hardware != nil && remote.Hardware.GPUModel != "" {
 			cliout.Printf(i18n.T("edge.status.hardware_line"), i18n.T("edge.field.hardware"),
-				remote.Hardware.GPUModel, max1(remote.Hardware.GPUCount), remote.Hardware.VRAMTotalGB)
+				cliout.Sanitize(remote.Hardware.GPUModel), max1(remote.Hardware.GPUCount), remote.Hardware.VRAMTotalGB)
 		}
 		// Live telemetry — only present when the agent has sent at
 		// least one heartbeat. Nil pointers mean "no live data" not

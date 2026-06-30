@@ -34,13 +34,21 @@ func edgeUpdate(args []string) error {
 	// CLI (shipped via `everyapi update`) can carry a changed compose
 	// template; without re-rendering, `edge update` would only pull images
 	// and leave the node on a stale compose — contradicting the generated
-	// file's own "re-render on update" note. meta.Mode was persisted by
-	// `edge start`; fall back to detection for legacy nodes predating it.
-	// Image fields stay at their writeCompose defaults, matching `edge
-	// start` when no --agent-image / --ollama-image override is given.
+	// file's own "re-render on update" note. meta.Mode and the pinned
+	// AgentImage/OllamaImage were persisted by `edge start`; carrying them
+	// through here is what keeps a pinned image from silently reverting to
+	// :latest on update.
 	mode := meta.Mode
+	persistMode := false
 	if mode == "" {
+		// Legacy node predating the persisted Mode field. Re-detect, then
+		// persist the result so a later transient nvidia-smi failure can't
+		// silently downgrade the node to CPU on every future update, and
+		// surface the resolved mode like `edge start` does so a fallback
+		// is visible.
 		mode = resolveMode(ModeAuto)
+		persistMode = true
+		cliout.Printf(i18n.T("edge.start.mode"), mode, modeDescription(mode, true))
 	}
 	cd := composeData{
 		NodeID:            nodeID,
@@ -48,10 +56,18 @@ func edgeUpdate(args []string) error {
 		Mode:              mode,
 		Gateway:           meta.Gateway,
 		RegistrationToken: meta.RegistrationToken,
+		AgentImage:        meta.AgentImage,
+		OllamaImage:       meta.OllamaImage,
 		Workloads:         meta.Workloads,
 	}
 	if _, err := writeCompose(dir, cd); err != nil {
 		return err
+	}
+	if persistMode {
+		meta.Mode = mode
+		if err := saveNodeMeta(nodeID, meta); err != nil {
+			cliout.Printf(i18n.T("edge.start.persist_mode_warn"), err)
+		}
 	}
 
 	cliout.Printf(i18n.T("edge.update.pull"), nodeID)

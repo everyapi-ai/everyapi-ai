@@ -79,14 +79,14 @@ func runPlans(args []string) error {
 	sort.Slice(plans, func(i, j int) bool { return plans[i].PriceAmount < plans[j].PriceAmount })
 	cliout.Printf(i18n.T("subscription.plans_count")+"\n", len(plans))
 	for _, p := range plans {
-		dur := formatDuration(p.DurationUnit, p.DurationValue, p.CustomSeconds)
+		dur := cliout.Sanitize(formatDuration(p.DurationUnit, p.DurationValue, p.CustomSeconds))
 		extra := ""
 		if p.UpgradeGroup != "" {
-			extra = fmt.Sprintf("  upgrades to group=%s", p.UpgradeGroup)
+			extra = fmt.Sprintf("  upgrades to group=%s", cliout.Sanitize(p.UpgradeGroup))
 		}
-		cliout.Printf("  [#%d] %s — %g %s / %s%s\n", p.ID, p.Title, p.PriceAmount, p.Currency, dur, extra)
+		cliout.Printf("  [#%d] %s — %g %s / %s%s\n", p.ID, cliout.Sanitize(p.Title), p.PriceAmount, cliout.Sanitize(p.Currency), dur, extra)
 		if p.Subtitle != "" {
-			cliout.Printf("        %s\n", p.Subtitle)
+			cliout.Printf("        %s\n", cliout.Sanitize(p.Subtitle))
 		}
 	}
 	return nil
@@ -120,7 +120,7 @@ func runSelf(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Billing preference: %s\n\n", self.BillingPreference)
+	cliout.Printf("Billing preference: %s\n\n", cliout.Sanitize(self.BillingPreference))
 	rows := self.Subscriptions
 	label := "active"
 	if *all {
@@ -142,7 +142,7 @@ func runSelf(args []string) error {
 			started = time.Unix(s.StartAt, 0).Format("2006-01-02")
 		}
 		cliout.Printf("  [#%d] %s  source=%s  status=%s  %s → %s\n",
-			s.ID, s.PlanTitle, s.Source, s.Status, started, expires)
+			s.ID, cliout.Sanitize(s.PlanTitle), cliout.Sanitize(s.Source), cliout.Sanitize(s.Status), started, expires)
 	}
 	return nil
 }
@@ -163,7 +163,7 @@ func runPreference(args []string) error {
 		if err != nil {
 			return classifyErr(err)
 		}
-		cliout.Printf(i18n.T("subscription.current_preference")+"\n", self.BillingPreference)
+		cliout.Printf(i18n.T("subscription.current_preference")+"\n", cliout.Sanitize(self.BillingPreference))
 		cliout.Println(i18n.T("subscription.set_hint"))
 		return nil
 	}

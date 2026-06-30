@@ -657,10 +657,12 @@ func stripInlineMarkdown(line string) string {
 //   - "dev" / "unknown" / anything non-`vX.Y.Z` sorts BEFORE every
 //     real release, so `update` from a dev build always reports
 //     "update available" — the right thing.
-//   - Pre-release suffixes (-rc1, -beta) are ignored for ordering;
-//     the comparison stops at the first three numeric segments.
-//     A v0.2.0-rc1 binary running `update` will be told v0.2.0 is
-//     newer, which is correct under semver.
+//   - Pre-release suffixes (-rc1, -beta) are DELIBERATELY rounded to
+//     equal with the same X.Y.Z: strict semver sorts a pre-release
+//     below its final release, but for this command's only question
+//     ("can I update?") nudging a -rc1 user onto the same .0 release
+//     would confuse more than help, so the comparison stops at the
+//     first three numeric segments. (TestCompareSemver pins this.)
 //
 // We don't import a semver library because the CLI's whole module
 // has zero third-party deps and we'd like to keep it that way for

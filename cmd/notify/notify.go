@@ -89,13 +89,15 @@ func runList(args []string) error {
 		if n.ReadAt == 0 {
 			marker = "•"
 		}
-		title := n.Title
+		title := cliout.Sanitize(n.Title)
 		if title == "" {
-			title = n.Type
+			title = cliout.Sanitize(n.Type)
 		}
 		cliout.Printf("  %s [#%d] %s  %s\n", marker, n.ID, when, title)
 		if n.Body != "" {
-			body := n.Body
+			// Sanitize before truncating so the rune slice can't split a
+			// multi-byte escape sequence and re-arm a partial control byte.
+			body := cliout.Sanitize(n.Body)
 			if r := []rune(body); len(r) > 120 {
 				body = string(r[:120]) + "…"
 			}

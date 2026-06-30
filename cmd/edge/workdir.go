@@ -21,7 +21,9 @@ type nodeMeta struct {
 	RegistrationToken string   `json:"registration_token"`
 	Gateway           string   `json:"gateway"`
 	Mode              Mode     `json:"mode,omitempty"`
-	Workloads         []string `json:"workloads,omitempty"` // declared at register time; rendered into the compose env
+	AgentImage        string   `json:"agent_image,omitempty"`  // pinned via `edge start --agent-image`; empty = writeCompose default
+	OllamaImage       string   `json:"ollama_image,omitempty"` // pinned via `edge start --ollama-image`; empty = writeCompose default
+	Workloads         []string `json:"workloads,omitempty"`    // declared at register time; rendered into the compose env
 }
 
 // dataRoot returns ~/.local/share/everyapi/edge (or the XDG override).

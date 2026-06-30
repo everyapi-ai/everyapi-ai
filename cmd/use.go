@@ -309,6 +309,16 @@ func Use(args []string) error {
 				// HERMES_HOME and won't clobber this.
 				env[t.YoloEnv] = "1"
 			}
+		} else if t.YoloEnv != "" {
+			// Declined. An env-var tool (hermes) may already have the yolo
+			// var exported in the parent environment; mergeEnv passes every
+			// ambient var through unless we override it, so without this the
+			// pre-exported HERMES_YOLO_MODE=1 would reach the child and yolo
+			// would stay ON — the opposite of the user's choice. Force it
+			// empty (off under any value-based parse: == "1", != "", ParseBool).
+			// Flag tools need no counterpart — their bypass is only ever
+			// added to argv on yes.
+			env[t.YoloEnv] = ""
 		}
 	}
 
@@ -373,7 +383,7 @@ func wantsUseHelp(args []string) bool {
 		if a == "--help" || a == "-h" {
 			return true
 		}
-		if a == "--group" || a == "-group" || a == "--channel" || a == "-channel" {
+		if a == "--group" || a == "-group" || a == "--channel" || a == "-channel" || a == "--model" || a == "-model" {
 			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
 				i++
 			}

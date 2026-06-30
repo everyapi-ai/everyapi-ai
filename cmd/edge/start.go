@@ -46,6 +46,18 @@ func edgeStart(args []string) error {
 	if gateway == "" {
 		gateway = meta.Gateway
 	}
+	// Resolve the effective images the same way as --gateway: an omitted
+	// flag keeps the persisted pin, so a bare `edge start` restart neither
+	// renders nor persists :latest over a pin set by an earlier
+	// `--agent-image` run (the silent reversion this persistence guards).
+	agentImage := *agentImageFlag
+	if agentImage == "" {
+		agentImage = meta.AgentImage
+	}
+	ollamaImage := *ollamaImageFlag
+	if ollamaImage == "" {
+		ollamaImage = meta.OllamaImage
+	}
 
 	dir, err := nodeDir(nodeID)
 	if err != nil {
@@ -57,8 +69,8 @@ func edgeStart(args []string) error {
 		Mode:              resolved,
 		Gateway:           gateway,
 		RegistrationToken: meta.RegistrationToken,
-		AgentImage:        *agentImageFlag,
-		OllamaImage:       *ollamaImageFlag,
+		AgentImage:        agentImage,
+		OllamaImage:       ollamaImage,
 		Workloads:         meta.Workloads,
 	}
 	composePath, err := writeCompose(dir, cd)
@@ -90,11 +102,14 @@ func edgeStart(args []string) error {
 		return fmt.Errorf(i18n.T("edge.start.up_failed"), err)
 	}
 
-	// Persist the resolved mode so `status` / `update` / `remove` know
-	// which compose variant to re-render without re-detecting. Best
-	// effort — a write failure here doesn't unwind the running
+	// Persist the resolved mode AND any pinned images so `status` /
+	// `update` / `remove` re-render the same compose variant without
+	// re-detecting hardware or silently reverting a pin back to :latest.
+	// Best effort — a write failure here doesn't unwind the running
 	// containers, so we warn instead of fail.
 	meta.Mode = resolved
+	meta.AgentImage = agentImage
+	meta.OllamaImage = ollamaImage
 	if err := saveNodeMeta(nodeID, meta); err != nil {
 		cliout.Printf(i18n.T("edge.start.persist_mode_warn"), err)
 	}

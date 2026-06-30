@@ -202,9 +202,17 @@ func pickManyByNumber(prompt string, labels, values, preselected []string) ([]st
 	// the same as "1,2,3". A genuinely empty EOF means "no change"; a
 	// populated line is split on commas below and never dropped.
 	line, err := readStdinLine()
-	if err != nil && (err != io.EOF || line == "") {
-		// EOF on empty stdin → no change. Same shape as Pick.
-		return preselected, nil
+	if err != nil {
+		// EOF on empty stdin → no change (same shape as Pick). But a
+		// genuine (non-EOF) read error must be surfaced, not silently
+		// swallowed as "no change" — that's what the sibling pickByNumber
+		// does. EOF with bytes already read falls through to parsing.
+		if err != io.EOF {
+			return nil, fmt.Errorf("read selection: %w", err)
+		}
+		if line == "" {
+			return preselected, nil
+		}
 	}
 	line = strings.TrimSpace(line)
 	if line == "" {

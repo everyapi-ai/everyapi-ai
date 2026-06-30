@@ -30,11 +30,14 @@ func Logout(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	_, loadErr := config.Load()
-	if errors.Is(loadErr, config.ErrNoCredentials) {
-		cliout.Println(i18n.T("logout.done"))
-		return nil
-	}
+	// Delete credentials.json (config.Delete treats a missing file as
+	// success) AND scrub the per-tool credential homes on EVERY logout.
+	// The scrub must run even when credentials.json is already gone: a
+	// prior partial logout (e.g. the Windows file-held-open warning path
+	// below), a crash, or a manual deletion can leave a live, billable
+	// relay key behind in codex-home/hermes-home. Gating the scrub on
+	// credentials.json still being present — as an early ErrNoCredentials
+	// return would — is exactly what lets that key outlive logout.
 	if err := config.Delete(); err != nil {
 		return err
 	}

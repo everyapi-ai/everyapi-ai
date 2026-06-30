@@ -261,10 +261,17 @@ func runUsage(args []string) error {
 	// gateway, else the public default. Works without login by design.
 	u, err := api.New(config.ResolveAPIBase(*baseFlag), key).GetTokenUsage(cliout.WithCtx())
 	if err != nil {
-		return classifyErr(err)
+		// This path authenticates with the relay key itself (no login
+		// session, no WithUserID), so don't route through the session-
+		// oriented classifyErr: a 401 here means the KEY is invalid /
+		// revoked / banned, not that a login expired. Surface the backend's
+		// own message (which already says the key is bad) instead of telling
+		// the user to run `everyapi login`, which wouldn't fix anything on
+		// this key-auth surface.
+		return err
 	}
 
-	cliout.Printf(i18n.T("token.usage_header")+"\n", u.Name)
+	cliout.Printf(i18n.T("token.usage_header")+"\n", cliout.Sanitize(u.Name))
 	if u.UnlimitedQuota {
 		cliout.Printf("  %-12s %s\n", i18n.T("token.usage_remaining"), i18n.T("token.usage_unlimited"))
 	} else {
@@ -279,7 +286,7 @@ func runUsage(args []string) error {
 			ms = append(ms, m)
 		}
 		sort.Strings(ms)
-		cliout.Printf("  %-12s %s\n", i18n.T("token.label.models"), strings.Join(ms, ", "))
+		cliout.Printf("  %-12s %s\n", i18n.T("token.label.models"), cliout.Sanitize(strings.Join(ms, ", ")))
 	}
 	return nil
 }

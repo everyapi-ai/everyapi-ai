@@ -77,9 +77,9 @@ func runList(args []string) error {
 	cliout.Printf(i18n.T("models.count")+"\n", len(ms))
 	for _, m := range ms {
 		if m.Vendor != "" {
-			cliout.Printf("  %-40s  %s\n", m.ID, m.Vendor)
+			cliout.Printf("  %-40s  %s\n", cliout.Sanitize(m.ID), cliout.Sanitize(m.Vendor))
 		} else {
-			cliout.Printf("  %s\n", m.ID)
+			cliout.Printf("  %s\n", cliout.Sanitize(m.ID))
 		}
 	}
 	return nil
@@ -118,11 +118,11 @@ func runPricing(args []string) error {
 	for _, r := range rows {
 		switch r.QuotaType {
 		case 1:
-			cliout.Printf("  %-40s  fixed: %g per call (owner=%s)\n", r.ModelName, r.ModelPrice, fallback(r.OwnerBy, "-"))
+			cliout.Printf("  %-40s  fixed: %g per call (owner=%s)\n", cliout.Sanitize(r.ModelName), r.ModelPrice, fallback(cliout.Sanitize(r.OwnerBy), "-"))
 		default:
 			// quota_type 0 = per-token ratio
 			cliout.Printf("  %-40s  ratio: prompt×%g  completion×%g  (owner=%s)\n",
-				r.ModelName, r.ModelRatio, ratioOrOne(r.CompletionRatio), fallback(r.OwnerBy, "-"))
+				cliout.Sanitize(r.ModelName), r.ModelRatio, ratioOrOne(r.CompletionRatio), fallback(cliout.Sanitize(r.OwnerBy), "-"))
 		}
 	}
 	if len(p.UsableGroup) > 0 {
@@ -134,11 +134,13 @@ func runPricing(args []string) error {
 		sort.Strings(groups)
 		for _, g := range groups {
 			ratio, ok := p.GroupRatio[g]
+			gName := cliout.Sanitize(g)
+			desc := cliout.Sanitize(p.UsableGroup[g])
 			if !ok {
-				cliout.Printf("  %-12s  (no explicit ratio)  %s\n", g, p.UsableGroup[g])
+				cliout.Printf("  %-12s  (no explicit ratio)  %s\n", gName, desc)
 				continue
 			}
-			cliout.Printf("  %-12s  ×%g  %s\n", g, ratio, p.UsableGroup[g])
+			cliout.Printf("  %-12s  ×%g  %s\n", gName, ratio, desc)
 		}
 	}
 	return nil
@@ -170,7 +172,7 @@ func runGroups(args []string) error {
 	for _, n := range names {
 		g := groups[n]
 		ratio := fmt.Sprintf("%v", g.Ratio)
-		cliout.Printf("  %-12s  ratio=%-6s  %s\n", n, ratio, g.Desc)
+		cliout.Printf("  %-12s  ratio=%-6s  %s\n", cliout.Sanitize(n), ratio, cliout.Sanitize(g.Desc))
 	}
 	return nil
 }

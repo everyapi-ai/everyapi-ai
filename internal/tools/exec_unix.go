@@ -87,14 +87,16 @@ func Exec(t *Tool, env map[string]string, extraArgs []string) error {
 			switch s {
 			case syscall.SIGTERM:
 				_ = cmd.Process.Signal(s)
-			case syscall.SIGINT, syscall.SIGQUIT:
+			case syscall.SIGINT, syscall.SIGQUIT, syscall.SIGHUP:
 				if forwardInterrupts {
 					_ = cmd.Process.Signal(s)
 				}
-				// else: the kernel already delivered it to the child via
-				// the shared foreground group; forwarding would double it.
+				// else: in the shared foreground group the kernel already
+				// delivered it to the child on Ctrl+C / hangup; forwarding
+				// would double it. SIGHUP is forwarded here too so a child
+				// launched WITHOUT a controlling terminal (mcp install, a
+				// wrapper, a pipe) can still be hung up via the parent.
 			}
-			// SIGHUP: always swallowed (the group already got it on hangup).
 		}
 	}()
 

@@ -44,7 +44,7 @@ var binaryRemover = os.Remove
 // can safely undo — brew is delegated to `brew uninstall`).
 //
 // --dry-run lists what would happen without touching anything.
-// --keep-config / --keep-edge / --keep-binary scope down the wipe.
+// --keep-config / --keep-data / --keep-binary scope down the wipe.
 // --yes / -y skips the confirmation prompt.
 func Uninstall(args []string) error {
 	fs := flag.NewFlagSet("uninstall", flag.ContinueOnError)

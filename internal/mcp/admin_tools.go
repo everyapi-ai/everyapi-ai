@@ -97,7 +97,7 @@ func handleAdminMarketplaceStatus(ctx context.Context, _ json.RawMessage) (strin
 // silently and the AI is the only party in a position to refuse.
 
 type adminMarketplaceSetArgs struct {
-	Enabled bool   `json:"enabled"`
+	Enabled *bool  `json:"enabled"`
 	Confirm string `json:"confirm"`
 }
 
@@ -150,15 +150,24 @@ func handleAdminMarketplaceSet(ctx context.Context, raw json.RawMessage) (string
 			"— surface the intent to the operator before retrying with confirm set.",
 			adminMarketplaceSetConfirmToken)
 	}
+	// `enabled` is required, but the server does not validate args against
+	// InputSchema — a non-pointer bool can't tell "omitted" from "false",
+	// and the absent case would default to CLOSING the marketplace
+	// deployment-wide (a destructive, wrong-direction write past the
+	// confirm gate). The *bool makes the omission explicit so we reject it
+	// loudly instead of silently closing. (See repo Rule 4.)
+	if args.Enabled == nil {
+		return "", fmt.Errorf("everyapi_admin_marketplace_set requires `enabled` (true to open / false to close the marketplace); it was omitted")
+	}
 	prev, _, err := client.GetOption(ctx, marketplaceOptionKey)
 	if err != nil {
 		return "", classifyAPIErr(err)
 	}
-	if err := client.SetBoolOption(ctx, marketplaceOptionKey, args.Enabled); err != nil {
+	if err := client.SetBoolOption(ctx, marketplaceOptionKey, *args.Enabled); err != nil {
 		return "", classifyAPIErr(err)
 	}
 	target := "false"
-	if args.Enabled {
+	if *args.Enabled {
 		target = "true"
 	}
 	prevLabel := prev

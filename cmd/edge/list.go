@@ -33,7 +33,7 @@ func edgeList(args []string) error {
 	// below so the colon column lines up across the whole output.
 	cliout.Printf("%-12s%s\n", "api_base:", creds.APIBase)
 	if creds.Username != "" {
-		cliout.Printf("%-12s%s (id=%d)\n\n", i18n.T("edge.field.user"), creds.Username, creds.UserID)
+		cliout.Printf("%-12s%s (id=%d)\n\n", i18n.T("edge.field.user"), cliout.Sanitize(creds.Username), creds.UserID)
 	} else {
 		cliout.Printf("%-12sid=%d\n\n", i18n.T("edge.field.user"), creds.UserID)
 	}
@@ -59,8 +59,8 @@ func edgeList(args []string) error {
 		if n.ID == active {
 			marker = "* "
 		}
-		cliout.Printf("%s#%d %s\n", marker, n.ID, n.Name)
-		cliout.Printf("  %-12s%s%s\n", i18n.T("edge.field.status"), n.Status, pauseSuffix(n.Paused))
+		cliout.Printf("%s#%d %s\n", marker, n.ID, cliout.Sanitize(n.Name))
+		cliout.Printf("  %-12s%s%s\n", i18n.T("edge.field.status"), cliout.Sanitize(n.Status), pauseSuffix(n.Paused))
 		if n.ChannelID != nil {
 			cliout.Printf("  %-12s%d\n", i18n.T("edge.field.channel"), *n.ChannelID)
 		}
@@ -69,10 +69,10 @@ func edgeList(args []string) error {
 				formatDuration(time.Since(time.Unix(n.LastSeenAt, 0))))
 		}
 		if len(n.Models) > 0 {
-			cliout.Printf("  %-12s%s\n", i18n.T("edge.field.models"), strings.Join(n.Models, ", "))
+			cliout.Printf("  %-12s%s\n", i18n.T("edge.field.models"), cliout.Sanitize(strings.Join(n.Models, ", ")))
 		}
 		if len(n.Workloads) > 0 {
-			cliout.Printf("  %-12s%s\n", i18n.T("edge.field.workloads"), strings.Join(n.Workloads, ", "))
+			cliout.Printf("  %-12s%s\n", i18n.T("edge.field.workloads"), cliout.Sanitize(strings.Join(n.Workloads, ", ")))
 		}
 	}
 	cliout.Println("")

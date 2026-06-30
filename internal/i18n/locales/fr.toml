@@ -494,6 +494,7 @@ usage_compensation = "utilisation : everyapi seller compensation {submit|list} [
 usage_compensation_help = "everyapi seller compensation {submit|list} — déposer / consulter des demandes d'indemnisation"
 withdraw_nothing = "Rien à retirer — votre solde vendeur est de $0."
 withdraw_done = "Transféré $%.2f du solde vendeur vers le solde principal.\n"
+withdraw_done_no_usd = "%d unités de quota transférées du solde vendeur vers le solde principal (valeur en USD indisponible — voir votre portefeuille).\n"
 withdraw_check_url = "Vérifier : %s/wallet\n"
 eligibility_header = "Éligibilité Marketplace :"
 eligibility_marketplace_enabled = "  %s marketplace activé"
@@ -860,7 +861,7 @@ tokens = "%d activés / %d au total"
 tokens_none = "%d token(s), 0 activé"
 proxy_down = "non démarré (l'assainisseur est optionnel, requis uniquement avec --sanitize)"
 proxy_unhealthy = "à l'écoute mais non sain (%s)"
-proxy_ok = "à l'écoute sur 127.0.0.1:8888"
+proxy_ok = "à l'écoute sur %s"
 
 [doctor.section]
 account = "Compte"

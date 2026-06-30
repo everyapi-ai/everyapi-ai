@@ -301,7 +301,13 @@ func dispatch(req *jsonRPCRequest, tools map[string]*Tool, log io.Writer) jsonRP
 			Code:    errMethodNotFound,
 			Message: "method not found: " + req.Method,
 		}
-		fmt.Fprintf(log, "everyapi-mcp: unknown method %q\n", req.Method)
+		// Conforming client→server notifications (notifications/cancelled,
+		// notifications/progress, …) are valid fire-and-forget messages
+		// whose response is dropped anyway; don't log them as "unknown
+		// method" — that's just stderr noise during normal operation.
+		if !strings.HasPrefix(req.Method, "notifications/") {
+			fmt.Fprintf(log, "everyapi-mcp: unknown method %q\n", req.Method)
+		}
 	}
 	return resp
 }

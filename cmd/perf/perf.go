@@ -54,7 +54,7 @@ func Run(args []string) error {
 	for _, m := range models {
 		// SuccessRate is already a 0–100 percentage from the backend.
 		cliout.Printf("  %-30s  succ=%5.1f%%  avg=%6dms  tps=%6.1f  n=%d\n",
-			m.ModelName, m.SuccessRate, m.AvgLatencyMs, m.AvgTps, m.RequestCount)
+			cliout.Sanitize(m.ModelName), m.SuccessRate, m.AvgLatencyMs, m.AvgTps, m.RequestCount)
 	}
 	return nil
 }

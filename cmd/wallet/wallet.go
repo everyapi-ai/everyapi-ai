@@ -102,7 +102,7 @@ func runHistory(args []string) error {
 			method = fmt.Sprintf("%s/%s", t.PaymentMethod, t.PaymentProvider)
 		}
 		cliout.Printf("  %s  [#%d]  %s  amount=%d  money=%s  status=%s  trade=%s\n",
-			when, t.ID, method, t.Amount, style.Bold(fmt.Sprintf("%g", t.Money)), t.Status, t.TradeNo)
+			when, t.ID, cliout.Sanitize(method), t.Amount, style.Bold(fmt.Sprintf("%g", t.Money)), cliout.Sanitize(t.Status), cliout.Sanitize(t.TradeNo))
 	}
 	return nil
 }
@@ -125,7 +125,7 @@ func runInfo(args []string) error {
 		cliout.Printf("  %s\n", i18n.T("wallet.label.none_enabled"))
 	}
 	for _, pm := range info.PayMethods {
-		cliout.Printf("  - %s (type=%s, min=%s)\n", pm["name"], pm["type"], pm["min_topup"])
+		cliout.Printf("  - %s (type=%s, min=%s)\n", cliout.Sanitize(pm["name"]), cliout.Sanitize(pm["type"]), cliout.Sanitize(pm["min_topup"]))
 	}
 	cliout.Println("\n" + i18n.T("wallet.label.feature_flags"))
 	cliout.Printf("  online (epay): %v\n", info.EnableOnlineTopup)
@@ -157,11 +157,11 @@ func runInfo(args []string) error {
 		})
 		cliout.Println("\n" + i18n.T("wallet.label.discount_tiers"))
 		for _, k := range keys {
-			cliout.Printf("  ≥%s → ×%g\n", k, info.Discount[k])
+			cliout.Printf("  ≥%s → ×%g\n", cliout.Sanitize(k), info.Discount[k])
 		}
 	}
 	if info.TopupLink != "" {
-		cliout.Printf("\nDashboard top-up: %s\n", info.TopupLink)
+		cliout.Printf("\nDashboard top-up: %s\n", cliout.Sanitize(info.TopupLink))
 	}
 	cliout.Println("\nFor card / e-wallet payments use 'everyapi wallet topup' (browser flow).")
 	return nil

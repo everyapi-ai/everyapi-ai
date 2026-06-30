@@ -275,19 +275,12 @@ func sellerSales(args []string) error {
 	for _, r := range rows {
 		when := time.Unix(r.CreatedAt, 0).Format("2006-01-02 15:04:05")
 		cliout.Printf("  %s  %-30s  in=%-5d  out=%-5d  charge=%-6d  take=%-6d  buyer=%s\n",
-			when, r.ModelName, r.PromptTokens, r.CompletionTokens, r.BuyerCharge, r.SellerTake, shortHash(r.BuyerAnon))
+			when, cliout.Sanitize(r.ModelName), r.PromptTokens, r.CompletionTokens, r.BuyerCharge, r.SellerTake, cliout.Sanitize(r.BuyerAnon))
 		totalCharge += r.BuyerCharge
 		totalTake += r.SellerTake
 	}
 	cliout.Printf(i18n.T("seller.sales_page_total")+"\n", totalCharge, totalTake)
 	return nil
-}
-
-func shortHash(s string) string {
-	if len(s) > 8 {
-		return s[:8]
-	}
-	return s
 }
 
 // --- seller eligibility ------------------------------------------

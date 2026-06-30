@@ -17,6 +17,7 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/everyapi-ai/everyapi-ai/cmd/proxy"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-ai/internal/style"
@@ -104,13 +105,16 @@ func Run(args []string) error {
 	})
 
 	report.run(i18n.T("doctor.check.sanitizer"), func() (string, string, error) {
-		// Sanitizer is best-effort. Probe the default listen
-		// (loopback:8888 — the proxy's default --listen) on its
-		// liveness path /__sanitizer/health with a 1s timeout; if
-		// no socket answers we surface as WARN, not FAIL, because the
-		// sanitizer is opt-in (--sanitize) and off by default.
+		// Sanitizer is best-effort. Probe the proxy's RECORDED listen
+		// address (proxy start picks a free port when the 127.0.0.1:8888
+		// default is taken and writes it to its PID file) on the liveness
+		// path /__sanitizer/health with a 1s timeout — hardcoding 8888 here
+		// would report a healthy proxy on a fallback port as "down". If no
+		// socket answers we surface as WARN, not FAIL, because the sanitizer
+		// is opt-in (--sanitize) and off by default.
+		addr := proxy.ResolveListen()
 		hc := &http.Client{Timeout: 1 * time.Second}
-		resp, err := hc.Get("http://127.0.0.1:8888/__sanitizer/health")
+		resp, err := hc.Get("http://" + addr + "/__sanitizer/health")
 		if err != nil {
 			return i18n.T("doctor.detail.proxy_down"),
 				i18n.T("doctor.hint.proxy_start"),
@@ -120,7 +124,7 @@ func Run(args []string) error {
 		if resp.StatusCode != http.StatusOK {
 			return fmt.Sprintf(i18n.T("doctor.detail.proxy_unhealthy"), resp.Status), "", errSoft(resp.Status)
 		}
-		return i18n.T("doctor.detail.proxy_ok"), "", nil
+		return fmt.Sprintf(i18n.T("doctor.detail.proxy_ok"), addr), "", nil
 	})
 
 	report.section(i18n.T("doctor.section.tools"))

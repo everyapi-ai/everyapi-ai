@@ -63,6 +63,12 @@ const (
 // mutated thereafter, so T() reads it lock-free.
 var locales = map[string]map[string]string{}
 
+// localesByLowerKey maps a lower-cased locale stem to the canonical
+// (filename-cased) key in `locales`. It lets normalize() resolve a region
+// locale (e.g. pt-BR.toml) and match case-insensitively without disturbing
+// the case-sensitive `locales` lookups elsewhere (LangZhTW == "zh-TW").
+var localesByLowerKey = map[string]string{}
+
 // supportedLangs is the alphabetically-sorted list of language
 // codes discovered at init() by scanning ./locales for *.toml. The
 // public SupportedLanguages() returns a copy so callers can't
@@ -155,6 +161,15 @@ func normalize(s string) string {
 	// otherwise zh_TW from $LANG would slip past the zh-tw case and
 	// be mis-detected as Simplified.
 	s = strings.ReplaceAll(s, "_", "-")
+	// Strip the libc codeset (".utf-8") and any "@modifier" so a real LANG
+	// like "pt_BR.UTF-8" folds to the bare tag "pt-br" before matching —
+	// otherwise the exact-tag locale-key probe below (and a future region
+	// bundle like pt-BR.toml) would never see the region tag. The switch
+	// prefixes below already tolerate the suffix via HasPrefix; this just
+	// makes the probe match too.
+	if i := strings.IndexAny(s, ".@"); i >= 0 {
+		s = s[:i]
+	}
 	switch {
 	// These Traditional cases MUST stay above the bare "zh" case below:
 	// "zh-tw" etc. also have prefix "zh", so the switch's first-match
@@ -181,12 +196,21 @@ func normalize(s string) string {
 	// code edit here — the documented "drop a {lang}.toml and it just works"
 	// contract. The explicit cases above still win; they encode the zh
 	// Simplified/Traditional split a bare-subtag match can't express.
+	// Probe the FULL normalized tag first (case-insensitively) so a
+	// region-tagged bundled locale like pt-BR.toml resolves, then fall back
+	// to the bare subtag. Both go through the lower-cased index so a
+	// libc/IETF case mismatch (pt-BR vs pt-br) still hits. The explicit
+	// switch cases above still win; they encode the zh Simplified/
+	// Traditional split a bare-subtag match can't express.
+	if canon, ok := localesByLowerKey[s]; ok {
+		return canon
+	}
 	sub := s
 	if i := strings.Index(sub, "-"); i >= 0 {
 		sub = sub[:i]
 	}
-	if _, ok := locales[sub]; ok {
-		return sub
+	if canon, ok := localesByLowerKey[sub]; ok {
+		return canon
 	}
 	return ""
 }
@@ -212,6 +236,7 @@ func init() {
 		flat := map[string]string{}
 		flatten("", raw, flat)
 		locales[lang] = flat
+		localesByLowerKey[strings.ToLower(lang)] = lang
 	}
 	for lang := range locales {
 		supportedLangs = append(supportedLangs, lang)

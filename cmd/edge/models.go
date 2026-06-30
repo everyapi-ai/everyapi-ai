@@ -68,14 +68,29 @@ func edgeModels(args []string) error {
 	}
 }
 
-// resolveModelArg pulls the model name off the front of rest, or
-// prompts for it on a TTY when missing. The first arg of rest that
-// doesn't start with "-" is treated as the model name; an empty
-// rest (or one that leads with a flag) on a TTY triggers the
-// interactive prompt instead of a usage error.
+// resolveModelArg pulls the model name out of rest, or prompts for it on
+// a TTY when missing. The model is the first non-flag token, tolerating
+// flags BEFORE it (`pull --node 5 mistral`) as well as after
+// (`pull mistral --node 5`) — Go's stdlib flag stops at the first
+// positional, so without this a flag-first invocation would drop the
+// model. --node is the only flag and takes one value, so a `--node`/
+// `-node` token is skipped together with the value that follows it; the
+// surviving flags are returned for the caller's fs.Parse.
 func resolveModelArg(op string, rest []string) (string, []string, error) {
-	if len(rest) > 0 && !strings.HasPrefix(rest[0], "-") {
-		return rest[0], rest[1:], nil
+	for i := 0; i < len(rest); i++ {
+		a := rest[i]
+		switch {
+		case a == "--node" || a == "-node":
+			i++ // skip the flag's value too
+			continue
+		case strings.HasPrefix(a, "--node=") || strings.HasPrefix(a, "-node="):
+			continue
+		case strings.HasPrefix(a, "-"):
+			continue // unknown flag — leave it for fs.Parse to reject
+		}
+		// First non-flag token is the model. Drop it, leaving the flags.
+		remaining := append(append([]string{}, rest[:i]...), rest[i+1:]...)
+		return a, remaining, nil
 	}
 	if !cliprompt.IsInteractive() {
 		return "", nil, fmt.Errorf(i18n.T("edge.models.usage_op"), op)

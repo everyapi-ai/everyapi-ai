@@ -1197,8 +1197,7 @@ func runMCP(args []string) error {
 			"  everyapi mcp status             show which clients have everyapi registered\n")
 		return nil
 	default:
-		fmt.Fprintf(os.Stderr, "unknown 'mcp' subcommand %q. Try 'everyapi mcp install' to register, 'everyapi mcp uninstall' to remove, 'everyapi mcp status' to check, or 'everyapi mcp' (no args) to run the server.\n", args[0])
-		os.Exit(2)
-		return nil // unreachable
+		fmt.Fprintf(os.Stderr, "Try 'everyapi mcp install' to register, 'everyapi mcp uninstall' to remove, 'everyapi mcp status' to check, or 'everyapi mcp' (no args) to run the server.\n")
+		return fmt.Errorf("unknown 'mcp' subcommand %q", args[0])
 	}
 }

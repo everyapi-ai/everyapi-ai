@@ -36,7 +36,7 @@ func Run(args []string) error {
 	days := fs.Int("days", 7, "lookback in days")
 	sinceStr := fs.String("since", "", "window start")
 	untilStr := fs.String("until", "", "window end")
-	perDay := fs.Bool("per-day", true, "group by day")
+	fs.Bool("per-day", true, "group by day (default)") // discoverable selector; per-day is the default render path, conflict-checked against --per-model below
 	perModel := fs.Bool("per-model", false, "group by model")
 	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
 		cliout.Println(usageDoc)
@@ -44,6 +44,19 @@ func Run(args []string) error {
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	// --per-day / --per-model are mutually exclusive grouping selectors.
+	// --per-day defaults true (it IS the default render), so only a user
+	// who EXPLICITLY passes --per-day alongside --per-model conflicts;
+	// surface that instead of silently preferring --per-model.
+	perDayExplicit := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "per-day" {
+			perDayExplicit = true
+		}
+	})
+	if perDayExplicit && *perModel {
+		return errors.New("--per-day and --per-model are mutually exclusive")
 	}
 	if *days < 0 || *days > 36500 {
 		return errors.New("--days out of range (0-36500)")
@@ -88,7 +101,6 @@ func Run(args []string) error {
 		renderPerModel(rows)
 		return nil
 	}
-	_ = *perDay // --per-day is the default and overrides nothing else
 	renderPerDay(rows)
 	return nil
 }
@@ -150,7 +162,7 @@ func renderPerModel(rows []api.QuotaDay) {
 	total := agg{}
 	for _, m := range models {
 		a := byModel[m]
-		cliout.Printf("  %-40s  quota=%-10d  calls=%-6d  tokens=%d\n", m, a.quota, a.count, a.tokens)
+		cliout.Printf("  %-40s  quota=%-10d  calls=%-6d  tokens=%d\n", cliout.Sanitize(m), a.quota, a.count, a.tokens)
 		total.quota += a.quota
 		total.count += a.count
 		total.tokens += a.tokens

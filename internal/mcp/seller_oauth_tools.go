@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 )
 
@@ -83,8 +84,8 @@ func handleSellerAddOAuthCodexStart(ctx context.Context, raw json.RawMessage) (s
 	}
 	var b strings.Builder
 	fmt.Fprintln(&b, "Codex device-auth flow started. Tell the user to do this:")
-	fmt.Fprintf(&b, "  1) Open: %s\n", start.VerificationURI)
-	fmt.Fprintf(&b, "  2) Enter the code: %s\n", start.UserCode)
+	fmt.Fprintf(&b, "  1) Open: %s\n", cliout.Sanitize(start.VerificationURI))
+	fmt.Fprintf(&b, "  2) Enter the code: %s\n", cliout.Sanitize(start.UserCode))
 	fmt.Fprintln(&b, "  3) Approve there, then come back.")
 	fmt.Fprintf(&b, "After the user reports they've completed step 3, call everyapi_seller_add_oauth_codex_poll with flow_id=%q\n", start.FlowID)
 	fmt.Fprintf(&b, "(initial poll interval %d sec; the flow expires in %d sec).", start.Interval, start.ExpiresIn)
@@ -155,7 +156,7 @@ func handleSellerAddOAuthCodexPoll(ctx context.Context, raw json.RawMessage) (st
 		var b strings.Builder
 		fmt.Fprintf(&b, "status=authorized — channel #%d mounted.\n", res.ChannelID)
 		if res.Email != "" {
-			fmt.Fprintf(&b, "Bound account: %s\n", res.Email)
+			fmt.Fprintf(&b, "Bound account: %s\n", cliout.Sanitize(res.Email))
 		}
 		fmt.Fprintf(&b, "Dashboard: %s/seller/channels", api.WebOriginFromBase(creds.APIBase))
 		return b.String(), nil
@@ -220,7 +221,7 @@ func handleSellerAddOAuthClaudeStart(ctx context.Context, raw json.RawMessage) (
 	}
 	var b strings.Builder
 	fmt.Fprintln(&b, "Claude OAuth flow started. Tell the user to do this:")
-	fmt.Fprintf(&b, "  1) Open: %s\n", authorizeURL)
+	fmt.Fprintf(&b, "  1) Open: %s\n", cliout.Sanitize(authorizeURL))
 	fmt.Fprintln(&b, "  2) Sign in and approve the connection at Anthropic.")
 	fmt.Fprintln(&b, "  3) Anthropic's callback page will show a `<code>#<state>` string.")
 	fmt.Fprintln(&b, "  4) Tell you that string, then call everyapi_seller_add_oauth_claude_complete with input=<that string>.")

@@ -264,7 +264,7 @@ func adminChannelTest(args []string) error {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		cliout.Printf("  %s  %v\n", style.Dim(padName(k+":", w+1)), res[k])
+		cliout.Printf("  %s  %s\n", style.Dim(padName(cliout.Sanitize(k)+":", w+1)), cliout.Sanitize(fmt.Sprintf("%v", res[k])))
 	}
 	return nil
 }

@@ -49,7 +49,13 @@ func edgeRemove(args []string) error {
 	// destroyed the containers).
 	if dockerErr := ensureDocker(); dockerErr == nil {
 		dir, dirErr := nodeDir(nodeID)
-		if dirErr == nil {
+		// Only attempt compose down when the node was actually started here
+		// (docker-compose.yml exists). A registered-but-never-started node
+		// has none, and `compose -f docker-compose.yml down` against a
+		// missing file aborts with a cryptic "no configuration file
+		// provided" (surfaced via down_failed) for what is a no-op. Mirror
+		// status.go's composeFileExists guard.
+		if dirErr == nil && composeFileExists(dir) {
 			cliout.Printf(i18n.T("edge.remove.down"), nodeID)
 			if err := runComposeCmd(dir, projectFor(nodeID), "down", "-v"); err != nil {
 				cliout.Printf(i18n.T("edge.remove.down_failed"), err)

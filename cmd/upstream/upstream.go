@@ -57,15 +57,16 @@ func render(providers []api.UpstreamProvider) string {
 	// runes, not terminal cells, so CJK / mixed-width names drift.
 	nameW := 0
 	for _, p := range providers {
-		if w := lipgloss.Width(p.Name); w > nameW {
+		if w := lipgloss.Width(cliout.Sanitize(p.Name)); w > nameW {
 			nameW = w
 		}
 	}
 
 	var b strings.Builder
 	for _, p := range providers {
-		pad := strings.Repeat(" ", nameW-lipgloss.Width(p.Name))
-		fmt.Fprintf(&b, "%s  %s%s  %s\n", indicatorMark(p.Indicator), p.Name, pad, indicatorLabel(p.Indicator))
+		name := cliout.Sanitize(p.Name)
+		pad := strings.Repeat(" ", nameW-lipgloss.Width(name))
+		fmt.Fprintf(&b, "%s  %s%s  %s\n", indicatorMark(p.Indicator), name, pad, indicatorLabel(p.Indicator))
 
 		// Keep only the components that actually carry a problem; the
 		// backend includes operational ones, but a green component is
@@ -83,13 +84,13 @@ func render(providers []api.UpstreamProvider) string {
 		// Degraded: the provider's own summary, the broken components,
 		// and any open incidents — indented under the rollup line.
 		if p.Description != "" {
-			fmt.Fprintf(&b, "%s%s\n", detailIndent, p.Description)
+			fmt.Fprintf(&b, "%s%s\n", detailIndent, cliout.Sanitize(p.Description))
 		}
 		for _, c := range broken {
-			fmt.Fprintf(&b, "%s- %s: %s\n", detailIndent, c.Name, humanize(c.Status))
+			fmt.Fprintf(&b, "%s- %s: %s\n", detailIndent, cliout.Sanitize(c.Name), humanize(c.Status))
 		}
 		for _, inc := range p.Incidents {
-			fmt.Fprintf(&b, "%s! %s (%s / %s)\n", detailIndent, inc.Name, humanize(inc.Status), humanize(inc.Impact))
+			fmt.Fprintf(&b, "%s! %s (%s / %s)\n", detailIndent, cliout.Sanitize(inc.Name), humanize(inc.Status), humanize(inc.Impact))
 		}
 	}
 	return b.String()
@@ -103,9 +104,11 @@ func isGreen(indicator string) bool {
 }
 
 // humanize turns a Statuspage snake_case enum (degraded_performance) into
-// space-separated words for display.
+// space-separated words for display. The enum is server-sourced, so the
+// result is sanitized too — a crafted status/impact value must not be able
+// to smuggle terminal escapes through the detail block.
 func humanize(s string) string {
-	return strings.ReplaceAll(s, "_", " ")
+	return cliout.Sanitize(strings.ReplaceAll(s, "_", " "))
 }
 
 // indicatorMark maps the Statuspage indicator to a short ASCII tag —

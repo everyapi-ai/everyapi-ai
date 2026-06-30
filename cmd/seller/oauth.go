@@ -312,6 +312,9 @@ func sellerAddOAuthGemini(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if *timeout <= 0 {
+		return fmt.Errorf("--timeout must be positive (e.g. 5m)")
+	}
 	*name = strings.TrimSpace(*name)
 	*models = strings.TrimSpace(*models)
 	if *name == "" || *models == "" {
@@ -390,7 +393,7 @@ func sellerAddOAuthGemini(args []string) error {
 		if desc == "" {
 			desc = cb.Error
 		}
-		return fmt.Errorf("authorization failed: %s", desc)
+		return fmt.Errorf("authorization failed: %s", cliout.Sanitize(desc))
 	}
 	if cb.Code == "" {
 		return errors.New(i18n.T("seller.oauth_callback_no_code"))
@@ -439,6 +442,9 @@ func sellerAddOAuthAntigravity(args []string) error {
 	timeout := fs.Duration("timeout", 5*time.Minute, "how long to wait for the OAuth callback before giving up")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *timeout <= 0 {
+		return fmt.Errorf("--timeout must be positive (e.g. 5m)")
 	}
 	*name = strings.TrimSpace(*name)
 	*models = strings.TrimSpace(*models)
@@ -517,7 +523,7 @@ func sellerAddOAuthAntigravity(args []string) error {
 		if desc == "" {
 			desc = cb.Error
 		}
-		return fmt.Errorf("authorization failed: %s", desc)
+		return fmt.Errorf("authorization failed: %s", cliout.Sanitize(desc))
 	}
 	if cb.Code == "" {
 		return errors.New(i18n.T("seller.oauth_callback_no_code"))
