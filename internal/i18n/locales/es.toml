@@ -1215,6 +1215,9 @@ browser_opened = "Navegador abierto. Verifica que la frase de la página coincid
 
 [login]
 cancelled = "Inicio de sesión cancelado."
+gateway_region_prompt = "Elige la región de pasarela de EveryAPI"
+gateway_region_global = "Pasarela global (recomendada fuera de China continental)"
+gateway_region_cn = "Pasarela acelerada de China (China continental)"
 waiting = "Esperando autorización... (Ctrl+C para cancelar)"
 waiting_with_copy = "Esperando autorización... (Ctrl+C para cancelar, pulsa 'c' para copiar URL)"
 next_hint = "Siguiente: prueba 'everyapi auth status' o 'everyapi use claude'."

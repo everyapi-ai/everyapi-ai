@@ -1,8 +1,7 @@
 // Package settings wires `everyapi settings …` — the CLI's
 // preference surface, persisted alongside credentials in
-// ConfigDir. Today the only setting is `language`; more will land
-// here as the CLI grows (default --group, default sanitizer
-// behaviour, color preference, …).
+// ConfigDir. Settings are intentionally non-secret: language,
+// launcher layout, gateway region, and future CLI preferences.
 //
 // File shape: clients/sdk/config/settings.go owns the Settings
 // struct + load/save. This package is the human-facing dispatcher.
@@ -64,6 +63,7 @@ func runList(args []string) error {
 	cliout.Printf("%s\n", i18n.T("settings.current"))
 	cliout.Printf("  %s: %s\n", i18n.T("settings.lang_label"), labelLanguage(s.Language))
 	cliout.Printf("  %s: %s\n", i18n.T("settings.menu_label"), labelMenuLayout(s.MenuLayout))
+	cliout.Printf("  %s: %s\n", "gateway_region", labelGatewayRegion(s.GatewayRegion))
 	path, _ := config.SettingsPath()
 	if path != "" {
 		cliout.Printf("\n%s %s\n", i18n.T("settings.file_at"), path)
@@ -155,10 +155,6 @@ func runInteractive() error {
 	if err != nil {
 		return err
 	}
-	// One-question wizard for now (the only setting is language).
-	// Grows naturally as more keys land — add another picker block
-	// per setting and a final "anything else?" branch.
-	//
 	// Build options from the live SupportedLanguages list (sorted en
 	// first by the loader) so a dropped-in {lang}.toml shows up
 	// automatically. Each row is "<code> — <native name>" — the
@@ -243,6 +239,8 @@ func readKey(s *config.Settings, key string) (string, bool) {
 		return s.Language, true
 	case "menu_layout":
 		return effectiveMenuLayout(s.MenuLayout), true
+	case "gateway_region":
+		return config.EffectiveGatewayRegion(s.GatewayRegion), true
 	}
 	return "", false
 }
@@ -274,6 +272,18 @@ func writeKey(s *config.Settings, key, value string) error {
 		}
 		s.MenuLayout = v
 		return nil
+	case "gateway_region":
+		v := strings.ToLower(strings.TrimSpace(value))
+		switch v {
+		case "", "global":
+			s.GatewayRegion = "global"
+			return nil
+		case "cn", "china":
+			s.GatewayRegion = "cn"
+			return nil
+		default:
+			return errors.New("gateway_region must be global or cn")
+		}
 	}
 	return fmt.Errorf(i18n.T("settings.unknown_key"), key)
 }
@@ -295,6 +305,14 @@ func labelMenuLayout(v string) string {
 		return i18n.T("settings.menu_nested")
 	}
 	return i18n.T("settings.menu_grouped")
+}
+
+func labelGatewayRegion(v string) string {
+	region := config.EffectiveGatewayRegion(v)
+	if strings.TrimSpace(v) == "" {
+		return fmt.Sprintf(i18n.T("settings.default_label"), region)
+	}
+	return region
 }
 
 // labelLanguage renders an unset Language as "(default)" + the

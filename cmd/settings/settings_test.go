@@ -24,6 +24,10 @@ func TestWriteKey(t *testing.T) {
 		{"language case insensitive", "language", "ZH", false, "zh"},
 		{"language with whitespace", "language", "  en  ", false, "en"},
 		{"language unsupported", "language", "klingon", true, ""},
+		{"gateway region global", "gateway_region", "global", false, ""},
+		{"gateway region cn", "gateway_region", "cn", false, ""},
+		{"gateway region china alias", "gateway_region", "china", false, ""},
+		{"gateway region unsupported", "gateway_region", "mars", true, ""},
 		{"unknown key", "color", "blue", true, ""},
 	}
 	for _, c := range cases {
@@ -44,6 +48,10 @@ func TestReadKey(t *testing.T) {
 	s := &config.Settings{Language: "zh"}
 	if v, ok := readKey(s, "language"); !ok || v != "zh" {
 		t.Errorf("readKey(language) = %q, %v", v, ok)
+	}
+	s.GatewayRegion = "cn"
+	if v, ok := readKey(s, "gateway_region"); !ok || v != "cn" {
+		t.Errorf("readKey(gateway_region) = %q, %v", v, ok)
 	}
 	if _, ok := readKey(s, "color"); ok {
 		t.Errorf("readKey(color) should return ok=false")
@@ -101,5 +109,30 @@ func TestEffectiveMenuLayout(t *testing.T) {
 		if got := effectiveMenuLayout(in); got != want {
 			t.Errorf("effectiveMenuLayout(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestGatewayRegion_WriteReadRoundTrip(t *testing.T) {
+	s := &config.Settings{}
+	if v, ok := readKey(s, "gateway_region"); !ok || v != "global" {
+		t.Errorf("readKey(gateway_region) on empty = %q,%v; want \"global\",true", v, ok)
+	}
+	if err := writeKey(s, "gateway_region", "  CN "); err != nil {
+		t.Fatalf("writeKey cn: %v", err)
+	}
+	if s.GatewayRegion != "cn" {
+		t.Errorf("GatewayRegion = %q, want cn", s.GatewayRegion)
+	}
+	if v, _ := readKey(s, "gateway_region"); v != "cn" {
+		t.Errorf("readKey(gateway_region) = %q, want cn", v)
+	}
+	if err := writeKey(s, "gateway_region", "global"); err != nil {
+		t.Fatalf("writeKey global: %v", err)
+	}
+	if s.GatewayRegion != "global" {
+		t.Errorf("GatewayRegion = %q, want global", s.GatewayRegion)
+	}
+	if err := writeKey(s, "gateway_region", "eu"); err == nil {
+		t.Error("writeKey accepted an invalid gateway_region value")
 	}
 }

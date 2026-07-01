@@ -43,7 +43,7 @@ CLI 的设计威胁模型（这些**不是**漏洞，而是设计权衡）：
 
 以下不在本 CLI 的 security 范围内：
 
-- 后端 / 服务端漏洞（`api.everyapi.ai` / dashboard / 计费 / 网关）——请到 [everyapi-ai 主仓的 SECURITY 流程](https://everyapi.ai/security) 走
+- 后端 / 服务端漏洞（EveryAPI API / dashboard / 计费 / 网关）——请到 [everyapi-ai 主仓的 SECURITY 流程](https://everyapi.ai/security) 走
 - 第三方依赖：本 CLI **没有任何**第三方 Go 依赖（`go.mod` 只列 `go 1.25.1`），但 release 二进制由 Go runtime 静态链接 — Go runtime 自身的 CVE 由我们升级 Go 版本响应
 - 用户自托管部署：自己改了 `--api-base` 指向私有后端时，私有后端的安全责任在你
 

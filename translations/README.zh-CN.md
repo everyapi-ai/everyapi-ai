@@ -69,6 +69,7 @@ everyapi use                # 无参 → 交互式选择已安装的工具
 
 ```bash
 everyapi login                                    # 生产，默认渲染 QR + 自动开浏览器
+everyapi settings set gateway_region cn          # 后续命令使用中国加速网关
 everyapi login --api-base http://localhost:8787   # 本地开发 / 自托管
 everyapi login --no-browser                       # 不自动开浏览器（用 QR 扫）
 everyapi login --no-qr                            # 不渲染 QR（非 UTF-8 终端 / piping）
@@ -304,6 +305,8 @@ fr : Erreur: non connecté — exécutez d'abord 'everyapi login'
 - `access_token` —— 所有需鉴权的 API 调用使用的 bearer。
 - `relay_key` —— relay API key（`sk-everyapi-…`），用于 `everyapi use` 的子进程 env。从 `/api/token/*` 拉来、缓存于此。
 - `user_id` / `username` —— 缓存，使 `status` 在首次 API 往返前就能渲染身份行。
+
+网关区域是 `settings.json` 里的 CLI 偏好：如果尚未设置，交互式登录会询问一次并保存选择。`everyapi settings set gateway_region cn` 会让官方网关流量走 `https://api-cn.everyapi.ai`；`global` 使用 `https://api.everyapi.ai`。自托管 `--api-base` 仍然优先。
 
 ## 开发
 

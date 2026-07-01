@@ -1182,6 +1182,9 @@ browser_opened = "瀏覽器已開啟。請核對頁面上的校驗短語與上�
 
 [login]
 cancelled = "已取消登入。"
+gateway_region_prompt = "選擇 EveryAPI 閘道區域"
+gateway_region_global = "全球閘道（中國大陸以外推薦）"
+gateway_region_cn = "中國加速閘道（中國大陸推薦）"
 waiting = "等待授權中…（Ctrl+C 取消）"
 waiting_with_copy = "等待授權中…（Ctrl+C 取消，按 'c' 複製 URL）"
 next_hint = "下一步：試試 'everyapi auth status' 或 'everyapi use claude'。"

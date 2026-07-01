@@ -63,8 +63,8 @@ USAGE
 
 START FLAGS
   --listen <addr>                 Bind address (default 127.0.0.1:8888)
-  --upstream <url>                Upstream gateway (default from credentials, or
-                                  https://api.everyapi.ai)
+  --upstream <url>                Upstream gateway (default from credentials /
+                                  settings, or https://api.everyapi.ai)
   --detach                        Re-exec self in the background and return.
                                   Writes ~/.config/everyapi/sanitizer.pid for
                                   later 'proxy stop'. Logs go to

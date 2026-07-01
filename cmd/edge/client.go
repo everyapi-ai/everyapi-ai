@@ -26,8 +26,8 @@ func edgeClient() (*api.Client, *config.Credentials, error) {
 }
 
 // gatewayURLFromAPIBase rewrites the SDK's REST API base
-// (https://api.everyapi.ai) into the WS scheme the agent needs
-// (wss://api.everyapi.ai). The agent appends '/edge/connect' itself,
+// (for example https://api.everyapi.ai) into the WS scheme the agent needs
+// (for example wss://api.everyapi.ai). The agent appends '/edge/connect' itself,
 // so we hand over the bare origin.
 //
 // Operator override via `--gateway` flag bypasses this. Useful for

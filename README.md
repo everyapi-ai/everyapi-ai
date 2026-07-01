@@ -113,6 +113,7 @@ Uses Device Authorization Grant (RFC 8628 style) + docs §7-5 Layer 1 "device-to
 
 ```bash
 everyapi auth login                                    # production; renders QR + opens browser by default
+everyapi settings set gateway_region cn               # use the China-accelerated gateway for future commands
 everyapi auth login --api-base http://localhost:8787   # local dev / self-hosted
 everyapi auth login --no-browser                       # don't auto-open the browser (scan the QR)
 everyapi auth login --no-qr                            # don't render the QR (non-UTF-8 terminals / piping)
@@ -348,6 +349,8 @@ Fields:
 - `access_token` — bearer used by every authenticated API call.
 - `relay_key` — relay API key (`sk-everyapi-…`) used for the subprocess env of `everyapi use`. Fetched from `/api/token/*` and cached here.
 - `user_id` / `username` — cached so `status` can render the identity line before its first API round-trip.
+
+Gateway region is a CLI preference in `settings.json`: if it is unset, interactive login asks once and saves the choice. `everyapi settings set gateway_region cn` switches official gateway traffic to `https://api-cn.everyapi.ai`; `global` uses `https://api.everyapi.ai`. A custom `--api-base` for self-hosting still wins.
 
 ## Development
 

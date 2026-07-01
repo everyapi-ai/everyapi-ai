@@ -7,9 +7,9 @@ import (
 	"errors"
 	"flag"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -34,19 +34,9 @@ func Run(args []string) error {
 	// Build a client. The abuse endpoint is TryUserAuth — works
 	// without credentials, but if we have them we'll send them so
 	// the backend can capture our user_id.
-	apiBase := config.DefaultAPIBase
-	token := ""
-	userID := 0
-	creds, err := config.Load()
-	if err != nil && !errors.Is(err, config.ErrNoCredentials) {
-		// A corrupt/unreadable config is worth surfacing, not silently
-		// falling back to an anonymous report against the default base.
+	apiBase, token, userID, err := reportClientConfig()
+	if err != nil {
 		return err
-	}
-	if creds != nil {
-		apiBase = creds.APIBase
-		token = creds.AccessToken
-		userID = creds.UserID
 	}
 	client := api.New(apiBase, token).WithUserID(userID)
 	if err := client.SubmitAbuseReport(cliout.WithCtx(), api.AbuseReportSubmit{
@@ -57,4 +47,19 @@ func Run(args []string) error {
 	}
 	cliout.Println(i18n.T("report.filed"))
 	return nil
+}
+
+func reportClientConfig() (apiBase, token string, userID int, err error) {
+	apiBase = config.ResolveAPIBase("")
+	creds, err := config.Load()
+	if err != nil && !errors.Is(err, config.ErrNoCredentials) {
+		// A corrupt/unreadable config is worth surfacing, not silently
+		// falling back to an anonymous report against the default base.
+		return "", "", 0, err
+	}
+	if creds != nil {
+		token = creds.AccessToken
+		userID = creds.UserID
+	}
+	return apiBase, token, userID, nil
 }

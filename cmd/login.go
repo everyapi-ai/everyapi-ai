@@ -35,20 +35,27 @@ import (
 //
 // Flags:
 //
-//	--api-base <url>  override default https://api.everyapi.ai (dev / self-host)
+//	--api-base <url>  override configured/default gateway (dev / self-host)
 //	--no-browser      skip the auto-open; user copies the URL manually
 //	--no-qr           skip the terminal QR (for non-UTF-8 terminals / pipes)
 func Login(args []string) error {
 	fs := flag.NewFlagSet("login", flag.ContinueOnError)
-	apiBase := fs.String("api-base", config.DefaultAPIBase, "EveryAPI API base URL")
+	apiBase := fs.String("api-base", "", "EveryAPI API base URL")
 	noBrowser := fs.Bool("no-browser", false, "skip opening the browser automatically")
 	noQR := fs.Bool("no-qr", false, "skip rendering the QR code (useful for non-UTF-8 terminals or when piping output)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	*apiBase = strings.TrimRight(*apiBase, "/")
+	resolvedAPIBase, err := resolveLoginAPIBase(*apiBase)
+	if err != nil {
+		if errors.Is(err, cliprompt.ErrPickCancelled) {
+			cliout.Println(i18n.T("common.canceled"))
+			return nil
+		}
+		return err
+	}
 
-	client := api.New(*apiBase, "")
+	client := api.New(resolvedAPIBase, "")
 	// signalCtx (not withCtx): the device-auth poll below blocks for
 	// minutes. The "(Ctrl+C to cancel)" line we print must be true —
 	// cancel the in-flight poll on SIGINT instead of hard-killing.
@@ -127,7 +134,7 @@ func Login(args []string) error {
 	// OAuth2 fallback path: the access token is itself the relay key, so it's
 	// saved directly with no management session / relay-key resolution.
 	if oauth2 {
-		return finishOAuth2Login(pctx, *apiBase, client, start, stopWatcher)
+		return finishOAuth2Login(pctx, resolvedAPIBase, client, start, stopWatcher)
 	}
 
 	res, err := client.PollUntilDone(pctx, start.DeviceCode, start.Interval)
@@ -155,7 +162,7 @@ func Login(args []string) error {
 	}
 
 	creds := &config.Credentials{
-		APIBase:     *apiBase,
+		APIBase:     resolvedAPIBase,
 		AccessToken: res.AccessToken,
 		UserID:      res.UserID,
 		Username:    res.Username,
@@ -175,7 +182,7 @@ func Login(args []string) error {
 	// is a transient backend issue worth giving up on rather than
 	// blocking the user.
 	roleCtx, roleCancel := context.WithTimeout(ctx, 10*time.Second)
-	if self, sErr := api.New(*apiBase, res.AccessToken).
+	if self, sErr := api.New(resolvedAPIBase, res.AccessToken).
 		WithUserID(res.UserID).
 		GetSelf(roleCtx); sErr == nil {
 		creds.Role = self.Role
@@ -210,6 +217,43 @@ func Login(args []string) error {
 
 	cliout.Println(i18n.T("login.next_hint"))
 	return nil
+}
+
+type gatewayRegionPicker func(prompt string, items []string, initial int) (int, error)
+
+func resolveLoginAPIBase(apiBaseOverride string) (string, error) {
+	if strings.TrimSpace(apiBaseOverride) != "" {
+		return config.ResolveAPIBase(apiBaseOverride), nil
+	}
+	if err := ensureGatewayRegionPreference(cliprompt.IsInteractive, cliprompt.PickWithSelected); err != nil {
+		return "", err
+	}
+	return config.ResolveAPIBase(""), nil
+}
+
+func ensureGatewayRegionPreference(isInteractive func() bool, pick gatewayRegionPicker) error {
+	s, err := config.LoadSettings()
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(s.GatewayRegion) != "" || !isInteractive() {
+		return nil
+	}
+
+	choices := []string{
+		i18n.T("login.gateway_region_global"),
+		i18n.T("login.gateway_region_cn"),
+	}
+	idx, err := pick(i18n.T("login.gateway_region_prompt"), choices, 0)
+	if err != nil {
+		return err
+	}
+	if idx == 1 {
+		s.GatewayRegion = "cn"
+	} else {
+		s.GatewayRegion = "global"
+	}
+	return config.SaveSettings(s)
 }
 
 // oauth2CLIClientID is the CLI's first-party OAuth2 client id (seeded in the

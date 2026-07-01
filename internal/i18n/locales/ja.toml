@@ -1204,6 +1204,9 @@ browser_opened = "ブラウザを開きました。ページ上のフレーズ�
 
 [login]
 cancelled = "ログインをキャンセルしました。"
+gateway_region_prompt = "EveryAPI ゲートウェイ地域を選択"
+gateway_region_global = "グローバルゲートウェイ（中国本土以外に推奨）"
+gateway_region_cn = "中国高速ゲートウェイ（中国本土）"
 waiting = "認証待機中... (Ctrl+C でキャンセル)"
 waiting_with_copy = "認証待機中... (Ctrl+C でキャンセル、'c' で URL コピー)"
 next_hint = "次は 'everyapi auth status' か 'everyapi use claude' を試してください。"

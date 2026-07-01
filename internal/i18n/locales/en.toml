@@ -1195,6 +1195,9 @@ browser_opened = "Browser opened. Verify the phrase on the page matches the one 
 
 [login]
 cancelled = "Login cancelled."
+gateway_region_prompt = "Choose your EveryAPI gateway region"
+gateway_region_global = "Global gateway (recommended outside mainland China)"
+gateway_region_cn = "China accelerated gateway (mainland China)"
 waiting = "Waiting for authorization... (Ctrl+C to cancel)"
 waiting_with_copy = "Waiting for authorization... (Ctrl+C to cancel, press 'c' to copy URL)"
 next_hint = "Next: try 'everyapi auth status' or 'everyapi use claude'."

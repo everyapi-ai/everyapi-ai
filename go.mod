@@ -8,7 +8,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/everyapi-ai/everyapi-sdk v0.2.24
+	github.com/everyapi-ai/everyapi-sdk v0.2.25
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/muesli/termenv v0.16.0
 	golang.org/x/sys v0.33.0

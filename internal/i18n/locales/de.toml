@@ -1211,6 +1211,9 @@ browser_opened = "Browser geöffnet. Vergewissere dich, dass die Phrase auf der 
 
 [login]
 cancelled = "Anmeldung abgebrochen."
+gateway_region_prompt = "EveryAPI-Gateway-Region auswählen"
+gateway_region_global = "Globales Gateway (außerhalb des chinesischen Festlands empfohlen)"
+gateway_region_cn = "China-beschleunigtes Gateway (chinesisches Festland)"
 waiting = "Warte auf Autorisierung... (Ctrl+C zum Abbrechen)"
 waiting_with_copy = "Warte auf Autorisierung... (Ctrl+C zum Abbrechen, 'c' zum URL-Kopieren drücken)"
 next_hint = "Als Nächstes: probiere 'everyapi auth status' oder 'everyapi use claude'."

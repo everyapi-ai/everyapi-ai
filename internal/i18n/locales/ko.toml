@@ -1202,6 +1202,9 @@ browser_opened = "브라우저를 열었습니다. 페이지의 문구가 위와
 
 [login]
 cancelled = "로그인이 취소되었습니다."
+gateway_region_prompt = "EveryAPI 게이트웨이 지역 선택"
+gateway_region_global = "글로벌 게이트웨이 (중국 본토 외 지역 권장)"
+gateway_region_cn = "중국 가속 게이트웨이 (중국 본토)"
 waiting = "인증 대기 중... (Ctrl+C 로 취소)"
 waiting_with_copy = "인증 대기 중... (Ctrl+C 로 취소, 'c' 키로 URL 복사)"
 next_hint = "다음: 'everyapi auth status' 또는 'everyapi use claude' 를 시도하세요."
