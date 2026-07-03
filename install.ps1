@@ -297,8 +297,12 @@ function Invoke-Install {
     [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
     $env:Path = "$installDir;$env:Path"
     Write-Host ''
-    Write-Warn "$installDir was added to your User PATH."
-    Write-Host '  Open a new terminal for other apps to pick it up.'
+    # Parity with install.sh's PATH hint, but Windows lets us DO the fix rather
+    # than hand the user a command to paste: the User PATH is now persisted and
+    # this session's $env:Path is already updated, so `everyapi` works in this
+    # window right away. Only other/already-open apps need a fresh terminal.
+    Write-Ok "Setup done: added $installDir to your User PATH (and this session)."
+    Write-Host '  everyapi works in this window now; open a new terminal for other apps to pick it up.'
   }
 
   Write-Host ''

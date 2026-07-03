@@ -596,7 +596,7 @@ esac
 
 echo
 if [ "$ON_PATH" -eq 0 ]; then
-  warn "$INSTALL_DIR is not on your PATH yet."
+  warn "Setup needed: $INSTALL_DIR is not on your PATH yet."
   # Pick the right rc file hint based on the user's shell. We default
   # to ~/.bashrc when $SHELL is empty or unrecognised — that's the
   # most common case on Linux servers.
@@ -605,16 +605,20 @@ if [ "$ON_PATH" -eq 0 ]; then
     */zsh)  RC_HINT="~/.zshrc" ;;
     */fish) RC_HINT="~/.config/fish/config.fish" ;;
   esac
-  echo "  Add this line to $RC_HINT (or the equivalent for your shell):"
-  # Same case dispatch as RC_HINT above. Doing two parallel `case`
-  # statements (instead of one branching into both the rc-file and
-  # the export-line) keeps each block focused on a single concern
-  # and matches the existing `*/zsh) | */fish)` pattern up the file.
+  # Emit a single copy-paste command that both persists the PATH change
+  # (appends to the rc file) AND applies it to the current shell — so a
+  # user can run one line and have `everyapi` work immediately, instead
+  # of hand-editing a dotfile and remembering to re-source it. fish gets
+  # its idiomatic `fish_add_path` (universal + persistent in one call);
+  # bash/zsh get the `echo … >> rc && source rc` idiom. $INSTALL_DIR is
+  # baked in literally; \$PATH stays unexpanded so it re-evaluates when
+  # the rc file is sourced.
+  echo "  Run this to fix it (adds it to $RC_HINT and applies it now):"
+  echo
   case "${SHELL:-}" in
-    */fish) echo "      set -gx PATH $INSTALL_DIR \$PATH" ;;
-    *)      echo "      export PATH=\"$INSTALL_DIR:\$PATH\"" ;;
+    */fish) echo "    fish_add_path $INSTALL_DIR" ;;
+    *)      echo "    echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> $RC_HINT && source $RC_HINT" ;;
   esac
-  echo "  Then open a new terminal or run: source $RC_HINT"
   echo
 fi
 
