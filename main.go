@@ -1031,6 +1031,24 @@ func runSubPicker(c command) error {
 		}
 		lastSel = idx
 		err = c.run(subs[idx].args)
+		// The auth sub-picker's login/logout rows are a mutually-
+		// exclusive toggle (see authMenuSubs): the instant login (or
+		// logout) returns, the menu rebuilds with the OPPOSITE action as
+		// its single row and re-parks the cursor on it. After a fresh
+		// login that opposite is `logout` — one stray Enter signs the
+		// user straight back out, the terrible UX this guards against.
+		// So once an auth action completes cleanly, unwind to the root
+		// launcher (ErrPickCancelled is the "go up one level" signal)
+		// instead of re-rendering this picker; the root menu already
+		// reflects the new session state. A FAILED action (e.g. a login
+		// network error) is deliberately not "clean" — it falls through
+		// so the user stays here and can retry.
+		if c.name == "auth" &&
+			(err == nil ||
+				errors.Is(err, cliprompt.ErrPickCancelled) ||
+				errors.Is(err, io.EOF)) {
+			return cliprompt.ErrPickCancelled
+		}
 		// Same "stay in the menu" rule as runLauncher: real
 		// errors get printed to stderr but don't eject the
 		// user from this sub-picker — they can pick something

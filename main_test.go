@@ -127,6 +127,48 @@ func TestSubPicker_BackRow(t *testing.T) {
 	})
 }
 
+// TestSubPicker_AuthUnwindsAfterCleanAction locks the login-lands-on-
+// logout fix: after an auth action returns cleanly, runSubPicker must
+// unwind to the root launcher (ErrPickCancelled) rather than re-render
+// the picker with the opposite (destructive) toggle under the cursor.
+func TestSubPicker_AuthUnwindsAfterCleanAction(t *testing.T) {
+	newAuthCmd := func(calls *int, runErr error) command {
+		return command{
+			name: "auth",
+			// A single login row, as authMenuSubs yields when signed out.
+			subs: []subcommand{
+				{name: "login", desc: "Authenticate this device", args: []string{"login"}},
+			},
+			run: func([]string) error { *calls++; return runErr },
+		}
+	}
+
+	t.Run("clean action pops to the root menu", func(t *testing.T) {
+		calls := 0
+		// Selector 1 == the login row.
+		withStdin(t, "1\n")
+		err := runSubPicker(newAuthCmd(&calls, nil))
+		if calls != 1 {
+			t.Fatalf("auth action dispatched %d times, want 1", calls)
+		}
+		if !errors.Is(err, cliprompt.ErrPickCancelled) {
+			t.Fatalf("after a clean auth action: err = %v, want ErrPickCancelled (unwind to root)", err)
+		}
+	})
+
+	t.Run("failed action keeps the user in the sub-picker", func(t *testing.T) {
+		calls := 0
+		// Pick login twice: a failed action must NOT pop to root, so the
+		// second selector still reaches the run func. The trailing EOF
+		// then unwinds the picker.
+		withStdin(t, "1\n1\n")
+		_ = runSubPicker(newAuthCmd(&calls, errors.New("login failed: network")))
+		if calls != 2 {
+			t.Fatalf("auth action dispatched %d times; a failed action must keep looping, want 2", calls)
+		}
+	})
+}
+
 func TestNameCell_BoldAfterPadding(t *testing.T) {
 	// Plain profile: exact width, no escapes — alignment preserved.
 	styletest.WithColorProfile(t, termenv.Ascii)
