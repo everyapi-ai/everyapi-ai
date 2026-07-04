@@ -232,6 +232,24 @@ func TestProviderChatModels(t *testing.T) {
 	}
 }
 
+// TestProviderChatModels_SanitizesTerminalEscapes proves a server-supplied
+// model ID carrying an embedded ANSI/control escape sequence is stripped
+// before it reaches the interactive picker (cliout.Sanitize), matching the
+// convention used everywhere else in the CLI for backend-relayed strings —
+// otherwise a malicious/compromised catalog entry could manipulate the
+// terminal (hide/relabel entries, move the cursor) while the user is
+// choosing which model to route their session through.
+func TestProviderChatModels_SanitizesTerminalEscapes(t *testing.T) {
+	catalog := []api.RelayModel{
+		{ID: "evil\x1b[31mmodel", OwnedBy: "minimax", SupportedEndpointTypes: []string{"anthropic"}},
+	}
+	got := providerChatModels(catalog, "minimax")
+	want := []string{"evilmodel"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("providerChatModels = %q, want %q (ANSI escape stripped)", got, want)
+	}
+}
+
 // TestProviderChatModelsLegacyOwnerAlias verifies the glm/qwen presets
 // match BOTH the new brand owned_by (zhipu/qwen) and the legacy
 // channel-adaptor name (zhipu_4v/ali) an un-upgraded gateway still emits,

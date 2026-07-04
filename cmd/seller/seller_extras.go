@@ -138,7 +138,12 @@ func sellerRemove(args []string) error {
 	if err != nil {
 		return err
 	}
-	if !*yes && !*yesLong && cliprompt.IsInteractive() {
+	if !*yes && !*yesLong {
+		if !cliprompt.IsInteractive() {
+			// Destructive + no TTY to confirm on: fail closed rather than
+			// silently removing. Require explicit -y for non-interactive use.
+			return errors.New(i18n.T("token.revoke_needs_confirm"))
+		}
 		all, _ := client.ListSellerChannels(cliout.WithCtx())
 		name := "(unknown)"
 		for _, ch := range all {

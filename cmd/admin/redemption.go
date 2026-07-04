@@ -298,7 +298,12 @@ func adminRedemptionDelete(args []string) error {
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
-	if !*yes && cliprompt.IsInteractive() {
+	if !*yes {
+		if !cliprompt.IsInteractive() {
+			// Destructive + no TTY to confirm on: fail closed rather than
+			// silently deleting. Require explicit -y for non-interactive use.
+			return errors.New(i18n.T("token.revoke_needs_confirm"))
+		}
 		ok, err := cliprompt.YesNo(bufio.NewReader(os.Stdin), fmt.Sprintf(i18n.T("admin.redemption.delete_confirm"), id), false)
 		if err != nil {
 			return err
@@ -325,7 +330,12 @@ func adminRedemptionClearInvalid(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if !*yes && cliprompt.IsInteractive() {
+	if !*yes {
+		if !cliprompt.IsInteractive() {
+			// Destructive + no TTY to confirm on: fail closed rather than
+			// silently deleting. Require explicit -y for non-interactive use.
+			return errors.New(i18n.T("token.revoke_needs_confirm"))
+		}
 		ok, err := cliprompt.YesNo(bufio.NewReader(os.Stdin), i18n.T("admin.redemption.clear_confirm"), false)
 		if err != nil {
 			return err

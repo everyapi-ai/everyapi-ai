@@ -148,7 +148,12 @@ func adminUserManage(args []string) error {
 	}
 	// `delete` here routes to the same irreversible deletion as `admin user
 	// delete`, so gate it behind the identical interactive confirmation.
-	if *action == "delete" && !*yes && cliprompt.IsInteractive() {
+	if *action == "delete" && !*yes {
+		if !cliprompt.IsInteractive() {
+			// Destructive + no TTY to confirm on: fail closed rather than
+			// silently deleting. Require explicit -y for non-interactive use.
+			return errors.New(i18n.T("token.revoke_needs_confirm"))
+		}
 		ok, err := cliprompt.YesNo(
 			bufio.NewReader(os.Stdin),
 			fmt.Sprintf(i18n.T("admin.user.delete_confirm"), id),
@@ -188,7 +193,12 @@ func adminUserDelete(args []string) error {
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
-	if !*yes && cliprompt.IsInteractive() {
+	if !*yes {
+		if !cliprompt.IsInteractive() {
+			// Destructive + no TTY to confirm on: fail closed rather than
+			// silently deleting. Require explicit -y for non-interactive use.
+			return errors.New(i18n.T("token.revoke_needs_confirm"))
+		}
 		ok, err := cliprompt.YesNo(
 			bufio.NewReader(os.Stdin),
 			fmt.Sprintf(i18n.T("admin.user.delete_confirm"), id),

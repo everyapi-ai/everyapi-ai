@@ -832,7 +832,7 @@ func providerChatModels(catalog []api.RelayModel, owner string) []string {
 		if !chatCapable(m.SupportedEndpointTypes) {
 			continue
 		}
-		ids = append(ids, m.ID)
+		ids = append(ids, cliout.Sanitize(m.ID))
 	}
 	sort.Strings(ids)
 	return ids
@@ -871,6 +871,13 @@ func pickModelInteractive(t *tools.Tool, creds *config.Credentials, relayKey str
 	if len(models) == 0 {
 		cliout.Printf(i18n.T("use.model_none")+"\n", t.ExecName)
 		return "", nil
+	}
+	// Server-supplied model IDs render directly in the interactive picker
+	// below; strip any embedded ANSI/control sequences before display,
+	// matching cliout.Sanitize's use elsewhere in the CLI for backend-
+	// relayed strings (model names, channel names, ...).
+	for i, m := range models {
+		models[i] = cliout.Sanitize(m)
 	}
 	sort.Strings(models)
 	// Default the cursor to last launch's model when it's still in the
@@ -926,7 +933,7 @@ func pickGroupInteractive(creds *config.Credentials) (string, error) {
 		if g == "" {
 			labels[i] = "(default — newest enabled key)"
 		} else {
-			labels[i] = g
+			labels[i] = cliout.Sanitize(g)
 		}
 	}
 	idx, err := cliprompt.Pick(i18n.T("use.group_picker"), labels)
