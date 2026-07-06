@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
@@ -82,7 +83,32 @@ func edgeRemove(args []string) error {
 
 	dir, err := nodeDir(nodeID)
 	if err == nil {
-		if rmErr := os.RemoveAll(dir); rmErr != nil {
+		if *keepBackend {
+			// The backend node row survives (the flag's purpose is
+			// re-pointing the node at a different host), and node.json holds
+			// the ONLY copy of the raw registration token — the backend
+			// keeps just its sha256. Wiping the whole workdir here would
+			// leave a live backend row that can never be reconnected. So
+			// preserve node.json; drop only the regenerable compose file and
+			// container data.
+			kept := true
+			for _, name := range []string{"docker-compose.yml", "data"} {
+				p := filepath.Join(dir, name)
+				if rmErr := os.RemoveAll(p); rmErr != nil {
+					kept = false
+					// Must NOT reuse workdir_failed here: its hint tells the
+					// user to `sudo rm -rf <workdir>`, which would delete the
+					// node.json this branch exists to preserve. The ollama
+					// `data` dir is root-owned, so this EPERM is the common
+					// case — point only at the specific leftover subpath and
+					// reassure the token is kept.
+					cliout.Printf(i18n.T("edge.remove.workdir_kept_partial"), dir, p, rmErr, p)
+				}
+			}
+			if kept {
+				cliout.Printf(i18n.T("edge.remove.workdir_kept"), dir)
+			}
+		} else if rmErr := os.RemoveAll(dir); rmErr != nil {
 			cliout.Printf(i18n.T("edge.remove.workdir_failed"), dir, rmErr, dir)
 		} else {
 			cliout.Printf(i18n.T("edge.remove.workdir_removed"), dir)

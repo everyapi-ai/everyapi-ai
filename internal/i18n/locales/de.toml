@@ -438,7 +438,7 @@ UNTERBEFEHLE
   redeem <key>                                    Aufladung / Einlöse-Schlüssel anwenden
 
 HINWEISE
-  Für tatsächliche Geldeingänge (Stripe / Creem / Waffo / EPay) verwende
+  Für tatsächliche Geldeingänge (Fluxa) verwende
   'everyapi wallet topup' — es öffnet das Dashboard mit der Anti-Phishing-
   Verifizierungsphrase. Der Browser-Übergang ist dort erforderlich,
   weil die Kartenerfassung außerhalb des Bandes stattfindet.
@@ -1149,6 +1149,8 @@ delete_row_failed = "Knotenzeile im Backend konnte nicht gelöscht werden: %w"
 row_deleted = "✓ Backend-Knotenzeile %d gelöscht\n"
 workdir_failed = "⚠ lokales workdir %s konnte nicht entfernt werden (%v) — der ollama-Container schreibt Modelldaten als root, daher können root-eigene Dateien zurückbleiben. Entferne sie mit: sudo rm -rf %s\n"
 workdir_removed = "✓ Lokales workdir %s entfernt\n"
+workdir_kept = "✓ Lokales workdir %s beibehalten — Registrierungs-Token für das Umleiten auf einen anderen Host bewahrt; Compose-Datei + Container-Daten entfernt\n"
+workdir_kept_partial = "⚠ lokales workdir %s beibehalten (Registrierungs-Token für das Umleiten bewahrt), konnte aber %s nicht entfernen (%v) — falls es dem ollama-Container als root gehört, entferne nur diesen Pfad mit: sudo rm -rf %s\n"
 clear_active_failed = "⚠ Zeiger auf aktiven Knoten konnte nicht gelöscht werden (%v)\n"
 done = "Fertig."
 

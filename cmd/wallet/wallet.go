@@ -128,11 +128,7 @@ func runInfo(args []string) error {
 		cliout.Printf("  - %s (type=%s, min=%s)\n", cliout.Sanitize(pm["name"]), cliout.Sanitize(pm["type"]), cliout.Sanitize(pm["min_topup"]))
 	}
 	cliout.Println("\n" + i18n.T("wallet.label.feature_flags"))
-	cliout.Printf("  online (epay): %v\n", info.EnableOnlineTopup)
-	cliout.Printf("  stripe:        %v (min=%d)\n", info.EnableStripeTopup, info.StripeMinTopup)
-	cliout.Printf("  creem:         %v\n", info.EnableCreemTopup)
-	cliout.Printf("  waffo:         %v (min=%d)\n", info.EnableWaffoTopup, info.WaffoMinTopup)
-	cliout.Printf("  waffo-pancake: %v (min=%d)\n", info.EnableWaffoPancakeTopup, info.WaffoPancakeMinTopup)
+	cliout.Printf("  fluxa:        %v (min=%d)\n", info.EnableFluxaTopup, info.FluxaMinTopup)
 	if info.MinTopup > 0 {
 		cliout.Printf("\n"+i18n.T("wallet.label.min_topup")+"\n", info.MinTopup)
 	}

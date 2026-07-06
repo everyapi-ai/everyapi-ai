@@ -423,7 +423,7 @@ everyapi wallet — 儲值紀錄、付款方式、兌換碼
   redeem <key>                                    使用儲值碼 / 兌換碼
 
 說明
-  實際付款（Stripe / Creem / Waffo / EPay）請使用 'everyapi wallet topup' —
+  實際付款（Fluxa）請使用 'everyapi wallet topup' —
   它會在 dashboard 開啟帶反釣魚校驗短語的頁面。卡片付款必須走瀏覽器，
   因為銀行卡收單在帶外完成。
 '''
@@ -1120,6 +1120,8 @@ delete_row_failed = "刪除後端節點記錄失敗：%w"
 row_deleted = "✓ 已刪除後端節點記錄 %d\n"
 workdir_failed = "⚠ 無法移除本機 workdir %s（%v）—— ollama 容器以 root 寫入模型資料，因此可能殘留 root 擁有的檔案。請執行：sudo rm -rf %s\n"
 workdir_removed = "✓ 已移除本機 workdir %s\n"
+workdir_kept = "✓ 已保留本機 workdir %s —— 保留註冊權杖以便重新指向新主機；已刪除 compose 檔案與容器資料\n"
+workdir_kept_partial = "⚠ 已保留本機 workdir %s（保留註冊權杖以便重新指向新主機），但無法刪除 %s（%v）—— 若它由 ollama 容器以 root 擁有，只需單獨清理該路徑：sudo rm -rf %s\n"
 clear_active_failed = "⚠ 無法清除作用中節點指標（%v）\n"
 done = "完成。"
 

@@ -59,7 +59,7 @@ func TestWalletBoldsValues(t *testing.T) {
 				"data": map[string]any{
 					"items": []map[string]any{{
 						"id": 9, "amount": 5000, "money": 12.5,
-						"trade_no": "TR-1", "payment_method": "stripe",
+						"trade_no": "TR-1", "payment_method": "fluxa",
 						"create_time": 1700000000, "status": "success",
 					}},
 					"total": 1,

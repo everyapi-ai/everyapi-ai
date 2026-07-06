@@ -109,7 +109,7 @@ func TestPrepareHermes_ModelEscaped(t *testing.T) {
 		}
 	}
 	if apiModeLines != 1 {
-		t.Errorf("expected exactly one api_mode line, got %d\nFull config:\n%s", apiModeLines, cfg)
+		t.Errorf("expected exactly a single api_mode line, got %d\nFull config:\n%s", apiModeLines, cfg)
 	}
 }
 

@@ -100,7 +100,14 @@ func resolveModelArg(op string, rest []string) (string, []string, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	return strings.TrimSpace(v), rest, nil
+	// Reject an empty response (bare Enter) or a leading-dash value before
+	// it reaches `docker compose exec ollama ollama pull/rm <model>`, where
+	// it would otherwise produce an opaque in-container usage error.
+	name := strings.TrimSpace(v)
+	if name == "" || strings.HasPrefix(name, "-") {
+		return "", nil, fmt.Errorf(i18n.T("edge.models.usage_op"), op)
+	}
+	return name, rest, nil
 }
 
 // execOllama runs `docker compose exec ollama ollama <args...>` against

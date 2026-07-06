@@ -22,8 +22,8 @@ func TestRenderComposeNVIDIA(t *testing.T) {
 		"container_name: everyapi-edge-42-agent",
 		"driver: nvidia",
 		"capabilities: [gpu]",
-		"image: ghcr.io/everyapi-ai/everyapi-edge:latest",
-		"image: ollama/ollama:latest",
+		`image: "ghcr.io/everyapi-ai/everyapi-edge:latest"`,
+		`image: "ollama/ollama:latest"`,
 		`EVERYAPI_GATEWAY: "wss://api.everyapi.ai"`,
 		`EVERYAPI_NODE_ID: "42"`,
 		`EVERYAPI_REGISTRATION_TOKEN: "rt_abc123"`,
@@ -54,7 +54,7 @@ func TestRenderComposeROCm(t *testing.T) {
 	}
 	s := string(out)
 	for _, want := range []string{
-		"image: ollama/ollama:rocm",
+		`image: "ollama/ollama:rocm"`,
 		"/dev/kfd",
 		"/dev/dri",
 		"group_add",
@@ -107,7 +107,7 @@ func TestRenderComposeCPU(t *testing.T) {
 	}
 	s := string(out)
 	// CPU mode = ollama sidecar but NO GPU passthrough block.
-	if !strings.Contains(s, "image: ollama/ollama:latest") {
+	if !strings.Contains(s, `image: "ollama/ollama:latest"`) {
 		t.Errorf("cpu mode should still spin up ollama sidecar")
 	}
 	for _, bad := range []string{"driver: nvidia", "/dev/kfd", "host.docker.internal"} {
@@ -123,12 +123,16 @@ func TestRenderComposeCPU(t *testing.T) {
 // reason renderCompose() runs every env value through strconv.Quote.
 func TestRenderComposeYAMLInjectionResistant(t *testing.T) {
 	out, err := renderCompose(composeData{
-		NodeID:            1,
-		NodeName:          `evil: # hi
+		NodeID: 1,
+		NodeName: `evil: # hi
 extra_key: pwn`,
 		Mode:              ModeNVIDIA,
 		Gateway:           "wss://api.everyapi.ai",
 		RegistrationToken: `rt"with:weird\stuff`,
+		// Operator-supplied image tags must be quoted too, or a newline
+		// in --agent-image / --ollama-image injects a service key.
+		AgentImage:  "ghcr.io/x/y:latest\n    privileged: true",
+		OllamaImage: "ollama/ollama:latest\n    privileged: true",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -139,6 +143,11 @@ extra_key: pwn`,
 	// appear as its own YAML key.
 	if strings.Contains(s, "\nextra_key:") {
 		t.Errorf("node name newline-injection leaked into YAML:\n%s", s)
+	}
+	// The image-tag newline must not break out into a standalone
+	// `privileged: true` line on either service.
+	if strings.Contains(s, "\n    privileged:") {
+		t.Errorf("image-tag newline-injection leaked into YAML:\n%s", s)
 	}
 	for _, want := range []string{
 		`EVERYAPI_NODE_NAME: "evil: # hi\nextra_key: pwn"`,

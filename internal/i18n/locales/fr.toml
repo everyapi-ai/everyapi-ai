@@ -439,7 +439,7 @@ SOUS-COMMANDES
   redeem <key>                                    Appliquer une clé de rechargement / d'échange
 
 NOTES
-  Pour les vrais paiements (Stripe / Creem / Waffo / EPay), utilisez
+  Pour les vrais paiements (Fluxa), utilisez
   'everyapi wallet topup' — cela ouvre le dashboard avec la phrase de
   vérification anti-phishing. Le passage au navigateur est requis là
   parce que la collecte de la carte se fait hors bande.
@@ -1154,6 +1154,8 @@ delete_row_failed = "échec de la suppression de la ligne du nœud côté backen
 row_deleted = "✓ Ligne du nœud %d supprimée côté backend\n"
 workdir_failed = "⚠ impossible de supprimer le workdir local %s (%v) — le conteneur ollama écrit les données de modèle en tant que root, des fichiers appartenant à root peuvent donc subsister. Supprimez-les avec : sudo rm -rf %s\n"
 workdir_removed = "✓ Workdir local %s supprimé\n"
+workdir_kept = "✓ Workdir local %s conservé — jeton d'enregistrement préservé pour repointer vers un autre hôte ; fichier compose + données du conteneur supprimés\n"
+workdir_kept_partial = "⚠ workdir local %s conservé (jeton d'enregistrement préservé pour repointer), mais impossible de supprimer %s (%v) — s'il appartient à root via le conteneur ollama, supprimez uniquement ce chemin avec : sudo rm -rf %s\n"
 clear_active_failed = "⚠ impossible d'effacer le pointeur du nœud actif (%v)\n"
 done = "Terminé."
 

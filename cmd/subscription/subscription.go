@@ -1,6 +1,6 @@
 // Package subscription wires `everyapi account subscription …` — plans
-// (read), self (read), preference (write). Pay flows
-// (Stripe / Creem / EPay) intentionally stay on `everyapi wallet topup`
+// (read), self (read), preference (write). Online payment intentionally stays
+// on `everyapi wallet topup`
 // since card collection needs a browser.
 package subscription
 

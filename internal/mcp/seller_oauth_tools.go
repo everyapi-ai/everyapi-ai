@@ -281,7 +281,7 @@ func handleSellerAddOAuthClaudeComplete(ctx context.Context, raw json.RawMessage
 	var b strings.Builder
 	fmt.Fprintf(&b, "Channel #%d mounted (type=claude).\n", res.ChannelID)
 	if res.ExpiresAt != "" {
-		fmt.Fprintf(&b, "Token expires: %s (auto-refreshes).\n", res.ExpiresAt)
+		fmt.Fprintf(&b, "Token expires: %s (auto-refreshes).\n", cliout.Sanitize(res.ExpiresAt))
 	}
 	fmt.Fprintf(&b, "Dashboard: %s/seller/channels", api.WebOriginFromBase(creds.APIBase))
 	return b.String(), nil

@@ -138,7 +138,7 @@ func edgeRegister(args []string) error {
 		return fmt.Errorf(i18n.T("edge.register.set_active_failed"), err)
 	}
 
-	cliout.Printf(i18n.T("edge.register.registered"), reg.Node.ID, reg.Node.Name)
+	cliout.Printf(i18n.T("edge.register.registered"), reg.Node.ID, cliout.Sanitize(reg.Node.Name))
 	cliout.Printf(i18n.T("edge.register.saved"), metaPath)
 	cliout.Printf("%s", i18n.T("edge.register.set_active"))
 	cliout.Printf("%s", i18n.T("edge.register.next"))

@@ -72,29 +72,38 @@ func Login(args []string) error {
 	// fallback "type the code by hand" path still works against the
 	// bare verification_uri printed below.
 	prefilledURL := buildVerificationURLWithCode(start.VerificationURI, start.UserCode)
+	// The verification_uri is server-controlled. Only feed a well-formed
+	// http(s) URL to the QR renderer, clipboard, and browser launcher — a
+	// value carrying control bytes or a leading '-' would drive the
+	// terminal (OSC/CSI injection) or inject options into open/xdg-open.
+	// The printed URL text always goes through Sanitize regardless.
+	safeURL := ""
+	if isDisplayableURL(prefilledURL) {
+		safeURL = prefilledURL
+	}
 
 	cliout.Println("")
-	if !*noQR {
+	if !*noQR && safeURL != "" {
 		cliout.Println(i18n.T("login.qr_hint"))
 		cliout.Println("")
 		// qrterminal renders to stdout with Unicode half-blocks by
 		// default (▀▄ etc.) — about half the height of the ASCII
 		// "▓▓" form. Level L recovery is fine for short URLs and
 		// keeps the QR small enough to fit a normal terminal.
-		qrterminal.GenerateHalfBlock(prefilledURL, qrterminal.L, cliout.Out)
+		qrterminal.GenerateHalfBlock(safeURL, qrterminal.L, cliout.Out)
 		cliout.Println("")
 		cliout.Println(i18n.T("login.url_hint_with_qr"))
 	} else {
 		cliout.Println(i18n.T("login.url_hint"))
 	}
-	cliout.Printf("\n    %s\n\n", prefilledURL)
+	cliout.Printf("\n    %s\n\n", cliout.Sanitize(prefilledURL))
 	// Surface the bare user_code too in case the dashboard fails to
 	// pre-fill (older /cli/auth deploys, query-stripping middlebox,
 	// user pasted the URL into a tool that drops query strings).
 	cliout.Printf(i18n.T("login.code_hint")+"\n\n", style.Bold(cliout.Sanitize(start.UserCode)))
 
-	if !*noBrowser {
-		if err := cliprompt.OpenBrowser(prefilledURL); err == nil {
+	if !*noBrowser && safeURL != "" {
+		if err := cliprompt.OpenBrowser(safeURL); err == nil {
 			cliout.Println(i18n.T("login.browser_opened"))
 		} else {
 			// stderr so a user piping `everyapi auth login | …` gets a clean
@@ -111,7 +120,11 @@ func Login(args []string) error {
 	ttyIn := term.IsTerminal(fd)
 
 	cliout.Println("")
-	if ttyIn {
+	// Only advertise the 'c'-to-copy hint when there's a validated URL to
+	// copy. If the verification_uri failed validation (safeURL==""), the
+	// key watcher ignores 'c', so promising the copy would be a dead
+	// control — show the plain waiting line instead.
+	if ttyIn && safeURL != "" {
 		cliout.Println(i18n.T("login.waiting_with_copy"))
 	} else {
 		cliout.Println(i18n.T("login.waiting"))
@@ -127,7 +140,9 @@ func Login(args []string) error {
 
 	stopWatcher := func() {}
 	if ttyIn {
-		stopWatcher = startLoginKeyWatcher(fd, prefilledURL, cancelPoll)
+		// Pass safeURL: the 'c' keystroke copies it to the clipboard, so
+		// an untrusted/malformed verification_uri must not be copyable.
+		stopWatcher = startLoginKeyWatcher(fd, safeURL, cancelPoll)
 	}
 	defer stopWatcher()
 
@@ -370,6 +385,13 @@ func startLoginKeyWatcher(fd int, url string, cancelPoll context.CancelFunc) fun
 			}
 			switch buf[0] {
 			case 'c', 'C':
+				if url == "" {
+					// The verification_uri failed validation (untrusted /
+					// malformed gateway response), so there is nothing safe
+					// to copy — ignore the keystroke rather than claim a
+					// bogus success or copy an empty clipboard.
+					continue
+				}
 				// Raw mode means a bare "\n" stays in the same column.
 				// Use "\r\n" so the message lines up at column zero.
 				if cerr := cliprompt.CopyToClipboard(url); cerr == nil {

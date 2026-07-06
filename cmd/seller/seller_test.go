@@ -309,3 +309,22 @@ func TestCollectSellerKeys(t *testing.T) {
 		})
 	}
 }
+
+// TestSellerWithdrawRejectsExplicitZero pins that an explicit --quota <= 0
+// is rejected at the boundary rather than being overloaded as the
+// "withdraw the full pending balance" sentinel (which an omitted flag
+// means). The guard returns before any network call, so no client is
+// needed. Regression for the audit finding where `--quota 0` swept the
+// entire SellerQuota.
+func TestSellerWithdrawRejectsExplicitZero(t *testing.T) {
+	for _, arg := range []string{"0", "-5"} {
+		err := sellerWithdraw([]string{"--quota", arg})
+		if err == nil {
+			t.Errorf("sellerWithdraw(--quota %s) = nil, want boundary rejection", arg)
+			continue
+		}
+		if !strings.Contains(err.Error(), "positive amount") {
+			t.Errorf("sellerWithdraw(--quota %s) error = %q, want a positive-amount rejection", arg, err.Error())
+		}
+	}
+}

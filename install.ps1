@@ -224,10 +224,24 @@ function Invoke-Install {
       $cosign = Get-Command cosign -ErrorAction SilentlyContinue
       if ($cosign) {
         $sigOk = $false
+        # Download the sig/cert in their OWN try so a MISSING artifact (404,
+        # or a release whose .sig/.pem aren't published yet during the
+        # mirror-sync window) is reported as "signature not available" —
+        # NOT conflated with a signature that exists but fails to verify
+        # (which would wrongly imply tampering). Mirrors install.sh's split.
+        $sigAvailable = $false
         try {
           Write-Info 'downloading cosign signature + certificate...'
           Invoke-WebRequest -Uri "$baseUrl/$sumsName.sig" -OutFile "$sumsPath.sig" -TimeoutSec 30 -UseBasicParsing
           Invoke-WebRequest -Uri "$baseUrl/$sumsName.pem" -OutFile "$sumsPath.pem" -TimeoutSec 30 -UseBasicParsing
+          $sigAvailable = $true
+        } catch {
+          if ($RequireSignature) {
+            Die "cosign signature/certificate not available for $Version and -RequireSignature is set"
+          }
+          Write-Warn "signature not available for $Version — skipping cosign verify"
+        }
+        if ($sigAvailable) {
           Write-Info 'verifying cosign signature...'
           # Pin the OIDC issuer to GitHub Actions AND the cert identity to the
           # exact release workflow (cli-release.yml on everyapi-ai/everyapi) —
@@ -240,15 +254,13 @@ function Invoke-Install {
             --certificate-identity-regexp '^https://github\.com/everyapi-ai/everyapi/\.github/workflows/cli-release\.yml@' `
             "$sumsPath" *> $null
           if ($LASTEXITCODE -eq 0) { $sigOk = $true }
-        } catch {
-          # fall through to the not-verified handling below
-        }
-        if ($sigOk) {
-          Write-Ok 'cosign signature verified'
-        } elseif ($RequireSignature) {
-          Die 'cosign signature verification failed and -RequireSignature is set'
-        } else {
-          Write-Warn 'cosign signature verification failed — proceeding because -RequireSignature was not passed'
+          if ($sigOk) {
+            Write-Ok 'cosign signature verified'
+          } elseif ($RequireSignature) {
+            Die 'cosign signature verification failed and -RequireSignature is set'
+          } else {
+            Write-Warn 'cosign signature verification failed — proceeding because -RequireSignature was not passed'
+          }
         }
       } elseif ($RequireSignature) {
         Die 'cosign is not installed but -RequireSignature was passed. Install cosign from https://github.com/sigstore/cosign and retry.'
@@ -288,13 +300,48 @@ function Invoke-Install {
   #
   # Persist installDir onto the User PATH when it isn't already there, and add
   # it to the current session so `everyapi` works without reopening the shell.
-  $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-  if (-not $userPath) { $userPath = '' }
+  #
+  # Read the RAW (unexpanded) value straight from the registry with
+  # DoNotExpandEnvironmentNames, and remember its value KIND. [Environment]::
+  # GetEnvironmentVariable expands %VAR% tokens, and [Environment]::
+  # SetEnvironmentVariable ALWAYS writes REG_SZ — round-tripping a PATH that
+  # was REG_EXPAND_SZ (the Windows default whenever it holds entries like
+  # %USERPROFILE%\bin / %JAVA_HOME%\bin) through those APIs would either bake
+  # in the expanded values or persist literal %VAR% tokens that no longer
+  # expand, silently breaking the user's environment for other tools. So
+  # write back through the registry preserving the original type.
+  $envKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $false)
+  $userPath = ''
+  $pathKind = [Microsoft.Win32.RegistryValueKind]::ExpandString
+  if ($envKey) {
+    $userPath = [string]$envKey.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+    try { $pathKind = $envKey.GetValueKind('Path') } catch { }
+    $envKey.Close()
+  }
+  # No existing value: pick the type from the content we're about to write —
+  # ExpandString only if it actually contains a %VAR% token.
+  if (-not $userPath) {
+    $pathKind = [Microsoft.Win32.RegistryValueKind]::String
+  }
   $onPath = @($userPath -split ';' |
     Where-Object { $_ -and ($_.TrimEnd('\') -ieq $installDir.TrimEnd('\')) }).Count -gt 0
   if (-not $onPath) {
     $newPath = if ($userPath) { "$installDir;$userPath" } else { $installDir }
-    [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
+    $pathType = if ($pathKind -eq [Microsoft.Win32.RegistryValueKind]::ExpandString) { 'ExpandString' } else { 'String' }
+    Set-ItemProperty -Path 'HKCU:\Environment' -Name 'Path' -Value $newPath -Type $pathType
+    # Set-ItemProperty (unlike SetEnvironmentVariable) doesn't notify running
+    # processes, so broadcast WM_SETTINGCHANGE ourselves — otherwise Explorer
+    # and already-open shells wouldn't see the new PATH until the next logon.
+    try {
+      if (-not ('Win32.NativeMethods' -as [type])) {
+        Add-Type -Namespace Win32 -Name NativeMethods -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, uint Msg, System.UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out System.UIntPtr lpdwResult);
+'@
+      }
+      $result = [System.UIntPtr]::Zero
+      [void][Win32.NativeMethods]::SendMessageTimeout([System.IntPtr]0xffff, 0x1A, [System.UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$result)
+    } catch { }
     $env:Path = "$installDir;$env:Path"
     Write-Host ''
     # Parity with install.sh's PATH hint, but Windows lets us DO the fix rather

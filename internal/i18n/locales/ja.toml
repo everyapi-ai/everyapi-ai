@@ -433,7 +433,7 @@ everyapi wallet — 支払い履歴、支払い方法、引換キー
   redeem <key>                                    入金 / 引換キーを適用
 
 注意
-  実際の入金 (Stripe / Creem / Waffo / EPay) には 'everyapi wallet topup' を
+  実際の入金 (Fluxa) には 'everyapi wallet topup' を
   使ってください。フィッシング対策フレーズ付きでダッシュボードが
   開きます。カード決済は帯域外で処理されるため、ブラウザ移動が
   必須です。
@@ -1142,6 +1142,8 @@ delete_row_failed = "バックエンドのノード行の削除に失敗: %w"
 row_deleted = "✓ バックエンドのノード行 %d を削除しました\n"
 workdir_failed = "⚠ ローカル workdir %s を削除できませんでした（%v）— ollama コンテナはモデルデータを root として書き込むため、root 所有のファイルが残ることがあります。次のコマンドで削除してください: sudo rm -rf %s\n"
 workdir_removed = "✓ ローカル workdir %s を削除しました\n"
+workdir_kept = "✓ ローカル workdir %s を保持しました —— 別ホストへの再ポイント用に登録トークンを保存し、compose ファイルとコンテナデータのみ削除しました\n"
+workdir_kept_partial = "⚠ ローカル workdir %s を保持しました（別ホストへの再ポイント用に登録トークンを保存）が、%s を削除できませんでした（%v）—— ollama コンテナが root 所有している場合は、そのパスだけを削除してください: sudo rm -rf %s\n"
 clear_active_failed = "⚠ アクティブノードのポインタをクリアできませんでした（%v）\n"
 done = "完了。"
 

@@ -53,3 +53,31 @@ func TestBuildVerificationURLWithCode(t *testing.T) {
 		})
 	}
 }
+
+func TestIsDisplayableURL(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"https ok", "https://app.everyapi.ai/cli/auth?code=X", true},
+		{"http localhost ok", "http://localhost:5173/cli/auth", true},
+		{"empty", "", false},
+		{"leading dash (option injection)", "-a", false},
+		{"leading dash url", "-https://evil", false},
+		{"embedded ESC (OSC 8 spoof)", "https://app.everyapi.ai\x1b]8;;https://evil\x07x", false},
+		{"embedded newline", "https://app.everyapi.ai\nfoo", false},
+		{"DEL byte", "https://app.everyapi.ai\x7f", false},
+		{"non-http scheme", "file:///etc/passwd", false},
+		{"javascript scheme", "javascript:alert(1)", false},
+		{"relative (no host)", "/cli/auth?code=X", false},
+		{"scheme without host", "https://", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := isDisplayableURL(c.in); got != c.want {
+				t.Errorf("isDisplayableURL(%q) = %v, want %v", c.in, got, c.want)
+			}
+		})
+	}
+}

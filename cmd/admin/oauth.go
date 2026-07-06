@@ -124,7 +124,7 @@ func adminChannelAddOAuthAntigravity(args []string) error {
 		if desc == "" {
 			desc = cb.Error
 		}
-		return fmt.Errorf("authorization failed: %s", desc)
+		return fmt.Errorf("authorization failed: %s", cliout.Sanitize(desc))
 	}
 	if cb.Code == "" {
 		return errors.New(i18n.T("seller.oauth_callback_no_code"))

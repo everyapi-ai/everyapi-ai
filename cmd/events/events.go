@@ -89,7 +89,7 @@ func Run(args []string) error {
 			continue
 		}
 		ts := time.Now().Format("15:04:05")
-		cliout.Printf("[%s] %s  %s\n", ts, ev.Type, string(ev.Data))
+		cliout.Printf("[%s] %s  %s\n", ts, cliout.Sanitize(ev.Type), cliout.Sanitize(string(ev.Data)))
 	}
 	// onErr (SDK goroutine) writes authErr strictly before the SDK
 	// closes ch on a 401; the channel close synchronises that write

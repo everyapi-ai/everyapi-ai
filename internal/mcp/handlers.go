@@ -126,9 +126,9 @@ func handleStatus(ctx context.Context, _ json.RawMessage) (string, error) {
 
 	var b strings.Builder
 	if self.Email != "" {
-		fmt.Fprintf(&b, "Account: %s (%s)\n", self.Username, self.Email)
+		fmt.Fprintf(&b, "Account: %s (%s)\n", cliout.Sanitize(self.Username), cliout.Sanitize(self.Email))
 	} else {
-		fmt.Fprintf(&b, "Account: %s\n", self.Username)
+		fmt.Fprintf(&b, "Account: %s\n", cliout.Sanitize(self.Username))
 	}
 	fmt.Fprintf(&b, "Quota:    $%.2f remaining   $%.2f used\n", quotaUSD, usedUSD)
 	fmt.Fprintf(&b, "Requests: %d\n", self.RequestCount)

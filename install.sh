@@ -68,9 +68,11 @@ main() {
 REPO="everyapi-ai/everyapi-ai"
 VERSION=""
 VERSION_PINNED=0   # 1 when --version was passed: never silently substitute it
+DOWNLOAD_LOCKED=0  # 1 once the first artifact is downloaded: freeze (source,version) so the checksum can't come from a different tag
 PREFIX=""
 FORCE=0
 VERIFY_SIGNATURE="auto"   # auto | required | skip
+COSIGN_VERIFIED=0         # 1 once cosign keyless verification actually passes
 
 # ----- Pretty print ----------------------------------------------------------
 
@@ -225,7 +227,12 @@ MIRROR_BASE="https://dl.everyapi.ai"
 # Location with %{url_effective} and strip to the tag.
 gh_latest() {
   local _url
-  _url=$(curl -fsSLI --connect-timeout 5 --max-time 8 -o /dev/null \
+  # --proto/--proto-redir '=https': this follows the releases/latest ->
+  # releases/tag redirect, so pin BOTH the initial request and every
+  # redirect hop to https (a redirect to http:// would otherwise be
+  # followed in cleartext).
+  _url=$(curl -fsSLI --proto '=https' --proto-redir '=https' --tlsv1.2 \
+    --connect-timeout 5 --max-time 8 -o /dev/null \
     -w '%{url_effective}' "https://github.com/$REPO/releases/latest" 2>/dev/null || true)
   case "$_url" in
     */releases/tag/v*) printf '%s' "${_url##*/}" ;;
@@ -235,7 +242,7 @@ gh_latest() {
 # mirror_latest: echo the latest tag from the mirror's plain-text /latest, or
 # empty. Used for mirror-mode resolution and the fetch() release-window fallback.
 mirror_latest() {
-  curl -fsSL --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 8 \
+  curl -fsSL --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 5 --max-time 8 \
     "$MIRROR_BASE/latest" 2>/dev/null | head -n1 | tr -d '[:space:]' || true
 }
 
@@ -244,7 +251,7 @@ if [ -n "${EVERYAPI_DOWNLOAD_BASE:-}" ]; then
   info "download source: mirror (EVERYAPI_DOWNLOAD_BASE=$DOWNLOAD_BASE)"
   if [ -z "$VERSION" ]; then
     info "resolving latest release tag from mirror…"
-    VERSION=$(curl -fsSL --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 8 \
+    VERSION=$(curl -fsSL --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 5 --max-time 8 \
       "$DOWNLOAD_BASE/latest" 2>/dev/null | head -n1 | tr -d '[:space:]' || true)
     if [ -z "$VERSION" ]; then
       err "could not resolve latest version from mirror ($DOWNLOAD_BASE/latest)"
@@ -369,7 +376,10 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 # the retry/fallback below) instead of hanging forever — there is deliberately
 # no overall --max-time, since a large binary on a slow-but-healthy link is fine.
 dl() {
-  curl -fsSL --proto '=https' --tlsv1.2 \
+  # --proto-redir '=https': --proto only constrains the FIRST hop; with -L
+  # a redirect to http:// would otherwise be followed in cleartext, letting
+  # a redirect-based downgrade MITM the artifact/checksum on any hop.
+  curl -fsSL --proto '=https' --proto-redir '=https' --tlsv1.2 \
     --connect-timeout 10 --speed-limit 1024 --speed-time 20 "$@"
 }
 
@@ -398,6 +408,12 @@ fetch() {
     return 0
   fi
   [ "$VERSION_PINNED" -eq 1 ] && return 1   # explicit --version: don't substitute
+  # Once the FIRST artifact (the tarball) is committed, freeze the version:
+  # substituting a different tag here would fetch SHA256SUMS for a tag that
+  # doesn't match the already-downloaded tarball, producing a bogus "SHA256
+  # mismatch — tampered binary" abort during a release/mirror-sync window
+  # (the two artifacts were each authentic, just for different tags).
+  [ "$DOWNLOAD_LOCKED" -eq 1 ] && return 1
   local _ml
   _ml=$(mirror_latest)
   if [ -n "$_ml" ] && [ "$_ml" != "$VERSION" ]; then
@@ -416,6 +432,12 @@ fetch "$TARBALL" "$TMP_DIR/$TARBALL" || {
   err "check your connection, or pin a known version with --version vX.Y.Z"
   exit 1
 }
+# The tarball's (source, version) is now committed. Freeze it so the
+# checksum + signature that follow are fetched for the SAME tag — see the
+# DOWNLOAD_LOCKED note in fetch(). fetch() may have already rewritten
+# VERSION/BASE_URL if the tarball itself fell back to the mirror's latest;
+# locking here keeps SHA256SUMS aligned with whatever the tarball ended up being.
+DOWNLOAD_LOCKED=1
 info "downloading ${SUMS}…"
 fetch "$SUMS" "$TMP_DIR/$SUMS" || {
   err "failed to download $SUMS — refusing to install without checksum"
@@ -523,6 +545,7 @@ if [ "$VERIFY_SIGNATURE" != "skip" ]; then
           --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
           --certificate-identity-regexp "^https://github\.com/everyapi-ai/everyapi/\.github/workflows/cli-release\.yml@" \
           "$TMP_DIR/$SUMS" >/dev/null 2>&1; then
+        COSIGN_VERIFIED=1
         ok "cosign signature verified"
       else
         if [ "$VERIFY_SIGNATURE" = "required" ]; then
@@ -548,6 +571,24 @@ if [ "$VERIFY_SIGNATURE" != "skip" ]; then
     warn "cosign not installed — skipping signature verify (SHA256 integrity only, no provenance)"
     warn "  install cosign and rerun with --require-signature for cryptographic provenance"
   fi
+fi
+
+# Same-origin checksum is INTEGRITY, not AUTHENTICITY. When the binary was
+# served from the mirror (mainland auto-fallback or an explicit
+# EVERYAPI_DOWNLOAD_BASE), SHA256SUMS came from that same origin, so a
+# matching digest proves only that the mirror agrees with itself — a
+# compromised mirror can serve a backdoored tarball plus a matching
+# checksum. cosign keyless verification is the ONLY control here that
+# proves the release came from the official pipeline. Surface that plainly
+# when we're about to install a mirror-served binary without a cosign proof.
+if [ -n "$DOWNLOAD_BASE" ] && [ "$COSIGN_VERIFIED" -ne 1 ] && [ "$VERIFY_SIGNATURE" != "skip" ]; then
+  warn "──────────────────────────────────────────────────────────────"
+  warn "DEGRADED TRUST: installing a mirror-served binary ($DOWNLOAD_BASE)"
+  warn "with SHA256 integrity only. The checksum was fetched from the SAME"
+  warn "origin as the binary, so it is NOT proof of authenticity."
+  warn "For cryptographic provenance: install cosign and re-run with"
+  warn "--require-signature, or install from GitHub directly."
+  warn "──────────────────────────────────────────────────────────────"
 fi
 
 # ----- Extract + install -----------------------------------------------------

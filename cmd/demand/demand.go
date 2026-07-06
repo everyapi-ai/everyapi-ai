@@ -11,10 +11,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -104,12 +104,39 @@ func runList(args []string, mine bool) error {
 		return nil
 	}
 	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)
+	// perUnit converts the stored quota-unit ceiling back to the USD/1M
+	// figure `submit --max-price` accepts. Fetched once (not per row).
+	perUnit := demandQuotaPerUnit(client)
 	for _, d := range rows {
 		when := time.Unix(d.CreatedAt, 0).Format("2006-01-02")
-		cliout.Printf("  [#%d] %s — model=%s  ceiling=%d quota/M tok  est=%d/mo  state=%s  posted %s\n",
-			d.ID, d.Title, d.ModelName, d.MaxPricePerMTokenUSDQuota, d.MonthlyTokenEstimate, d.State, when)
+		cliout.Printf("  [#%d] %s — model=%s  ceiling=%s  est=%d/mo  state=%s  posted %s\n",
+			d.ID, cliout.Sanitize(d.Title), cliout.Sanitize(d.ModelName),
+			priceCeiling(d.MaxPricePerMTokenUSDQuota, perUnit), d.MonthlyTokenEstimate,
+			cliout.Sanitize(d.State), when)
 	}
 	return nil
+}
+
+// demandQuotaPerUnit fetches the account's quota→USD divisor via a free
+// /api/status round-trip. Returns 0 when unavailable so callers fall
+// back to raw quota units rather than misrendering dollars.
+func demandQuotaPerUnit(client *api.Client) float64 {
+	if status, err := client.GetStatus(cliout.WithCtx()); err == nil && status.QuotaPerUnit > 0 {
+		return status.QuotaPerUnit
+	}
+	return 0
+}
+
+// priceCeiling renders MaxPricePerMTokenUSDQuota. `submit --max-price`
+// takes the ceiling in USD/1M tokens and the backend stores it in quota
+// units, so divide by QuotaPerUnit to echo the figure the user typed.
+// Falls back to raw, clearly-labelled quota units when the divisor is
+// unavailable (so a $1 ceiling is never mislabelled as "$500000").
+func priceCeiling(quota int64, perUnit float64) string {
+	if perUnit > 0 {
+		return fmt.Sprintf("$%.2f/1M tok", float64(quota)/perUnit)
+	}
+	return fmt.Sprintf("%d quota/1M tok", quota)
 }
 
 func runShow(args []string) error {
@@ -125,9 +152,9 @@ func runShow(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Demand #%d  %q  (state=%s)\n", d.ID, d.Title, d.State)
-	cliout.Printf("  model:         %s\n", d.ModelName)
-	cliout.Printf("  price ceiling: %d quota per 1M tokens\n", d.MaxPricePerMTokenUSDQuota)
+	cliout.Printf("Demand #%d  %q  (state=%s)\n", d.ID, cliout.Sanitize(d.Title), cliout.Sanitize(d.State))
+	cliout.Printf("  model:         %s\n", cliout.Sanitize(d.ModelName))
+	cliout.Printf("  price ceiling: %s\n", priceCeiling(d.MaxPricePerMTokenUSDQuota, demandQuotaPerUnit(client)))
 	cliout.Printf("  est volume:    %d tokens/month\n", d.MonthlyTokenEstimate)
 	if d.RequireOAuth {
 		cliout.Println("  require OAuth: yes")
@@ -139,10 +166,10 @@ func runShow(args []string) error {
 		cliout.Printf("  max latency:   %d ms\n", d.MaxLatencyMs)
 	}
 	if d.TermDescription != "" {
-		cliout.Printf("  term:          %s\n", d.TermDescription)
+		cliout.Printf("  term:          %s\n", cliout.Sanitize(d.TermDescription))
 	}
 	if d.Description != "" {
-		cliout.Printf("  description:   %s\n", d.Description)
+		cliout.Printf("  description:   %s\n", cliout.Sanitize(d.Description))
 	}
 	if d.ExpiresAt > 0 {
 		cliout.Printf("  expires:       %s\n", time.Unix(d.ExpiresAt, 0).Format("2006-01-02 15:04:05"))

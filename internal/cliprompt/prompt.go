@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
@@ -262,23 +263,48 @@ func YesNo(in *bufio.Reader, label string, defaultYes bool) (bool, error) {
 	}
 }
 
+// IsBrowsableURL reports whether s is a plain absolute http(s) URL safe
+// to hand to an OS "open URL" helper: non-empty, no leading '-' (which
+// open/xdg-open would otherwise parse as an option flag), an http/https
+// scheme, and a host. It is the single source of truth for the CLI's
+// "is this server-supplied URL safe to act on" rule — the login display
+// path (isDisplayableURL) layers an explicit control-byte check on top.
+func IsBrowsableURL(s string) bool {
+	if s == "" || strings.HasPrefix(s, "-") {
+		return false
+	}
+	u, err := url.Parse(s)
+	if err != nil {
+		return false
+	}
+	return u.IsAbs() && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+}
+
 // OpenBrowser tries the platform's standard "open URL" helper. We
 // intentionally use exec.Command + ignore stderr: a browser launcher
 // that fails should not look like a CLI bug — every caller already
 // prints the URL for the user to copy.
-func OpenBrowser(url string) error {
+func OpenBrowser(rawURL string) error {
+	// The URL can be server-controlled (the login verification_uri). Refuse
+	// anything that isn't a plain absolute http(s) URL before handing it to
+	// the OS launcher: a leading '-' would be parsed as an option flag by
+	// open/xdg-open (argument injection), and a non-http scheme (file:,
+	// smb:, …) is never a legitimate browser target here.
+	if !IsBrowsableURL(rawURL) {
+		return fmt.Errorf("refusing to open non-http(s) URL")
+	}
 	var cmd string
 	var args []string
 	switch runtime.GOOS {
 	case "darwin":
 		cmd = "open"
-		args = []string{url}
+		args = []string{rawURL}
 	case "windows":
 		cmd = "rundll32"
-		args = []string{"url.dll,FileProtocolHandler", url}
+		args = []string{"url.dll,FileProtocolHandler", rawURL}
 	default:
 		cmd = "xdg-open"
-		args = []string{url}
+		args = []string{rawURL}
 	}
 	c := exec.Command(cmd, args...)
 	if err := c.Start(); err != nil {

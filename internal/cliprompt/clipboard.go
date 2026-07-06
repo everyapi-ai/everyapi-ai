@@ -2,6 +2,7 @@ package cliprompt
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -42,7 +43,16 @@ func clipboardCommand() (string, []string, error) {
 			{"xclip", []string{"-selection", "clipboard"}},
 			{"xsel", []string{"--clipboard", "--input"}},
 		}
+		// wl-copy only works under a running Wayland compositor. On an X11
+		// session that merely has wl-clipboard installed, wl-copy is present
+		// but fails to connect ("failed to connect to a Wayland server"),
+		// and we'd wrongly report a copy failure though xclip/xsel would
+		// have worked. Skip it unless WAYLAND_DISPLAY is set.
+		wayland := os.Getenv("WAYLAND_DISPLAY") != ""
 		for _, c := range candidates {
+			if c.name == "wl-copy" && !wayland {
+				continue
+			}
 			if _, err := exec.LookPath(c.name); err == nil {
 				return c.name, c.args, nil
 			}

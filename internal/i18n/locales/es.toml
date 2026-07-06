@@ -440,7 +440,7 @@ SUBCOMANDOS
   redeem <key>                                    Aplicar una clave de recarga / canje
 
 NOTAS
-  Para el ingreso real de dinero (Stripe / Creem / Waffo / EPay), usa
+  Para el ingreso real de dinero (Fluxa), usa
   'everyapi wallet topup' — abre el dashboard con la frase anti-phishing.
   La transferencia al navegador es obligatoria ahí porque la
   recogida de tarjeta ocurre fuera de banda.
@@ -1153,6 +1153,8 @@ delete_row_failed = "no se pudo eliminar la fila del nodo en el backend: %w"
 row_deleted = "✓ Fila del nodo %d eliminada del backend\n"
 workdir_failed = "⚠ no se pudo eliminar el workdir local %s (%v) — el contenedor de ollama escribe los datos del modelo como root, por lo que pueden quedar archivos propiedad de root. Elimínalos con: sudo rm -rf %s\n"
 workdir_removed = "✓ Workdir local %s eliminado\n"
+workdir_kept = "✓ Workdir local %s conservado — token de registro preservado para reapuntar a otro host; se eliminaron el archivo compose y los datos del contenedor\n"
+workdir_kept_partial = "⚠ workdir local %s conservado (token de registro preservado para reapuntar), pero no se pudo eliminar %s (%v) — si pertenece a root por el contenedor de ollama, elimina solo esa ruta con: sudo rm -rf %s\n"
 clear_active_failed = "⚠ no se pudo borrar el puntero del nodo activo (%v)\n"
 done = "Listo."
 

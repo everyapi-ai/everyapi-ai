@@ -424,7 +424,7 @@ SUBCOMMANDS
   redeem <key>                                    Apply a topup / redemption key
 
 NOTES
-  For actual money-in (Stripe / Creem / Waffo / EPay), use
+  For actual money-in (Fluxa), use
   'everyapi wallet topup' — it opens the dashboard with the anti-phishing
   verification phrase. Browser handoff is required there because
   card collection happens out-of-band.
@@ -1133,6 +1133,8 @@ delete_row_failed = "delete backend node row: %w"
 row_deleted = "✓ Backend node row %d deleted\n"
 workdir_failed = "⚠ couldn't remove local workdir %s (%v) — the ollama container writes model data as root, so root-owned files may remain. Remove them with: sudo rm -rf %s\n"
 workdir_removed = "✓ Removed local workdir %s\n"
+workdir_kept = "✓ Kept local workdir %s — registration token preserved for re-pointing; removed compose file + container data\n"
+workdir_kept_partial = "⚠ kept local workdir %s (registration token preserved for re-pointing), but couldn't remove %s (%v) — if it is root-owned by the ollama container, clear just that path with: sudo rm -rf %s\n"
 clear_active_failed = "⚠ couldn't clear active-node pointer (%v)\n"
 done = "Done."
 

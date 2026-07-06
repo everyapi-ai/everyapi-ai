@@ -8,11 +8,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-ai/internal/sellertype"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -159,13 +159,27 @@ func sellerWithdraw(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	// Distinguish an omitted --quota (sweep the full pending balance) from
+	// an explicit value. Overloading amount==0 as the "full balance"
+	// sentinel would turn `--quota 0` (or a caller whose amount computes
+	// to 0 = "nothing") into a full sweep — the opposite of intent. Mirror
+	// the fs.Visit pattern token/seller `update` already use.
+	quotaSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "quota" {
+			quotaSet = true
+		}
+	})
+	if quotaSet && *quota <= 0 {
+		return fmt.Errorf("--quota must be a positive amount (got %d); omit --quota to withdraw the full pending balance", *quota)
+	}
 	client, creds, err := sellerClient()
 	if err != nil {
 		return err
 	}
 
 	amount := *quota
-	if amount == 0 {
+	if !quotaSet {
 		self, err := client.GetSelf(cliout.WithCtx())
 		if err != nil {
 			return classifySellerErr(err)

@@ -105,7 +105,10 @@ func runInfo(args []string) error {
 	// 2FA / passkey / bindings are best-effort — each may 401 on a
 	// pure bearer-token session if backend gates that surface on the
 	// dashboard cookie. Render the failures as "(unknown — N/A on
-	// CLI session)" rather than killing the whole info command.
+	// CLI session)" rather than killing the whole info command OR
+	// silently dropping the line (which makes a real backend outage
+	// look identical to the feature being unset).
+	const unknown = "(unknown — N/A on CLI session)"
 	if st, err := client.Get2FAStatus(ctx); err == nil {
 		extra := ""
 		if st.Enabled {
@@ -115,6 +118,8 @@ func runInfo(args []string) error {
 			}
 		}
 		cliout.Printf("  2fa:            enabled=%v%s\n", st.Enabled, extra)
+	} else {
+		cliout.Printf("  2fa:            %s\n", unknown)
 	}
 	if ps, err := client.GetPasskeyStatus(ctx); err == nil {
 		if ps.Enabled {
@@ -122,6 +127,8 @@ func runInfo(args []string) error {
 		} else {
 			cliout.Println("  passkey:        not registered")
 		}
+	} else {
+		cliout.Printf("  passkey:        %s\n", unknown)
 	}
 	if bs, err := client.ListOAuthBindings(ctx); err == nil {
 		if len(bs) == 0 {
@@ -132,7 +139,13 @@ func runInfo(args []string) error {
 				cliout.Printf("    - [#%d] %s (%s)\n", b.ProviderID, cliout.Sanitize(b.ProviderName), cliout.Sanitize(b.ProviderSlug))
 			}
 		}
+	} else {
+		cliout.Printf("  oauth bindings: %s\n", unknown)
 	}
+	// aff code: only shown when present; an error is non-actionable
+	// noise here (affiliate code is optional), so keep omitting on
+	// failure — but distinguish it from the gated surfaces above,
+	// which the user might otherwise think are simply unset.
 	if aff, err := client.GetAffCode(ctx); err == nil && aff != "" {
 		cliout.Printf("  aff code:       %s\n", cliout.Sanitize(aff))
 	}
