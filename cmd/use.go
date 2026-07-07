@@ -172,6 +172,11 @@ func Use(args []string) error {
 	// credential); resolve the account's relay API key instead.
 	relayKey, err := resolveRelayKey(creds, group)
 	if err != nil {
+		if errors.Is(err, errNoRelayKey) && group == "" {
+			relayKey, err = createDefaultRelayKeyInteractive(creds)
+		}
+	}
+	if err != nil {
 		if errors.Is(err, errNoRelayKeyForGroup) {
 			return fmt.Errorf(
 				"no enabled relay API key in group %q on your account. Create an\n"+
@@ -362,6 +367,53 @@ func Use(args []string) error {
 	// stdin, so it doesn't leak into the launched tool as phantom input.
 	cliprompt.DrainStdin()
 	return tools.Exec(t, env, extraArgs)
+}
+
+// createDefaultRelayKeyInteractive is the first-run repair path for
+// device-auth users who can manage their account but have not created a
+// relay API key yet. Scripts keep the explicit error; an interactive shell can
+// mint a default key and continue the launch in the same command.
+func createDefaultRelayKeyInteractive(creds *config.Credentials) (string, error) {
+	if !cliprompt.IsInteractive() {
+		return "", errNoRelayKey
+	}
+	ok, err := cliprompt.YesNo(
+		bufio.NewReader(os.Stdin),
+		i18n.T("use.create_relay_key_prompt"),
+		true,
+	)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", errors.New(i18n.T("common.canceled"))
+	}
+	return createDefaultRelayKey(creds)
+}
+
+func createDefaultRelayKey(creds *config.Credentials) (string, error) {
+	name := "everyapi-cli-" + time.Now().Format("20060102-150405")
+	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
+	req := api.TokenCreate{
+		Name:           name,
+		ExpiredTime:    api.TokenExpiresNever,
+		UnlimitedQuota: true,
+	}
+	if err := client.CreateToken(cliout.WithCtx(), req); err != nil {
+		if api.IsUnauthorized(err) {
+			return "", errors.New(i18n.T("auth.session_expired"))
+		}
+		return "", fmt.Errorf(i18n.T("use.create_relay_key_failed"), err)
+	}
+	cliout.Printf(i18n.T("use.create_relay_key_created")+"\n", name)
+	key, err := resolveRelayKey(creds, "")
+	if err != nil {
+		if api.IsUnauthorized(err) {
+			return "", errors.New(i18n.T("auth.session_expired"))
+		}
+		return "", fmt.Errorf(i18n.T("use.create_relay_key_resolve_failed"), err)
+	}
+	return key, nil
 }
 
 // containsFlag reports whether the user already passed `flag` in

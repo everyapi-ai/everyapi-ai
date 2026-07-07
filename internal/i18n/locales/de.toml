@@ -1281,6 +1281,10 @@ fallback_direct = "Fallback auf Direktmodus — dein Traffic erreicht %s ohne de
 fallback_hint = "Lassen Sie --sanitize weg für eine direkte Verbindung ohne diese Warnung, oder 'everyapi proxy start' zum Debuggen.\n\n"
 no_relay_keys = "keine aktivierten Relay-API-Keys in deinem Konto, um eine Gruppe auszuwählen — erstelle einen im EveryAPI-Dashboard und führe dann 'everyapi auth login' aus"
 relay_key_mode_group = "--group/--channel erfordert eine vollständige Management-Anmeldung; dieses Konto ist nur mit einem Relay-Schlüssel (OAuth2) angemeldet — führe 'everyapi auth login' aus, oder lasse --group/--channel weg, um den Standard-Relay-Schlüssel zu verwenden."
+create_relay_key_prompt = "Es gibt noch keinen Relay-API-Key. Jetzt einen unbegrenzten Standard-Key erstellen?"
+create_relay_key_created = "Relay-API-Key %q erstellt."
+create_relay_key_failed = "Relay-API-Key erstellen: %v"
+create_relay_key_resolve_failed = "Relay-API-Key wurde erstellt, konnte aber nicht abgerufen werden: %v"
 no_relay_key_long = '''
 kein nutzbarer Relay-API-Schlüssel im Konto — `everyapi use` benötigt einen,
 unabhängig vom Login-Token. Erstelle einen API-Schlüssel im

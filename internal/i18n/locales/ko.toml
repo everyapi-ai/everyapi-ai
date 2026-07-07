@@ -1272,6 +1272,10 @@ fallback_direct = "직접 모드로 대체 — 트래픽이 프라이버시 필�
 fallback_hint = "--sanitize 를 빼면 기본 직접 연결이 되어 이 경고가 표시되지 않습니다. 디버그는 'everyapi proxy start'.\n\n"
 no_relay_keys = "그룹을 선택할 활성 relay API key 가 계정에 없습니다 — EveryAPI 대시보드에서 생성한 뒤 'everyapi auth login' 을 실행하세요"
 relay_key_mode_group = "--group/--channel 에는 완전한 관리 로그인이 필요합니다. 이 계정은 릴레이 키(OAuth2)로만 로그인되어 있습니다 — 'everyapi auth login' 을 실행하거나 --group/--channel 을 빼서 기본 릴레이 키를 사용하세요."
+create_relay_key_prompt = "relay API key 가 아직 없습니다. 기본 무제한 key 를 지금 생성할까요?"
+create_relay_key_created = "relay API key %q 를 생성했습니다."
+create_relay_key_failed = "relay API key 생성 실패: %v"
+create_relay_key_resolve_failed = "relay API key 를 생성했지만 가져오지 못했습니다: %v"
 no_relay_key_long = '''
 계정에 사용 가능한 relay API 키가 없습니다 — `everyapi use` 에 필요합니다.
 로그인 토큰과는 별개입니다. EveryAPI dashboard (%s) 에서 API 키를 생성한 후

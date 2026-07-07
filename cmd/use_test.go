@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"reflect"
 	"testing"
@@ -166,6 +169,69 @@ func TestResolveToolModel(t *testing.T) {
 			t.Errorf("claude should not touch %s, got %q", env, got)
 		}
 	})
+}
+
+func TestCreateDefaultRelayKeyCreatesThenCaches(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	var gotCreate api.TokenCreate
+	var postCount int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/token/":
+			postCount++
+			if err := json.NewDecoder(r.Body).Decode(&gotCreate); err != nil {
+				t.Errorf("decode create body: %v", err)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": true})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/token/":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"data": map[string]any{"items": []map[string]any{
+					{"id": 7, "name": gotCreate.Name, "status": api.TokenStatusEnabled, "group": ""},
+				}},
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/token/7/key":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"data":    map[string]any{"key": "sk-everyapi-created"},
+			})
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	creds := &config.Credentials{APIBase: srv.URL, AccessToken: "mgmt-token", UserID: 42}
+	key, err := createDefaultRelayKey(creds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if key != "sk-everyapi-created" {
+		t.Fatalf("key = %q, want created key", key)
+	}
+	if creds.RelayKey != "sk-everyapi-created" {
+		t.Fatalf("creds.RelayKey = %q, want cached key", creds.RelayKey)
+	}
+	if postCount != 1 {
+		t.Fatalf("POST /api/token count = %d, want 1", postCount)
+	}
+	if gotCreate.Name == "" {
+		t.Fatal("created token name is empty")
+	}
+	if gotCreate.Group != "" {
+		t.Fatalf("created token group = %q, want default group", gotCreate.Group)
+	}
+	if !gotCreate.UnlimitedQuota {
+		t.Fatal("created token should be unlimited")
+	}
+	if gotCreate.ExpiredTime != api.TokenExpiresNever {
+		t.Fatalf("created token expiry = %d, want never", gotCreate.ExpiredTime)
+	}
+	if gotCreate.ModelLimitsEnabled || gotCreate.ModelLimits != "" {
+		t.Fatalf("created token should not have model limits: %#v", gotCreate)
+	}
 }
 
 func TestWantsUseHelp(t *testing.T) {

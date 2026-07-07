@@ -1252,6 +1252,10 @@ fallback_direct = "已回退到直連模式 — 流量將直接抵達 %s，不�
 fallback_hint = "移除 --sanitize 即預設直連（不再有此提示）；或執行 'everyapi proxy start' 排查。\n\n"
 no_relay_keys = "你的帳戶沒有可用的 relay API key 用於選擇分組 — 請到 EveryAPI dashboard 建立，再執行 'everyapi auth login'"
 relay_key_mode_group = "--group/--channel 需要完整的管理登入；此帳號僅以中繼金鑰（OAuth2）登入 — 請執行 'everyapi auth login'，或移除 --group/--channel 以使用預設中繼金鑰。"
+create_relay_key_prompt = "目前還沒有 relay API key。現在建立一個預設的無限額度 key？"
+create_relay_key_created = "已建立 relay API key %q。"
+create_relay_key_failed = "建立 relay API key 失敗：%v"
+create_relay_key_resolve_failed = "relay API key 已建立，但無法取得：%v"
 no_relay_key_long = '''
 帳戶上沒有可用的 relay API key — `everyapi use` 需要它，
 它與你的登入 token 是分開的。請在 EveryAPI dashboard (%s) 建立一個 API key，

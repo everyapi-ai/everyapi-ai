@@ -1285,6 +1285,10 @@ fallback_direct = "Cayendo a modo directo — tu tráfico llegará a %s sin el f
 fallback_hint = "Omite --sanitize para una conexión directa sin este aviso, o 'everyapi proxy start' para depurar.\n\n"
 no_relay_keys = "no hay relay API keys habilitadas en tu cuenta para elegir un grupo — crea una en el dashboard de EveryAPI, luego 'everyapi auth login'"
 relay_key_mode_group = "--group/--channel requiere un inicio de sesión de gestión completo; esta cuenta solo tiene sesión con una clave de retransmisión (OAuth2) — ejecuta 'everyapi auth login', o quita --group/--channel para usar la clave de retransmisión predeterminada."
+create_relay_key_prompt = "Aún no hay relay API key. ¿Crear ahora una clave predeterminada ilimitada?"
+create_relay_key_created = "Relay API key %q creada."
+create_relay_key_failed = "crear relay API key: %v"
+create_relay_key_resolve_failed = "se creó una relay API key, pero no se pudo obtener: %v"
 no_relay_key_long = '''
 no hay una clave API de relay utilizable en tu cuenta — `everyapi use` la necesita,
 y es independiente del token de inicio de sesión. Crea una clave API en el

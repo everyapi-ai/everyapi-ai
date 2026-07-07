@@ -1274,6 +1274,10 @@ fallback_direct = "直接モードにフォールバックします — トラ�
 fallback_hint = "--sanitize を外せば既定の直接接続になり、この警告は表示されません。デバッグは 'everyapi proxy start'。\n\n"
 no_relay_keys = "アカウントにグループを選択するための有効な relay API key がありません — EveryAPI ダッシュボードで作成後、'everyapi auth login' を実行してください"
 relay_key_mode_group = "--group/--channel には完全な管理ログインが必要です。このアカウントはリレーキー（OAuth2）のみでサインインしています — 'everyapi auth login' を実行するか、--group/--channel を外してデフォルトのリレーキーを使ってください。"
+create_relay_key_prompt = "relay API key がまだありません。デフォルトの無制限キーを今作成しますか？"
+create_relay_key_created = "relay API key %q を作成しました。"
+create_relay_key_failed = "relay API key の作成に失敗しました: %v"
+create_relay_key_resolve_failed = "relay API key は作成されましたが、取得できませんでした: %v"
 no_relay_key_long = '''
 アカウントに使用可能な relay API キーがありません — `everyapi use` には必要です。
 ログイントークンとは別物です。EveryAPI dashboard (%s) で API キーを作成し、

@@ -1286,6 +1286,10 @@ fallback_direct = "Bascule en mode direct — votre trafic atteindra %s sans le 
 fallback_hint = "Omettez --sanitize pour une connexion directe sans cet avertissement, ou 'everyapi proxy start' pour déboguer.\n\n"
 no_relay_keys = "aucune relay API key activée sur votre compte pour choisir un groupe — créez-en une dans le dashboard EveryAPI, puis 'everyapi auth login'"
 relay_key_mode_group = "--group/--channel nécessite une connexion de gestion complète ; ce compte n'est connecté qu'avec une clé de relais (OAuth2) — exécutez 'everyapi auth login', ou retirez --group/--channel pour utiliser la clé de relais par défaut."
+create_relay_key_prompt = "Aucune relay API key n'existe encore. Créer maintenant une clé par défaut illimitée ?"
+create_relay_key_created = "Relay API key %q créée."
+create_relay_key_failed = "création de la relay API key : %v"
+create_relay_key_resolve_failed = "une relay API key a été créée, mais impossible de la récupérer : %v"
 no_relay_key_long = '''
 aucune clé API relais utilisable sur votre compte — `everyapi use` en a besoin,
 elle est distincte du jeton de connexion. Créez une clé API dans le

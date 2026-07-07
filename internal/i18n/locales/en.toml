@@ -1265,6 +1265,10 @@ fallback_direct = "Falling back to direct mode — your traffic will reach %s wi
 fallback_hint = "Omit --sanitize to run direct without this warning, or 'everyapi proxy start' to debug.\n\n"
 no_relay_keys = "no enabled relay API keys on your account to pick a group from — create one in the EveryAPI dashboard, then 'everyapi auth login'"
 relay_key_mode_group = "--group/--channel needs a full management login; this account is signed in with a relay key (OAuth2) only — run 'everyapi auth login', or drop --group/--channel to use the default relay key."
+create_relay_key_prompt = "No relay API key exists yet. Create a default unlimited key now?"
+create_relay_key_created = "Created relay API key %q."
+create_relay_key_failed = "create relay API key: %v"
+create_relay_key_resolve_failed = "created a relay API key, but could not fetch it: %v"
 no_relay_key_long = '''
 no usable relay API key on your account — `everyapi use` needs one,
 and it's separate from your login token. Create an API key in the
