@@ -8,6 +8,7 @@
 package perf
 
 import (
+	"errors"
 	"flag"
 	"sort"
 
@@ -34,7 +35,14 @@ func Run(args []string) error {
 	// so a logged-in admin gets data instead of a 401.
 	base := config.ResolveAPIBase(*baseFlag)
 	client := api.New(base, "")
-	if creds, lerr := config.Load(); lerr == nil && creds != nil {
+	creds, lerr := config.Load()
+	if lerr != nil && !errors.Is(lerr, config.ErrNoCredentials) {
+		// A real load failure (corrupt/unreadable credentials.json) must
+		// not masquerade as "not logged in" and surface downstream as an
+		// opaque 401 — report it directly.
+		return lerr
+	}
+	if creds != nil {
 		client = api.New(base, creds.AccessToken).WithUserID(creds.UserID)
 	}
 	models, err := client.GetPerfSummary(cliout.WithCtx(), *hours)

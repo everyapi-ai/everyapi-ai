@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/internal/sellertype"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -187,7 +188,7 @@ func handleSellerList(ctx context.Context, _ json.RawMessage) (string, error) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%d seller channel(s):\n", len(channels))
 	for _, ch := range channels {
-		fmt.Fprintf(&b, "  [#%d] %s — type=%d status=%s\n", ch.ID, cliout.Sanitize(ch.Name), ch.Type, statusLabel(ch.Status))
+		fmt.Fprintf(&b, "  [#%d] %s — type=%s status=%s\n", ch.ID, cliout.Sanitize(ch.Name), sellertype.Label(ch.KindSlug), statusLabel(ch.Status))
 		if ch.Models != "" {
 			fmt.Fprintf(&b, "        models: %s\n", cliout.Sanitize(ch.Models))
 		}

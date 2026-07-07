@@ -23,13 +23,14 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/internal/style"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
 func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		cliout.Println(i18n.T("user.usage"))
+		cliout.Println(style.Emph(i18n.T("user.usage")))
 		if len(args) == 0 {
 			return fmt.Errorf(i18n.T("common.missing_subcommand"), "everyapi account user")
 		}
@@ -669,16 +670,20 @@ func showSetting(client *api.Client) error {
 		return nil
 	}
 	cliout.Printf(i18n.T("user.setting_header")+"\n", v.NotifyType)
-	cliout.Printf("  %-12s %g\n", i18n.T("user.setting_threshold"), v.QuotaWarningThreshold)
+	// %.2f, not %g: a large threshold (e.g. 1000000) would otherwise
+	// render in scientific notation ("1e+06").
+	cliout.Printf("  %-12s %.2f\n", i18n.T("user.setting_threshold"), v.QuotaWarningThreshold)
+	// Sanitize server-echoed endpoint values before printing — same
+	// terminal-escape guard the rest of the CLI applies to server strings.
 	switch v.NotifyType {
 	case "email":
-		cliout.Printf("  %-12s %s\n", "email", v.NotificationEmail)
+		cliout.Printf("  %-12s %s\n", "email", cliout.Sanitize(v.NotificationEmail))
 	case "webhook":
-		cliout.Printf("  %-12s %s\n", "webhook", v.WebhookURL)
+		cliout.Printf("  %-12s %s\n", "webhook", cliout.Sanitize(v.WebhookURL))
 	case "bark":
-		cliout.Printf("  %-12s %s\n", "bark", v.BarkURL)
+		cliout.Printf("  %-12s %s\n", "bark", cliout.Sanitize(v.BarkURL))
 	case "gotify":
-		cliout.Printf("  %-12s %s\n", "gotify", v.GotifyURL)
+		cliout.Printf("  %-12s %s\n", "gotify", cliout.Sanitize(v.GotifyURL))
 	}
 	return nil
 }

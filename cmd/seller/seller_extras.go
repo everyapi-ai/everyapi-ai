@@ -193,19 +193,19 @@ func sellerRefresh(args []string) error {
 	}
 	kind := strings.ToLower(*kindFlag)
 	if kind == "" {
-		// Auto-detect from the channel's type. SellerChannel.Type
-		// is the backend's integer enum; map back via the existing
-		// channelTypeLabel + a small whitelist of the OAuth kinds
-		// we know how to refresh.
+		// Auto-detect from the channel's kind_slug. SellerChannel.KindSlug
+		// is the backend's channel_kinds.slug; map it to the refresh
+		// URL suffix via a small whitelist of the OAuth kinds we know
+		// how to refresh.
 		all, err := client.ListSellerChannels(cliout.WithCtx())
 		if err != nil {
 			return classifySellerErr(err)
 		}
-		var t int
+		var slug string
 		found := false
 		for _, ch := range all {
 			if ch.ID == id {
-				t = ch.Type
+				slug = ch.KindSlug
 				found = true
 				break
 			}
@@ -213,9 +213,9 @@ func sellerRefresh(args []string) error {
 		if !found {
 			return fmt.Errorf(i18n.T("seller.channel_not_found"), id)
 		}
-		kind = oauthKindForChannelType(t)
+		kind = oauthKindForChannelType(slug)
 		if kind == "" {
-			return fmt.Errorf(i18n.T("seller.oauth_only_refresh"), id, channelTypeLabel(t))
+			return fmt.Errorf(i18n.T("seller.oauth_only_refresh"), id, channelTypeLabel(slug))
 		}
 	}
 	res, err := client.RefreshChannelCredential(cliout.WithCtx(), id, kind)
@@ -235,20 +235,20 @@ func sellerRefresh(args []string) error {
 	return nil
 }
 
-// oauthKindForChannelType maps the backend channel-type integer to
-// the URL suffix used by the refresh endpoints. Returns "" for
-// non-OAuth types (which can't be refreshed). The integers must
-// match sellerChannelTypeAliases above — `seller refresh` walks the
-// same channel-type id space the `setup` / `add-oauth` wizard
-// targets, so a drift here would mean a channel mounted via
-// add-oauth couldn't be refreshed.
-func oauthKindForChannelType(t int) string {
-	switch t {
-	case sellerChannelTypeAliases["claude"]:
+// oauthKindForChannelType maps the backend kind_slug to the URL suffix
+// used by the refresh endpoints. Returns "" for non-OAuth kinds (which
+// can't be refreshed). The refresh suffix and the kind_slug differ for
+// Anthropic — the slug is "anthropic" but the refresh route is
+// /claude/refresh — so this is a genuine mapping, not an identity.
+// Only codex / anthropic / gemini are refreshable (see backend
+// api-router.go, which registers only those three refresh routes).
+func oauthKindForChannelType(slug string) string {
+	switch strings.ToLower(strings.TrimSpace(slug)) {
+	case "anthropic", "claude":
 		return "claude"
-	case sellerChannelTypeAliases["gemini"]:
+	case "gemini":
 		return "gemini"
-	case sellerChannelTypeAliases["codex"]:
+	case "codex":
 		return "codex"
 	default:
 		return ""

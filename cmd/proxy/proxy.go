@@ -220,8 +220,15 @@ func proxyStart(args []string) error {
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", *listen, err)
 	}
+	// Record the ACTUAL bound address, not the requested one: with a
+	// kernel-assigned port (`--listen 127.0.0.1:0`) *listen still says
+	// ":0", so persisting it would leave proxyStop/IsRunning probing a
+	// port nothing listens on — the proxy would be unmanageable. The
+	// default-collision path already rewrites *listen to the concrete
+	// fallback port; listener.Addr() covers the explicit :0 case too.
+	boundAddr := listener.Addr().String()
 
-	if err := writePIDFile(os.Getpid(), *listen); err != nil {
+	if err := writePIDFile(os.Getpid(), boundAddr); err != nil {
 		_ = listener.Close()
 		return fmt.Errorf("write pid file: %w", err)
 	}
@@ -231,10 +238,10 @@ func proxyStart(args []string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	cliout.Printf(i18n.T("proxy.start_listening")+"\n", *listen)
+	cliout.Printf(i18n.T("proxy.start_listening")+"\n", boundAddr)
 	cliout.Printf(i18n.T("proxy.start_upstream")+"\n", resolvedUpstream)
 	cliout.Printf(i18n.T("proxy.start_detectors")+"\n", len(detectors))
-	cliout.Printf(i18n.T("proxy.start_point_sdk")+"\n", *listen)
+	cliout.Printf(i18n.T("proxy.start_point_sdk")+"\n", boundAddr)
 	cliout.Println(i18n.T("proxy.start_ctrl_c"))
 	cliout.Println("")
 
@@ -301,10 +308,11 @@ func proxyStop(args []string) error {
 		return nil
 	}
 	cliout.Printf(i18n.T("proxy.stop_sent_sigterm"), pid)
-	// Wait briefly for the process to actually exit before
-	// reporting success. The server uses an 5s shutdown grace, so
-	// 3s here is "polled until done or report still-running".
-	deadline := time.Now().Add(3 * time.Second)
+	// Wait for the process to actually exit before reporting success.
+	// The server uses a 5s graceful-shutdown grace, so poll a hair
+	// longer (6s) — a 3s deadline expires mid-shutdown and falsely
+	// reports "still alive" for a proxy that is cleanly draining.
+	deadline := time.Now().Add(6 * time.Second)
 	for time.Now().Before(deadline) {
 		if !processAlive(pid) {
 			_ = removePIDFile()

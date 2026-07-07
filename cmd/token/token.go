@@ -20,6 +20,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/internal/style"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -29,7 +30,7 @@ import (
 // launcher's sub-picker isn't masked by a successful no-op.
 func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		cliout.Println(i18n.T("token.usage"))
+		cliout.Println(style.Emph(i18n.T("token.usage")))
 		if len(args) == 0 {
 			return fmt.Errorf(i18n.T("common.missing_subcommand"), "everyapi token")
 		}
@@ -392,6 +393,13 @@ func runCreate(args []string) error {
 	}
 	if strings.TrimSpace(tf.name) == "" {
 		return errors.New(i18n.T("token.name_required"))
+	}
+	// A token with neither --unlimited nor a positive --quota is created
+	// enabled but with 0 remaining quota — it cannot relay a single
+	// request, yet `everyapi use` would happily select it and every call
+	// fails with an opaque quota error. Refuse at the boundary.
+	if !tf.unlimited && tf.quota <= 0 {
+		return errors.New(i18n.T("token.quota_required"))
 	}
 	exp, err := expiresValue(tf.expires, api.TokenExpiresNever)
 	if err != nil {

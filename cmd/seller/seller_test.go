@@ -124,45 +124,44 @@ func TestParseAddKeyArgs(t *testing.T) {
 	}
 }
 
-// TestResolveSellerType covers the alias map + the numeric escape hatch
-// + case-insensitivity. The point of the alias map is that a user types
-// "claude" rather than "6"; the numeric passthrough exists for future
-// types we haven't aliased yet, so we don't have to ship a new CLI for
-// an operator to support a new provider.
+// TestResolveSellerType covers the alias map + canonical-slug
+// acceptance + case-insensitivity. The point of the alias map is that
+// a user types "claude" and the CLI sends the backend's kind_slug
+// ("anthropic"). Unknown inputs are rejected locally (no numeric
+// passthrough — the backend retired the integer type contract).
 func TestResolveSellerType(t *testing.T) {
 	cases := []struct {
-		in      string
-		wantID  int
-		wantErr bool
+		in       string
+		wantSlug string
+		wantErr  bool
 	}{
-		{"openai", 1, false},
-		{"OpenAI", 1, false}, // case-insensitive
-		{"claude", 6, false},
-		{"anthropic", 6, false}, // both aliases hit the same id
-		{"gemini", 13, false},
-		{"codex", 42, false},
-		{"vertex", 26, false},
-		{"vertexai", 26, false},
-		{"aws", 18, false},
-		{"bedrock", 18, false},
-		{"xai", 33, false},
-		{"grok", 33, false},
-		{"deepseek", 28, false},
-		{"  claude  ", 6, false}, // whitespace tolerated
-		{"42", 42, false},        // numeric passthrough
-		{"99", 99, false},        // unknown numeric: pass through, backend will 422 later
-		{"unknown", 0, true},
-		{"-1", 0, true}, // negative ids never valid
-		{"0", 0, true},
+		{"openai", "openai", false},
+		{"OpenAI", "openai", false}, // case-insensitive
+		{"claude", "anthropic", false},
+		{"anthropic", "anthropic", false}, // canonical slug accepted directly
+		{"gemini", "gemini", false},
+		{"codex", "codex", false},
+		{"vertex", "vertex_ai", false},
+		{"vertexai", "vertex_ai", false},
+		{"vertex_ai", "vertex_ai", false},
+		{"aws", "aws", false},
+		{"bedrock", "aws", false},
+		{"xai", "xai", false},
+		{"grok", "xai", false},
+		{"deepseek", "deepseek", false},
+		{"  claude  ", "anthropic", false}, // whitespace tolerated
+		{"42", "", true},                   // numeric no longer accepted
+		{"unknown", "", true},
+		{"", "", true},
 	}
 	for _, c := range cases {
 		t.Run(c.in, func(t *testing.T) {
-			id, err := resolveSellerType(c.in)
+			slug, err := resolveSellerType(c.in)
 			if (err != nil) != c.wantErr {
 				t.Fatalf("err = %v, wantErr = %v", err, c.wantErr)
 			}
-			if id != c.wantID {
-				t.Errorf("id = %d, want %d", id, c.wantID)
+			if slug != c.wantSlug {
+				t.Errorf("slug = %q, want %q", slug, c.wantSlug)
 			}
 		})
 	}
@@ -185,30 +184,31 @@ func TestSellerTypeChoicesStable(t *testing.T) {
 	}
 }
 
-// TestChannelTypeLabel: when two aliases share an id (claude/anthropic,
-// aws/bedrock, …) the displayed label must be the marketing name we
-// prefer, not whichever string sorts first. Without this guard the
-// label could flip on a stdlib map iteration order change between Go
-// versions.
+// TestChannelTypeLabel: when a slug maps to several aliases
+// (anthropic→claude/anthropic, aws→aws/bedrock, …) the displayed label
+// must be the marketing name we prefer, not whichever string sorts
+// first. Without this guard the label could flip on a stdlib map
+// iteration order change between Go versions.
 func TestChannelTypeLabel(t *testing.T) {
 	cases := []struct {
-		id   int
+		slug string
 		want string
 	}{
-		{1, "openai"},
-		{6, "claude"},  // not "anthropic"
-		{18, "aws"},    // not "bedrock"
-		{26, "vertex"}, // not "vertexai"
-		{33, "xai"},    // not "grok"
-		{13, "gemini"},
-		{28, "deepseek"},
-		{42, "codex"},
-		{999, "type=999"}, // unknown id falls back to raw integer
+		{"openai", "openai"},
+		{"anthropic", "claude"}, // not "anthropic"
+		{"aws", "aws"},          // not "bedrock"
+		{"vertex_ai", "vertex"}, // not "vertexai"
+		{"xai", "xai"},          // not "grok"
+		{"gemini", "gemini"},
+		{"deepseek", "deepseek"},
+		{"codex", "codex"},
+		{"mystery", "mystery"}, // unknown slug falls back to the raw slug
+		{"", ""},
 	}
 	for _, c := range cases {
-		got := channelTypeLabel(c.id)
+		got := channelTypeLabel(c.slug)
 		if got != c.want {
-			t.Errorf("channelTypeLabel(%d) = %q, want %q", c.id, got, c.want)
+			t.Errorf("channelTypeLabel(%q) = %q, want %q", c.slug, got, c.want)
 		}
 	}
 }

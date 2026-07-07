@@ -85,7 +85,7 @@ func runPlans(args []string) error {
 		if p.UpgradeGroup != "" {
 			extra = fmt.Sprintf("  upgrades to group=%s", cliout.Sanitize(p.UpgradeGroup))
 		}
-		cliout.Printf("  [#%d] %s — %g %s / %s%s\n", p.ID, cliout.Sanitize(p.Title), p.PriceAmount, cliout.Sanitize(p.Currency), dur, extra)
+		cliout.Printf("  [#%d] %s — %.2f %s / %s%s\n", p.ID, cliout.Sanitize(p.Title), p.PriceAmount, cliout.Sanitize(p.Currency), dur, extra)
 		if p.Subtitle != "" {
 			cliout.Printf("        %s\n", cliout.Sanitize(p.Subtitle))
 		}

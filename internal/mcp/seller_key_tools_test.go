@@ -123,7 +123,7 @@ func TestHandleSellerAddKey_ValidationShortCircuits(t *testing.T) {
 func TestHandleSellerAddKey_HappyPath(t *testing.T) {
 	var created struct {
 		Name       string   `json:"name"`
-		Type       int      `json:"type"`
+		KindSlug   string   `json:"kind_slug"`
 		Keys       []string `json:"keys"`
 		KeyRemarks []string `json:"key_remarks"`
 		Models     string   `json:"models"`
@@ -153,9 +153,9 @@ func TestHandleSellerAddKey_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The wire request carries the resolved alias and every field.
-	if created.Type != 6 {
-		t.Errorf("type alias not resolved: sent type=%d, want 6", created.Type)
+	// The wire request carries the resolved kind_slug and every field.
+	if created.KindSlug != "anthropic" {
+		t.Errorf("type alias not resolved: sent kind_slug=%q, want \"anthropic\"", created.KindSlug)
 	}
 	if created.Name != "my-claude" || created.Models != "claude-sonnet-4" || created.Remark != "team pool" {
 		t.Errorf("create payload mismatch: %+v", created)
@@ -171,31 +171,25 @@ func TestHandleSellerAddKey_HappyPath(t *testing.T) {
 	}
 }
 
-func TestHandleSellerAddKey_NumericTypePassthrough(t *testing.T) {
+// The backend retired the integer type contract; an unknown or numeric
+// type is rejected locally with the choice list, never forwarded.
+func TestHandleSellerAddKey_UnknownTypeRejected(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/api/seller/eligibility":
-			w.Write([]byte(eligibilityJSON(true)))
-		case "/api/seller/channel":
-			var body struct {
-				Type int `json:"type"`
-			}
-			_ = json.NewDecoder(r.Body).Decode(&body)
-			if body.Type != 99 {
-				t.Errorf("numeric type not passed through: got %d", body.Type)
-			}
-			w.Write([]byte(`{"success":true,"data":{"id":5}}`))
-		default:
-			http.Error(w, "unexpected", 404)
+		if r.URL.Path == "/api/seller/channel" {
+			t.Errorf("unknown type should not reach the create endpoint")
 		}
+		http.Error(w, "unexpected", 404)
 	}))
 	defer srv.Close()
 	withCredentials(t, srv.URL, "tok")
 
 	_, err := handleSellerAddKey(context.Background(), json.RawMessage(
 		`{"name":"n","type":"99","keys":["k"],"models":"m"}`))
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		t.Fatal("expected an unknown-type error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown channel type") {
+		t.Errorf("error should mention unknown channel type, got: %q", err.Error())
 	}
 }
 

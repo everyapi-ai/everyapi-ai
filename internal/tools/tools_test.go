@@ -39,6 +39,12 @@ func TestEnv_Claude(t *testing.T) {
 	if got := env["ANTHROPIC_AUTH_TOKEN"]; got != "my-token" {
 		t.Errorf("ANTHROPIC_AUTH_TOKEN = %q", got)
 	}
+	// ANTHROPIC_API_KEY must be present and empty: mergeEnv overlays it
+	// onto the child env to neutralise any ambient real Anthropic key so
+	// it can't leak to the gateway or shadow ANTHROPIC_AUTH_TOKEN.
+	if got, ok := env["ANTHROPIC_API_KEY"]; !ok || got != "" {
+		t.Errorf("ANTHROPIC_API_KEY = %q (present=%v), want present and empty", got, ok)
+	}
 	// No accidental OpenAI vars leaking through.
 	if _, ok := env["OPENAI_API_KEY"]; ok {
 		t.Error("claude env should not set OPENAI_API_KEY")
@@ -83,6 +89,9 @@ func TestClaudeProviderPreset(t *testing.T) {
 		}
 		if got := env["ANTHROPIC_AUTH_TOKEN"]; got != "my-token" {
 			t.Errorf("%s ANTHROPIC_AUTH_TOKEN = %q", name, got)
+		}
+		if got, ok := env["ANTHROPIC_API_KEY"]; !ok || got != "" {
+			t.Errorf("%s ANTHROPIC_API_KEY = %q (present=%v), want present and empty", name, got, ok)
 		}
 		if _, ok := env["ANTHROPIC_MODEL"]; ok {
 			t.Errorf("%s envFn should not pin ANTHROPIC_MODEL (chosen at launch)", name)

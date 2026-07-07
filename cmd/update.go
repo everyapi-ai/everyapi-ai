@@ -177,12 +177,19 @@ func detectInstallMethod() installMethod {
 	if strings.Contains(exe, string(os.PathSeparator)+"Cellar"+string(os.PathSeparator)) {
 		return installMethodBrew
 	}
-	for _, dir := range goBinDirs() {
-		if dir == "" {
-			continue
-		}
-		if strings.HasPrefix(exe, dir+string(os.PathSeparator)) {
-			return installMethodGoInstall
+	// Only classify as go-install when a Go toolchain is actually on
+	// PATH: a binary can sit under ~/go/bin (a common ad-hoc bin dir)
+	// on a machine with no Go, and `runGoInstallUpgrade` would then exec
+	// `go install …` and die with `exec: "go": executable file not
+	// found`. Without a toolchain, fall through to the manual hint.
+	if _, gerr := exec.LookPath("go"); gerr == nil {
+		for _, dir := range goBinDirs() {
+			if dir == "" {
+				continue
+			}
+			if strings.HasPrefix(exe, dir+string(os.PathSeparator)) {
+				return installMethodGoInstall
+			}
 		}
 	}
 	return installMethodUnknown

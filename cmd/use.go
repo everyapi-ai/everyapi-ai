@@ -119,6 +119,17 @@ func Use(args []string) error {
 		return err
 	}
 
+	// OAuth2 (relay-key) logins carry no management credential, so the
+	// per-group relay-key lookup (uncached ListTokens path) 401s and the
+	// downstream handler mistranslates that into "session expired —
+	// re-login", which re-login cannot fix. Refuse --group/--channel up
+	// front with an actionable message. The default-group path works off
+	// the cached relay key, so only guard when a group was explicitly
+	// requested (flag value or the interactive picker).
+	if creds.OAuthClientID != "" && (group != "" || pickGroup) {
+		return errors.New(i18n.T("use.relay_key_mode_group"))
+	}
+
 	if toolName == "" {
 		toolName, err = interactivePicker()
 		if err != nil {

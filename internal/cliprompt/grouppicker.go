@@ -49,6 +49,14 @@ func PickGrouped(title string, groups []MenuGroup, initial int) (int, error) {
 	}
 	res, err := tea.NewProgram(m).Run()
 	if err != nil {
+		// Ctrl-C / kill surfaces as a bubbletea sentinel rather than
+		// setting the model's canceled flag. Map it to the package's
+		// cancel contract (as the huh-based pickers do with
+		// huh.ErrUserAborted) so the launcher treats it as a clean
+		// back-out instead of a fatal error.
+		if errors.Is(err, tea.ErrInterrupted) || errors.Is(err, tea.ErrProgramKilled) {
+			return -1, ErrPickCancelled
+		}
 		return -1, err
 	}
 	final := res.(groupModel)

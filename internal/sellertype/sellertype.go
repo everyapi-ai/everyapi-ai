@@ -1,58 +1,68 @@
 // Package sellertype is the single source of truth for the
-// human-name ↔ backend-integer mapping of seller-mountable channel
+// human-name ↔ backend kind_slug mapping of seller-mountable channel
 // types. Shared by `everyapi seller …` (cmd/seller) and the MCP
 // seller tools (internal/mcp) so the two surfaces can't drift.
+//
+// The backend retired the numeric `type` column for seller mounts:
+// controller.SellerChannelCreate now binds `kind_slug string` and
+// validates it against a fixed allow-list (openai / anthropic /
+// codex / gemini / vertex_ai / aws / xai / deepseek — see
+// backend/internal/controller/channel_seller.go sellerAllowedChannelKinds).
+// This package therefore maps human aliases to those canonical slugs;
+// sending the old integer id makes the backend drop the field and 422.
 //
 // Error formatting deliberately stays with the callers: the CLI
 // localizes via i18n, the MCP tools speak English only.
 package sellertype
 
 import (
-	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 )
 
-// Aliases maps human names to the server's integer channel type id.
+// Aliases maps accepted human inputs to the backend's canonical
+// kind_slug. Both the marketing spellings (claude, vertex, bedrock,
+// grok) and the canonical slugs themselves are accepted as input so a
+// user can type either; the value is always the exact slug the
+// backend allow-list expects. Keys are lowercase; lookup folds case.
+//
 // Curated to match the server-side allow-list for seller-mounted
-// channels — anything not in that allowed set would 422 at submit,
-// so listing it here would be misleading. Keep the keys lowercase;
-// lookup folds case.
-var Aliases = map[string]int{
-	"openai":    1,
-	"anthropic": 6,
-	"claude":    6,
-	"gemini":    13,
-	"aws":       18,
-	"bedrock":   18,
-	"vertex":    26,
-	"vertexai":  26,
-	"deepseek":  28,
-	"xai":       33,
-	"grok":      33,
-	"codex":     42,
+// channels — anything not in that allowed set would 422 at submit, so
+// listing it here would be misleading.
+var Aliases = map[string]string{
+	"openai":    "openai",
+	"anthropic": "anthropic",
+	"claude":    "anthropic",
+	"gemini":    "gemini",
+	"codex":     "codex",
+	"vertex_ai": "vertex_ai",
+	"vertex":    "vertex_ai",
+	"vertexai":  "vertex_ai",
+	"aws":       "aws",
+	"bedrock":   "aws",
+	"xai":       "xai",
+	"grok":      "xai",
+	"deepseek":  "deepseek",
 }
 
-// Resolve accepts either an alias name (openai / claude / …) or a
-// numeric id straight through. Numeric passthrough is the escape
-// hatch for any allowed type the alias map doesn't list yet, without
-// blocking the user on a CLI release. Reports ok=false when the
-// input is neither — callers format their own error message.
-func Resolve(s string) (id int, ok bool) {
+// Resolve accepts an alias name (openai / claude / vertex / …) or a
+// canonical slug (anthropic / vertex_ai / …) and returns the backend
+// kind_slug. Reports ok=false when the input is neither — callers
+// format their own error message listing Choices(). Unlike the old
+// integer contract there is no numeric passthrough: the slug allow-list
+// is fixed and small, so an unknown input is a typo we should catch
+// locally with a helpful list rather than forward to a backend 422.
+func Resolve(s string) (slug string, ok bool) {
 	s = strings.ToLower(strings.TrimSpace(s))
-	if id, ok := Aliases[s]; ok {
-		return id, true
+	if slug, ok := Aliases[s]; ok {
+		return slug, true
 	}
-	if id, err := strconv.Atoi(s); err == nil && id > 0 {
-		return id, true
-	}
-	return 0, false
+	return "", false
 }
 
 // Choices returns alias names in stable display order. We dedupe
-// across the alias map (claude/anthropic both → 6) and prefer the
-// marketing-recognisable spelling: "claude" not "anthropic",
+// across the alias map (claude/anthropic both → anthropic) and prefer
+// the marketing-recognisable spelling: "claude" not "anthropic",
 // "vertex" not "vertexai".
 func Choices() []string {
 	preferred := []string{"openai", "claude", "gemini", "codex", "vertex", "aws", "xai", "deepseek"}
@@ -67,39 +77,37 @@ func Choices() []string {
 	return out
 }
 
-// Label returns the human alias for a backend integer id, for output
-// rendering. Falls back to the raw id string when the integer is
-// outside our alias map (forward-compat with future types).
-func Label(id int) string {
-	type kv struct {
-		name string
-		id   int
+// Label returns the human alias for a backend kind_slug, for output
+// rendering. Falls back to the raw slug when it is outside our alias
+// map (forward-compat with future kinds).
+func Label(slug string) string {
+	slug = strings.ToLower(strings.TrimSpace(slug))
+	if slug == "" {
+		return ""
 	}
-	pairs := make([]kv, 0, len(Aliases))
-	for n, i := range Aliases {
-		pairs = append(pairs, kv{n, i})
+	// For slugs with multiple aliases, hardcode the preferred display
+	// name instead of relying on alphabetic luck: anthropic→claude,
+	// aws (not bedrock), vertex_ai→vertex, xai (not grok).
+	preferredFor := map[string]string{
+		"anthropic": "claude",
+		"aws":       "aws",
+		"vertex_ai": "vertex",
+		"xai":       "xai",
 	}
-	// Stable iteration so the label for id=6 is deterministically
-	// "claude" (the marketing name we prefer over "anthropic"), even
-	// though both alias to 6. Sort puts the alphabetically-first first;
-	// for the four ambiguous pairs ((anthropic, claude), (aws,
-	// bedrock), (vertex, vertexai), (xai, grok)) we want claude / aws /
-	// vertex / grok respectively. Hardcode the preferred display name
-	// instead of relying on alphabetic luck.
-	preferredFor := map[int]string{
-		6:  "claude",
-		18: "aws",
-		26: "vertex",
-		33: "xai",
-	}
-	if name, ok := preferredFor[id]; ok {
+	if name, ok := preferredFor[slug]; ok {
 		return name
 	}
-	sort.Slice(pairs, func(i, j int) bool { return pairs[i].name < pairs[j].name })
-	for _, p := range pairs {
-		if p.id == id {
-			return p.name
+	// Otherwise return the alias whose canonical slug matches, in a
+	// deterministic order so the label is stable across map iteration.
+	names := make([]string, 0, len(Aliases))
+	for n, s := range Aliases {
+		if s == slug {
+			names = append(names, n)
 		}
 	}
-	return fmt.Sprintf("type=%d", id)
+	if len(names) > 0 {
+		sort.Strings(names)
+		return names[0]
+	}
+	return slug
 }

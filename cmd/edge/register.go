@@ -127,10 +127,12 @@ func edgeRegister(args []string) error {
 		printTokenRescue(reg.Node.ID, gateway, reg.RegistrationToken, metaPath)
 		return fmt.Errorf(i18n.T("edge.register.persist_meta_failed"), err)
 	}
-	if err := os.WriteFile(metaPath, mb, 0o600); err != nil {
+	if err := atomicWriteNodeJSON(metaPath, mb); err != nil {
 		// Disk write failed (ENOSPC / EACCES / disk-full). The raw token
 		// lives nowhere else, so echo it to stdout first so the operator
-		// can hand-create node.json and still start the node.
+		// can hand-create node.json and still start the node. The atomic
+		// temp-then-rename write guarantees a failure here leaves no
+		// truncated node.json behind.
 		printTokenRescue(reg.Node.ID, gateway, reg.RegistrationToken, metaPath)
 		return fmt.Errorf(i18n.T("edge.register.persist_meta_failed"), err)
 	}

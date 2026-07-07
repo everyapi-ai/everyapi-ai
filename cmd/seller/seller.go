@@ -124,7 +124,7 @@ func sellerList(args []string) error {
 	cliout.Printf(i18n.T("seller.list_count")+"\n", len(channels))
 	for _, ch := range channels {
 		cliout.Printf("  [#%d] %s — type=%s status=%s\n",
-			ch.ID, ch.Name, channelTypeLabel(ch.Type), channelStatusLabel(ch.Status))
+			ch.ID, ch.Name, channelTypeLabel(ch.KindSlug), channelStatusLabel(ch.Status))
 		if ch.Models != "" {
 			cliout.Printf("        models: %s\n", ch.Models)
 		}
@@ -245,16 +245,16 @@ func (s *stringSliceFlag) String() string     { return strings.Join(*s, ",") }
 func (s *stringSliceFlag) Set(v string) error { *s = append(*s, v); return nil }
 
 // sellerAddKey wraps POST /api/seller/channel. The type is a human
-// alias (openai / claude / gemini / …) resolved to the backend integer
-// id via sellerChannelTypeAliases; if the user types a number we pass
-// it through, which is the escape hatch for any future type the alias
-// map doesn't list yet.
+// alias (openai / claude / gemini / …) resolved to the backend
+// kind_slug via sellertype.Resolve; an unknown alias is rejected
+// locally with the list of valid choices rather than forwarded to a
+// backend 422.
 func sellerAddKey(args []string) error {
 	parsed, err := parseAddKeyArgs(args)
 	if err != nil {
 		return err
 	}
-	typeID, err := resolveSellerType(parsed.Type)
+	kindSlug, err := resolveSellerType(parsed.Type)
 	if err != nil {
 		return err
 	}
@@ -280,7 +280,7 @@ func sellerAddKey(args []string) error {
 
 	id, err := client.CreateSellerChannel(cliout.WithCtx(), api.SellerChannelCreate{
 		Name:       parsed.Name,
-		Type:       typeID,
+		KindSlug:   kindSlug,
 		Keys:       parsed.Keys,
 		KeyRemarks: parsed.Remarks,
 		Models:     parsed.Models,
@@ -293,7 +293,7 @@ func sellerAddKey(args []string) error {
 	if len(parsed.Keys) > 1 {
 		pool = fmt.Sprintf(i18n.T("seller.key_backup_pool"), len(parsed.Keys))
 	}
-	cliout.Printf(i18n.T("seller.mounted_with_pool"), id, parsed.Name, channelTypeLabel(typeID), pool)
+	cliout.Printf(i18n.T("seller.mounted_with_pool"), id, parsed.Name, channelTypeLabel(kindSlug), pool)
 	cliout.Println(i18n.T("seller.mounted_status_hint"))
 	return nil
 }
@@ -314,7 +314,7 @@ func parseAddKeyArgs(args []string) (*addKeyArgs, error) {
 	a := &addKeyArgs{}
 	var keys stringSliceFlag
 	var remarks stringSliceFlag
-	fs.StringVar(&a.Type, "type", "", "upstream channel type alias (openai / claude / gemini / codex / vertex / aws / xai / deepseek) or numeric id")
+	fs.StringVar(&a.Type, "type", "", "upstream channel type alias (openai / claude / gemini / codex / vertex / aws / xai / deepseek)")
 	fs.StringVar(&a.Name, "name", "", "channel display name (free-form)")
 	fs.Var(&keys, "key", "upstream API key (per-key) — or a Vertex ADC JSON / AWS region+key blob. Repeat the flag for a multi-key backup pool, e.g. --key sk-a --key sk-b")
 	fs.Var(&remarks, "key-remark", "per-key label, repeatable, aligned by position with --key (1st --key-remark labels the 1st --key). For the channel-wide note use --remark instead.")
@@ -651,19 +651,18 @@ func classifySellerErr(err error) error {
 // package-local names are kept as thin delegates so call sites and
 // tests stay untouched; error wording (i18n) stays here because the
 // MCP side is English-only.
-var sellerChannelTypeAliases = sellertype.Aliases
 
-func resolveSellerType(s string) (int, error) {
-	if id, ok := sellertype.Resolve(s); ok {
-		return id, nil
+func resolveSellerType(s string) (string, error) {
+	if slug, ok := sellertype.Resolve(s); ok {
+		return slug, nil
 	}
 	s = strings.ToLower(strings.TrimSpace(s))
-	return 0, fmt.Errorf(i18n.T("seller.unknown_channel_type"), s, strings.Join(sellerTypeChoices(), ", "))
+	return "", fmt.Errorf(i18n.T("seller.unknown_channel_type"), s, strings.Join(sellerTypeChoices(), ", "))
 }
 
 func sellerTypeChoices() []string { return sellertype.Choices() }
 
-func channelTypeLabel(id int) string { return sellertype.Label(id) }
+func channelTypeLabel(slug string) string { return sellertype.Label(slug) }
 
 // Prompt helpers (Line, Optional, Choice, YesNo) live in
 // internal/cliprompt — shared with cmd/proxy and the login flow.

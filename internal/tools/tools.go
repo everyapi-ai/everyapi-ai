@@ -187,6 +187,13 @@ func claudeProviderPreset(name, owner string) *Tool {
 			return map[string]string{
 				"ANTHROPIC_BASE_URL":   joinBase(apiBase, ""),
 				"ANTHROPIC_AUTH_TOKEN": token,
+				// Neutralise any ambient ANTHROPIC_API_KEY: Claude Code
+				// prefers it over ANTHROPIC_AUTH_TOKEN, so a user who has
+				// their real Anthropic key exported would otherwise send
+				// it to the EveryAPI gateway (leaking the key to a third
+				// party) and/or break relay auth. mergeEnv overlays this
+				// empty value onto the child's env.
+				"ANTHROPIC_API_KEY": "",
 			}
 		},
 	}
@@ -228,6 +235,11 @@ var Registry = map[string]*Tool{
 			return map[string]string{
 				"ANTHROPIC_BASE_URL":   joinBase(apiBase, ""),
 				"ANTHROPIC_AUTH_TOKEN": token,
+				// See claudeProviderPreset: clear any ambient
+				// ANTHROPIC_API_KEY so the user's real Anthropic key is
+				// never forwarded to the gateway and can't shadow the
+				// relay token.
+				"ANTHROPIC_API_KEY": "",
 			}
 		},
 	},

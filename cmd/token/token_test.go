@@ -1,10 +1,25 @@
 package token
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 )
+
+// TestRunCreateRequiresQuota locks the boundary guard: `token create`
+// with neither --unlimited nor a positive --quota must be refused
+// before any network call, so we never mint an enabled 0-quota token
+// that `everyapi use` would select and then fail every relay on.
+func TestRunCreateRequiresQuota(t *testing.T) {
+	err := runCreate([]string{"--name", "x"})
+	if err == nil {
+		t.Fatal("expected an error when neither --quota nor --unlimited is set")
+	}
+	if !strings.Contains(err.Error(), "quota") {
+		t.Errorf("error should mention quota, got: %v", err)
+	}
+}
 
 func TestExpiresValue(t *testing.T) {
 	cases := []struct {

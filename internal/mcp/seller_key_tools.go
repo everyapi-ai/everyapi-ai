@@ -104,7 +104,7 @@ var sellerAddKeySchema = json.RawMessage(`{
     },
     "type": {
       "type": "string",
-      "description": "Upstream provider: openai, claude, gemini, codex, vertex, aws, xai, deepseek — or a numeric channel-type id for providers not in that list."
+      "description": "Upstream provider: openai, claude, gemini, codex, vertex, aws, xai, deepseek."
     },
     "keys": {
       "type": "array",
@@ -159,9 +159,9 @@ func handleSellerAddKey(ctx context.Context, raw json.RawMessage) (string, error
 	if err := validateAddKeyArgs(&args); err != nil {
 		return "", err
 	}
-	typeID, ok := sellertype.Resolve(args.Type)
+	kindSlug, ok := sellertype.Resolve(args.Type)
 	if !ok {
-		return "", fmt.Errorf("unknown channel type %q — use one of %s, or a numeric channel-type id",
+		return "", fmt.Errorf("unknown channel type %q — use one of %s",
 			cliout.Sanitize(args.Type), strings.Join(sellertype.Choices(), ", "))
 	}
 
@@ -179,7 +179,7 @@ func handleSellerAddKey(ctx context.Context, raw json.RawMessage) (string, error
 
 	id, err := client.CreateSellerChannel(ctx, api.SellerChannelCreate{
 		Name:       args.Name,
-		Type:       typeID,
+		KindSlug:   kindSlug,
 		Keys:       args.Keys,
 		KeyRemarks: args.KeyRemarks,
 		Models:     args.Models,
@@ -195,7 +195,7 @@ func handleSellerAddKey(ctx context.Context, raw json.RawMessage) (string, error
 	return fmt.Sprintf("Mounted seller channel #%d: %s (type=%s)%s.\n"+
 		"It starts enabled and serves marketplace traffic once the platform's health probe passes.\n"+
 		"Manage it at %s/seller/channels or via everyapi_seller_list.",
-		id, cliout.Sanitize(args.Name), sellertype.Label(typeID), pool, api.WebOriginFromBase(creds.APIBase)), nil
+		id, cliout.Sanitize(args.Name), sellertype.Label(kindSlug), pool, api.WebOriginFromBase(creds.APIBase)), nil
 }
 
 // validateAddKeyArgs enforces the same hard requirements as the CLI

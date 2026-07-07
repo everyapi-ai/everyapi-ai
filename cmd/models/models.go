@@ -10,9 +10,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -171,7 +171,10 @@ func runGroups(args []string) error {
 	cliout.Printf("%d routing group(s):\n", len(names))
 	for _, n := range names {
 		g := groups[n]
-		ratio := fmt.Sprintf("%v", g.Ratio)
+		// g.Ratio is `any` (the backend may send a number or a string),
+		// so the formatted value is attacker-influenced text — sanitize
+		// it like every other server-sourced field printed here.
+		ratio := cliout.Sanitize(fmt.Sprintf("%v", g.Ratio))
 		cliout.Printf("  %-12s  ratio=%-6s  %s\n", cliout.Sanitize(n), ratio, cliout.Sanitize(g.Desc))
 	}
 	return nil

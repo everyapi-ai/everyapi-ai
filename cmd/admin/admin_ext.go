@@ -287,11 +287,37 @@ func adminChannelTag(args []string) error {
 	fs := flag.NewFlagSet("admin channel tag", flag.ContinueOnError)
 	enable := fs.Bool("enable", false, "enable every channel carrying the tag")
 	disable := fs.Bool("disable", false, "disable every channel carrying the tag")
+	yes := fs.Bool("y", false, "skip confirmation")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
 	if *enable == *disable {
 		return errors.New("pass exactly one of --enable / --disable")
+	}
+	// This mutates EVERY channel carrying the tag in one shot — confirm
+	// before firing (same gate as `admin user delete`). Non-interactive
+	// callers must pass -y so a scripted bulk change is explicit, not
+	// accidental.
+	if !*yes {
+		confirmKey := "admin.channel.tag_confirm_disable"
+		if *enable {
+			confirmKey = "admin.channel.tag_confirm_enable"
+		}
+		if !cliprompt.IsInteractive() {
+			return errors.New(i18n.T("token.revoke_needs_confirm"))
+		}
+		ok, err := cliprompt.YesNo(
+			bufio.NewReader(os.Stdin),
+			fmt.Sprintf(i18n.T(confirmKey), tag),
+			false,
+		)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			cliout.Println(mutedText("common.canceled"))
+			return nil
+		}
 	}
 	client, err := newClient()
 	if err != nil {
