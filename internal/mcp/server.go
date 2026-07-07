@@ -296,6 +296,12 @@ func dispatch(req *jsonRPCRequest, tools map[string]*Tool, log io.Writer) jsonRP
 		// initialize. Nothing to do — caller drops the response because
 		// the method is in the notifications/* namespace.
 		resp.Result = nil
+	case "ping":
+		// MCP utility method: the receiver MUST reply promptly with an
+		// empty result. Hosts use it for keepalive; answering with a
+		// method-not-found error would make a strict host treat the
+		// server as dead and tear down the stdio session.
+		resp.Result = map[string]any{}
 	default:
 		resp.Error = &jsonRPCError{
 			Code:    errMethodNotFound,

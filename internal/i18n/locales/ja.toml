@@ -664,6 +664,7 @@ everyapi inbox notify — アプリ内通知
 '''
 
 [dm]
+threads_of_total = "%d 件 / 全 %d 件のスレッド:"
 no_threads = "DM スレッドはありません。"
 no_contacts = "DM 連絡先がまだいません。"
 no_messages = "(メッセージなし)"
@@ -703,6 +704,8 @@ aff_transfer_usage = "使用法: everyapi account user aff transfer <amount> [-y
 aff_transfer_bad_amount = "無効な金額 %q（正の整数、ゲートウェイのクォータ単位である必要があります）"
 aff_transfer_confirm = "アフィリエイト報酬からメイン残高へ $%.2f（%d 単位）を振り替えますか？"
 aff_transfer_ok = "メイン残高へ $%.2f を振り替えました。"
+aff_transfer_confirm_no_usd = "アフィリエイト報酬からメイン残高へ %d 単位を振り替えますか？（USD換算は利用不可）"
+aff_transfer_ok_no_usd = "メイン残高へ %d 単位を振り替えました（USD換算は利用不可 — ウォレットをご確認ください）。"
 oauth_usage = "使い方: everyapi account user oauth {list|unbind <provider_id>}"
 passkey_dashboard_gated = "passkey ステータスは dashboard session cookie に依存します — passkey 管理は Web UI を使ってください"
 passkey_registered_last_used = "Passkey 登録済み。最終使用: %s"
@@ -769,6 +772,12 @@ no_plans = "有効なサブスクリプションプランがありません。"
 plans_count = "%d 個のプラン:"
 preference_updated = "課金設定を %q に更新しました。"
 current_preference = "現在の請求設定: %s"
+preference_normalized = "注意: バックエンドが %q を %q に正規化しました。"
+self_billing_preference = "課金設定: %s"
+self_no_active = "有効なサブスクリプションはありません。"
+self_no_all = "サブスクリプションはありません。"
+self_count_active = "有効なサブスクリプション %d 件:"
+self_count_all = "サブスクリプション %d 件:"
 set_hint = "--set <value> で変更します。未知の値はバックエンドで既定値に正規化されます。"
 usage = '''
 everyapi account subscription — サブスクリプションプラン / 自分の契約 / 設定
@@ -780,7 +789,7 @@ everyapi account subscription — サブスクリプションプラン / 自分�
   plans                            有効なサブスクリプションプランを一覧
   self                             有効 + 過去のサブスクリプションを表示
   preference --set <value>         課金設定を更新
-                                   (例: "topup" / "subscription" / "subscription_first")
+                                   (subscription_first / wallet_first / subscription_only / wallet_only)
                                    バックエンドが不明な値を正規化します。
 注意
   プラン購入はブラウザ操作です — 'everyapi wallet topup' でフィッシング対策

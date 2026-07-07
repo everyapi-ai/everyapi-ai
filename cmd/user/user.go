@@ -470,8 +470,10 @@ func runAffTransfer(client *api.Client, args []string) error {
 	// /api/status round-trip; fall back to raw DB units on the rare
 	// failure rather than blocking the transfer.
 	perUnit := 1.0
+	haveUSD := false
 	if status, sErr := client.GetStatus(cliout.WithCtx()); sErr == nil && status.QuotaPerUnit > 0 {
 		perUnit = status.QuotaPerUnit
+		haveUSD = true
 	}
 	usd := float64(amount) / perUnit
 	if !yes {
@@ -480,7 +482,16 @@ func runAffTransfer(client *api.Client, args []string) error {
 			// silently transferring. Require explicit -y for non-interactive use.
 			return errors.New("refusing to transfer without confirmation; pass -y to transfer non-interactively")
 		}
-		ok, err := cliprompt.YesNo(bufio.NewReader(os.Stdin), fmt.Sprintf(i18n.T("user.aff_transfer_confirm"), usd, amount), false)
+		// Without a quota→USD divisor, dividing raw units by 1.0 and
+		// labelling it "$" overstates the value by QuotaPerUnit (default
+		// 500000×), so show a unit-neutral confirm instead of a bogus $.
+		var prompt string
+		if haveUSD {
+			prompt = fmt.Sprintf(i18n.T("user.aff_transfer_confirm"), usd, amount)
+		} else {
+			prompt = fmt.Sprintf(i18n.T("user.aff_transfer_confirm_no_usd"), amount)
+		}
+		ok, err := cliprompt.YesNo(bufio.NewReader(os.Stdin), prompt, false)
 		if err != nil {
 			return err
 		}
@@ -492,7 +503,11 @@ func runAffTransfer(client *api.Client, args []string) error {
 	if err := client.TransferAffQuota(cliout.WithCtx(), amount); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf(i18n.T("user.aff_transfer_ok")+"\n", usd)
+	if haveUSD {
+		cliout.Printf(i18n.T("user.aff_transfer_ok")+"\n", usd)
+	} else {
+		cliout.Printf(i18n.T("user.aff_transfer_ok_no_usd")+"\n", amount)
+	}
 	return nil
 }
 

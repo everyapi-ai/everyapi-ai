@@ -103,7 +103,7 @@ func runList(args []string, mine bool) error {
 		cliout.Println(i18n.T("demand.no_rows"))
 		return nil
 	}
-	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)
+	cliout.Printf(i18n.T("common.rows_of_total")+"\n", len(rows), total)
 	// perUnit converts the stored quota-unit ceiling back to the USD/1M
 	// figure `submit --max-price` accepts. Fetched once (not per row).
 	perUnit := demandQuotaPerUnit(client)

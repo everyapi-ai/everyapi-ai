@@ -672,6 +672,7 @@ SUBCOMANDOS
 '''
 
 [dm]
+threads_of_total = "%d hilo(s) de %d total:"
 no_threads = "Sin hilos de DM."
 no_contacts = "Aún no hay contactos de DM."
 no_messages = "(sin mensajes)"
@@ -711,6 +712,8 @@ aff_transfer_usage = "uso: everyapi account user aff transfer <cantidad> [-y]"
 aff_transfer_bad_amount = "cantidad no válida %q (debe ser un entero positivo, en unidades de cuota del gateway)"
 aff_transfer_confirm = "¿Transferir $%.2f (%d unidades) de las recompensas de afiliado a tu saldo principal?"
 aff_transfer_ok = "Transferidos $%.2f a tu saldo principal."
+aff_transfer_confirm_no_usd = "¿Transferir %d unidades de cuota de las recompensas de afiliado a tu saldo principal? (valor en USD no disponible)"
+aff_transfer_ok_no_usd = "Transferidas %d unidades de cuota a tu saldo principal (valor en USD no disponible — consulta tu monedero)."
 oauth_usage = "Uso: everyapi account user oauth {list|unbind <provider_id>}"
 passkey_dashboard_gated = "el estado de passkey depende de la cookie de sesión del dashboard — usa la UI web para gestionar passkey"
 passkey_registered_last_used = "Passkey registrada. Última vez usada: %s"
@@ -777,6 +780,12 @@ no_plans = "No hay planes de suscripción habilitados."
 plans_count = "%d plan(es):"
 preference_updated = "Preferencia de facturación actualizada a %q."
 current_preference = "Preferencia de facturación actual: %s"
+preference_normalized = "Nota: el backend normalizó %q a %q."
+self_billing_preference = "Preferencia de facturación: %s"
+self_no_active = "Sin suscripciones activas."
+self_no_all = "Sin suscripciones."
+self_count_active = "%d suscripción(es) activa(s):"
+self_count_all = "%d suscripción(es):"
 set_hint = "Usa --set <valor> para cambiar. El backend normaliza los valores desconocidos al predeterminado."
 usage = '''
 everyapi account subscription — planes de suscripción / mi cuenta / preferencia
@@ -788,7 +797,7 @@ SUBCOMANDOS
   plans                            Listar planes de suscripción habilitados
   self                             Mostrar tus suscripciones activas + pasadas
   preference --set <valor>         Actualizar preferencia de facturación
-                                   (comunes: "topup" / "subscription" / "subscription_first")
+                                   (subscription_first / wallet_first / subscription_only / wallet_only)
                                    El backend normaliza valores desconocidos.
 
 NOTA

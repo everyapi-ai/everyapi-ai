@@ -653,6 +653,7 @@ everyapi inbox notify — 站内通知
 '''
 
 [dm]
+threads_of_total = "共 %d 个会话，总计 %d 个："
 no_threads = "无私信会话。"
 no_contacts = "暂无私信联系人。"
 no_messages = "（无消息）"
@@ -692,6 +693,8 @@ aff_transfer_usage = "用法：everyapi account user aff transfer <数量> [-y]"
 aff_transfer_bad_amount = "无效数量 %q（必须是正整数，单位为网关额度）"
 aff_transfer_confirm = "把 $%.2f（%d 个额度）从推广返佣转入主余额？"
 aff_transfer_ok = "已转入 $%.2f 到主余额。"
+aff_transfer_confirm_no_usd = "把 %d 个额度从推广返佣转入主余额？（暂无法换算美元）"
+aff_transfer_ok_no_usd = "已转入 %d 个额度到主余额（暂无法换算美元 — 请查看钱包）。"
 oauth_usage = "用法：everyapi account user oauth {list|unbind <provider_id>}"
 passkey_dashboard_gated = "passkey 状态受 dashboard session cookie 限制 — 请通过网页 UI 管理 passkey"
 passkey_registered_last_used = "Passkey 已注册。上次使用：%s"
@@ -757,6 +760,12 @@ no_plans = "无可用订阅计划。"
 plans_count = "共 %d 个计划："
 preference_updated = "计费偏好已更新为 %q。"
 current_preference = "当前计费偏好：%s"
+preference_normalized = "注意：后端已将 %q 归一化为 %q。"
+self_billing_preference = "计费偏好：%s"
+self_no_active = "没有活跃的订阅。"
+self_no_all = "没有订阅。"
+self_count_active = "%d 个活跃订阅："
+self_count_all = "%d 个订阅："
 set_hint = "使用 --set <value> 修改。未知值会被后端归一化到默认值。"
 usage = '''
 everyapi account subscription — 订阅计划 / 我的订阅 / 计费偏好
@@ -768,7 +777,7 @@ everyapi account subscription — 订阅计划 / 我的订阅 / 计费偏好
   plans                            列出已启用的订阅计划
   self                             查看你的当前与历史订阅
   preference --set <值>            更新计费偏好
-                                   （常用："topup" / "subscription" / "subscription_first"）
+                                   （subscription_first / wallet_first / subscription_only / wallet_only）
                                    后端会将未知值归一化。
 
 说明

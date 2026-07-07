@@ -137,7 +137,7 @@ func runThreads(args []string) error {
 		cliout.Println(i18n.T("dm.no_threads"))
 		return nil
 	}
-	cliout.Printf("%d thread(s) of %d total:\n", len(rows), total)
+	cliout.Printf(i18n.T("dm.threads_of_total")+"\n", len(rows), total)
 	me := myUserID()
 	for _, t := range rows {
 		when := time.Unix(t.LastMessageAt, 0).Format("01-02 15:04")

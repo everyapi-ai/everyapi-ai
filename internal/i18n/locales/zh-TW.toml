@@ -652,6 +652,7 @@ everyapi inbox notify — 站內通知
 '''
 
 [dm]
+threads_of_total = "共 %d 個對話，總計 %d 個："
 no_threads = "無私訊對話。"
 no_contacts = "尚無私訊聯絡人。"
 no_messages = "（無訊息）"
@@ -691,6 +692,8 @@ aff_transfer_usage = "用法：everyapi account user aff transfer <數量> [-y]"
 aff_transfer_bad_amount = "無效數量 %q（必須是正整數，單位為閘道額度）"
 aff_transfer_confirm = "把 $%.2f（%d 個額度）從推廣返佣轉入主餘額？"
 aff_transfer_ok = "已轉入 $%.2f 到主餘額。"
+aff_transfer_confirm_no_usd = "把 %d 個額度從推廣返佣轉入主餘額？（暫時無法換算美元）"
+aff_transfer_ok_no_usd = "已轉入 %d 個額度到主餘額（暫時無法換算美元 — 請查看錢包）。"
 oauth_usage = "用法：everyapi account user oauth {list|unbind <provider_id>}"
 passkey_dashboard_gated = "passkey 狀態受 dashboard session cookie 限制 — 請透過網頁 UI 管理 passkey"
 passkey_registered_last_used = "Passkey 已註冊。上次使用：%s"
@@ -756,6 +759,12 @@ no_plans = "無可用訂閱方案。"
 plans_count = "共 %d 個方案："
 preference_updated = "計費偏好已更新為 %q。"
 current_preference = "目前計費偏好：%s"
+preference_normalized = "注意：後端已將 %q 正規化為 %q。"
+self_billing_preference = "計費偏好：%s"
+self_no_active = "沒有使用中的訂閱。"
+self_no_all = "沒有訂閱。"
+self_count_active = "%d 個使用中的訂閱："
+self_count_all = "%d 個訂閱："
 set_hint = "使用 --set <value> 修改。未知值會被後端正規化到預設值。"
 usage = '''
 everyapi account subscription — 訂閱方案 / 我的訂閱 / 計費偏好
@@ -767,7 +776,7 @@ everyapi account subscription — 訂閱方案 / 我的訂閱 / 計費偏好
   plans                            列出已啟用的訂閱方案
   self                             查看你的目前與歷史訂閱
   preference --set <值>            更新計費偏好
-                                   （常用："topup" / "subscription" / "subscription_first"）
+                                   （subscription_first / wallet_first / subscription_only / wallet_only）
                                    後端會將未知值正規化。
 
 說明

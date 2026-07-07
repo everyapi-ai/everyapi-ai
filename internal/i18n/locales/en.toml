@@ -656,6 +656,7 @@ SUBCOMMANDS
 '''
 
 [dm]
+threads_of_total = "%d thread(s) of %d total:"
 no_threads = "No DM threads."
 no_contacts = "No DM contacts yet."
 no_messages = "(no messages)"
@@ -695,6 +696,8 @@ aff_transfer_usage = "usage: everyapi account user aff transfer <amount> [-y]"
 aff_transfer_bad_amount = "invalid amount %q (must be a positive integer, in gateway quota units)"
 aff_transfer_confirm = "Transfer $%.2f (%d units) from affiliate rewards to your main balance?"
 aff_transfer_ok = "Transferred $%.2f to your main balance."
+aff_transfer_confirm_no_usd = "Transfer %d quota units from affiliate rewards to your main balance? (USD value unavailable)"
+aff_transfer_ok_no_usd = "Transferred %d quota units to your main balance (USD value unavailable — see your wallet)."
 oauth_usage = "Usage: everyapi account user oauth {list|unbind <provider_id>}"
 passkey_dashboard_gated = "passkey status is gated on the dashboard session cookie — use the web UI for passkey management"
 passkey_registered_last_used = "Passkey registered. Last used: %s"
@@ -761,6 +764,12 @@ no_plans = "No enabled subscription plans."
 plans_count = "%d plan(s):"
 preference_updated = "Billing preference updated to %q."
 current_preference = "Current billing preference: %s"
+preference_normalized = "Note: the backend normalised %q to %q."
+self_billing_preference = "Billing preference: %s"
+self_no_active = "No active subscriptions."
+self_no_all = "No subscriptions."
+self_count_active = "%d active subscription(s):"
+self_count_all = "%d subscription(s):"
 set_hint = "Use --set <value> to change. Backend normalises unknown values to the default."
 usage = '''
 everyapi account subscription — subscription plans / self / preference
@@ -772,7 +781,7 @@ SUBCOMMANDS
   plans                            List enabled subscription plans
   self                             Show your active + past subscriptions
   preference --set <value>         Update billing preference
-                                   (commonly: "topup" / "subscription" / "subscription_first")
+                                   (subscription_first / wallet_first / subscription_only / wallet_only)
                                    Backend normalises unknown values.
 
 NOTE

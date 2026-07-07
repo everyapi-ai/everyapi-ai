@@ -305,7 +305,15 @@ func runUsage(args []string) error {
 		cliout.Printf("  %-12s %d\n", i18n.T("token.usage_granted"), u.TotalGranted)
 	}
 	cliout.Printf("  %-12s %d\n", i18n.T("token.usage_used"), u.TotalUsed)
-	cliout.Printf("  %-12s %s\n", i18n.T("token.label.expires"), expiresLabel(u.ExpiresAt))
+	// The /api/usage/token endpoint normalizes a never-expiry token to
+	// expires_at=0 (the management API uses -1). expiresLabel only knows
+	// the -1 sentinel, so map 0 -> never here rather than rendering
+	// time.Unix(0,0) = 1970-01-01.
+	usageExpires := u.ExpiresAt
+	if usageExpires == 0 {
+		usageExpires = api.TokenExpiresNever
+	}
+	cliout.Printf("  %-12s %s\n", i18n.T("token.label.expires"), expiresLabel(usageExpires))
 	if u.ModelLimitsEnabled && len(u.ModelLimits) > 0 {
 		ms := make([]string, 0, len(u.ModelLimits))
 		for m := range u.ModelLimits {

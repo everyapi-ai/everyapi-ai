@@ -281,6 +281,31 @@ func TestServe_UnknownMethod(t *testing.T) {
 	}
 }
 
+// TestServe_Ping pins the MCP `ping` utility method: the receiver MUST
+// reply with an empty result, NOT a method-not-found error (a strict
+// host would treat the error as a dead server and tear down the session).
+func TestServe_Ping(t *testing.T) {
+	input := `{"jsonrpc":"2.0","id":9,"method":"ping"}` + "\n"
+	resps := runWithTools(t, input, nil)
+	if len(resps) != 1 {
+		t.Fatalf("want 1 response, got %d", len(resps))
+	}
+	r := decodeResp(t, resps[0])
+	if r.Error != nil {
+		t.Fatalf("ping must not error, got %+v", r.Error)
+	}
+	if r.Result == nil {
+		t.Fatal("ping result should be a (non-nil) empty object")
+	}
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal(r.Result.(json.RawMessage), &body); err != nil {
+		t.Fatalf("ping result should be a JSON object: %v", err)
+	}
+	if len(body) != 0 {
+		t.Errorf("ping result should be empty, got %v", body)
+	}
+}
+
 // ---- notifications --------------------------------------------------
 
 func TestServe_NotificationDropped(t *testing.T) {

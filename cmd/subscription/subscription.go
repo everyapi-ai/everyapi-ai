@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
@@ -120,18 +121,24 @@ func runSelf(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf("Billing preference: %s\n\n", cliout.Sanitize(self.BillingPreference))
+	cliout.Printf(i18n.T("subscription.self_billing_preference")+"\n\n", cliout.Sanitize(self.BillingPreference))
 	rows := self.Subscriptions
-	label := "active"
 	if *all {
 		rows = self.AllSubscriptions
-		label = "all"
 	}
 	if len(rows) == 0 {
-		cliout.Printf("No %s subscriptions.\n", label)
+		if *all {
+			cliout.Println(i18n.T("subscription.self_no_all"))
+		} else {
+			cliout.Println(i18n.T("subscription.self_no_active"))
+		}
 		return nil
 	}
-	cliout.Printf("%d %s subscription(s):\n", len(rows), label)
+	if *all {
+		cliout.Printf(i18n.T("subscription.self_count_all")+"\n", len(rows))
+	} else {
+		cliout.Printf(i18n.T("subscription.self_count_active")+"\n", len(rows))
+	}
 	for _, s := range rows {
 		sub := s.Subscription
 		expires := "never"
@@ -150,7 +157,7 @@ func runSelf(args []string) error {
 
 func runPreference(args []string) error {
 	fs := flag.NewFlagSet("subscription preference", flag.ContinueOnError)
-	set := fs.String("set", "", "new billing preference (e.g. topup / subscription / subscription_first)")
+	set := fs.String("set", "", "new billing preference: subscription_first / wallet_first / subscription_only / wallet_only")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -171,6 +178,17 @@ func runPreference(args []string) error {
 	if err := client.UpdateSubscriptionPreference(cliout.WithCtx(), *set); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf(i18n.T("subscription.preference_updated")+"\n", *set)
+	// The backend silently normalises an unrecognised value to a default
+	// instead of rejecting it, so echoing the raw input would falsely
+	// confirm a typo as applied. Re-read and report the SERVER's stored
+	// value, warning when it differs from what was requested.
+	applied := strings.TrimSpace(*set)
+	if self, rErr := client.GetSubscriptionSelf(cliout.WithCtx()); rErr == nil {
+		applied = self.BillingPreference
+	}
+	cliout.Printf(i18n.T("subscription.preference_updated")+"\n", cliout.Sanitize(applied))
+	if requested := strings.TrimSpace(*set); requested != applied {
+		cliout.Printf(i18n.T("subscription.preference_normalized")+"\n", cliout.Sanitize(requested), cliout.Sanitize(applied))
+	}
 	return nil
 }

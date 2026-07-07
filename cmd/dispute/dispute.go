@@ -110,7 +110,7 @@ func runList(args []string) error {
 		return nil
 	}
 	me := creds.UserID
-	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)
+	cliout.Printf(i18n.T("common.rows_of_total")+"\n", len(rows), total)
 	for _, d := range rows {
 		when := time.Unix(d.OpenedAt, 0).Format("2006-01-02")
 		// Describe the OTHER party relative to me, and which side I'm on.

@@ -670,6 +670,7 @@ UNTERBEFEHLE
 '''
 
 [dm]
+threads_of_total = "%d Thread(s) von %d insgesamt:"
 no_threads = "Keine DM-Threads."
 no_contacts = "Noch keine DM-Kontakte."
 no_messages = "(keine Nachrichten)"
@@ -709,6 +710,8 @@ aff_transfer_usage = "Verwendung: everyapi account user aff transfer <Betrag> [-
 aff_transfer_bad_amount = "ungültiger Betrag %q (muss eine positive ganze Zahl in Gateway-Quota-Einheiten sein)"
 aff_transfer_confirm = "$%.2f (%d Einheiten) von den Affiliate-Belohnungen auf dein Hauptsaldo übertragen?"
 aff_transfer_ok = "$%.2f auf dein Hauptsaldo übertragen."
+aff_transfer_confirm_no_usd = "%d Kontingenteinheiten von den Affiliate-Belohnungen auf dein Hauptsaldo übertragen? (USD-Wert nicht verfügbar)"
+aff_transfer_ok_no_usd = "%d Kontingenteinheiten auf dein Hauptsaldo übertragen (USD-Wert nicht verfügbar — siehe deine Wallet)."
 oauth_usage = "Verwendung: everyapi account user oauth {list|unbind <provider_id>}"
 passkey_dashboard_gated = "Passkey-Status ist an das Dashboard-Session-Cookie gebunden — nutze die Web-UI für die Passkey-Verwaltung"
 passkey_registered_last_used = "Passkey registriert. Zuletzt verwendet: %s"
@@ -775,6 +778,12 @@ no_plans = "Keine aktivierten Abopläne."
 plans_count = "%d Plan/Pläne:"
 preference_updated = "Abrechnungspräferenz auf %q aktualisiert."
 current_preference = "Aktuelle Abrechnungseinstellung: %s"
+preference_normalized = "Hinweis: Das Backend hat %q zu %q normalisiert."
+self_billing_preference = "Abrechnungspräferenz: %s"
+self_no_active = "Keine aktiven Abonnements."
+self_no_all = "Keine Abonnements."
+self_count_active = "%d aktive(s) Abonnement(s):"
+self_count_all = "%d Abonnement(s):"
 set_hint = "Mit --set <Wert> ändern. Unbekannte Werte werden vom Backend auf den Standardwert normalisiert."
 usage = '''
 everyapi account subscription — Abopläne / eigene Abos / Präferenz
@@ -786,7 +795,7 @@ UNTERBEFEHLE
   plans                            Aktivierte Abopläne auflisten
   self                             Aktive + vergangene Abos anzeigen
   preference --set <Wert>          Abrechnungspräferenz aktualisieren
-                                   (üblich: "topup" / "subscription" / "subscription_first")
+                                   (subscription_first / wallet_first / subscription_only / wallet_only)
                                    Das Backend normalisiert unbekannte Werte.
 
 HINWEIS

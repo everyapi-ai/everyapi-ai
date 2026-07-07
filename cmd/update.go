@@ -547,12 +547,17 @@ func renderChangelog(rel *latestRelease) {
 			if line == "" {
 				cliout.Println("")
 			} else {
-				cliout.Printf("  %s\n", line)
+				// The release body is GitHub/goreleaser's changelog, built
+				// from merged PR titles and commit subjects — server-relayed,
+				// contributor-influenceable text. cleanReleaseNotes only
+				// strips markdown, not ESC/CSI/OSC or C0/C1 controls, so
+				// sanitize before printing like every other untrusted sink.
+				cliout.Printf("  %s\n", cliout.Sanitize(line))
 			}
 		}
 	}
 	if rel.HTMLURL != "" {
-		cliout.Printf("\n"+i18n.T("update.full_release")+"\n", rel.HTMLURL)
+		cliout.Printf("\n"+i18n.T("update.full_release")+"\n", cliout.Sanitize(rel.HTMLURL))
 	}
 	cliout.Println("──────────────────")
 	cliout.Println("")
