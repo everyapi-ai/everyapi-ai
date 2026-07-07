@@ -1271,6 +1271,7 @@ install_prompt = "現在安裝 %s 嗎？"
 installing = "正在安裝 %s ……"
 installed = "%s 已安裝。"
 installed_not_on_path = "%s 已安裝，但還不在 $PATH 中。請開啟新的 shell，或將安裝器的 bin 目錄加入 PATH。"
+installed_not_on_path_dirs = "%[1]s 已安裝，但在 $PATH 和 npm 全域 bin 中都找不到（已搜尋：%[2]s）。請將 npm 全域 bin 目錄加入 PATH，或開啟新的 shell 後重試。"
 installer_missing = "%[1]s 尚未安裝，但其安裝器需要 %[2]q，而它不在你的 PATH 中（透過版本管理器以 shell 函式形式提供的 npm 在這裡不可見）。請先安裝 %[2]s 再重試，或自行安裝 %[1]s：\n  %[3]s"
 
 [upstream]

@@ -33,7 +33,7 @@ import (
 // callers can forward user-supplied flags (e.g.
 // `--dangerously-skip-permissions` for claude). nil is fine.
 func Exec(t *Tool, env map[string]string, extraArgs []string) error {
-	path, err := exec.LookPath(t.ExecName)
+	path, err := ResolveExec(t)
 	if err != nil {
 		return &ErrToolNotFound{Tool: t}
 	}

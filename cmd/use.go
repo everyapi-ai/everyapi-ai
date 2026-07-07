@@ -1008,6 +1008,10 @@ func ensureToolInstalled(t *tools.Tool) error {
 	if err := tools.RunInstall(t); err != nil {
 		var notOnPath *tools.ErrInstalledButNotOnPath
 		if errors.As(err, &notOnPath) {
+			if len(notOnPath.Dirs) > 0 {
+				return fmt.Errorf(i18n.T("use.installed_not_on_path_dirs"),
+					notOnPath.Tool.ExecName, strings.Join(notOnPath.Dirs, ", "))
+			}
 			return fmt.Errorf(i18n.T("use.installed_not_on_path"), notOnPath.Tool.ExecName)
 		}
 		return err

@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"time"
 
 	"golang.org/x/term"
@@ -135,7 +134,7 @@ func Run(args []string) error {
 			if err != nil {
 				return "", "", err
 			}
-			path, err := exec.LookPath(t.ExecName)
+			path, err := tools.ResolveExec(t)
 			if err != nil {
 				return "", t.InstallHint, errSoft("not on PATH")
 			}

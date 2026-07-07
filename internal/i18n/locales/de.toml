@@ -1300,6 +1300,7 @@ install_prompt = "%s jetzt installieren?"
 installing = "Installiere %s ..."
 installed = "%s installiert."
 installed_not_on_path = "%s wurde installiert, ist aber noch nicht in $PATH. Öffne eine neue Shell oder füge das Bin-Verzeichnis des Installers zu PATH hinzu."
+installed_not_on_path_dirs = "%[1]s wurde installiert, aber weder in $PATH noch im globalen npm-Bin gefunden (durchsucht: %[2]s). Füge das globale npm-Bin-Verzeichnis zu PATH hinzu oder öffne eine neue Shell und versuche es erneut."
 installer_missing = "%[1]s ist nicht installiert, aber sein Installer benötigt %[2]q, das nicht in deinem PATH liegt (ein npm, das ein Versionsmanager nur als Shell-Funktion bereitstellt, ist hier nicht sichtbar). Installiere %[2]s und versuche es erneut, oder installiere %[1]s selbst:\n  %[3]s"
 
 [upstream]
