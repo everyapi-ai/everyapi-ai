@@ -48,16 +48,18 @@ func Install(args []string) error {
 	}
 
 	argv := c.AddArgv("everyapi", "everyapi", []string{"mcp"})
-	cmd := exec.Command(c.Name, argv...)
-	// Capture stderr instead of letting it pass through to the user's
-	// terminal: we want to inspect it for the "already exists" sentinel
-	// before deciding whether the error is fatal or idempotent. The
-	// stderr text is re-emitted at the end if we do treat it as fatal.
-	cmd.Stdout = os.Stdout
-	var stderrBuf strings.Builder
-	cmd.Stderr = &stderrBuf
-	if err := cmd.Run(); err != nil {
-		stderrText := stderrBuf.String()
+	stderrText, err := runClientAdd(c.Name, argv)
+	// Graceful degradation for older client CLIs that predate the
+	// `--scope` flag (claude/gemini inject `--scope user`): a bare
+	// `unknown flag` failure would otherwise leave the server
+	// unregistered. Retry once without the scope tokens so the install
+	// still succeeds (in the client's default scope) rather than hard
+	// failing. Modern CLIs never hit this branch.
+	if err != nil && looksLikeUnknownFlag(stderrText) && hasScopeFlag(argv) {
+		argv = stripScopeFlag(argv)
+		stderrText, err = runClientAdd(c.Name, argv)
+	}
+	if err != nil {
 		// The "already exists" error path: claude / codex / gemini
 		// all variations of "MCP server <name> already exists ..."
 		// when the registration is already in place. That's not an
@@ -133,6 +135,62 @@ Registered as `+"`everyapi`"+` in `+c.Name+`. Restart `+c.Name+` (or run
 // client versions.
 func isAlreadyRegistered(stderr string) bool {
 	s := strings.ToLower(stderr)
+	// Deliberately NOT gated on the server name (unlike isNotRegistered):
+	// codex/gemini's "already configured" message (see patterns above) does
+	// not name the server, so requiring "everyapi" here would misclassify a
+	// legitimate idempotent re-install as a hard failure. The broader match
+	// can in principle swallow an unrelated failure that happens to contain
+	// these phrases, but that is far rarer than a normal repeat install.
 	return strings.Contains(s, "already exists") || strings.Contains(s, "already configured")
+}
+
+// runClientAdd shells out `<client> <argv...>` capturing stderr (so the
+// caller can inspect it for the already-registered / unknown-flag
+// sentinels) while letting stdout pass through to the user.
+func runClientAdd(name string, argv []string) (string, error) {
+	cmd := exec.Command(name, argv...)
+	cmd.Stdout = os.Stdout
+	var stderrBuf strings.Builder
+	cmd.Stderr = &stderrBuf
+	err := cmd.Run()
+	return stderrBuf.String(), err
+}
+
+// looksLikeUnknownFlag reports whether the client rejected an argument
+// it didn't recognize — the signal that an older CLI predates a flag we
+// injected (e.g. `--scope`). Covers the common phrasings across Go/Node
+// arg parsers.
+func looksLikeUnknownFlag(stderr string) bool {
+	s := strings.ToLower(stderr)
+	return strings.Contains(s, "unknown flag") ||
+		strings.Contains(s, "unknown option") ||
+		strings.Contains(s, "unrecognized") ||
+		strings.Contains(s, "flag provided but not defined") ||
+		strings.Contains(s, "invalid option")
+}
+
+// hasScopeFlag / stripScopeFlag manage the `--scope user` pair that the
+// claude/gemini AddArgv builders inject, so install can drop it and retry
+// on a CLI too old to know the flag. The value always immediately follows
+// the flag.
+func hasScopeFlag(argv []string) bool {
+	for _, a := range argv {
+		if a == "--scope" {
+			return true
+		}
+	}
+	return false
+}
+
+func stripScopeFlag(argv []string) []string {
+	out := make([]string, 0, len(argv))
+	for i := 0; i < len(argv); i++ {
+		if argv[i] == "--scope" {
+			i++ // also skip the flag's value ("user")
+			continue
+		}
+		out = append(out, argv[i])
+	}
+	return out
 }
 

@@ -557,17 +557,35 @@ func IsRunning() bool {
 // mirrors cmd.sanitizerHealthy, replicated here because that helper is
 // unexported in a different package.
 func sanitizerHealthAt(listen string) bool {
-	client := &http.Client{Timeout: 250 * time.Millisecond}
-	resp, err := client.Get("http://" + listen + "/__sanitizer/health")
-	if err != nil {
-		return false
+	// This boolean gates DESTRUCTIVE control flow: proxyStop() and
+	// IsRunning() delete the PID file (and skip SIGTERM) when it's false,
+	// and IsRunning() drives the uninstall stop-step. A single 250ms probe
+	// could time out against a live-but-momentarily-slow proxy (loaded /
+	// swapping host), orphaning it — the port stays held and it becomes
+	// un-stoppable via `proxy stop`. Use a forgiving timeout with a few
+	// retries so only a genuinely dead/foreign endpoint reads as false. A
+	// closed port refuses the connection immediately, so the retries add
+	// no latency on the common dead case.
+	client := &http.Client{Timeout: time.Second}
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			time.Sleep(100 * time.Millisecond)
+		}
+		resp, err := client.Get("http://" + listen + "/__sanitizer/health")
+		if err != nil {
+			continue
+		}
+		ok := resp.StatusCode == 200
+		var body []byte
+		if ok {
+			body, _ = io.ReadAll(io.LimitReader(resp.Body, 16))
+		}
+		resp.Body.Close()
+		if ok && strings.TrimSpace(string(body)) == "ok" {
+			return true
+		}
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return false
-	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 16))
-	return strings.TrimSpace(string(body)) == "ok"
+	return false
 }
 
 func readPIDFile() (pid int, listen string, ok bool) {

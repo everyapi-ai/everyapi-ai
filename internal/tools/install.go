@@ -92,6 +92,15 @@ func RunInstall(t *Tool) error {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
 		cmd = exec.Command("cmd", "/C", t.InstallCmd)
+	} else if bash, err := exec.LookPath("bash"); err == nil {
+		// Prefer bash with pipefail so a failing pipeline stage is
+		// reported. The curl|bash installers exit with bash's status,
+		// not curl's — a failed `curl -fsSL … | bash` (network error,
+		// HTTP 4xx/5xx) writes nothing and bash exits 0, which without
+		// pipefail masquerades as a successful install and misleads the
+		// user into chasing a nonexistent $PATH problem. bash is present
+		// whenever these curl|bash installers could run at all.
+		cmd = exec.Command(bash, "-c", "set -o pipefail; "+t.InstallCmd)
 	} else {
 		cmd = exec.Command("sh", "-c", t.InstallCmd)
 	}

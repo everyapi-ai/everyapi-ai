@@ -55,9 +55,9 @@ func TestClientAddArgv(t *testing.T) {
 		client string
 		want   []string
 	}{
-		{"claude", []string{"mcp", "add", "everyapi", "everyapi", "mcp"}},
+		{"claude", []string{"mcp", "add", "--scope", "user", "everyapi", "everyapi", "mcp"}},
 		{"codex", []string{"mcp", "add", "everyapi", "--", "everyapi", "mcp"}},
-		{"gemini", []string{"mcp", "add", "everyapi", "everyapi", "mcp"}},
+		{"gemini", []string{"mcp", "add", "--scope", "user", "everyapi", "everyapi", "mcp"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.client, func(t *testing.T) {
@@ -102,7 +102,7 @@ func TestClientConfigPath(t *testing.T) {
 	// must be populated for every client so the user knows where to
 	// paste ManualSnippet.
 	want := map[string]string{
-		"claude": "~/.claude/settings.json",
+		"claude": "~/.claude.json",
 		"codex":  "~/.codex/config.toml",
 		"gemini": "~/.gemini/settings.json",
 	}

@@ -38,6 +38,30 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 )
 
+// SplitConfirmFlag separates the confirm-skip flag from positional
+// args, accepting it in ANY position — stdlib flag.Parse stops at the
+// first non-flag token, so `revoke 5 -y` would leave -y unparsed and
+// `revoke -y 5` would feed "-y" to the positional parser. Callers that
+// take a single positional id/amount plus an optional confirm flag use
+// this instead of a flag.FlagSet.
+//
+// The accepted spellings are the union of what the previous per-command
+// flag.Bool("y") / flag.Bool("yes") registrations matched — both the
+// single- and double-dash forms of y and yes — so no caller loses a
+// spelling it used to accept. Centralized here so the set stays
+// identical across `token revoke`, `oauth unbind`, and `aff transfer`.
+func SplitConfirmFlag(args []string) (skip bool, positional []string) {
+	for _, a := range args {
+		switch a {
+		case "-y", "--y", "-yes", "--yes":
+			skip = true
+		default:
+			positional = append(positional, a)
+		}
+	}
+	return skip, positional
+}
+
 // runHuhField wraps every cliprompt huh widget in a form whose Quit
 // binding accepts BOTH ctrl+c and esc. Huh's default keymap binds
 // Quit to ctrl+c only — pressing Esc inside a prompt is a no-op

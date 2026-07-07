@@ -77,7 +77,7 @@ func printRedemptionRows(rows []api.Redemption, perUnit float64) {
 		if r.ExpiredTime > 0 {
 			exp = time.Unix(r.ExpiredTime, 0).Format("2006-01-02")
 		}
-		cells[i] = []string{fmt.Sprintf("#%d", r.ID), r.Name, redemptionStatusLabel(r.Status), fmtQuota(int64(r.Quota), perUnit), exp}
+		cells[i] = []string{fmt.Sprintf("#%d", r.ID), sanitize(r.Name), redemptionStatusLabel(r.Status), fmtQuota(int64(r.Quota), perUnit), exp}
 	}
 	printTable(cols, cells, nil)
 }
@@ -155,13 +155,13 @@ func adminRedemptionShow(args []string) error {
 		expires = time.Unix(r.ExpiredTime, 0).Format("2006-01-02 15:04:05")
 	}
 	var d detail
-	d.add("admin.redemption.f_key", r.Key)
-	d.add("admin.redemption.f_name", r.Name)
+	d.add("admin.redemption.f_key", sanitize(r.Key))
+	d.add("admin.redemption.f_name", sanitize(r.Name))
 	d.add("admin.redemption.f_status", redemptionStatusLabel(r.Status))
 	d.add("admin.redemption.f_quota", fmtQuota(int64(r.Quota), quotaPerUnit(client)))
 	d.add("admin.redemption.f_created", time.Unix(r.CreatedTime, 0).Format("2006-01-02 15:04:05"))
 	d.add("admin.redemption.f_expires", expires)
-	d.add("admin.redemption.f_used_by", r.UsedUsername)
+	d.add("admin.redemption.f_used_by", sanitize(r.UsedUsername))
 	printDetail("admin.redemption.detail_title", r.ID, d)
 	return nil
 }

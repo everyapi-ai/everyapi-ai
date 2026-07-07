@@ -109,15 +109,23 @@ var mcpClients = map[string]*mcpClient{
 	"claude": {
 		Name:        "claude",
 		InstallHint: "Install Claude Code: https://docs.claude.com/en/docs/claude-code/setup",
-		ConfigPath:  "~/.claude/settings.json",
+		// User-scope MCP servers live in ~/.claude.json (top-level
+		// "mcpServers"), NOT ~/.claude/settings.json — Claude Code does
+		// not read MCP servers from settings.json.
+		ConfigPath: "~/.claude.json",
 		ManualSnippet: `{
   "mcpServers": {
     "everyapi": { "command": "everyapi", "args": ["mcp"] }
   }
 }`,
 		AddArgv: func(name, cmd string, args []string) []string {
-			// claude mcp add <name> <cmd> [args...]
-			return append([]string{"mcp", "add", name, cmd}, args...)
+			// claude mcp add --scope user <name> <cmd> [args...]
+			// Without --scope, `claude mcp add` defaults to local
+			// (per-project, keyed to cwd) scope, so the registration only
+			// takes effect when Claude Code is launched from the same
+			// directory `everyapi mcp install` ran in. User scope makes it
+			// global (and lets `mcp status` see it from any directory).
+			return append([]string{"mcp", "add", "--scope", "user", name, cmd}, args...)
 		},
 		RemoveArgv: func(name string) []string {
 			return []string{"mcp", "remove", name}
@@ -152,8 +160,11 @@ args = ["mcp"]`,
   }
 }`,
 		AddArgv: func(name, cmd string, args []string) []string {
-			// gemini mcp add <name> <cmd> [args...]
-			return append([]string{"mcp", "add", name, cmd}, args...)
+			// gemini mcp add --scope user <name> <cmd> [args...]
+			// Same reasoning as claude: without --scope the server is
+			// registered in project scope (cwd-local) rather than the
+			// user's global gemini config.
+			return append([]string{"mcp", "add", "--scope", "user", name, cmd}, args...)
 		},
 		RemoveArgv: func(name string) []string {
 			return []string{"mcp", "remove", name}

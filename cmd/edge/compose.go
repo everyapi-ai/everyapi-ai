@@ -160,8 +160,17 @@ func renderCompose(d composeData) ([]byte, error) {
 	// AgentImage / OllamaImage tags — so a stray `:` / `#` / newline
 	// can't desync the YAML or smuggle in a service key (e.g.
 	// `privileged: true`).
+	//
+	// Compose ALSO runs $VAR / ${VAR} interpolation over compose-file
+	// values at `pull`/`up` time, independent of YAML quoting — the only
+	// literal-$ escape is `$$`. strconv.Quote does not double `$`, so a
+	// value like `gpu-${HOME}` would be silently substituted from the
+	// operator's shell env (leaking host state or emptying the field).
+	// Double every `$` after quoting to neutralize the interpolation.
 	funcs := template.FuncMap{
-		"yamlStr": strconv.Quote,
+		"yamlStr": func(s string) string {
+			return strings.ReplaceAll(strconv.Quote(s), "$", "$$")
+		},
 		"joinComma": func(parts []string) string {
 			return strings.Join(parts, ",")
 		},

@@ -3,6 +3,7 @@ package tools
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -176,6 +177,35 @@ func TestRunInstall_CommandFailure(t *testing.T) {
 	var notOnPath *ErrInstalledButNotOnPath
 	if errors.As(err, &notOnPath) {
 		t.Errorf("command-failure error misclassified as ErrInstalledButNotOnPath: %v", err)
+	}
+}
+
+// TestRunInstall_PipelineFirstStageFailure pins the pipefail fix: for a
+// `curl … | bash`-style installer, a failure in the FIRST stage (curl)
+// must surface as an error rather than being masked by the pipeline's
+// aggregate exit code (bash's 0). Without pipefail this returned
+// ErrInstalledButNotOnPath — a wrong "installed but not on PATH"
+// diagnosis of a failed download. Requires bash (present wherever these
+// installers could run at all); skipped otherwise.
+func TestRunInstall_PipelineFirstStageFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-only: pipeline + pipefail semantics")
+	}
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not available; pipefail path not exercised")
+	}
+	tool := &Tool{
+		Name:       "pipefail",
+		ExecName:   "definitely-not-real-pipefail-zzz",
+		InstallCmd: "false | true", // first stage fails, last stage exits 0
+	}
+	err := RunInstall(tool)
+	if err == nil {
+		t.Fatal("RunInstall should error when the first pipeline stage fails")
+	}
+	var notOnPath *ErrInstalledButNotOnPath
+	if errors.As(err, &notOnPath) {
+		t.Errorf("failed pipeline misclassified as ErrInstalledButNotOnPath: %v", err)
 	}
 }
 

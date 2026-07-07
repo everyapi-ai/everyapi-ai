@@ -266,6 +266,13 @@ func runUsage(args []string) error {
 	if *keyFlag != "" {
 		key = *keyFlag
 	}
+	// A positional key placed AFTER a flag (e.g. `token usage --base URL sk-…`)
+	// isn't caught by the leading-arg check above — flag.Parse stops at the
+	// first non-flag token and leaves it in fs.Args(). Recover it here so the
+	// documented "pass it as the first argument" works regardless of order.
+	if key == "" && fs.NArg() > 0 {
+		key = fs.Arg(0)
+	}
 	// Fall back to the environment so the secret can stay off argv
 	// (visible in ps / /proc/<pid>/cmdline / shell history). The
 	// explicit positional/flag forms still win when given.
@@ -522,20 +529,17 @@ func runSetStatus(args []string, status int) (err error) {
 // --- revoke ----------------------------------------------------------
 
 func runRevoke(args []string) error {
-	fs := flag.NewFlagSet("token revoke", flag.ContinueOnError)
-	yes := fs.Bool("y", false, "skip the confirmation prompt")
-	yesLong := fs.Bool("yes", false, "alias of -y")
-	if len(args) == 0 {
+	// Accept the id and the confirm-skip flag in any order (stdlib flag
+	// stops at the first non-flag token). Both `revoke -y 5` and
+	// `revoke 5 -y` work.
+	skip, positional := cliprompt.SplitConfirmFlag(args)
+	if len(positional) == 0 {
 		return errors.New(i18n.T("token.usage_revoke"))
 	}
-	id, err := strconv.Atoi(args[0])
+	id, err := strconv.Atoi(positional[0])
 	if err != nil || id <= 0 {
-		return fmt.Errorf(i18n.T("token.invalid_id"), args[0])
+		return fmt.Errorf(i18n.T("token.invalid_id"), positional[0])
 	}
-	if err := fs.Parse(args[1:]); err != nil {
-		return err
-	}
-	skip := *yes || *yesLong
 	client, creds, err := newClient()
 	if err != nil {
 		return err

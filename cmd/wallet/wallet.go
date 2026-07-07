@@ -102,7 +102,7 @@ func runHistory(args []string) error {
 			method = fmt.Sprintf("%s/%s", t.PaymentMethod, t.PaymentProvider)
 		}
 		cliout.Printf("  %s  [#%d]  %s  amount=%d  money=%s  status=%s  trade=%s\n",
-			when, t.ID, cliout.Sanitize(method), t.Amount, style.Bold(fmt.Sprintf("%g", t.Money)), cliout.Sanitize(t.Status), cliout.Sanitize(t.TradeNo))
+			when, t.ID, cliout.Sanitize(method), t.Amount, style.Bold(fmt.Sprintf("%.2f", t.Money)), cliout.Sanitize(t.Status), cliout.Sanitize(t.TradeNo))
 	}
 	return nil
 }
@@ -135,7 +135,7 @@ func runInfo(args []string) error {
 	if len(info.AmountOptions) > 0 {
 		labels := make([]string, len(info.AmountOptions))
 		for i, a := range info.AmountOptions {
-			labels[i] = fmt.Sprintf("%g", a)
+			labels[i] = fmt.Sprintf("%.2f", a)
 		}
 		cliout.Printf("\n"+i18n.T("wallet.label.suggested")+"\n", strings.Join(labels, ", "))
 	}

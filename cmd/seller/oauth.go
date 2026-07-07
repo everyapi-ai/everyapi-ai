@@ -139,8 +139,8 @@ func sellerAddOAuthCodex(args []string) error {
 
 	cliout.Println("")
 	cliout.Println(i18n.T("seller.oauth_codex_intro"))
-	cliout.Printf("\n    URL:  %s\n", start.VerificationURI)
-	cliout.Printf("    Code: %s\n\n", start.UserCode)
+	cliout.Printf("\n    URL:  %s\n", cliout.Sanitize(start.VerificationURI))
+	cliout.Printf("    Code: %s\n\n", cliout.Sanitize(start.UserCode))
 
 	if !*noBrowser {
 		// Same fail-soft approach as `everyapi auth login`: a missing
@@ -162,12 +162,18 @@ func sellerAddOAuthCodex(args []string) error {
 			return errors.New(i18n.T("seller.oauth_codex_timeout"))
 		case errors.Is(err, api.ErrSellerCodexPollDenied):
 			return errors.New(i18n.T("seller.oauth_denied"))
+		case errors.Is(err, context.Canceled):
+			// Ctrl+C during the poll cancels the context; exit cleanly
+			// instead of dumping "Error: poll: context canceled" with a
+			// non-zero status, matching `everyapi auth login`.
+			cliout.Println(i18n.T("login.cancelled"))
+			return nil
 		default:
 			return fmt.Errorf("poll: %w", classifySellerErr(err))
 		}
 	}
 
-	bound := res.Email
+	bound := cliout.Sanitize(res.Email)
 	if bound == "" {
 		bound = i18n.T("seller.oauth_email_unknown")
 	}
@@ -247,7 +253,7 @@ func sellerAddOAuthClaude(args []string) error {
 
 	cliout.Println("")
 	cliout.Println(i18n.T("seller.oauth_claude_intro"))
-	cliout.Printf("\n"+i18n.T("seller.oauth_claude_step_1")+"\n", authorizeURL)
+	cliout.Printf("\n"+i18n.T("seller.oauth_claude_step_1")+"\n", cliout.Sanitize(authorizeURL))
 	cliout.Println(i18n.T("seller.oauth_claude_step_2"))
 	cliout.Println(i18n.T("seller.oauth_claude_step_3a"))
 	cliout.Println(i18n.T("seller.oauth_claude_step_3b"))
@@ -276,7 +282,7 @@ func sellerAddOAuthClaude(args []string) error {
 
 	cliout.Printf(i18n.T("seller.oauth_mounted_claude"), res.ChannelID, *name)
 	if res.ExpiresAt != "" {
-		cliout.Printf(i18n.T("seller.oauth_token_expires"), res.ExpiresAt)
+		cliout.Printf(i18n.T("seller.oauth_token_expires"), cliout.Sanitize(res.ExpiresAt))
 	}
 	cliout.Printf(i18n.T("seller.oauth_status_visit"), api.WebOriginFromBase(creds.APIBase))
 	return nil
@@ -372,7 +378,7 @@ func sellerAddOAuthGemini(args []string) error {
 
 	cliout.Println("")
 	cliout.Println(i18n.T("seller.oauth_gemini_intro"))
-	cliout.Printf("\n    %s\n\n", start.AuthorizeURL)
+	cliout.Printf("\n    %s\n\n", cliout.Sanitize(start.AuthorizeURL))
 	if !*noBrowser {
 		if berr := cliprompt.OpenBrowser(start.AuthorizeURL); berr == nil {
 			cliout.Println(i18n.T("seller.oauth_browser_sign_in"))
@@ -386,6 +392,12 @@ func sellerAddOAuthGemini(args []string) error {
 	defer cancel()
 	cb, err := listener.Wait(waitCtx)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			// Ctrl+C while waiting for the browser callback: exit cleanly
+			// instead of "Error: waiting for OAuth callback: context canceled".
+			cliout.Println(i18n.T("login.cancelled"))
+			return nil
+		}
 		return fmt.Errorf("waiting for OAuth callback: %w", err)
 	}
 	if cb.Error != "" {
@@ -416,7 +428,7 @@ func sellerAddOAuthGemini(args []string) error {
 
 	cliout.Printf(i18n.T("seller.oauth_mounted_gemini"), res.ChannelID, *name)
 	if res.ExpiresAt != "" {
-		cliout.Printf(i18n.T("seller.oauth_token_expires"), res.ExpiresAt)
+		cliout.Printf(i18n.T("seller.oauth_token_expires"), cliout.Sanitize(res.ExpiresAt))
 	}
 	cliout.Printf(i18n.T("seller.oauth_status_visit"), api.WebOriginFromBase(creds.APIBase))
 	return nil
@@ -502,7 +514,7 @@ func sellerAddOAuthAntigravity(args []string) error {
 
 	cliout.Println("")
 	cliout.Println(i18n.T("seller.oauth_antigravity_intro"))
-	cliout.Printf("\n    %s\n\n", start.AuthorizeURL)
+	cliout.Printf("\n    %s\n\n", cliout.Sanitize(start.AuthorizeURL))
 	if !*noBrowser {
 		if berr := cliprompt.OpenBrowser(start.AuthorizeURL); berr == nil {
 			cliout.Println(i18n.T("seller.oauth_browser_sign_in"))
@@ -516,6 +528,12 @@ func sellerAddOAuthAntigravity(args []string) error {
 	defer cancel()
 	cb, err := listener.Wait(waitCtx)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			// Ctrl+C while waiting for the browser callback: exit cleanly
+			// instead of "Error: waiting for OAuth callback: context canceled".
+			cliout.Println(i18n.T("login.cancelled"))
+			return nil
+		}
 		return fmt.Errorf("waiting for OAuth callback: %w", err)
 	}
 	if cb.Error != "" {
@@ -541,7 +559,7 @@ func sellerAddOAuthAntigravity(args []string) error {
 
 	cliout.Printf(i18n.T("seller.oauth_mounted_antigravity"), res.ChannelID, *name)
 	if res.ExpiresAt != "" {
-		cliout.Printf(i18n.T("seller.oauth_token_expires"), res.ExpiresAt)
+		cliout.Printf(i18n.T("seller.oauth_token_expires"), cliout.Sanitize(res.ExpiresAt))
 	}
 	cliout.Printf(i18n.T("seller.oauth_status_visit"), api.WebOriginFromBase(creds.APIBase))
 	return nil

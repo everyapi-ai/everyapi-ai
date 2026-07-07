@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/sellertype"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 )
@@ -161,7 +162,7 @@ func handleSellerAddKey(ctx context.Context, raw json.RawMessage) (string, error
 	typeID, ok := sellertype.Resolve(args.Type)
 	if !ok {
 		return "", fmt.Errorf("unknown channel type %q — use one of %s, or a numeric channel-type id",
-			args.Type, strings.Join(sellertype.Choices(), ", "))
+			cliout.Sanitize(args.Type), strings.Join(sellertype.Choices(), ", "))
 	}
 
 	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
@@ -194,7 +195,7 @@ func handleSellerAddKey(ctx context.Context, raw json.RawMessage) (string, error
 	return fmt.Sprintf("Mounted seller channel #%d: %s (type=%s)%s.\n"+
 		"It starts enabled and serves marketplace traffic once the platform's health probe passes.\n"+
 		"Manage it at %s/seller/channels or via everyapi_seller_list.",
-		id, args.Name, sellertype.Label(typeID), pool, api.WebOriginFromBase(creds.APIBase)), nil
+		id, cliout.Sanitize(args.Name), sellertype.Label(typeID), pool, api.WebOriginFromBase(creds.APIBase)), nil
 }
 
 // validateAddKeyArgs enforces the same hard requirements as the CLI

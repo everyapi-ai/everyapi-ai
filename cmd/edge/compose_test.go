@@ -159,6 +159,36 @@ extra_key: pwn`,
 	}
 }
 
+// TestRenderComposeDollarInterpolationResistant ensures a `$` in a baked
+// scalar is doubled to `$$` so Docker Compose does NOT substitute it from
+// the operator's shell env at `up`/`pull` time (leaking host state, or
+// silently emptying the value). YAML double-quoting alone does not stop
+// Compose interpolation — only `$$` does.
+func TestRenderComposeDollarInterpolationResistant(t *testing.T) {
+	out, err := renderCompose(composeData{
+		NodeID:            1,
+		NodeName:          "gpu-${HOME}-a$b",
+		Mode:              ModeNVIDIA,
+		Gateway:           "wss://api.everyapi.ai",
+		RegistrationToken: "tok$ign",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	// Every `$` must be doubled to `$$` so Compose does not interpolate.
+	// The exact escaped forms below are unambiguous — a single-`$` leak
+	// would render `gpu-${HOME}` / `tok$ign` and fail these.
+	for _, want := range []string{
+		`EVERYAPI_NODE_NAME: "gpu-$${HOME}-a$$b"`,
+		`EVERYAPI_REGISTRATION_TOKEN: "tok$$ign"`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("missing $$-escaped form %q in:\n%s", want, s)
+		}
+	}
+}
+
 func TestParseMode(t *testing.T) {
 	cases := map[string]Mode{
 		"":       ModeAuto,

@@ -379,23 +379,23 @@ func runOAuthList(args []string) error {
 }
 
 func runOAuthUnbind(args []string) error {
-	if len(args) == 0 {
+	// Accept the id and -y in any order (mirrors runAffTransfer / runRevoke):
+	// stdlib flag stops at the first non-flag token, so parsing args[0] with
+	// Atoi before flag parsing rejects a leading `-y` with a misleading
+	// "invalid provider id" error.
+	yes, positional := cliprompt.SplitConfirmFlag(args)
+	if len(positional) == 0 {
 		return errors.New("usage: everyapi account user oauth unbind <provider_id>")
 	}
-	id, err := strconv.Atoi(args[0])
+	id, err := strconv.Atoi(positional[0])
 	if err != nil || id <= 0 {
-		return fmt.Errorf("invalid provider id %q", args[0])
-	}
-	fs := flag.NewFlagSet("user oauth unbind", flag.ContinueOnError)
-	yes := fs.Bool("y", false, "skip confirmation")
-	if err := fs.Parse(args[1:]); err != nil {
-		return err
+		return fmt.Errorf("invalid provider id %q", positional[0])
 	}
 	client, err := newClient()
 	if err != nil {
 		return err
 	}
-	if !*yes {
+	if !yes {
 		if !cliprompt.IsInteractive() {
 			// Destructive + no TTY to confirm on: fail closed rather than
 			// silently unbinding. Require explicit -y for non-interactive use.
@@ -452,20 +452,10 @@ func runAff(args []string) error {
 // the affiliate-side mirror of `seller withdraw`. Amount is the first
 // positional arg (gateway quota units); -y skips the confirm.
 func runAffTransfer(client *api.Client, args []string) error {
-	// Accept the amount and the confirm-skip flag in any order — the only
-	// flag here is -y (with --y / --yes aliases, matching `seller`), so
-	// splitting it from the positional amount by hand keeps both
-	// `aff transfer -y 1000` and `aff transfer 1000 -y` working (stdlib
-	// flag would mis-read the amount-first form's trailing flag).
-	yes := false
-	var positional []string
-	for _, a := range args {
-		if a == "-y" || a == "--y" || a == "--yes" {
-			yes = true
-			continue
-		}
-		positional = append(positional, a)
-	}
+	// Accept the amount and the confirm-skip flag in any order (stdlib flag
+	// would mis-read the amount-first form's trailing flag). Both
+	// `aff transfer -y 1000` and `aff transfer 1000 -y` work.
+	yes, positional := cliprompt.SplitConfirmFlag(args)
 	if len(positional) == 0 {
 		return errors.New(i18n.T("user.aff_transfer_usage"))
 	}

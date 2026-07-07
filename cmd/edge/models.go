@@ -134,6 +134,11 @@ func execOllama(explicitNode int, ollamaArgs ...string) error {
 	if err != nil {
 		return err
 	}
-	composeArgs := append([]string{"exec", "ollama", "ollama"}, ollamaArgs...)
+	// -T disables pseudo-TTY allocation. `docker compose exec` allocates a
+	// TTY by default and aborts with "the input device is not a TTY" when
+	// stdin isn't a terminal (systemd/cron/CI, `</dev/null`). These ollama
+	// subcommands (list/pull/rm) are non-interactive and read no stdin, so
+	// running headless must work on an unattended supplier host.
+	composeArgs := append([]string{"exec", "-T", "ollama", "ollama"}, ollamaArgs...)
 	return runComposeCmd(dir, projectFor(nodeID), composeArgs...)
 }

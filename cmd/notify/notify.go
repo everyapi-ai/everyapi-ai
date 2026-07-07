@@ -82,7 +82,7 @@ func runList(args []string) error {
 		}
 		return nil
 	}
-	cliout.Printf("%d row(s) of %d total:\n", len(rows), total)
+	cliout.Printf(i18n.T("common.rows_of_total")+"\n", len(rows), total)
 	for _, n := range rows {
 		when := time.Unix(n.CreatedAt, 0).Format("01-02 15:04")
 		marker := " "

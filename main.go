@@ -185,7 +185,7 @@ func proxyMenuSubs() []subcommand {
 // never unheaded and the user can see why login is the only action.
 func authHeader() {
 	if err := cmd.Status(nil); err != nil {
-		cliout.Println(err.Error())
+		cliout.Println(cliout.Sanitize(err.Error()))
 	}
 }
 
@@ -1154,12 +1154,16 @@ func main() {
 	if cliprompt.IsInteractive() &&
 		(errors.Is(err, cliprompt.ErrPickCancelled) || errors.Is(err, io.EOF)) {
 		if lerr := runLauncher(); lerr != nil {
-			fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), lerr)
+			fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), cliout.Sanitize(lerr.Error()))
 			os.Exit(1)
 		}
 		return
 	}
-	fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), err)
+	// Backend-relayed error messages can carry attacker-chosen ESC/CSI/OSC
+	// bytes (cliout.Sanitize's doc lists "error messages" as untrusted).
+	// Neutralize here so every command's server-error output is safe,
+	// regardless of whether the command sanitized its own error path.
+	fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), cliout.Sanitize(err.Error()))
 	os.Exit(1)
 }
 

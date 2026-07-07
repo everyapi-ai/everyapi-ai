@@ -103,7 +103,7 @@ func TestWalletBoldsValues(t *testing.T) {
 	t.Run("history bolds the money figure", func(t *testing.T) {
 		styletest.WithColorProfile(t, termenv.TrueColor)
 		out := run(t, "history")
-		if !strings.Contains(out, "money=\x1b[1m12.5\x1b[22m") {
+		if !strings.Contains(out, "money=\x1b[1m12.50\x1b[22m") {
 			t.Errorf("history output missing bold money figure:\n%s", out)
 		}
 	})
@@ -126,7 +126,7 @@ func TestWalletBoldsValues(t *testing.T) {
 		if strings.Contains(out, "\x1b[") {
 			t.Errorf("piped history output contains ANSI escapes:\n%q", out)
 		}
-		if !strings.Contains(out, "money=12.5") {
+		if !strings.Contains(out, "money=12.50") {
 			t.Errorf("piped history output missing plain money figure:\n%s", out)
 		}
 	})

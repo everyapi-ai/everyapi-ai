@@ -103,7 +103,7 @@ func adminChannelAddOAuthAntigravity(args []string) error {
 
 	cliout.Println("")
 	cliout.Println(i18n.T("seller.oauth_antigravity_intro"))
-	cliout.Printf("\n    %s\n\n", start.AuthorizeURL)
+	cliout.Printf("\n    %s\n\n", cliout.Sanitize(start.AuthorizeURL))
 	if !*noBrowser {
 		if berr := cliprompt.OpenBrowser(start.AuthorizeURL); berr == nil {
 			cliout.Println(i18n.T("seller.oauth_browser_sign_in"))
@@ -117,6 +117,12 @@ func adminChannelAddOAuthAntigravity(args []string) error {
 	defer cancel()
 	cb, err := listener.Wait(waitCtx)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			// Ctrl+C while waiting for the browser callback: exit cleanly
+			// instead of "Error: waiting for OAuth callback: context canceled".
+			cliout.Println(i18n.T("login.cancelled"))
+			return nil
+		}
 		return fmt.Errorf("waiting for OAuth callback: %w", err)
 	}
 	if cb.Error != "" {
@@ -142,7 +148,7 @@ func adminChannelAddOAuthAntigravity(args []string) error {
 
 	cliout.Printf(i18n.T("admin.channel.oauth_mounted"), res.ChannelID, *name, *group)
 	if res.ExpiresAt != "" {
-		cliout.Printf(i18n.T("seller.oauth_token_expires"), res.ExpiresAt)
+		cliout.Printf(i18n.T("seller.oauth_token_expires"), cliout.Sanitize(res.ExpiresAt))
 	}
 	cliout.Printf(i18n.T("admin.channel.oauth_verify_hint"), res.ChannelID)
 	return nil
