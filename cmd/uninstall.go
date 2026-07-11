@@ -274,6 +274,13 @@ func executeUninstallPlan(p uninstallPlan) error {
 		} else if existed {
 			cliout.Printf("  %s %s\n", i18n.T("uninstall.removed_marker"), p.binaryPath)
 		}
+		// install.ps1's upgrade-over-a-running-binary dance parks the
+		// previous binary at <exe>.old for the NEXT install to clean up.
+		// Uninstall is that "next" too: without this, a full working
+		// prior-version executable outlives the uninstall on a dir
+		// that's still on the user's PATH. Best-effort — a still-running
+		// .old can't be unlinked on Windows, same policy as above.
+		_ = binaryRemover(p.binaryPath + ".old")
 	}
 
 	cliout.Printf("\n%s\n", i18n.T("uninstall.done"))

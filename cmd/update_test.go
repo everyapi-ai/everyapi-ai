@@ -5,6 +5,10 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -76,8 +80,11 @@ func TestParseSemver_NonNumericFails(t *testing.T) {
 // TestGoBinDirs_RespectsEnv covers the precedence order so a future
 // rewrite doesn't accidentally let GOPATH override GOBIN.
 func TestGoBinDirs_RespectsEnv(t *testing.T) {
+	// filepath.SplitList / filepath.Join so the expectations hold on
+	// Windows too (`;` list separator, `\` joins) — goBinDirs itself
+	// is platform-neutral.
 	t.Setenv("GOBIN", "/tmp/test-gobin")
-	t.Setenv("GOPATH", "/tmp/test-gopath:/tmp/test-gopath2")
+	t.Setenv("GOPATH", "/tmp/test-gopath"+string(os.PathListSeparator)+"/tmp/test-gopath2")
 	dirs := goBinDirs()
 	if len(dirs) < 3 {
 		t.Fatalf("expected at least 3 candidate dirs (GOBIN + GOPATH × 2), got %v", dirs)
@@ -86,8 +93,8 @@ func TestGoBinDirs_RespectsEnv(t *testing.T) {
 		t.Errorf("GOBIN should come first, got %q", dirs[0])
 	}
 	// Both GOPATH entries should show up before the $HOME/go/bin fallback.
-	gopath1 := "/tmp/test-gopath/bin"
-	gopath2 := "/tmp/test-gopath2/bin"
+	gopath1 := filepath.Join("/tmp/test-gopath", "bin")
+	gopath2 := filepath.Join("/tmp/test-gopath2", "bin")
 	if dirs[1] != gopath1 || dirs[2] != gopath2 {
 		t.Errorf("GOPATH split order wrong: got %v, want %q then %q", dirs[1:3], gopath1, gopath2)
 	}
@@ -104,7 +111,7 @@ func TestGoBinDirs_EmptyEnvFallsBackToHome(t *testing.T) {
 		t.Fatal("expected $HOME/go/bin fallback, got empty slice")
 	}
 	last := dirs[len(dirs)-1]
-	if last == "" || !endsWith(last, "go/bin") {
+	if last == "" || !endsWith(last, filepath.Join("go", "bin")) {
 		t.Errorf("last entry should be $HOME/go/bin, got %q", last)
 	}
 }
@@ -474,4 +481,116 @@ func swapRedirectURL(t *testing.T, url string) {
 	prev := latestReleaseRedirectURL
 	latestReleaseRedirectURL = url
 	t.Cleanup(func() { latestReleaseRedirectURL = prev })
+}
+
+// TestScriptBinDirs pins the install script's default target dir per
+// platform — the dir classifyExePath must recognise so script installs
+// stop reading as "unknown (curl / manual)".
+func TestScriptBinDirs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Setenv("LOCALAPPDATA", `C:\Users\test\AppData\Local`)
+		dirs := scriptBinDirs()
+		want := filepath.Join(`C:\Users\test\AppData\Local`, "everyapi", "bin")
+		if len(dirs) != 1 || dirs[0] != want {
+			t.Fatalf("scriptBinDirs() = %v, want [%s]", dirs, want)
+		}
+		return
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skipf("no home dir: %v", err)
+	}
+	dirs := scriptBinDirs()
+	want := filepath.Join(home, ".local", "bin")
+	if len(dirs) != 1 || dirs[0] != want {
+		t.Fatalf("scriptBinDirs() = %v, want [%s]", dirs, want)
+	}
+}
+
+// TestClassifyExePath_ScriptInstall is the regression guard for the
+// "installed by install.sh / install.ps1 but reported as unknown"
+// bug: a binary in the script's default bin dir must classify as the
+// script method (and get the script's one-liner), not the unknown
+// grab-bag whose brew/bash entries don't even fit the platform. The
+// Windows path deliberately varies the casing — NTFS is
+// case-insensitive, and %LOCALAPPDATA% casing differs by source.
+func TestClassifyExePath_ScriptInstall(t *testing.T) {
+	var exe string
+	if runtime.GOOS == "windows" {
+		t.Setenv("LOCALAPPDATA", `C:\Users\test\AppData\Local`)
+		exe = `C:\Users\test\appdata\local\everyapi\bin\everyapi.exe`
+	} else {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Skipf("no home dir: %v", err)
+		}
+		exe = filepath.Join(home, ".local", "bin", "everyapi")
+	}
+	// Point the go-install candidates away from exe so a dev machine's
+	// GOBIN/GOPATH can't shadow the branch under test.
+	t.Setenv("GOBIN", filepath.Join(t.TempDir(), "gobin"))
+	t.Setenv("GOPATH", filepath.Join(t.TempDir(), "gopath"))
+	if got := classifyExePath(exe); got != installMethodScript {
+		t.Errorf("classifyExePath(%q) = %q, want %q", exe, got, installMethodScript)
+	}
+}
+
+// A GOBIN deliberately pointed at the script dir must classify as go
+// install — `go install` is what actually overwrites that binary, so
+// its upgrade flow is the right one to run.
+func TestClassifyExePath_GoInstallWinsOverScriptDir(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("no go toolchain on PATH")
+	}
+	var dir string
+	if runtime.GOOS == "windows" {
+		t.Setenv("LOCALAPPDATA", `C:\Users\test\AppData\Local`)
+		dir = filepath.Join(`C:\Users\test\AppData\Local`, "everyapi", "bin")
+	} else {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Skipf("no home dir: %v", err)
+		}
+		dir = filepath.Join(home, ".local", "bin")
+	}
+	t.Setenv("GOBIN", dir)
+	exe := filepath.Join(dir, "everyapi")
+	if got := classifyExePath(exe); got != installMethodGoInstall {
+		t.Errorf("classifyExePath(%q) = %q, want %q", exe, got, installMethodGoInstall)
+	}
+}
+
+func TestClassifyExePath_BrewAndUnknown(t *testing.T) {
+	sep := string(os.PathSeparator)
+	brewExe := strings.Join([]string{"", "opt", "homebrew", "Cellar", "everyapi", "0.1.0", "bin", "everyapi"}, sep)
+	if got := classifyExePath(brewExe); got != installMethodBrew {
+		t.Errorf("classifyExePath(%q) = %q, want %q", brewExe, got, installMethodBrew)
+	}
+
+	t.Setenv("GOBIN", filepath.Join(t.TempDir(), "gobin"))
+	t.Setenv("GOPATH", filepath.Join(t.TempDir(), "gopath"))
+	if runtime.GOOS == "windows" {
+		t.Setenv("LOCALAPPDATA", `C:\Users\test\AppData\Local`)
+	}
+	other := filepath.Join(t.TempDir(), "elsewhere", "everyapi")
+	if got := classifyExePath(other); got != installMethodUnknown {
+		t.Errorf("classifyExePath(%q) = %q, want %q", other, got, installMethodUnknown)
+	}
+}
+
+// TestReleaseAssetName pins the zip-vs-tar.gz split (.goreleaser.yml
+// format_overrides): the old hint hardcoded .tar.gz, which on Windows
+// pointed at an asset that doesn't exist (the release ships a .zip).
+func TestReleaseAssetName(t *testing.T) {
+	got := releaseAssetName()
+	wantExt := ".tar.gz"
+	if runtime.GOOS == "windows" {
+		wantExt = ".zip"
+	}
+	if !strings.HasSuffix(got, wantExt) {
+		t.Errorf("releaseAssetName() = %q, want %q suffix", got, wantExt)
+	}
+	if !strings.Contains(got, runtime.GOOS) || !strings.Contains(got, runtime.GOARCH) {
+		t.Errorf("releaseAssetName() = %q, want it to name %s/%s", got, runtime.GOOS, runtime.GOARCH)
+	}
 }

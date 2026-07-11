@@ -55,6 +55,10 @@ try {
 $Repo = 'everyapi-ai/everyapi-ai'
 $MirrorBase = 'https://dl.everyapi.ai'
 
+# User-visible strings stay ASCII-only: `irm | iex` decodes this script as
+# ISO-8859-1 when the server response carries no charset, and Windows
+# PowerShell 5.1 consoles on non-UTF-8 codepages then render multi-byte
+# punctuation as mojibake (an em dash prints as "â€""). Use "--" instead.
 function Write-Info($m) { Write-Host "> $m" -ForegroundColor Cyan }
 function Write-Ok($m)   { Write-Host "+ $m" -ForegroundColor Green }
 function Write-Warn($m) { Write-Host "! $m" -ForegroundColor Yellow }
@@ -84,7 +88,7 @@ function Get-LatestTag {
   try {
     return (Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -Headers $headers -TimeoutSec 8).tag_name
   } catch {
-    Write-Warn "github.com version lookup failed — using the mainland mirror ($MirrorBase)"
+    Write-Warn "github.com version lookup failed -- using the mainland mirror ($MirrorBase)"
     $script:DownloadBase = $MirrorBase
     try {
       return ((Invoke-WebRequest -Uri "$MirrorBase/latest" -TimeoutSec 8 -UseBasicParsing).Content).Trim()
@@ -134,6 +138,11 @@ function Invoke-Install {
 
   $target = Join-Path $installDir 'everyapi.exe'
 
+  # Clean up the .old a previous upgrade-over-a-running-binary left behind
+  # (see the copy step below). Fails silently while that old process is
+  # still alive; succeeds on the next install after it has exited.
+  Remove-Item -LiteralPath "$target.old" -Force -ErrorAction SilentlyContinue
+
   # Same-version short-circuit (matches install.sh): re-running the one-liner
   # is a no-op once you're current, keeping it safe in setup scripts. -Force
   # overrides for a re-verify / repair.
@@ -143,7 +152,7 @@ function Invoke-Install {
     if ($existing) {
       $m = [regex]::Match($existing, '\d+\.\d+\.\d+')
       if ($m.Success -and $m.Value -eq $ver.TrimStart('v')) {
-        Write-Ok "already at $ver — nothing to do (pass -Force to reinstall)"
+        Write-Ok "already at $ver -- nothing to do (pass -Force to reinstall)"
         return
       }
       Write-Info "found existing install: $existing"
@@ -175,18 +184,18 @@ function Invoke-Install {
         if ($i -lt 3) { Start-Sleep -Seconds 1 }
       }
       if ($DownloadBase) { return $false }   # already on a mirror — no further fallback
-      Write-Warn 'github.com download failed — falling back to the mainland mirror'
+      Write-Warn 'github.com download failed -- falling back to the mainland mirror'
       $script:DownloadBase = $MirrorBase
       try { Invoke-WebRequest -Uri "$MirrorBase/$ver/$name" -OutFile $out -TimeoutSec 120 -UseBasicParsing; return $true } catch { return $false }
     }
 
     Write-Info "downloading $zipName..."
     if (-not (Get-Asset $zipName $zipPath)) {
-      Die "failed to download $zipName from GitHub and the mirror — check your connection, or pass -Version vX.Y.Z"
+      Die "failed to download $zipName from GitHub and the mirror -- check your connection, or pass -Version vX.Y.Z"
     }
     Write-Info "downloading $sumsName..."
     if (-not (Get-Asset $sumsName $sumsPath)) {
-      Die "failed to download $sumsName — refusing to install without a checksum"
+      Die "failed to download $sumsName -- refusing to install without a checksum"
     }
     # Whatever source the downloads settled on (a fallback may have flipped it),
     # point $baseUrl there so the cosign sig/cert come from the same place.
@@ -204,12 +213,12 @@ function Invoke-Install {
       Where-Object { $_ -match ("^[a-fA-F0-9]{64}  " + $escaped + '$') } |
       Select-Object -First 1
     if (-not $line) {
-      Die "$zipName not listed in $sumsName — release artifacts may be incomplete"
+      Die "$zipName not listed in $sumsName -- release artifacts may be incomplete"
     }
     $expected = ($line -split '\s+')[0].ToLowerInvariant()
     $actual = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($expected -ne $actual) {
-      Die 'SHA256 mismatch — refusing to install a tampered or corrupt binary'
+      Die 'SHA256 mismatch -- refusing to install a tampered or corrupt binary'
     }
     Write-Ok 'SHA256 verified'
 
@@ -239,7 +248,7 @@ function Invoke-Install {
           if ($RequireSignature) {
             Die "cosign signature/certificate not available for $Version and -RequireSignature is set"
           }
-          Write-Warn "signature not available for $Version — skipping cosign verify"
+          Write-Warn "signature not available for $Version -- skipping cosign verify"
         }
         if ($sigAvailable) {
           Write-Info 'verifying cosign signature...'
@@ -259,13 +268,13 @@ function Invoke-Install {
           } elseif ($RequireSignature) {
             Die 'cosign signature verification failed and -RequireSignature is set'
           } else {
-            Write-Warn 'cosign signature verification failed — proceeding because -RequireSignature was not passed'
+            Write-Warn 'cosign signature verification failed -- proceeding because -RequireSignature was not passed'
           }
         }
       } elseif ($RequireSignature) {
         Die 'cosign is not installed but -RequireSignature was passed. Install cosign from https://github.com/sigstore/cosign and retry.'
       } else {
-        Write-Warn 'cosign not installed — skipping signature verify (SHA256 integrity only, no provenance)'
+        Write-Warn 'cosign not installed -- skipping signature verify (SHA256 integrity only, no provenance)'
         Write-Warn '  install cosign and rerun with -RequireSignature for cryptographic provenance'
       }
     }
@@ -279,12 +288,36 @@ function Invoke-Install {
       Die 'archive did not contain everyapi.exe'
     }
 
-    # A running everyapi.exe can lock the destination; surface that as
-    # actionable advice rather than a raw access-denied stack.
+    # A running everyapi.exe write-locks the destination (Windows locks
+    # executing images against writes) -- but a running exe can still be
+    # RENAMED. So when the plain copy fails, move the live binary aside to
+    # .old, copy the new one into place, and leave the .old for the next
+    # install to clean up (deleting it now fails while the old process is
+    # alive). This is what lets `irm | iex` upgrade while an everyapi MCP
+    # server or `everyapi use` proxy is still running.
     try {
       Copy-Item -LiteralPath $exe.FullName -Destination $target -Force
     } catch {
-      Die "could not write $target — close any running 'everyapi' process and retry. ($($_.Exception.Message))"
+      $aside = "$target.old"
+      try {
+        Remove-Item -LiteralPath $aside -Force -ErrorAction SilentlyContinue
+        Move-Item -LiteralPath $target -Destination $aside -Force
+        Copy-Item -LiteralPath $exe.FullName -Destination $target -Force
+        Write-Warn "a running everyapi process holds the old binary; moved it aside to everyapi.exe.old (cleaned up by the next install)"
+      } catch {
+        # Best-effort rollback. A Copy-Item that died partway can leave a
+        # TRUNCATED $target behind -- remove it first, or the good binary
+        # parked at .old would never be restored (and the next install's
+        # early .old cleanup would then delete the only intact copy). The
+        # remove is safe: the only unremovable $target is the original
+        # running exe, which means the Move-Item above never fired and
+        # there's nothing to restore.
+        try {
+          Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+          if (-not (Test-Path $target)) { Move-Item -LiteralPath $aside -Destination $target -Force }
+        } catch { }
+        Die "could not write $target -- close any running 'everyapi' process and retry. ($($_.Exception.Message))"
+      }
     }
     Write-Ok 'installed'
   } finally {
@@ -375,7 +408,7 @@ if ($DownloadBase) {
     $DownloadBase = ''
   } catch {
     $DownloadBase = $MirrorBase
-    Write-Warn "github.com is slow or unreachable — using the mainland mirror ($MirrorBase)"
+    Write-Warn "github.com is slow or unreachable -- using the mainland mirror ($MirrorBase)"
   }
 }
 

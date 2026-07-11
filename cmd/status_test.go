@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -88,12 +89,16 @@ func TestStatusLazyMigratesRole(t *testing.T) {
 	}
 
 	// File should still be 0600 — the rewrite must preserve perms.
-	info, err := os.Stat(filepath.Join(tmp, "everyapi", "credentials.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("credentials.json perm after rewrite = %o, want 0600", perm)
+	// Windows has no POSIX permission bits (Stat reports 666 for any
+	// writable file), so the assertion only means something elsewhere.
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(filepath.Join(tmp, "everyapi", "credentials.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Errorf("credentials.json perm after rewrite = %o, want 0600", perm)
+		}
 	}
 }
 

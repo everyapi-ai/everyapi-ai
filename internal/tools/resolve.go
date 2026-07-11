@@ -31,29 +31,71 @@ import (
 //
 // Returns os.ErrNotExist when nothing resolves.
 func ResolveExec(t *Tool) (string, error) {
+	path, _, err := resolveExecDirs(t)
+	return path, err
+}
+
+// LookupExecName resolves a bare executable name for launching, the
+// way Exec launches tools: exec.LookPath first, then the npm global
+// bin dirs (env-derived, then `npm prefix -g`). The env return is
+// ready for exec.Cmd.Env, with the resolved dir appended to the
+// child's PATH so a co-located node/npm resolves — nil means "inherit
+// unchanged" (the $PATH fast path). ok=false when nothing resolves;
+// callers should keep the bare name so exec.Command's own not-found
+// error still surfaces.
+//
+// Exported for the mcp subcommands, which launch the same
+// npm-installed client CLIs (claude / codex / gemini) outside the
+// *Tool plumbing — without this they'd fail for exactly the off-PATH
+// cohort `use` handles.
+func LookupExecName(execName string) (path string, env []string, ok bool) {
+	if p, err := exec.LookPath(execName); err == nil {
+		return p, nil, true
+	}
+	dirs := npmEnvBinDirs()
+	if d := npmPrefixBinDir(); d != "" {
+		dirs = dedupeStrings(append(dirs, d))
+	}
+	for _, dir := range dirs {
+		if p, found := findExecutable(dir, execName); found {
+			return p, mergeEnv(withExecDirOnPath(nil, p)), true
+		}
+	}
+	return "", nil, false
+}
+
+// resolveExecDirs is ResolveExec plus the npm global bin directories it
+// searched. The extra return lets the failure path (RunInstall) name the
+// dirs in its error WITHOUT recomputing them — recomputing would spawn a
+// second `npm prefix -g`. searched is nil when the $PATH fast path hits or
+// the tool isn't an npm install (nothing was scanned).
+func resolveExecDirs(t *Tool) (path string, searched []string, err error) {
 	if t == nil {
-		return "", os.ErrNotExist
+		return "", nil, os.ErrNotExist
 	}
-	if p, err := exec.LookPath(t.ExecName); err == nil {
-		return p, nil
+	if p, e := exec.LookPath(t.ExecName); e == nil {
+		return p, nil, nil
 	}
-	if installUsesNpm(t) {
-		// Cheap, subprocess-free candidates first (env vars only), so the
-		// common version-manager case resolves without ever shelling out.
-		for _, dir := range npmEnvBinDirs() {
-			if p, ok := findExecutable(dir, t.ExecName); ok {
-				return p, nil
-			}
-		}
-		// Last resort: ask npm itself where its global root is. Spawns a
-		// process, so it only runs when the free lookups above all miss.
-		if dir := npmPrefixBinDir(); dir != "" {
-			if p, ok := findExecutable(dir, t.ExecName); ok {
-				return p, nil
-			}
+	if !installUsesNpm(t) {
+		return "", nil, os.ErrNotExist
+	}
+	// Cheap, subprocess-free candidates first (env vars only), so the
+	// common version-manager case resolves without ever shelling out.
+	searched = npmEnvBinDirs()
+	for _, dir := range searched {
+		if p, ok := findExecutable(dir, t.ExecName); ok {
+			return p, searched, nil
 		}
 	}
-	return "", os.ErrNotExist
+	// Last resort: ask npm itself where its global root is. Spawns a
+	// process, so it only runs when the free lookups above all miss.
+	if dir := npmPrefixBinDir(); dir != "" {
+		searched = dedupeStrings(append(searched, dir))
+		if p, ok := findExecutable(dir, t.ExecName); ok {
+			return p, searched, nil
+		}
+	}
+	return "", searched, os.ErrNotExist
 }
 
 // installUsesNpm reports whether the tool's auto-installer is a global
@@ -61,23 +103,6 @@ func ResolveExec(t *Tool) (string, error) {
 // ResolveExec makes sense (a curl|bash installer writes elsewhere).
 func installUsesNpm(t *Tool) bool {
 	return installRequires(t) == "npm"
-}
-
-// npmSearchDirs returns the npm global bin directories ResolveExec would
-// consult for t (env-derived plus `npm prefix -g`), so an
-// "installed but still not found" message can name concrete directories
-// to add to PATH instead of a vague hint. Empty for non-npm tools. This
-// is the error-path variant — it always resolves the (subprocess-backed)
-// prefix dir because we're already failing and want the fullest picture.
-func npmSearchDirs(t *Tool) []string {
-	if !installUsesNpm(t) {
-		return nil
-	}
-	dirs := npmEnvBinDirs()
-	if pd := npmPrefixBinDir(); pd != "" {
-		dirs = append(dirs, pd)
-	}
-	return dedupeStrings(dirs)
 }
 
 // npmEnvBinDirs lists candidate global-bin directories derivable from the
@@ -101,7 +126,12 @@ func npmEnvBinDirs() []string {
 	if f := os.Getenv("FNM_MULTISHELL_PATH"); f != "" {
 		add(binSubdir(f)) // fnm
 	}
-	// Explicit npm prefix override (any of the three spellings npm honors).
+	// Explicit npm prefix override — all three spellings npm honors.
+	// Bare `PREFIX` included deliberately: @npmcli/config's
+	// loadGlobalPrefix (npm 7+) checks `this.env.PREFIX` FIRST when
+	// deriving the global prefix, so on Termux-style / hand-rolled
+	// setups global installs genuinely land in $PREFIX/bin and skipping
+	// it would push those users back into the install loop.
 	if p := firstNonEmptyEnv("npm_config_prefix", "NPM_CONFIG_PREFIX", "PREFIX"); p != "" {
 		add(binSubdir(p))
 	}

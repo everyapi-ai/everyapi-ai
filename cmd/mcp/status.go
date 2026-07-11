@@ -12,6 +12,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-ai/internal/style"
+	"github.com/everyapi-ai/everyapi-ai/internal/tools"
 )
 
 // probeClient returns one of these state constants. Kept as
@@ -115,7 +116,11 @@ func Status(args []string) error {
 // hung on stdin under specific conditions) would otherwise lock
 // `everyapi mcp status` and any caller that polls it.
 func probeClient(c *mcpClient) string {
-	if _, err := exec.LookPath(c.Name); err != nil {
+	// Same resolution `use` applies: a client in an off-$PATH npm
+	// global dir is installed, not "not installed" — and probing it
+	// needs its dir on the child PATH for the co-located node.
+	path, env, ok := tools.LookupExecName(c.Name)
+	if !ok {
 		return stateNotInstalled
 	}
 	if c.ListArgv == nil {
@@ -125,7 +130,10 @@ func probeClient(c *mcpClient) string {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, c.Name, c.ListArgv()...)
+	cmd := exec.CommandContext(ctx, path, c.ListArgv()...)
+	if env != nil {
+		cmd.Env = env
+	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		// claude / codex / gemini all exit 0 even when zero servers

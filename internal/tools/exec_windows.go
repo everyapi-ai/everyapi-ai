@@ -42,7 +42,7 @@ func Exec(t *Tool, env map[string]string, extraArgs []string) error {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Env = mergeEnv(env)
+	cmd.Env = mergeEnv(withExecDirOnPath(env, path))
 
 	// Notify is installed BEFORE Start so there's no window where a
 	// console Ctrl+C lands on our default (fatal) disposition and

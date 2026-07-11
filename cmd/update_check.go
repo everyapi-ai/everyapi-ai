@@ -376,16 +376,18 @@ func handleUpdatePrompt(currentVer string, cache *updateCheckCache) bool {
 	}
 	switch idx {
 	case choiceUpdate:
-		if err := Update(nil); err != nil {
+		dispatched, err := updateRun(nil)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "update: %v\n", err)
 			return false
 		}
 		// Only swallow the user's original command when an upgrade was
-		// actually dispatched. The unknown-install path (curl/install.sh
-		// — the most common cohort) just prints a manual hint and does
-		// nothing, so returning true there would discard the command the
-		// user actually typed. Let those fall through and still run it.
-		return detectInstallMethod() != installMethodUnknown
+		// actually dispatched (updateRun's real outcome, not a re-derived
+		// install method): the script/unknown paths just print a hint,
+		// and even brew/go can short-circuit without running anything
+		// ("already up to date" after a stale cache). In all those cases
+		// the command the user actually typed must still run.
+		return dispatched
 	case choiceSkip:
 		cache.SkippedVersion = cache.LatestVersion
 		if err := saveUpdateCheckCache(cache); err != nil {

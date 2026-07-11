@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -49,6 +51,90 @@ func mergeEnv(set map[string]string) []string {
 		out = append(out, k+"="+v)
 	}
 	return out
+}
+
+// withExecDirOnPath returns env with the directory of execPath APPENDED
+// to the PATH the launched child will inherit, unless it's already there.
+//
+// This matters when ResolveExec located the tool OUTSIDE $PATH (an npm
+// global bin dir a version manager never added to PATH): the tool's
+// interpreter and siblings live in that SAME dir — a Node CLI like gemini
+// is a `#!/usr/bin/env node` script whose `node` sits right next to it. If
+// we launch the resolved absolute path without putting that dir on the
+// child's PATH, the shebang can't find node and the tool dies instantly
+// with a cryptic `env: node: No such file or directory`. Appending the
+// dir makes the co-located interpreter (and any npm/sibling the tool
+// shells out to) resolvable as a FALLBACK. Deliberately appended, not
+// prepended: a node/npm the user already has first on PATH must keep
+// winning — a prepend would let a stale off-PATH install (old nvm dir
+// exported via NVM_BIN) shadow the working system interpreter.
+//
+// Idempotent: when execPath is already on $PATH (the LookPath fast path)
+// the dir is present and env is returned unchanged; entries are Clean'd
+// before comparing so a trailing-separator PATH entry still counts as
+// present. The existing PATH key's casing is preserved (Windows exports
+// "Path", not "PATH") so mergeEnv overlays the canonical entry instead
+// of adding a shadow one. Key matching is exact on POSIX (env names are
+// case-sensitive — a stray "Path" is a different variable) and folded
+// only on Windows, where the scan keeps the LAST fold-equal entry to
+// mirror os/exec's dedupEnv ("in favor of later values") — rewriting an
+// earlier duplicate would be silently dropped at Start.
+func withExecDirOnPath(env map[string]string, execPath string) map[string]string {
+	dir := filepath.Dir(execPath)
+	if dir == "" || dir == "." {
+		return env
+	}
+	// Determine the PATH key + value the child would see. An entry in env
+	// wins over the ambient one (mergeEnv lets env override os.Environ).
+	key, cur := "PATH", ""
+	for _, kv := range os.Environ() {
+		if i := strings.IndexByte(kv, '='); i >= 0 && pathKeyEquals(kv[:i]) {
+			key, cur = kv[:i], kv[i+1:]
+			// No break: keep the LAST match (Windows dedupEnv semantics;
+			// POSIX names are unique so this loop matches at most once).
+		}
+	}
+	for k, v := range env {
+		if pathKeyEquals(k) {
+			key, cur = k, v
+			break
+		}
+	}
+	for _, p := range filepath.SplitList(cur) {
+		if p != "" && samePath(p, dir) {
+			return env // already reachable; nothing to do
+		}
+	}
+	out := make(map[string]string, len(env)+1)
+	for k, v := range env {
+		out[k] = v
+	}
+	if cur == "" {
+		out[key] = dir
+	} else {
+		out[key] = cur + string(os.PathListSeparator) + dir
+	}
+	return out
+}
+
+// pathKeyEquals reports whether an env key names the PATH variable:
+// exact on POSIX (env names are case-sensitive), folded on Windows.
+func pathKeyEquals(k string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(k, "PATH")
+	}
+	return k == "PATH"
+}
+
+// samePath compares two cleaned paths, case-insensitively on Windows.
+// Cleaning matters: hand-edited PATH entries often carry trailing
+// separators that LookPath tolerates but a raw == would not.
+func samePath(a, b string) bool {
+	a, b = filepath.Clean(a), filepath.Clean(b)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
 }
 
 // exitCodeFromWait maps a cmd.Wait() error to the process exit code we

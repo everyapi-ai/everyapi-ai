@@ -149,8 +149,11 @@ func TestUninstall_BinaryRemovalHookFires(t *testing.T) {
 			t.Errorf("brew install method should not invoke binaryRemover, got %v", *calls)
 		}
 	default:
-		if len(*calls) != 1 {
-			t.Fatalf("expected exactly one binaryRemover call for %s install, got %v", method, *calls)
+		// Two calls: the binary itself, then the best-effort cleanup of
+		// the .old sibling install.ps1's upgrade-over-a-running-binary
+		// dance can leave behind.
+		if len(*calls) != 2 {
+			t.Fatalf("expected binaryRemover calls for the binary and its .old for %s install, got %v", method, *calls)
 		}
 		// The path is whatever os.Executable() returned for the test
 		// binary — we don't pin its exact value (varies per test
@@ -158,6 +161,9 @@ func TestUninstall_BinaryRemovalHookFires(t *testing.T) {
 		// argument so the production path obviously gets called.
 		if (*calls)[0] == "" {
 			t.Error("binaryRemover called with empty path")
+		}
+		if (*calls)[1] != (*calls)[0]+".old" {
+			t.Errorf("second binaryRemover call = %q, want %q", (*calls)[1], (*calls)[0]+".old")
 		}
 	}
 }

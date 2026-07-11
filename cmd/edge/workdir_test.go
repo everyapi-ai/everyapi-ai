@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -102,13 +103,17 @@ func TestNodeMetaWriteReadRoundTrip(t *testing.T) {
 	}
 
 	// Permission check — node.json must be 0600 (token inside).
-	dir, _ := nodeDir(42)
-	info, err := os.Stat(filepath.Join(dir, "node.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("node.json perm = %o, want 0600", perm)
+	// Windows has no Unix permission bits; skip the assertion there
+	// like the other perm tests do.
+	if runtime.GOOS != "windows" {
+		dir, _ := nodeDir(42)
+		info, err := os.Stat(filepath.Join(dir, "node.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Errorf("node.json perm = %o, want 0600", perm)
+		}
 	}
 }
 

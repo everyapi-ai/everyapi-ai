@@ -3,10 +3,10 @@ package mcp
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/internal/tools"
 )
 
 // Uninstall is the inverse of Install: it removes the "everyapi" MCP
@@ -34,12 +34,14 @@ func Uninstall(args []string) error {
 		return err
 	}
 
-	if _, err := exec.LookPath(c.Name); err != nil {
+	// Same resolution `use` applies — a client sitting in an off-$PATH
+	// npm global dir counts as installed here too.
+	if _, _, ok := tools.LookupExecName(c.Name); !ok {
 		return fmt.Errorf("`%s` CLI not found on PATH. If you registered everyapi by hand-editing the client's settings, remove the \"everyapi\" entry from the mcpServers object manually", c.Name)
 	}
 
 	argv := c.RemoveArgv("everyapi")
-	cmd := exec.Command(c.Name, argv...)
+	cmd := clientCmd(c.Name, argv)
 	// Capture stderr (like Install) so we can recognise the "not
 	// registered" path and treat it as an idempotent no-op success rather
 	// than a failure: a second `mcp uninstall`, or uninstalling a client

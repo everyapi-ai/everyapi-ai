@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -167,5 +168,67 @@ func TestDedupeStrings(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("dedupeStrings = %v, want %v", got, want)
 		}
+	}
+}
+
+// pathValue returns env's PATH value under whatever casing the key uses
+// ("Path" on Windows), or "" if absent.
+func pathValue(env map[string]string) (string, bool) {
+	for k, v := range env {
+		if strings.EqualFold(k, "PATH") {
+			return v, true
+		}
+	}
+	return "", false
+}
+
+// TestWithExecDirOnPath is the guard for the interpreter-not-found
+// regression: when a tool is resolved in a dir that ISN'T on $PATH, that
+// dir (holding the tool's co-located `node`/siblings) must be APPENDED
+// to the child's PATH — appended, not prepended, so it can't shadow a
+// node/npm the user already has first — and when it's already on $PATH
+// (even with a trailing separator), env is untouched.
+func TestWithExecDirOnPath(t *testing.T) {
+	dir := t.TempDir()
+	execPath := filepath.Join(dir, "gemini")
+
+	// dir NOT on PATH → appended last, existing entries keep priority,
+	// other vars preserved, input not mutated.
+	first := filepath.Join(dir, "..", "elsewhere")
+	t.Setenv("PATH", first)
+	env := map[string]string{"FOO": "bar"}
+	got := withExecDirOnPath(env, execPath)
+	pv, ok := pathValue(got)
+	if !ok {
+		t.Fatal("expected a PATH entry to be injected")
+	}
+	entries := filepath.SplitList(pv)
+	if len(entries) < 2 || entries[len(entries)-1] != dir {
+		t.Errorf("PATH = %q, want %q appended last", pv, dir)
+	}
+	if entries[0] != first {
+		t.Errorf("PATH = %q, want existing entry %q kept first", pv, first)
+	}
+	if got["FOO"] != "bar" {
+		t.Error("unrelated env vars must be preserved")
+	}
+	if _, mutated := pathValue(env); mutated {
+		t.Error("input env map must not be mutated")
+	}
+
+	// dir already on PATH → env returned unchanged (no PATH override added).
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+"/x")
+	env2 := map[string]string{"FOO": "bar"}
+	got2 := withExecDirOnPath(env2, execPath)
+	if _, injected := pathValue(got2); injected {
+		t.Errorf("dir already on PATH: expected no PATH override, got %v", got2)
+	}
+
+	// dir on PATH with a trailing separator → still recognised (entries
+	// are Clean'd before comparing), so no override either.
+	t.Setenv("PATH", dir+string(os.PathSeparator)+string(os.PathListSeparator)+"/x")
+	got3 := withExecDirOnPath(map[string]string{}, execPath)
+	if _, injected := pathValue(got3); injected {
+		t.Error("trailing-separator PATH entry must still count as already present")
 	}
 }

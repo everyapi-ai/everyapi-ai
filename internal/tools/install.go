@@ -113,8 +113,8 @@ func RunInstall(t *Tool) error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("install %s: %w", t.Name, err)
 	}
-	if _, err := ResolveExec(t); err != nil {
-		return &ErrInstalledButNotOnPath{Tool: t, Dirs: npmSearchDirs(t)}
+	if _, searched, err := resolveExecDirs(t); err != nil {
+		return &ErrInstalledButNotOnPath{Tool: t, Dirs: searched}
 	}
 	return nil
 }

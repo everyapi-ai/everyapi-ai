@@ -12,7 +12,26 @@ import (
 	rootcmd "github.com/everyapi-ai/everyapi-ai/cmd"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/internal/tools"
 )
+
+// clientCmd builds an exec.Cmd for a client CLI (claude / codex /
+// gemini), resolving the executable the way `use` does — $PATH first,
+// then the npm global bin dirs — so an npm-installed client living off
+// $PATH still launches, with the resolved dir appended to the child's
+// PATH for its co-located node. An unresolvable name falls through to
+// the bare name so exec.Command's own not-found error surfaces.
+func clientCmd(name string, argv []string) *exec.Cmd {
+	path, env, ok := tools.LookupExecName(name)
+	if !ok {
+		path = name
+	}
+	cmd := exec.Command(path, argv...)
+	if env != nil {
+		cmd.Env = env
+	}
+	return cmd
+}
 
 // Install wires `everyapi mcp` into a supported MCP client's config so
 // the user doesn't have to hand-edit JSON.
@@ -43,7 +62,9 @@ func Install(args []string) error {
 		return err
 	}
 
-	if _, err := exec.LookPath(c.Name); err != nil {
+	// Same resolution `use` applies — a client sitting in an off-$PATH
+	// npm global dir counts as installed here too.
+	if _, _, ok := tools.LookupExecName(c.Name); !ok {
 		return fmt.Errorf("`%s` CLI not found on PATH. %s\n\nAlternatively, paste the following into %s:\n\n%s", c.Name, c.InstallHint, c.ConfigPath, c.ManualSnippet)
 	}
 
@@ -148,7 +169,7 @@ func isAlreadyRegistered(stderr string) bool {
 // caller can inspect it for the already-registered / unknown-flag
 // sentinels) while letting stdout pass through to the user.
 func runClientAdd(name string, argv []string) (string, error) {
-	cmd := exec.Command(name, argv...)
+	cmd := clientCmd(name, argv)
 	cmd.Stdout = os.Stdout
 	var stderrBuf strings.Builder
 	cmd.Stderr = &stderrBuf

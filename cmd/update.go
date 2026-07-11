@@ -35,17 +35,26 @@ import (
 //     on Apple Silicon, /usr/local/Cellar/
 //     on Intel, /home/linuxbrew/ on Linux)
 //   - $GOBIN / $GOPATH/bin → `go install`
+//   - the install script's default bin dir → install script
+//     (%LOCALAPPDATA%\everyapi\bin from install.ps1 on Windows,
+//     ~/.local/bin from install.sh elsewhere)
 //   - anything else        → unknown (curl / manual)
 //
-// Detected install methods exec the right tool's upgrade flow —
+// Detected package managers exec the right tool's upgrade flow —
 // `brew update && brew upgrade everyapi` or `go install …@latest`.
 // We never self-replace the binary: brew + go's own verification
 // (SHA / module checksum) is more battle-tested than anything we
 // could re-implement here, and self-replacing a running executable
 // is platform-hostile (Windows in particular).
 //
+// Install-script installs get the script's one-liner printed rather
+// than exec'd: on Windows the running everyapi.exe write-locks the
+// very file install.ps1 must replace, and on any platform piping a
+// freshly downloaded script through a shell is something the user
+// should opt into by running the command themselves.
+//
 // For unknown install methods we fall back to printing the manual
-// curl + SHA256 + cosign flow from the README — that's the same
+// download + SHA256 + cosign flow from the README — that's the same
 // content as `--dry-run` but only shown when there's no install
 // manager to delegate to.
 //
@@ -58,11 +67,24 @@ import (
 //	            always printed; kept as an escape hatch for users
 //	            who want to inspect the command before running it.
 func Update(args []string) error {
+	_, err := updateRun(args)
+	return err
+}
+
+// updateRun is Update's body. The extra `dispatched` return reports
+// whether an upgrade was ACTUALLY handed to an install manager (brew /
+// go install ran, not dry-run): every informational early return —
+// up-to-date, prerelease, dev build, hint-only script/unknown paths —
+// is false. handleUpdatePrompt keys "swallow the user's original
+// command" off this real outcome; re-deriving it from
+// detectInstallMethod() would swallow the command even when Update
+// printed "up to date" and ran nothing.
+func updateRun(args []string) (dispatched bool, err error) {
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	checkOnly := fs.Bool("check", false, "exit 0 if up-to-date, 1 if a newer version exists; no other output")
 	dryRun := fs.Bool("dry-run", false, "print the upgrade command instead of running it")
 	if err := fs.Parse(args); err != nil {
-		return err
+		return false, err
 	}
 
 	ctx, cancel := context.WithTimeout(cliout.WithCtx(), 10*time.Second)
@@ -84,7 +106,7 @@ func Update(args []string) error {
 			fmt.Fprintf(os.Stderr, "could not check latest version: %v\n", err)
 			os.Exit(2)
 		}
-		return fmt.Errorf("check latest version: %w", err)
+		return false, fmt.Errorf("check latest version: %w", err)
 	}
 
 	ver, commit := version.Resolve()
@@ -96,7 +118,7 @@ func Update(args []string) error {
 	if ver == "dev" {
 		if *checkOnly {
 			cliout.Printf(i18n.T("update.dev_build_check"), commit, latest)
-			return nil
+			return false, nil
 		}
 		cliout.Printf(i18n.T("update.dev_build_intro"), commit, latest)
 		cliout.Println("")
@@ -106,7 +128,7 @@ func Update(args []string) error {
 		cliout.Println(i18n.T("update.switch_header"))
 		cliout.Println(i18n.T("update.switch_cmd_brew"))
 		cliout.Println(i18n.T("update.switch_cmd_go"))
-		return nil
+		return false, nil
 	}
 
 	cmp := compareSemver(ver, latest)
@@ -114,42 +136,48 @@ func Update(args []string) error {
 	if *checkOnly {
 		if cmp >= 0 {
 			cliout.Printf(i18n.T("update.up_to_date_check")+"\n", ver)
-			return nil
+			return false, nil
 		}
 		cliout.Printf(i18n.T("update.available")+"\n", ver, latest)
 		os.Exit(1)
-		return nil // unreachable
+		return false, nil // unreachable
 	}
 
 	if cmp > 0 {
 		cliout.Printf("\n"+i18n.T("update.prerelease")+"\n", ver, latest)
 		cliout.Println(i18n.T("update.nothing_to_do"))
-		return nil
+		return false, nil
 	}
 	if cmp == 0 {
 		cliout.Printf("\n"+i18n.T("update.up_to_date")+"\n", ver)
-		return nil
+		return false, nil
 	}
 
 	// cmp < 0: outdated. Pick a method based on where the binary lives.
 	method := detectInstallMethod()
 	cliout.Printf("\n"+i18n.T("update.update_available")+"\n", ver, latest)
 	renderChangelog(changelogRelease(ctx, latest))
-	cliout.Printf(i18n.T("update.install_method")+"\n\n", method)
+	cliout.Printf(i18n.T("update.install_method")+"\n\n", methodDisplayName(method))
 
 	switch method {
 	case installMethodBrew:
-		return runBrewUpgrade(*dryRun)
+		// dry-run only prints the command — nothing was dispatched.
+		return !*dryRun, runBrewUpgrade(*dryRun)
 	case installMethodGoInstall:
-		return runGoInstallUpgrade(*dryRun)
+		return !*dryRun, runGoInstallUpgrade(*dryRun)
+	case installMethodScript:
+		// Print, don't exec — see the doc comment above for why the
+		// install script is never piped through a shell by us.
+		printScriptUpgradeHint(latest)
+		return false, nil
 	default:
 		// Unknown install path — we can't safely auto-replace the
 		// binary because we don't know where the user wants it.
-		// Print the manual flow (curl + SHA256 + cosign) so they
+		// Print the manual flow (download + SHA256 + cosign) so they
 		// can finish by hand without losing the README's verify
 		// step.
 		printUnknownInstallHint(latest)
-		return nil
+		return false, nil
 	}
 }
 
@@ -157,11 +185,32 @@ func Update(args []string) error {
 
 type installMethod string
 
+// installMethod values are internal identifiers. Brew and go-install
+// double as display labels (proper names, identical in every language);
+// script/unknown display text lives in the update.method_* locale keys
+// via methodDisplayName — don't put user-facing prose here.
 const (
 	installMethodBrew      installMethod = "Homebrew"
 	installMethodGoInstall installMethod = "go install"
-	installMethodUnknown   installMethod = "unknown (curl / manual)"
+	installMethodScript    installMethod = "script"
+	installMethodUnknown   installMethod = "unknown"
 )
+
+// methodDisplayName localizes the install-method label shown after
+// "Install method:". The installMethod constants stay English — they
+// are internal identifiers — and "Homebrew" / "go install" are proper
+// names that read the same in every language, so only the script and
+// unknown labels get a translation.
+func methodDisplayName(m installMethod) string {
+	switch m {
+	case installMethodScript:
+		return i18n.T("update.method_script")
+	case installMethodUnknown:
+		return i18n.T("update.method_unknown")
+	default:
+		return string(m)
+	}
+}
 
 func detectInstallMethod() installMethod {
 	exe, err := os.Executable()
@@ -174,6 +223,15 @@ func detectInstallMethod() installMethod {
 	if resolved, lerr := filepath.EvalSymlinks(exe); lerr == nil {
 		exe = resolved
 	}
+	return classifyExePath(exe)
+}
+
+// classifyExePath maps a resolved binary path to an install method.
+// Split from detectInstallMethod so tests can feed synthetic paths —
+// a `go test` binary's own os.Executable() never lands in any of the
+// recognised locations.
+func classifyExePath(exe string) installMethod {
+	exe = filepath.Clean(exe)
 	if strings.Contains(exe, string(os.PathSeparator)+"Cellar"+string(os.PathSeparator)) {
 		return installMethodBrew
 	}
@@ -187,12 +245,81 @@ func detectInstallMethod() installMethod {
 			if dir == "" {
 				continue
 			}
-			if strings.HasPrefix(exe, dir+string(os.PathSeparator)) {
+			if hasDirPrefix(exe, dir) {
 				return installMethodGoInstall
 			}
 		}
 	}
+	// Install-script default target dirs. Checked AFTER go install so a
+	// GOBIN deliberately pointed at one of these still upgrades via
+	// `go install` (which is what would actually overwrite the binary).
+	exeDir := filepath.Dir(exe)
+	for _, dir := range scriptBinDirs() {
+		if pathsEqual(exeDir, dir) {
+			return installMethodScript
+		}
+	}
 	return installMethodUnknown
+}
+
+// scriptBinDirs returns the DEFAULT bin dir the platform's install
+// script drops the binary into: %LOCALAPPDATA%\everyapi\bin from
+// install.ps1 (falling back to <home>\AppData\Local like the script
+// does), ~/.local/bin from install.sh.
+//
+// Unix deliberately omits /usr/local/bin: install.sh does target it
+// when run as root, but it's also where manual tarball installs
+// conventionally land, and misclassifying those as "install script"
+// would hint a non-sudo re-run that installs a SECOND binary into
+// ~/.local/bin instead of upgrading the one in place. ~/.local/bin is
+// unambiguous. Custom --prefix / -Prefix installs are undetectable by
+// design and stay "unknown".
+func scriptBinDirs() []string {
+	if runtime.GOOS == "windows" {
+		base := os.Getenv("LOCALAPPDATA")
+		if base == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return nil
+			}
+			base = filepath.Join(home, "AppData", "Local")
+		}
+		return []string{filepath.Join(base, "everyapi", "bin")}
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	return []string{filepath.Join(home, ".local", "bin")}
+}
+
+// pathsEqual compares two cleaned paths for equality — case-
+// insensitively on Windows, where the filesystem is case-preserving
+// but case-insensitive and %LOCALAPPDATA% casing varies by source.
+func pathsEqual(a, b string) bool {
+	a, b = filepath.Clean(a), filepath.Clean(b)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}
+
+// hasDirPrefix reports whether exe (already Clean'd) sits under dir at
+// any depth, with the same normalization pathsEqual applies: dir is
+// Clean'd (a raw GOBIN can carry a trailing separator that would
+// otherwise never match) and the comparison folds case on Windows,
+// where EvalSymlinks returns on-disk casing while the user's env keeps
+// whatever casing they typed.
+func hasDirPrefix(exe, dir string) bool {
+	prefix := filepath.Clean(dir) + string(os.PathSeparator)
+	if len(exe) < len(prefix) {
+		return false
+	}
+	head := exe[:len(prefix)]
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(head, prefix)
+	}
+	return head == prefix
 }
 
 // goBinDirs returns the candidate directories `go install` may have
@@ -246,7 +373,7 @@ func runBrewUpgrade(dryRun bool) error {
 	if err := runCmd("brew", "upgrade", "everyapi"); err != nil {
 		return fmt.Errorf("brew upgrade everyapi: %w", err)
 	}
-	cliout.Printf("\nDone. Run `everyapi version` to confirm.\n")
+	cliout.Printf("\n%s\n", i18n.T("update.done_confirm"))
 	return nil
 }
 
@@ -260,34 +387,77 @@ func runGoInstallUpgrade(dryRun bool) error {
 	if err := runCmd("go", "install", pkg); err != nil {
 		return fmt.Errorf("go install: %w", err)
 	}
-	cliout.Printf("\nDone. Run `everyapi version` to confirm.\n")
+	cliout.Printf("\n%s\n", i18n.T("update.done_confirm"))
 	return nil
 }
 
+// printScriptUpgradeHint is the action for installMethodScript: the
+// binary sits in the install script's own bin dir, so re-running the
+// script's published one-liner upgrades it in place (with the script's
+// SHA256 + cosign verification). Printed, never exec'd — rationale in
+// the Update doc comment.
+func printScriptUpgradeHint(latest string) {
+	cliout.Printf("%s\n\n", i18n.T("update.rerun_script"))
+	cliout.Printf("  %s\n", installScriptOneLiner())
+	cliout.Printf("\n"+i18n.T("update.release_notes")+"\n", releaseTagURL(latest))
+}
+
+// installScriptOneLiner returns the platform's copy-paste install/
+// upgrade command — the same one the README and docs publish.
+func installScriptOneLiner() string {
+	if runtime.GOOS == "windows" {
+		return "irm https://dl.everyapi.ai/install.ps1 | iex"
+	}
+	return "curl -fsSL https://dl.everyapi.ai/install.sh | bash"
+}
+
+// releaseAssetName is the goreleaser archive for the running platform
+// — zip on Windows, tar.gz elsewhere (.goreleaser.yml format_overrides).
+// Windows is always the amd64 artifact: .goreleaser.yml ignores
+// windows/arm64 (no native build), and Windows-on-ARM runs the amd64
+// binary under emulation — the same mapping install.ps1 makes. Naming
+// the literal GOARCH there would print a 404 link.
+func releaseAssetName() string {
+	if runtime.GOOS == "windows" {
+		return "everyapi_windows_amd64.zip"
+	}
+	return fmt.Sprintf("everyapi_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+}
+
 func printUnknownInstallHint(latest string) {
-	binaryPath := guessBinaryPath()
-	cliout.Printf("%s\n", i18n.T("update.cant_auto"))
-
 	// Install-script path comes first because it's the most common
-	// install method for users who land in the "unknown" branch —
-	// `curl … install.sh | bash` lands the binary in ~/.local/bin,
-	// which doesn't match the brew /Cellar/ or go install $GOBIN
-	// prefixes detectInstallMethod() looks for. Re-running the same
-	// curl command upgrades in place, so it's the closest thing to
-	// a one-liner upgrade for non-brew/non-go users.
-	cliout.Printf("  # Install script (Linux / macOS — re-run to upgrade in place)\n")
-	cliout.Printf("  curl -fsSL https://dl.everyapi.ai/install.sh | bash\n\n")
-	cliout.Printf("  # Homebrew (after `brew tap everyapi-ai/tap`)\n")
-	cliout.Printf("  brew update && brew upgrade everyapi\n\n")
-	cliout.Printf("  # go install\n")
-	cliout.Printf("  go install github.com/everyapi-ai/everyapi-ai@latest\n\n")
-	cliout.Printf("  # Direct binary (current platform: %s/%s)\n", runtime.GOOS, runtime.GOARCH)
-	cliout.Printf("  curl -L -o %s.new \\\n", binaryPath)
-	cliout.Printf("    https://github.com/everyapi-ai/everyapi-ai/releases/download/%s/everyapi_%s_%s.tar.gz\n",
-		latest, runtime.GOOS, runtime.GOARCH)
-	cliout.Printf("  # verify SHA256 + cosign per README before replacing the binary\n")
+	// install method for users who land in the "unknown" branch (a
+	// custom --prefix / -Prefix puts the binary outside every dir
+	// detectInstallMethod() knows). Re-running it upgrades in place,
+	// so it's the closest thing to a one-liner upgrade for
+	// non-brew/non-go users. Everything here is per-platform: bash
+	// script + brew mean nothing on Windows, install.ps1 means
+	// nothing elsewhere.
+	// No `go install` entry: it's the nichest of the install paths, and
+	// anyone who actually installed that way sits under $GOBIN and never
+	// reaches this hint — detectInstallMethod dispatches their upgrade
+	// through `go install` automatically. The comment lines are i18n'd;
+	// the commands and URLs themselves are not (they're literal input).
+	if runtime.GOOS == "windows" {
+		cliout.Printf("%s\n", i18n.T("update.cant_auto_windows"))
+		cliout.Printf("%s\n", i18n.T("update.hint_script_windows"))
+		cliout.Printf("  irm https://dl.everyapi.ai/install.ps1 | iex\n\n")
+	} else {
+		cliout.Printf("%s\n", i18n.T("update.cant_auto"))
+		cliout.Printf("%s\n", i18n.T("update.hint_script_unix"))
+		cliout.Printf("  curl -fsSL https://dl.everyapi.ai/install.sh | bash\n\n")
+		cliout.Printf("%s\n", i18n.T("update.hint_brew"))
+		cliout.Printf("  brew update && brew upgrade everyapi\n\n")
+	}
+	// A bare URL, not a constructed curl command: the download is an
+	// ARCHIVE (zip/tar.gz), not the binary itself, so the old
+	// `curl -o <exe>.new <…tar.gz>` line was wrong twice over — and
+	// POSIX line continuations don't paste into PowerShell anyway.
+	cliout.Printf(i18n.T("update.hint_direct")+"\n", runtime.GOOS, runtime.GOARCH)
+	cliout.Printf(i18n.T("update.hint_direct_replace")+"\n", guessBinaryPath())
+	cliout.Printf("  https://github.com/everyapi-ai/everyapi-ai/releases/download/%s/%s\n", latest, releaseAssetName())
 
-	cliout.Printf("\nRelease notes: https://github.com/everyapi-ai/everyapi-ai/releases/tag/%s\n", latest)
+	cliout.Printf("\n"+i18n.T("update.release_notes")+"\n", releaseTagURL(latest))
 }
 
 // guessBinaryPath returns the binary's full on-disk path for use in
