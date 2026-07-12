@@ -280,9 +280,8 @@ var Registry = map[string]*Tool{
 	},
 
 	// Google Gemini CLI: reads GEMINI_API_KEY (auth) and
-	// GOOGLE_GEMINI_BASE_URL (alternate base). The /v1beta suffix
-	// matches Google's published path; EveryAPI's gemini relay is
-	// mounted at the same path so a passthrough works.
+	// GOOGLE_GEMINI_BASE_URL (alternate base). Gemini CLI appends the
+	// native /v1beta API prefix itself, so this must be the gateway root.
 	"gemini": {
 		Name:        "gemini",
 		ExecName:    "gemini",
@@ -293,9 +292,10 @@ var Registry = map[string]*Tool{
 		envFn: func(apiBase, token string) map[string]string {
 			return map[string]string{
 				"GEMINI_API_KEY":         token,
-				"GOOGLE_GEMINI_BASE_URL": joinBase(apiBase, "/v1beta"),
+				"GOOGLE_GEMINI_BASE_URL": joinBase(apiBase, ""),
 			}
 		},
+		prepareFn: prepareGemini,
 	},
 
 	// Nous Research Hermes Agent (Python CLI, binary `hermes`). Unlike

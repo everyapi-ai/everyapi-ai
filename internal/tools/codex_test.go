@@ -173,13 +173,13 @@ func TestCodexTool_PrepareWired(t *testing.T) {
 	}
 }
 
-// TestClaudeTool_NoPrepare guards the negative case: claude/gemini
+// TestClaudeTool_NoPrepare guards the negative case: claude
 // don't need pre-exec setup, so tool.Prepare must be a clean no-op
 // (nil map, nil err). A future regression that accidentally wires a
 // shared prepareFn would silently create unwanted ~/.config/everyapi
 // dirs for those flows.
 func TestClaudeTool_NoPrepare(t *testing.T) {
-	for _, name := range []string{"claude", "gemini"} {
+	for _, name := range []string{"claude"} {
 		tool, _ := Lookup(name)
 		extra, err := tool.Prepare("https://api.everyapi.ai", "tok")
 		if err != nil {

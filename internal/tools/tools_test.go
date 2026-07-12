@@ -147,16 +147,16 @@ func TestEnv_Codex(t *testing.T) {
 	}
 }
 
-// TestEnv_Gemini verifies the Gemini env contract: /v1beta suffix
-// matches Google's published path.
+// TestEnv_Gemini verifies the Gemini env contract. Gemini CLI's SDK appends
+// /v1beta itself, so GOOGLE_GEMINI_BASE_URL must remain at the gateway root.
 func TestEnv_Gemini(t *testing.T) {
 	tool, _ := Lookup("gemini")
 	env := tool.Env("https://api.everyapi.ai", "my-token")
 	if got := env["GEMINI_API_KEY"]; got != "my-token" {
 		t.Errorf("GEMINI_API_KEY = %q", got)
 	}
-	if got := env["GOOGLE_GEMINI_BASE_URL"]; got != "https://api.everyapi.ai/v1beta" {
-		t.Errorf("GOOGLE_GEMINI_BASE_URL = %q (need /v1beta suffix)", got)
+	if got := env["GOOGLE_GEMINI_BASE_URL"]; got != "https://api.everyapi.ai" {
+		t.Errorf("GOOGLE_GEMINI_BASE_URL = %q, want gateway root", got)
 	}
 }
 
@@ -185,7 +185,7 @@ func TestEnv_LocalDevBase(t *testing.T) {
 	tool, _ := Lookup("gemini")
 	env := tool.Env("http://localhost:8787/", "tok")
 	got := env["GOOGLE_GEMINI_BASE_URL"]
-	if got != "http://localhost:8787/v1beta" {
+	if got != "http://localhost:8787" {
 		t.Errorf("GOOGLE_GEMINI_BASE_URL = %q (expected single slash join)", got)
 	}
 	// Defensive: no `://` anomalies introduced
