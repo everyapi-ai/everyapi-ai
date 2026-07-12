@@ -2,11 +2,39 @@ package mcp
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 )
+
+// clientConfigPath returns the path the client CLI actually uses. Codex
+// supports CODEX_HOME and EveryAPI's managed Codex launcher sets it, so a
+// hard-coded ~/.codex hint can point at a completely unrelated file.
+func clientConfigPath(c *mcpClient) string {
+	if c != nil {
+		switch c.Name {
+		case "claude":
+			if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+				return filepath.Join(dir, ".claude.json")
+			}
+		case "codex":
+			if home := os.Getenv("CODEX_HOME"); home != "" {
+				return filepath.Join(home, "config.toml")
+			}
+		case "gemini":
+			if home := os.Getenv("GEMINI_CLI_HOME"); home != "" {
+				return filepath.Join(home, "settings.json")
+			}
+		}
+	}
+	if c == nil {
+		return ""
+	}
+	return c.ConfigPath
+}
 
 // resolveClient picks which MCP client to operate on. Three paths,
 // in priority order:

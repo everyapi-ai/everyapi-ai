@@ -79,7 +79,7 @@ func Status(args []string) error {
 		)
 		switch probeClient(c) {
 		case stateRegistered:
-			word, tone, extra = i18n.T("mcp.status.state_registered"), style.ToneGreen, c.ConfigPath
+			word, tone, extra = i18n.T("mcp.status.state_registered"), style.ToneGreen, clientConfigPath(c)
 			registered++
 		case stateNotRegistered:
 			word, tone, extra = i18n.T("mcp.status.state_not_registered"), style.ToneYellow, fmt.Sprintf(i18n.T("mcp.status.run_install_hint"), n)
@@ -165,7 +165,12 @@ func probeClient(c *mcpClient) string {
 // "○ everyapi:"). A substring search falsely marked a server named "foo"
 // whose command was `/usr/bin/everyapi-helper` as the EveryAPI registration.
 func listOutputHasServer(out []byte, name string) bool {
-	for _, line := range strings.Split(cliout.Sanitize(string(out)), "\n") {
+	// Split before sanitizing: cliout.Sanitize deliberately folds CR/LF to
+	// spaces for untrusted single-field output. Sanitizing the whole table
+	// first therefore collapses every row into the header row and makes a
+	// normal Codex `mcp list` table impossible to match.
+	for _, rawLine := range strings.Split(string(out), "\n") {
+		line := cliout.Sanitize(rawLine)
 		fields := strings.Fields(line)
 		if len(fields) == 0 {
 			continue

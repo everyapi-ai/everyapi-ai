@@ -65,7 +65,7 @@ func Install(args []string) error {
 	// Same resolution `use` applies — a client sitting in an off-$PATH
 	// npm global dir counts as installed here too.
 	if _, _, ok := tools.LookupExecName(c.Name); !ok {
-		return fmt.Errorf("`%s` CLI not found on PATH. %s\n\nAlternatively, paste the following into %s:\n\n%s", c.Name, c.InstallHint, c.ConfigPath, c.ManualSnippet)
+		return fmt.Errorf("`%s` CLI not found on PATH. %s\n\nAlternatively, paste the following into %s:\n\n%s", c.Name, c.InstallHint, clientConfigPath(c), c.ManualSnippet)
 	}
 
 	argv := c.AddArgv("everyapi", "everyapi", []string{"mcp"})
@@ -214,4 +214,3 @@ func stripScopeFlag(argv []string) []string {
 	}
 	return out
 }
-

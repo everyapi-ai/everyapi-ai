@@ -100,3 +100,16 @@ func TestProbeClient(t *testing.T) {
 		}
 	})
 }
+
+func TestListOutputHasServerPreservesRows(t *testing.T) {
+	codex := []byte("Name      Command   Args  Env  Cwd  Status   Auth\n" +
+		"everyapi  everyapi  mcp   -    -    enabled  Unsupported\n")
+	if !listOutputHasServer(codex, "everyapi") {
+		t.Fatal("did not find everyapi in Codex header-plus-row output")
+	}
+
+	nearName := []byte("Name  Command\nfoo   /usr/bin/everyapi-helper\n")
+	if listOutputHasServer(nearName, "everyapi") {
+		t.Fatal("matched everyapi only inside another server's command")
+	}
+}

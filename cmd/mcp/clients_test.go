@@ -2,10 +2,40 @@ package mcp
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestClientConfigPathHonorsCodexHome(t *testing.T) {
+	t.Setenv("CODEX_HOME", filepath.Join(t.TempDir(), "managed-codex"))
+	got := clientConfigPath(mcpClients["codex"])
+	want := filepath.Join(os.Getenv("CODEX_HOME"), "config.toml")
+	if got != want {
+		t.Fatalf("clientConfigPath(codex) = %q, want %q", got, want)
+	}
+	if got := clientConfigPath(mcpClients["claude"]); got != "~/.claude.json" {
+		t.Fatalf("clientConfigPath(claude) = %q", got)
+	}
+}
+
+func TestClientConfigPathHonorsClaudeConfigDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "managed-claude")
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	if got, want := clientConfigPath(mcpClients["claude"]), filepath.Join(dir, ".claude.json"); got != want {
+		t.Fatalf("clientConfigPath(claude) = %q, want %q", got, want)
+	}
+}
+
+func TestClientConfigPathHonorsGeminiCLIHome(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "managed-gemini")
+	t.Setenv("GEMINI_CLI_HOME", home)
+	if got, want := clientConfigPath(mcpClients["gemini"]), filepath.Join(home, "settings.json"); got != want {
+		t.Fatalf("clientConfigPath(gemini) = %q, want %q", got, want)
+	}
+}
 
 func TestLookupClient(t *testing.T) {
 	for _, name := range []string{"claude", "codex", "gemini"} {
