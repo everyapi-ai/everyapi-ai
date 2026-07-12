@@ -19,6 +19,10 @@ func Run(args []string) error {
 	if len(args) == 0 {
 		return runList(nil)
 	}
+	if len(args) > 1 && (args[1] == "help" || args[1] == "--help" || args[1] == "-h") {
+		cliout.Println(i18n.T("notify.usage"))
+		return nil
+	}
 	switch args[0] {
 	case "help", "--help", "-h":
 		cliout.Println(i18n.T("notify.usage"))
