@@ -39,6 +39,9 @@ func TestEnv_Claude(t *testing.T) {
 	if got := env["ANTHROPIC_AUTH_TOKEN"]; got != "my-token" {
 		t.Errorf("ANTHROPIC_AUTH_TOKEN = %q", got)
 	}
+	if got := env["ENABLE_TOOL_SEARCH"]; got != "1" {
+		t.Errorf("ENABLE_TOOL_SEARCH = %q, want 1", got)
+	}
 	// ANTHROPIC_API_KEY must be present and empty: mergeEnv overlays it
 	// onto the child env to neutralise any ambient real Anthropic key so
 	// it can't leak to the gateway or shadow ANTHROPIC_AUTH_TOKEN.
@@ -89,6 +92,9 @@ func TestClaudeProviderPreset(t *testing.T) {
 		}
 		if got := env["ANTHROPIC_AUTH_TOKEN"]; got != "my-token" {
 			t.Errorf("%s ANTHROPIC_AUTH_TOKEN = %q", name, got)
+		}
+		if got := env["ENABLE_TOOL_SEARCH"]; got != "1" {
+			t.Errorf("%s ENABLE_TOOL_SEARCH = %q, want 1", name, got)
 		}
 		if got, ok := env["ANTHROPIC_API_KEY"]; !ok || got != "" {
 			t.Errorf("%s ANTHROPIC_API_KEY = %q (present=%v), want present and empty", name, got, ok)

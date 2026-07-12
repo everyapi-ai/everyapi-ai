@@ -187,6 +187,13 @@ func claudeProviderPreset(name, owner string) *Tool {
 			return map[string]string{
 				"ANTHROPIC_BASE_URL":   joinBase(apiBase, ""),
 				"ANTHROPIC_AUTH_TOKEN": token,
+				// Claude Code disables deferred MCP tool discovery when a
+				// third-party ANTHROPIC_BASE_URL is present unless this opt-in
+				// is set. Without it, every configured MCP schema is injected
+				// into the first request (hundreds of thousands of tokens for
+				// large Jira/Lark installations). Keep the native ToolSearch
+				// behavior while routing through EveryAPI.
+				"ENABLE_TOOL_SEARCH": "1",
 				// Neutralise any ambient ANTHROPIC_API_KEY: Claude Code
 				// prefers it over ANTHROPIC_AUTH_TOKEN, so a user who has
 				// their real Anthropic key exported would otherwise send
@@ -235,6 +242,9 @@ var Registry = map[string]*Tool{
 			return map[string]string{
 				"ANTHROPIC_BASE_URL":   joinBase(apiBase, ""),
 				"ANTHROPIC_AUTH_TOKEN": token,
+				// Preserve Claude Code's deferred MCP ToolSearch behavior when
+				// the CLI is pointed at the EveryAPI gateway.
+				"ENABLE_TOOL_SEARCH": "1",
 				// See claudeProviderPreset: clear any ambient
 				// ANTHROPIC_API_KEY so the user's real Anthropic key is
 				// never forwarded to the gateway and can't shadow the
