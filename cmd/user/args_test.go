@@ -16,6 +16,12 @@ func TestDestructivePositionalsAreExact(t *testing.T) {
 	if err := runAffTransfer(&api.Client{}, []string{"1", "extra", "-y"}); err == nil {
 		t.Fatal("affiliate transfer accepted extra")
 	}
+	if err := runAff([]string{"transfer", "1", "extra", "-y"}); err == nil {
+		t.Fatal("affiliate dispatcher accepted extra before authentication")
+	}
+	if err := runAff([]string{"transfer", "not-an-amount", "-y"}); err == nil {
+		t.Fatal("affiliate dispatcher deferred invalid amount until after authentication")
+	}
 }
 
 func TestFlagOnlyCommandsRejectPositionalsBeforeSideEffects(t *testing.T) {

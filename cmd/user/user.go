@@ -465,6 +465,11 @@ func runAff(args []string) error {
 	if len(args) > 0 && args[0] == "reset" && len(args) != 1 {
 		return cliargs.RequireExact(args, 1)
 	}
+	if len(args) > 0 && args[0] == "transfer" {
+		if err := validateAffTransferArgs(args[1:]); err != nil {
+			return err
+		}
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -493,20 +498,14 @@ func runAff(args []string) error {
 // the affiliate-side mirror of `seller withdraw`. Amount is the first
 // positional arg (gateway quota units); -y skips the confirm.
 func runAffTransfer(client *api.Client, args []string) error {
+	if err := validateAffTransferArgs(args); err != nil {
+		return err
+	}
 	// Accept the amount and the confirm-skip flag in any order (stdlib flag
 	// would mis-read the amount-first form's trailing flag). Both
 	// `aff transfer -y 1000` and `aff transfer 1000 -y` work.
 	yes, positional := cliprompt.SplitConfirmFlag(args)
-	if len(positional) == 0 {
-		return errors.New(i18n.T("user.aff_transfer_usage"))
-	}
-	if len(positional) != 1 {
-		return cliargs.RequireExact(positional, 1)
-	}
-	amount, err := strconv.Atoi(positional[0])
-	if err != nil || amount <= 0 {
-		return fmt.Errorf(i18n.T("user.aff_transfer_bad_amount"), positional[0])
-	}
+	amount, _ := strconv.Atoi(positional[0])
 	// Render the amount in USD (like `seller withdraw` / `status`) so the
 	// confirm + result speak the same units as the rest of the CLI — a
 	// user typing too small an amount sees "$0.00" and backs out instead
@@ -551,6 +550,21 @@ func runAffTransfer(client *api.Client, args []string) error {
 		cliout.Printf(i18n.T("user.aff_transfer_ok")+"\n", usd)
 	} else {
 		cliout.Printf(i18n.T("user.aff_transfer_ok_no_usd")+"\n", amount)
+	}
+	return nil
+}
+
+func validateAffTransferArgs(args []string) error {
+	_, positional := cliprompt.SplitConfirmFlag(args)
+	if len(positional) == 0 {
+		return errors.New(i18n.T("user.aff_transfer_usage"))
+	}
+	if len(positional) != 1 {
+		return cliargs.RequireExact(positional, 1)
+	}
+	amount, err := strconv.Atoi(positional[0])
+	if err != nil || amount <= 0 {
+		return fmt.Errorf(i18n.T("user.aff_transfer_bad_amount"), positional[0])
 	}
 	return nil
 }
