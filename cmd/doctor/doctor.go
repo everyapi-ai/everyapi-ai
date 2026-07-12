@@ -17,6 +17,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/everyapi-ai/everyapi-ai/cmd/proxy"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-ai/internal/style"
@@ -33,6 +34,9 @@ func Run(args []string) error {
 	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
 		cliout.Println(i18n.T("doctor.usage"))
 		return nil
+	}
+	if err := cliargs.RequireExact(args, 0); err != nil {
+		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

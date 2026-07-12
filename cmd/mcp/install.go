@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	rootcmd "github.com/everyapi-ai/everyapi-ai/cmd"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-ai/internal/tools"
@@ -51,6 +52,9 @@ func Install(args []string) error {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
 		fmt.Fprint(os.Stdout, i18n.T("mcp.install_usage"))
 		return nil
+	}
+	if len(args) > 1 {
+		return cliargs.RequireExact(args, 1)
 	}
 
 	clientName, err := resolveClient(args, "install")
