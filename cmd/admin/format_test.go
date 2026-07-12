@@ -139,12 +139,12 @@ func TestPrintUserSanitizesEscapes(t *testing.T) {
 	i18n.SetLanguage("en")
 	u := api.AdminUserRow{
 		ID:          7,
-		Username:    "ev\x1b[31mil",        // CSI color
-		Email:       "a\x1b]0;pwn\x07b",     // OSC title set + BEL
+		Username:    "ev\x1b[31mil",     // CSI color
+		Email:       "a\x1b]0;pwn\x07b", // OSC title set + BEL
 		Role:        1,
 		Status:      1,
-		Group:       "grp\x1b[2J",           // CSI erase-screen
-		DisplayName: "disp\x07lay",          // BEL
+		Group:       "grp\x1b[2J",  // CSI erase-screen
+		DisplayName: "disp\x07lay", // BEL
 	}
 
 	rows := captureOut(t, func() { printUserRows([]api.AdminUserRow{u}, 0, false) })

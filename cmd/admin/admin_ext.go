@@ -147,6 +147,9 @@ func adminUserManage(args []string) error {
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return err
+	}
 	if *action == "" {
 		return errors.New("--action is required")
 	}
@@ -195,6 +198,9 @@ func adminUserDelete(args []string) error {
 	fs := flag.NewFlagSet("admin user delete", flag.ContinueOnError)
 	yes := fs.Bool("y", false, "skip confirmation")
 	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if err := rejectPositionals(fs); err != nil {
 		return err
 	}
 	if !*yes {
@@ -297,6 +303,9 @@ func adminChannelTag(args []string) error {
 	disable := fs.Bool("disable", false, "disable every channel carrying the tag")
 	yes := fs.Bool("y", false, "skip confirmation")
 	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if err := rejectPositionals(fs); err != nil {
 		return err
 	}
 	if *enable == *disable {
@@ -537,6 +546,9 @@ func adminAbuseUpdate(args []string) error {
 	status := fs.String("status", "", "new status (backend enumerates)")
 	note := fs.String("note", "", "admin triage note")
 	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if err := rejectPositionals(fs); err != nil {
 		return err
 	}
 	if *status == "" && *note == "" {

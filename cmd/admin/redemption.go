@@ -93,6 +93,9 @@ func adminRedemptionList(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -179,6 +182,9 @@ func adminRedemptionCreate(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return err
+	}
 	if *name == "" {
 		return errors.New("--name is required")
 	}
@@ -225,6 +231,9 @@ func adminRedemptionUpdate(args []string) error {
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -262,7 +271,7 @@ func adminRedemptionUpdate(args []string) error {
 }
 
 func adminRedemptionStatus(args []string) error {
-	if len(args) < 2 {
+	if len(args) != 2 {
 		return errors.New("usage: everyapi admin redemption status <id> <enable|disable>")
 	}
 	id, err := strconv.Atoi(args[0])
@@ -302,6 +311,9 @@ func adminRedemptionDelete(args []string) error {
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return err
+	}
 	if !*yes {
 		if !cliprompt.IsInteractive() {
 			// Destructive + no TTY to confirm on: fail closed rather than
@@ -332,6 +344,9 @@ func adminRedemptionClearInvalid(args []string) error {
 	fs := flag.NewFlagSet("admin redemption clear-invalid", flag.ContinueOnError)
 	yes := fs.Bool("y", false, "skip confirmation")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := rejectPositionals(fs); err != nil {
 		return err
 	}
 	if !*yes {

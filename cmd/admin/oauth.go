@@ -57,6 +57,9 @@ func adminChannelAddOAuthAntigravity(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return err
+	}
 	*name = strings.TrimSpace(*name)
 	*models = strings.TrimSpace(*models)
 	*group = strings.TrimSpace(*group)
