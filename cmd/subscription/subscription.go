@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/api"
@@ -65,6 +66,9 @@ func runPlans(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -113,6 +117,9 @@ func runSelf(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -159,6 +166,9 @@ func runPreference(args []string) error {
 	fs := flag.NewFlagSet("subscription preference", flag.ContinueOnError)
 	set := fs.String("set", "", "new billing preference: subscription_first / wallet_first / subscription_only / wallet_only")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
 		return err
 	}
 	client, err := newClient()

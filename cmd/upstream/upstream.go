@@ -11,6 +11,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/api"
@@ -21,6 +22,9 @@ func Run(args []string) error {
 	fs := flag.NewFlagSet("upstream", flag.ContinueOnError)
 	baseFlag := fs.String("base", "", "gateway base URL (default: your gateway, else the public one)")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
 		return err
 	}
 

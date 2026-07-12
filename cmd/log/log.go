@@ -12,9 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -125,6 +126,9 @@ func runList(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	if err := resolveWindow(&f, sinceStr, untilStr); err != nil {
 		return err
 	}
@@ -168,6 +172,9 @@ func runStat(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	if err := resolveWindow(&f, sinceStr, untilStr); err != nil {
 		return err
 	}
@@ -191,6 +198,9 @@ func runSummary(args []string) error {
 	sinceStr := fs.String("since", "168h", "window start (e.g. 168h, 7d) or Unix seconds")
 	untilStr := fs.String("until", "", "window end (Unix seconds; default: now)")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
 		return err
 	}
 	now := time.Now()
