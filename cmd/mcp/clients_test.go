@@ -74,14 +74,21 @@ func TestClientAddArgv(t *testing.T) {
 }
 
 func TestClientRemoveArgv(t *testing.T) {
-	// All three clients currently take `mcp remove <name>` — but the
-	// builder is per-client so this stays correct if one diverges.
-	for _, name := range []string{"claude", "codex", "gemini"} {
-		c, _ := lookupClient(name)
+	cases := []struct {
+		name string
+		want []string
+	}{
+		{"claude", []string{"mcp", "remove", "everyapi"}},
+		{"codex", []string{"mcp", "remove", "everyapi"}},
+		// Gemini defaults removal to project scope, while install writes user
+		// scope. Omitting this flag reports success but leaves the registration.
+		{"gemini", []string{"mcp", "remove", "--scope", "user", "everyapi"}},
+	}
+	for _, tc := range cases {
+		c, _ := lookupClient(tc.name)
 		got := c.RemoveArgv("everyapi")
-		want := []string{"mcp", "remove", "everyapi"}
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("%s RemoveArgv = %v, want %v", name, got, want)
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%s RemoveArgv = %v, want %v", tc.name, got, tc.want)
 		}
 	}
 }

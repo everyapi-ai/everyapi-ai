@@ -322,6 +322,41 @@ func TestProviderChatModels(t *testing.T) {
 	}
 }
 
+func TestCatalogSupportsEndpoint(t *testing.T) {
+	cases := []struct {
+		name     string
+		catalog  []api.RelayModel
+		endpoint string
+		want     bool
+	}{
+		{"matching model", []api.RelayModel{{ID: "gemini-pro", SupportedEndpointTypes: []string{"gemini"}}}, "gemini", true},
+		{"case insensitive", []api.RelayModel{{ID: "gemini-pro", SupportedEndpointTypes: []string{"Gemini"}}}, "gemini", true},
+		{"explicitly incompatible", []api.RelayModel{{ID: "claude", SupportedEndpointTypes: []string{"anthropic", "openai"}}}, "gemini", false},
+		{"missing metadata fails open", []api.RelayModel{{ID: "legacy"}}, "gemini", true},
+		{"empty catalog", nil, "gemini", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := catalogSupportsEndpoint(tc.catalog, tc.endpoint); got != tc.want {
+				t.Errorf("catalogSupportsEndpoint() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestToolInvocationNeedsEndpoint(t *testing.T) {
+	for _, args := range [][]string{{"--help"}, {"-h"}, {"--version"}, {"-v"}} {
+		if toolInvocationNeedsEndpoint(args) {
+			t.Errorf("%v should not require a model endpoint", args)
+		}
+	}
+	for _, args := range [][]string{nil, {"--prompt", "hi"}, {"--model", "gemini-pro"}} {
+		if !toolInvocationNeedsEndpoint(args) {
+			t.Errorf("%v should require a model endpoint", args)
+		}
+	}
+}
+
 func TestValidateClaudePresetModel(t *testing.T) {
 	tool, err := tools.Lookup("kimi")
 	if err != nil {

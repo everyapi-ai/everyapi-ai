@@ -60,6 +60,9 @@ func Uninstall(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: everyapi version uninstall [--dry-run] [--yes|-y] [--keep-config] [--keep-data] [--keep-binary]")
+	}
 
 	plan, err := buildUninstallPlan(*keepConfig, *keepData, *keepBinary)
 	if err != nil {

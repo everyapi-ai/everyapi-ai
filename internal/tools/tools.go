@@ -98,6 +98,12 @@ type Tool struct {
 	// CLIs default the model and route it by name through the gateway.
 	ModelEnv string
 
+	// RequiredEndpoint, when non-empty, is the relay endpoint type this
+	// client's wire protocol requires. `everyapi use` checks the live model
+	// catalog before launch so a client cannot enter its own retry loop when
+	// every available model explicitly lacks that protocol bridge.
+	RequiredEndpoint string
+
 	// envFn builds the env vars from the resolved API base + access
 	// token. Returns a map[name]value to merge into os.Environ before
 	// exec. Implemented as a function (not a static map) because the
@@ -283,12 +289,13 @@ var Registry = map[string]*Tool{
 	// GOOGLE_GEMINI_BASE_URL (alternate base). Gemini CLI appends the
 	// native /v1beta API prefix itself, so this must be the gateway root.
 	"gemini": {
-		Name:        "gemini",
-		ExecName:    "gemini",
-		InstallHint: "Install Gemini CLI: https://github.com/google-gemini/gemini-cli#installation",
-		InstallCmd:  "npm install -g @google/gemini-cli",
-		YoloFlag:    "--yolo",
-		YoloLabel:   "yolo mode — auto-approve every tool call (--yolo)",
+		Name:             "gemini",
+		ExecName:         "gemini",
+		InstallHint:      "Install Gemini CLI: https://github.com/google-gemini/gemini-cli#installation",
+		InstallCmd:       "npm install -g @google/gemini-cli",
+		YoloFlag:         "--yolo",
+		YoloLabel:        "yolo mode — auto-approve every tool call (--yolo)",
+		RequiredEndpoint: "gemini",
 		envFn: func(apiBase, token string) map[string]string {
 			return map[string]string{
 				"GEMINI_API_KEY":         token,

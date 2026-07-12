@@ -212,8 +212,18 @@ func Use(args []string) error {
 	// below, including an explicit --model, so a separate probe would be a
 	// redundant round-trip.
 	if t.ModelOwner == "" {
-		if perr := api.New(creds.APIBase, relayKey).
-			ProbeRelayToken(cliout.WithCtx()); perr != nil && api.IsUnauthorized(perr) {
+		client := api.New(creds.APIBase, relayKey)
+		var perr error
+		if t.RequiredEndpoint != "" && toolInvocationNeedsEndpoint(extraArgs) {
+			var catalog []api.RelayModel
+			catalog, perr = client.RelayModelCatalog(cliout.WithCtx())
+			if perr == nil && !catalogSupportsEndpoint(catalog, t.RequiredEndpoint) {
+				return fmt.Errorf("no models available through the %s endpoint for this relay key; choose a compatible EveryAPI client or add a channel that supports this endpoint", t.RequiredEndpoint)
+			}
+		} else {
+			perr = client.ProbeRelayToken(cliout.WithCtx())
+		}
+		if perr != nil && api.IsUnauthorized(perr) {
 			invalidateCachedKeyOnReject(creds, group)
 			return relayKeyRejectedErr(t.ExecName, creds.APIBase)
 		}
@@ -933,6 +943,36 @@ func chatCapable(types []string) bool {
 		}
 	}
 	return false
+}
+
+// catalogSupportsEndpoint reports whether at least one routable model can
+// serve the wire protocol required by a tool. Missing endpoint metadata fails
+// open for compatibility with older gateways; an empty catalog or a catalog
+// where every model explicitly declares only other endpoints fails closed.
+func catalogSupportsEndpoint(catalog []api.RelayModel, endpoint string) bool {
+	for _, model := range catalog {
+		if len(model.SupportedEndpointTypes) == 0 {
+			return true
+		}
+		for _, supported := range model.SupportedEndpointTypes {
+			if strings.EqualFold(supported, endpoint) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func toolInvocationNeedsEndpoint(args []string) bool {
+	if len(args) == 0 {
+		return true
+	}
+	switch args[0] {
+	case "--help", "-h", "help", "--version", "-v", "version":
+		return false
+	default:
+		return true
+	}
 }
 
 // pickModelInteractive lists the models the relay key can route to

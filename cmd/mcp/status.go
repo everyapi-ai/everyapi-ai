@@ -143,7 +143,7 @@ func probeClient(c *mcpClient) string {
 	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		if targeted && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		if targeted && !errors.Is(ctx.Err(), context.DeadlineExceeded) && targetedProbeNotRegistered(out) {
 			return stateNotRegistered
 		}
 		// claude / codex / gemini all exit 0 even when zero servers
@@ -153,10 +153,40 @@ func probeClient(c *mcpClient) string {
 		// too; the same "probe failed" label is the right outcome.
 		return stateProbeFailed
 	}
-	if strings.Contains(string(out), "everyapi") {
+	if listOutputHasServer(out, "everyapi") {
 		return stateRegistered
 	}
 	return stateNotRegistered
+}
+
+// listOutputHasServer matches the server-name column, not an arbitrary
+// occurrence in the command or arguments. Codex starts each data row with the
+// name; Gemini prefixes it with a one-token status glyph (for example
+// "○ everyapi:"). A substring search falsely marked a server named "foo"
+// whose command was `/usr/bin/everyapi-helper` as the EveryAPI registration.
+func listOutputHasServer(out []byte, name string) bool {
+	for _, line := range strings.Split(cliout.Sanitize(string(out)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		if strings.TrimSuffix(fields[0], ":") == name {
+			return true
+		}
+		if len(fields) > 1 && strings.Trim(fields[0], "○●✓✗") == "" && strings.TrimSuffix(fields[1], ":") == name {
+			return true
+		}
+	}
+	return false
+}
+
+// targetedProbeNotRegistered distinguishes the named-server absence that
+// Claude reports from real probe failures such as a corrupt config file. Both
+// exit non-zero; treating every non-zero as absence makes `mcp status` claim
+// "not registered" when the client could not read its configuration at all.
+func targetedProbeNotRegistered(out []byte) bool {
+	s := strings.ToLower(string(out))
+	return strings.Contains(s, "everyapi") && strings.Contains(s, "no mcp server named")
 }
 
 // probeTimeout caps each per-client `mcp list` shell-out. 5s is

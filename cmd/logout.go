@@ -30,6 +30,9 @@ func Logout(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: everyapi auth logout")
+	}
 	// Delete credentials.json (config.Delete treats a missing file as
 	// success) AND scrub the per-tool credential homes on EVERY logout.
 	// The scrub must run even when credentials.json is already gone: a

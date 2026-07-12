@@ -7,6 +7,12 @@ import (
 	"testing"
 )
 
+func TestUninstallRejectsExtraArgsBeforePlanning(t *testing.T) {
+	if err := Uninstall([]string{"--dry-run", "typo"}); err == nil {
+		t.Fatal("uninstall accepted an extra positional")
+	}
+}
+
 // withIsolatedHome points HOME / XDG_CONFIG_HOME / XDG_DATA_HOME at a
 // tempdir for the duration of the test, returns the resolved
 // configDir + dataDir so callers can seed them and assert later. The

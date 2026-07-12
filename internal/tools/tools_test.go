@@ -151,6 +151,9 @@ func TestEnv_Codex(t *testing.T) {
 // /v1beta itself, so GOOGLE_GEMINI_BASE_URL must remain at the gateway root.
 func TestEnv_Gemini(t *testing.T) {
 	tool, _ := Lookup("gemini")
+	if tool.RequiredEndpoint != "gemini" {
+		t.Errorf("RequiredEndpoint = %q, want gemini", tool.RequiredEndpoint)
+	}
 	env := tool.Env("https://api.everyapi.ai", "my-token")
 	if got := env["GEMINI_API_KEY"]; got != "my-token" {
 		t.Errorf("GEMINI_API_KEY = %q", got)

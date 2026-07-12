@@ -55,9 +55,9 @@ func resolveClient(args []string, op string) (string, error) {
 //   - codex:  `codex  mcp add <name> -- <cmd> [args...]`  (needs `--`)
 //   - gemini: `gemini mcp add <name> <cmd> [args...]`
 //
-// Removal is uniform (`<cli> mcp remove <name>`), but we keep the
-// builder per-client so any future divergence (e.g. scope flags) lives
-// in one place.
+// Removal is client-specific too: Gemini defaults removal to project scope,
+// while EveryAPI installs in user scope, so its remove argv must repeat the
+// scope explicitly.
 type mcpClient struct {
 	// Name is what the user types on the command line and what we
 	// look up in `exec.LookPath`. It's also the binary name itself —
@@ -176,7 +176,7 @@ args = ["mcp"]`,
 			return append([]string{"mcp", "add", "--scope", "user", name, cmd}, args...)
 		},
 		RemoveArgv: func(name string) []string {
-			return []string{"mcp", "remove", name}
+			return []string{"mcp", "remove", "--scope", "user", name}
 		},
 		ListArgv: func() []string { return []string{"mcp", "list"} },
 	},

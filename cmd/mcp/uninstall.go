@@ -49,14 +49,22 @@ func Uninstall(args []string) error {
 	// (everyapi not registered here). Captured stderr is re-emitted on both
 	// the success and fatal-error paths below; only the not-registered case
 	// suppresses it.
-	cmd.Stdout = os.Stdout
+	var stdoutBuf strings.Builder
+	cmd.Stdout = &stdoutBuf
 	var stderrBuf strings.Builder
 	cmd.Stderr = &stderrBuf
 	if err := cmd.Run(); err != nil {
+		stdoutText := stdoutBuf.String()
 		stderrText := stderrBuf.String()
-		if isNotRegistered(stderrText) {
+		if isNotRegistered(stdoutText + "\n" + stderrText) {
 			fmt.Fprintf(os.Stdout, "`everyapi` was not registered in %s — nothing to do.\n", c.Name)
 			return nil
+		}
+		if stdoutText != "" {
+			fmt.Fprint(os.Stdout, stdoutText)
+			if !strings.HasSuffix(stdoutText, "\n") {
+				fmt.Fprintln(os.Stdout)
+			}
 		}
 		if stderrText != "" {
 			fmt.Fprint(os.Stderr, stderrText)
@@ -67,10 +75,25 @@ func Uninstall(args []string) error {
 		return fmt.Errorf("%s mcp remove failed: %w", c.Name, err)
 	}
 
-	// Surface any stderr the remove wrote on the SUCCESS path too (warnings,
-	// deprecation / next-step notes). Capturing it for the not-registered
-	// check above must not silently swallow it when the remove succeeds.
-	if stderrText := stderrBuf.String(); stderrText != "" {
+	// Gemini 0.50 exits 0 even when the named server is absent and reports the
+	// condition only on stderr. Classify that before announcing a removal;
+	// otherwise a second idempotent uninstall falsely says it removed something.
+	stdoutText := stdoutBuf.String()
+	stderrText := stderrBuf.String()
+	if isNotRegistered(stdoutText + "\n" + stderrText) {
+		fmt.Fprintf(os.Stdout, "`everyapi` was not registered in %s — nothing to do.\n", c.Name)
+		return nil
+	}
+
+	// Surface all other client output on the success path (normal confirmation,
+	// warnings, deprecation / next-step notes).
+	if stdoutText != "" {
+		fmt.Fprint(os.Stdout, stdoutText)
+		if !strings.HasSuffix(stdoutText, "\n") {
+			fmt.Fprintln(os.Stdout)
+		}
+	}
+	if stderrText != "" {
 		fmt.Fprint(os.Stderr, stderrText)
 		if !strings.HasSuffix(stderrText, "\n") {
 			fmt.Fprintln(os.Stderr)
@@ -90,8 +113,8 @@ func Uninstall(args []string) error {
 //	claude:  "No MCP server found with name: everyapi"
 //	codex:   "not found" / "is not configured"  (anecdotal — broader match)
 //	gemini:  "not found" / "not configured"     (anecdotal — broader match)
-func isNotRegistered(stderr string) bool {
-	s := strings.ToLower(stderr)
+func isNotRegistered(output string) bool {
+	s := strings.ToLower(output)
 	// Require the server name to appear alongside a not-registered phrase, so
 	// an unrelated failure that merely mentions "not found" / "not configured"
 	// (e.g. a "profile not found", a config parse error, a missing config
@@ -102,8 +125,10 @@ func isNotRegistered(stderr string) bool {
 	if !strings.Contains(s, "everyapi") {
 		return false
 	}
-	return strings.Contains(s, "no mcp server found") ||
-		strings.Contains(s, "not found") ||
-		strings.Contains(s, "not configured")
+	return strings.Contains(s, "no mcp server named") ||
+		strings.Contains(s, "no mcp server found with name") ||
+		strings.Contains(s, `server "everyapi" not found`) ||
+		strings.Contains(s, "server 'everyapi' not found") ||
+		strings.Contains(s, `"everyapi" is not configured`) ||
+		strings.Contains(s, "'everyapi' is not configured")
 }
-

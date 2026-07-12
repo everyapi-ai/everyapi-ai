@@ -76,7 +76,7 @@ func runList(args []string) error {
 }
 
 func runGet(args []string) error {
-	if len(args) == 0 {
+	if len(args) != 1 {
 		return errors.New(i18n.T("settings.usage_get"))
 	}
 	s, err := config.LoadSettings()
@@ -94,7 +94,7 @@ func runGet(args []string) error {
 // --- set ------------------------------------------------------------
 
 func runSet(args []string) error {
-	if len(args) < 2 {
+	if len(args) != 2 {
 		return errors.New(i18n.T("settings.usage_set"))
 	}
 	key, value := args[0], args[1]
@@ -128,6 +128,9 @@ func runReset(args []string) error {
 	yes := fs.Bool("y", false, "skip confirmation")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: everyapi settings reset [-y]")
 	}
 	if !*yes && cliprompt.IsInteractive() {
 		ok, err := cliprompt.YesNo(
