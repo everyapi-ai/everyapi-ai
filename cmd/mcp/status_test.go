@@ -55,4 +55,14 @@ func TestProbeClient(t *testing.T) {
 			t.Errorf("got %q, want '(probe failed)'", got)
 		}
 	})
+
+	t.Run("targeted probe treats clean not-found exit as not registered", func(t *testing.T) {
+		c := &mcpClient{
+			Name:      "sh",
+			ProbeArgv: func(string) []string { return []string{"-c", "exit 1"} },
+		}
+		if got := probeClient(c); got != "not registered" {
+			t.Errorf("got %q, want 'not registered'", got)
+		}
+	})
 }

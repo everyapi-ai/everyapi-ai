@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/tools"
@@ -33,6 +34,7 @@ func TestParseUseArgs(t *testing.T) {
 		{"space value after tool", []string{"claude", "--channel", "byteplus"}, "claude", "byteplus", false, false, nil, "", false},
 		{"space value before tool", []string{"--channel", "team-a", "claude"}, "claude", "team-a", false, false, nil, "", false},
 		{"group alias space value", []string{"claude", "--group", "byteplus"}, "claude", "byteplus", false, false, nil, "", false},
+		{"group and channel aliases conflict", []string{"claude", "--group", "a", "--channel", "b"}, "", "", false, false, nil, "", true},
 		{"eq value", []string{"claude", "--channel=byteplus"}, "claude", "byteplus", false, false, nil, "", false},
 		{"empty eq → picker", []string{"claude", "--channel="}, "claude", "", true, false, nil, "", false},
 		{"single dash space value", []string{"-channel", "team-a", "codex"}, "codex", "team-a", false, false, nil, "", false},
@@ -99,6 +101,28 @@ func TestParseUseArgs(t *testing.T) {
 			}
 		})
 	}
+}
+
+func FuzzParseUseArgsDoesNotPanic(f *testing.F) {
+	seeds := []string{
+		"claude -- --model opus",
+		"--group a --channel b claude",
+		"kimi --model= --sanitize=false",
+		"-- --group \x00",
+		"\u65e5\u672c\u8a9e --channel=\u7d44",
+	}
+	for _, seed := range seeds {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, input string) {
+		// Fields deliberately leaves arbitrary Unicode and control bytes inside
+		// tokens while bounding argv growth for the fuzzer.
+		args := strings.Fields(input)
+		if len(args) > 64 {
+			args = args[:64]
+		}
+		_, _, _, _, _, _, _ = parseUseArgs(args)
+	})
 }
 
 // TestResolveToolModel covers the non-interactive branches of the
@@ -295,6 +319,26 @@ func TestProviderChatModels(t *testing.T) {
 	onlyImage := []api.RelayModel{{ID: "img", OwnedBy: "minimax", SupportedEndpointTypes: []string{"image-generation"}}}
 	if got := providerChatModels(onlyImage, "minimax"); len(got) != 0 {
 		t.Errorf("providerChatModels(only-image) = %v, want empty", got)
+	}
+}
+
+func TestValidateClaudePresetModel(t *testing.T) {
+	tool, err := tools.Lookup("kimi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog := []api.RelayModel{
+		{ID: "kimi-k2.5", OwnedBy: "moonshot", SupportedEndpointTypes: []string{"anthropic"}},
+		{ID: "other-model", OwnedBy: "deepseek", SupportedEndpointTypes: []string{"anthropic"}},
+	}
+	if err := validateClaudePresetModel(tool, catalog, "kimi-k2.5"); err != nil {
+		t.Fatalf("reachable provider model rejected: %v", err)
+	}
+	if err := validateClaudePresetModel(tool, catalog, "missing-model"); err == nil {
+		t.Fatal("unreachable explicit model accepted")
+	}
+	if err := validateClaudePresetModel(tool, catalog, "other-model"); err == nil {
+		t.Fatal("model owned by another preset accepted")
 	}
 }
 

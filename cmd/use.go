@@ -208,12 +208,10 @@ func Use(args []string) error {
 	// tool's own retry — false-blocking a working setup on a flaky
 	// probe is worse than letting it through.
 	//
-	// Skip it for a preset that has no --model: that path resolves its
-	// model through a FATAL /v1/models catalog fetch below (same
-	// TokenAuth), so probing here would just be a redundant second
-	// round-trip. A preset WITH --model skips the catalog fetch, so it
-	// still needs the probe to catch a dead key before launch.
-	if t.ModelOwner == "" || model != "" {
+	// Provider presets always validate against the live /v1/models catalog
+	// below, including an explicit --model, so a separate probe would be a
+	// redundant round-trip.
+	if t.ModelOwner == "" {
 		if perr := api.New(creds.APIBase, relayKey).
 			ProbeRelayToken(cliout.WithCtx()); perr != nil && api.IsUnauthorized(perr) {
 			invalidateCachedKeyOnReject(creds, group)
@@ -624,6 +622,7 @@ func parseUseArgs(args []string) (toolName, group string, pickGroup, sanitize bo
 	var positional []string
 	groupSeen := false
 	groupHasVal := false
+	groupFlagName := ""
 
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -690,6 +689,10 @@ func parseUseArgs(args []string) (toolName, group string, pickGroup, sanitize bo
 			}
 			return "", "", false, false, nil, "", errors.New(i18n.T("use.model_needs_value"))
 		case "group", "channel":
+			if groupFlagName != "" && groupFlagName != name {
+				return "", "", false, false, nil, "", errors.New("--group and --channel are aliases; use only one")
+			}
+			groupFlagName = name
 			groupSeen = true
 			if hasEq {
 				if val != "" {
@@ -809,11 +812,10 @@ func invalidateCachedKeyOnReject(creds *config.Credentials, group string) {
 // silently falling back to Claude Code's default Anthropic model would
 // be a worse surprise than a clear "no glm models reachable" error.
 func resolveClaudePresetModel(t *tools.Tool, creds *config.Credentials, relayKey, modelFlag, group string) (string, error) {
-	if modelFlag != "" {
-		return modelFlag, nil
-	}
 	if !cliprompt.IsInteractive() {
-		return "", fmt.Errorf(i18n.T("use.preset_needs_model"), t.Name)
+		if modelFlag == "" {
+			return "", fmt.Errorf(i18n.T("use.preset_needs_model"), t.Name)
+		}
 	}
 	catalog, err := api.New(creds.APIBase, relayKey).RelayModelCatalog(cliout.WithCtx())
 	if err != nil {
@@ -829,6 +831,12 @@ func resolveClaudePresetModel(t *tools.Tool, creds *config.Credentials, relayKey
 		}
 		return "", fmt.Errorf(i18n.T("use.preset_catalog_failed"), t.Name, err)
 	}
+	if modelFlag != "" {
+		if err := validateClaudePresetModel(t, catalog, modelFlag); err != nil {
+			return "", err
+		}
+		return modelFlag, nil
+	}
 	ids := providerChatModels(catalog, t.ModelOwner)
 	if len(ids) == 0 {
 		return "", fmt.Errorf(i18n.T("use.preset_no_models"),
@@ -839,6 +847,15 @@ func resolveClaudePresetModel(t *tools.Tool, creds *config.Credentials, relayKey
 		return "", err
 	}
 	return ids[idx], nil
+}
+
+func validateClaudePresetModel(t *tools.Tool, catalog []api.RelayModel, model string) error {
+	for _, id := range providerChatModels(catalog, t.ModelOwner) {
+		if id == model {
+			return nil
+		}
+	}
+	return fmt.Errorf("model %q is not currently reachable for %s through this relay key", model, t.Name)
 }
 
 // chatCapableEndpoints are the GET /v1/models `supported_endpoint_types`

@@ -123,19 +123,29 @@ func probeClient(c *mcpClient) string {
 	if !ok {
 		return stateNotInstalled
 	}
-	if c.ListArgv == nil {
+	if c.ListArgv == nil && c.ProbeArgv == nil {
 		// Defensive: an entry without a ListArgv can't be probed.
 		// Treat as unknown so the rest of the table still renders.
 		return stateProbeFailed
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, path, c.ListArgv()...)
+	targeted := c.ProbeArgv != nil
+	argv := []string(nil)
+	if targeted {
+		argv = c.ProbeArgv("everyapi")
+	} else {
+		argv = c.ListArgv()
+	}
+	cmd := exec.CommandContext(ctx, path, argv...)
 	if env != nil {
 		cmd.Env = env
 	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		if targeted && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return stateNotRegistered
+		}
 		// claude / codex / gemini all exit 0 even when zero servers
 		// are registered (printed e.g. "No MCP servers configured")
 		// — a non-zero exit means the binary itself broke, not that

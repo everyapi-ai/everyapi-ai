@@ -100,6 +100,12 @@ type mcpClient struct {
 	// client formats its list differently and the output drifts
 	// across versions, but the server name is always present.
 	ListArgv func() []string
+
+	// ProbeArgv, when set, checks one server by name without enumerating or
+	// health-checking unrelated servers. Exit 0 means registered; a normal
+	// non-zero exit means the named server is absent. This avoids commands such
+	// as `claude mcp list`, which contacts every configured remote MCP.
+	ProbeArgv func(serverName string) []string
 }
 
 // mcpClients is the registered set, keyed by the name the user types
@@ -131,6 +137,9 @@ var mcpClients = map[string]*mcpClient{
 			return []string{"mcp", "remove", name}
 		},
 		ListArgv: func() []string { return []string{"mcp", "list"} },
+		ProbeArgv: func(name string) []string {
+			return []string{"mcp", "get", name}
+		},
 	},
 	"codex": {
 		Name:        "codex",
