@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/api"
@@ -70,6 +71,9 @@ func runList(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -116,6 +120,9 @@ func runCount(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -131,6 +138,9 @@ func runCount(args []string) error {
 func runRead(args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: everyapi inbox notify read <id>")
+	}
+	if err := cliargs.RequireExact(args, 1); err != nil {
+		return err
 	}
 	id, err := strconv.Atoi(args[0])
 	if err != nil || id <= 0 {
@@ -150,6 +160,9 @@ func runRead(args []string) error {
 func runReadAll(args []string) error {
 	fs := flag.NewFlagSet("notify readall", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
 		return err
 	}
 	client, err := newClient()

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/api"
@@ -129,6 +130,9 @@ func runThreads(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -163,6 +167,9 @@ func runContacts(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -183,6 +190,9 @@ func runContacts(args []string) error {
 }
 
 func runCount(args []string) error {
+	if err := cliargs.RequireExact(args, 0); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -196,6 +206,9 @@ func runCount(args []string) error {
 }
 
 func runOpen(args []string) error {
+	if err := cliargs.RequireExact(args, 1); err != nil {
+		return err
+	}
 	uid, err := parseInt(args, 0, "other_user_id")
 	if err != nil {
 		return err
@@ -221,6 +234,9 @@ func runMessages(args []string) error {
 	after := fs.Int("after", 0, "message id (exclusive)")
 	limit := fs.Int("limit", 50, "page size")
 	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
 		return err
 	}
 	client, err := newClient()
@@ -281,6 +297,9 @@ func runSend(args []string) error {
 }
 
 func runRead(args []string) error {
+	if err := cliargs.RequireExact(args, 1); err != nil {
+		return err
+	}
 	tid, err := parseInt(args, 0, "thread_id")
 	if err != nil {
 		return err

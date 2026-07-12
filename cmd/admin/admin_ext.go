@@ -72,6 +72,9 @@ func adminUserList(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -92,6 +95,9 @@ func adminUserList(args []string) error {
 func adminUserSearch(args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: everyapi admin user search <keyword>")
+	}
+	if err := requireExactPositionals(args, 1); err != nil {
+		return err
 	}
 	keyword := args[0]
 	client, err := newClient()
@@ -114,6 +120,9 @@ func adminUserSearch(args []string) error {
 func adminUserShow(args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: everyapi admin user show <id>")
+	}
+	if err := requireExactPositionals(args, 1); err != nil {
+		return err
 	}
 	id, err := strconv.Atoi(args[0])
 	if err != nil || id <= 0 {
@@ -259,6 +268,9 @@ func adminChannelTest(args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: everyapi admin channel test <id>")
 	}
+	if err := requireExactPositionals(args, 1); err != nil {
+		return err
+	}
 	id, err := strconv.Atoi(args[0])
 	if err != nil || id <= 0 {
 		return fmt.Errorf("invalid channel id %q", args[0])
@@ -373,6 +385,9 @@ func adminLogTail(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return err
+	}
 	now := time.Now()
 	start, err := parseWindow(*sinceStr, now)
 	if err != nil {
@@ -464,6 +479,9 @@ func adminAbuseList(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -507,6 +525,9 @@ func adminAbuseList(args []string) error {
 func adminAbuseShow(args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: everyapi admin abuse show <id>")
+	}
+	if err := requireExactPositionals(args, 1); err != nil {
+		return err
 	}
 	id, err := strconv.Atoi(args[0])
 	if err != nil || id <= 0 {
@@ -572,6 +593,9 @@ func adminAudit(args []string) error {
 	page := fs.Int("page", 0, "1-based page")
 	limit := fs.Int("limit", 20, "page size")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := rejectPositionals(fs); err != nil {
 		return err
 	}
 	client, err := newClient()

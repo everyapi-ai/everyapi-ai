@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/api"
@@ -64,6 +65,9 @@ func runList(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -92,6 +96,9 @@ func runPricing(args []string) error {
 	fs := flag.NewFlagSet("models pricing", flag.ContinueOnError)
 	modelFilter := fs.String("model", "", "filter to one model name (substring match)")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
 		return err
 	}
 	client, err := newClient()
@@ -152,6 +159,9 @@ func runPricing(args []string) error {
 func runGroups(args []string) error {
 	fs := flag.NewFlagSet("models groups", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
 		return err
 	}
 	client, err := newClient()

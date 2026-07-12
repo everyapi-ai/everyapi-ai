@@ -124,6 +124,9 @@ func adminRedemptionSearch(args []string) error {
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -144,6 +147,9 @@ func adminRedemptionSearch(args []string) error {
 func adminRedemptionShow(args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: everyapi admin redemption show <id>")
+	}
+	if err := requireExactPositionals(args, 1); err != nil {
+		return err
 	}
 	id, err := strconv.Atoi(args[0])
 	if err != nil || id <= 0 {
