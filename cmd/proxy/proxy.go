@@ -779,7 +779,7 @@ func proxyStatus(args []string) error {
 		// Most likely: connection refused → proxy not running.
 		fmt.Fprintln(os.Stderr, i18n.T("proxy.status_not_running"))
 		fmt.Fprintln(os.Stderr, i18n.T("proxy.status_start_hint"))
-		return nil
+		return fmt.Errorf("sanitizer proxy is not running at %s", addr)
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
@@ -789,7 +789,7 @@ func proxyStatus(args []string) error {
 			addr, resp.StatusCode, ct)
 		fmt.Fprintln(os.Stderr, i18n.T("proxy.status_wrong_server_line2"))
 		fmt.Fprintf(os.Stderr, i18n.T("proxy.status_wrong_server_line3")+"\n", portOf(addr))
-		return nil
+		return fmt.Errorf("service at %s is not the EveryAPI sanitizer", addr)
 	}
 	return renderSanitizerStatus(body)
 }
