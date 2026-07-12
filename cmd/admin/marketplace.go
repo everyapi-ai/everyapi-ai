@@ -7,6 +7,7 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 
+	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
@@ -14,6 +15,10 @@ import (
 const marketplaceOptionKey = "marketplace.enabled"
 
 func adminMarketplace(args []string) error {
+	if cliargs.IsHelp(args) {
+		cliout.Println("usage: everyapi admin marketplace {status|on|off}")
+		return nil
+	}
 	if len(args) == 0 {
 		return errors.New("usage: everyapi admin marketplace {status|on|off}")
 	}
