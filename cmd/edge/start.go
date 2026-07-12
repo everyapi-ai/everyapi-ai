@@ -18,6 +18,9 @@ func edgeStart(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return err
+	}
 
 	// Order matters: identity checks (login → active node → local
 	// metadata) before docker presence. A user who hasn't run

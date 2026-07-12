@@ -44,6 +44,9 @@ func edgeRename(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return err
+	}
 	workloads, err := parseWorkloadsFlag(*workloadsFlag)
 	if err != nil {
 		return err

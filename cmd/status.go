@@ -40,6 +40,9 @@ func Status(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := rejectFlagPositionals(fs); err != nil {
+		return err
+	}
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
 		return errors.New(i18n.T("auth.not_logged_in"))

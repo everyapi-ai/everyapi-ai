@@ -14,6 +14,9 @@ func edgeStop(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return err
+	}
 	nodeID, err := resolveNodeID(*nodeFlag)
 	if err != nil {
 		return err

@@ -86,6 +86,9 @@ func updateRun(args []string) (dispatched bool, err error) {
 	if err := fs.Parse(args); err != nil {
 		return false, err
 	}
+	if err := rejectFlagPositionals(fs); err != nil {
+		return false, err
+	}
 
 	ctx, cancel := context.WithTimeout(cliout.WithCtx(), 10*time.Second)
 	defer cancel()

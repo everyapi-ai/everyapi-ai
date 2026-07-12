@@ -88,6 +88,13 @@ func proxyUsageErr() error {
 	return fmt.Errorf("missing subcommand\n\n%s", proxyUsage)
 }
 
+func rejectProxyPositionals(fs *flag.FlagSet) error {
+	if fs.NArg() != 0 {
+		return fmt.Errorf("unexpected positional arguments: %v", fs.Args())
+	}
+	return nil
+}
+
 // proxyStart parses flags, optionally re-execs itself in detached
 // mode, and either blocks in the foreground or returns once the
 // detached child is healthy.
@@ -100,6 +107,9 @@ func proxyStart(args []string) error {
 	parentPID := fs.Int("parent-pid", 0, "shut down when this pid exits (auto-cleanup for a script that --detach'd this proxy)")
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("%w\n\n%s", err, proxyUsage)
+	}
+	if err := rejectProxyPositionals(fs); err != nil {
+		return err
 	}
 	if *listen == "" {
 		return fmt.Errorf("--listen cannot be empty")
@@ -261,6 +271,9 @@ func proxyStop(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := rejectProxyPositionals(fs); err != nil {
+		return err
+	}
 	pid, listen, ok := readPIDFile()
 	if !ok {
 		cliout.Println(i18n.T("proxy.stop_not_running"))
@@ -348,6 +361,9 @@ func proxyConfigure(args []string) error {
 	fs := flag.NewFlagSet("proxy configure", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := rejectProxyPositionals(fs); err != nil {
 		return err
 	}
 	fc, err := sanitizer.LoadFileConfig()
@@ -768,6 +784,9 @@ func proxyStatus(args []string) error {
 	listen := fs.String("listen", "", "address to probe (default: from PID file, else 127.0.0.1:8888)")
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("%w\n\n%s", err, proxyUsage)
+	}
+	if err := rejectProxyPositionals(fs); err != nil {
+		return err
 	}
 	addr := *listen
 	if addr == "" {

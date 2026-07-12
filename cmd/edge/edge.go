@@ -31,6 +31,7 @@ package edge
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
@@ -38,6 +39,13 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 )
+
+func rejectPositionals(fs *flag.FlagSet) error {
+	if fs.NArg() != 0 {
+		return fmt.Errorf("unexpected positional arguments: %v", fs.Args())
+	}
+	return nil
+}
 
 func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {

@@ -118,6 +118,10 @@ func parseID(args []string, verb string) (int, []string, error) {
 	return id, args[1:], nil
 }
 
+func unexpectedPositionals(args []string) error {
+	return fmt.Errorf("unexpected positional arguments: %v", args)
+}
+
 func statusLabel(s int) string {
 	switch s {
 	case api.TokenStatusEnabled:
@@ -146,6 +150,9 @@ func runList(args []string) error {
 	fs := flag.NewFlagSet("token list", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if fs.NArg() != 0 {
+		return unexpectedPositionals(fs.Args())
 	}
 	client, _, err := newClient()
 	if err != nil {
@@ -176,9 +183,12 @@ func runList(args []string) error {
 // --- show -------------------------------------------------------------
 
 func runShow(args []string) error {
-	id, _, err := parseID(args, "show")
+	id, rest, err := parseID(args, "show")
 	if err != nil {
 		return err
+	}
+	if len(rest) != 0 {
+		return unexpectedPositionals(rest)
 	}
 	client, _, err := newClient()
 	if err != nil {
@@ -228,9 +238,12 @@ func emptyAs(s, fallback string) string {
 // --- key --------------------------------------------------------------
 
 func runKey(args []string) error {
-	id, _, err := parseID(args, "key")
+	id, rest, err := parseID(args, "key")
 	if err != nil {
 		return err
+	}
+	if len(rest) != 0 {
+		return unexpectedPositionals(rest)
 	}
 	client, _, err := newClient()
 	if err != nil {
@@ -267,6 +280,9 @@ func runUsage(args []string) error {
 	}
 	if err := fs.Parse(rest); err != nil {
 		return err
+	}
+	if fs.NArg() > 1 || (key != "" && fs.NArg() > 0) {
+		return unexpectedPositionals(fs.Args())
 	}
 	if *keyFlag != "" {
 		key = *keyFlag
@@ -362,6 +378,9 @@ func (tf *tokenFlags) bind(fs *flag.FlagSet) {
 func (tf *tokenFlags) parse(fs *flag.FlagSet, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if fs.NArg() != 0 {
+		return unexpectedPositionals(fs.Args())
 	}
 	tf.seen = map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { tf.seen[f.Name] = true })
@@ -522,9 +541,12 @@ func runSetStatus(args []string, status int) (err error) {
 	if status == api.TokenStatusDisabled {
 		verb = "disable"
 	}
-	id, _, err := parseID(args, verb)
+	id, rest, err := parseID(args, verb)
 	if err != nil {
 		return err
+	}
+	if len(rest) != 0 {
+		return unexpectedPositionals(rest)
 	}
 	client, creds, err := newClient()
 	if err != nil {
@@ -555,6 +577,9 @@ func runRevoke(args []string) error {
 	skip, positional := cliprompt.SplitConfirmFlag(args)
 	if len(positional) == 0 {
 		return errors.New(i18n.T("token.usage_revoke"))
+	}
+	if len(positional) != 1 {
+		return unexpectedPositionals(positional[1:])
 	}
 	id, err := strconv.Atoi(positional[0])
 	if err != nil || id <= 0 {

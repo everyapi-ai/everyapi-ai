@@ -46,6 +46,9 @@ func Login(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := rejectFlagPositionals(fs); err != nil {
+		return err
+	}
 	resolvedAPIBase, err := resolveLoginAPIBase(*apiBase)
 	if err != nil {
 		if errors.Is(err, cliprompt.ErrPickCancelled) {

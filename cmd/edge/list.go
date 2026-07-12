@@ -20,6 +20,9 @@ func edgeList(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return err
+	}
 
 	client, creds, err := edgeClient()
 	if err != nil {
