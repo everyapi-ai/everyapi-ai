@@ -120,7 +120,9 @@ func updateRun(args []string) (dispatched bool, err error) {
 	// binary. Detect and short-circuit with a tailored message.
 	if ver == "dev" {
 		if *checkOnly {
-			cliout.Printf(i18n.T("update.dev_build_check"), commit, latest)
+			// Script mode is deliberately silent; callers consume only the
+			// documented exit status. A dev build has no ordered release
+			// version to compare, so preserve the existing success status.
 			return false, nil
 		}
 		cliout.Printf(i18n.T("update.dev_build_intro"), commit, latest)
@@ -138,10 +140,8 @@ func updateRun(args []string) (dispatched bool, err error) {
 
 	if *checkOnly {
 		if cmp >= 0 {
-			cliout.Printf(i18n.T("update.up_to_date_check")+"\n", ver)
 			return false, nil
 		}
-		cliout.Printf(i18n.T("update.available")+"\n", ver, latest)
 		os.Exit(1)
 		return false, nil // unreachable
 	}
