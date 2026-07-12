@@ -9,9 +9,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
+	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -68,6 +69,9 @@ func runSubmit(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	if *typ == "" || *kind == "" || *tgt == "" || *desc == "" {
 		return errors.New("--type, --target-kind, --target, --description are required")
 	}
@@ -95,6 +99,9 @@ func runList(args []string) error {
 	page := fs.Int("page", 0, "1-based page")
 	limit := fs.Int("limit", 20, "page size")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
 		return err
 	}
 	client, creds, err := newClient()
@@ -145,8 +152,12 @@ func runList(args []string) error {
 }
 
 func runShow(args []string) error {
-	if len(args) == 0 {
-		return errors.New("usage: everyapi market dispute show <id>")
+	if cliargs.IsHelp(args) {
+		cliout.Println(i18n.T("dispute.usage"))
+		return nil
+	}
+	if err := cliargs.RequireExact(args, 1); err != nil {
+		return err
 	}
 	id, err := strconv.Atoi(args[0])
 	if err != nil || id <= 0 {

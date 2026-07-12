@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-ai/internal/style"
@@ -82,6 +83,9 @@ func runHistory(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -110,6 +114,9 @@ func runHistory(args []string) error {
 func runInfo(args []string) error {
 	fs := flag.NewFlagSet("wallet info", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
 		return err
 	}
 	client, err := newClient()
@@ -199,6 +206,9 @@ func runRedeem(args []string) error {
 	}
 	fs := flag.NewFlagSet("wallet redeem", flag.ContinueOnError)
 	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
 		return err
 	}
 	client, err := newClient()

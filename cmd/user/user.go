@@ -20,6 +20,7 @@ import (
 	"github.com/mdp/qrterminal/v3"
 	"golang.org/x/term"
 
+	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
@@ -85,6 +86,9 @@ func classifyErr(err error) error {
 func runInfo(args []string) error {
 	fs := flag.NewFlagSet("user info", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
 		return err
 	}
 	client, err := newClient()
@@ -187,6 +191,9 @@ func runTwoFAStatus(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -213,6 +220,9 @@ func runTwoFADisable(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	if *code == "" {
 		return errors.New("--code is required")
 	}
@@ -231,6 +241,9 @@ func runTwoFABackup(args []string) error {
 	fs := flag.NewFlagSet("user 2fa backup", flag.ContinueOnError)
 	code := fs.String("code", "", "6-digit TOTP (required)")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
 		return err
 	}
 	if *code == "" {
@@ -261,6 +274,9 @@ func runTwoFAEnable(args []string) error {
 	noQR := fs.Bool("no-qr", false, "skip the terminal QR; show the secret to type instead")
 	codeFlag := fs.String("code", "", "TOTP code (non-interactive: skip the prompt)")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
 		return err
 	}
 	client, err := newClient()
@@ -318,6 +334,9 @@ func runPasskey(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -364,6 +383,9 @@ func runOAuthList(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -384,6 +406,10 @@ func runOAuthList(args []string) error {
 }
 
 func runOAuthUnbind(args []string) error {
+	if cliargs.IsHelp(args) {
+		cliout.Println(i18n.T("user.oauth_usage"))
+		return nil
+	}
 	// Accept the id and -y in any order (mirrors runAffTransfer / runRevoke):
 	// stdlib flag stops at the first non-flag token, so parsing args[0] with
 	// Atoi before flag parsing rejects a leading `-y` with a misleading
@@ -391,6 +417,9 @@ func runOAuthUnbind(args []string) error {
 	yes, positional := cliprompt.SplitConfirmFlag(args)
 	if len(positional) == 0 {
 		return errors.New("usage: everyapi account user oauth unbind <provider_id>")
+	}
+	if len(positional) != 1 {
+		return cliargs.RequireExact(positional, 1)
 	}
 	id, err := strconv.Atoi(positional[0])
 	if err != nil || id <= 0 {
@@ -429,6 +458,13 @@ func runOAuthUnbind(args []string) error {
 // --- aff ------------------------------------------------------
 
 func runAff(args []string) error {
+	if cliargs.IsHelp(args) {
+		cliout.Println(i18n.T("user.usage"))
+		return nil
+	}
+	if len(args) > 0 && args[0] == "reset" && len(args) != 1 {
+		return cliargs.RequireExact(args, 1)
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -463,6 +499,9 @@ func runAffTransfer(client *api.Client, args []string) error {
 	yes, positional := cliprompt.SplitConfirmFlag(args)
 	if len(positional) == 0 {
 		return errors.New(i18n.T("user.aff_transfer_usage"))
+	}
+	if len(positional) != 1 {
+		return cliargs.RequireExact(positional, 1)
 	}
 	amount, err := strconv.Atoi(positional[0])
 	if err != nil || amount <= 0 {
@@ -528,6 +567,9 @@ func runUpdate(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	u := strings.TrimSpace(*username)
 	d := strings.TrimSpace(*displayName)
 	if u == "" && d == "" {
@@ -554,6 +596,9 @@ func runUpdate(args []string) error {
 func runPasswd(args []string) error {
 	fs := flag.NewFlagSet("user passwd", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
 		return err
 	}
 	if !cliprompt.IsInteractive() {
@@ -631,6 +676,9 @@ func runSetting(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -695,6 +743,9 @@ func showSetting(client *api.Client) error {
 func runSettingTest(args []string) error {
 	fs := flag.NewFlagSet("user setting test", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
 		return err
 	}
 	client, err := newClient()

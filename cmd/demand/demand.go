@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
@@ -85,6 +86,9 @@ func runList(args []string, mine bool) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	client, err := newClient()
 	if err != nil {
 		return err
@@ -140,6 +144,13 @@ func priceCeiling(quota int64, perUnit float64) string {
 }
 
 func runShow(args []string) error {
+	if cliargs.IsHelp(args) {
+		cliout.Println(i18n.T("demand.usage"))
+		return nil
+	}
+	if err := cliargs.RequireExact(args, 1); err != nil {
+		return err
+	}
 	id, _, err := parseID(args)
 	if err != nil {
 		return err
@@ -192,6 +203,9 @@ func runSubmit(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
 	if *title == "" || *model == "" || *maxPrice <= 0 {
 		return errors.New("--title, --model, --max-price are required (--max-price > 0)")
 	}
@@ -218,6 +232,13 @@ func runSubmit(args []string) error {
 }
 
 func runCancel(args []string) error {
+	if cliargs.IsHelp(args) {
+		cliout.Println(i18n.T("demand.usage"))
+		return nil
+	}
+	if err := cliargs.RequireExact(args, 1); err != nil {
+		return err
+	}
 	id, _, err := parseID(args)
 	if err != nil {
 		return err
@@ -234,6 +255,10 @@ func runCancel(args []string) error {
 }
 
 func runRemove(args []string) error {
+	if cliargs.IsHelp(args) {
+		cliout.Println(i18n.T("demand.usage"))
+		return nil
+	}
 	id, rest, err := parseID(args)
 	if err != nil {
 		return err
@@ -241,6 +266,9 @@ func runRemove(args []string) error {
 	fs := flag.NewFlagSet("demand remove", flag.ContinueOnError)
 	yes := fs.Bool("y", false, "skip confirmation")
 	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
 		return err
 	}
 	if !*yes {

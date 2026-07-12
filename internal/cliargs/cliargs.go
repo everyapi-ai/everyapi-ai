@@ -18,3 +18,18 @@ func RequireExact(args []string, n int) error {
 	}
 	return nil
 }
+
+// IsHelp reports whether the first argument is a conventional help token.
+// Leaf commands call this before interpreting a required positional value so
+// `<command> --help` never reaches validation, authentication, or an API call.
+func IsHelp(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	switch args[0] {
+	case "help", "--help", "-h":
+		return true
+	default:
+		return false
+	}
+}

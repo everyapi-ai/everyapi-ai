@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
@@ -32,6 +33,9 @@ func Topup(args []string) error {
 	fs := flag.NewFlagSet("topup", flag.ContinueOnError)
 	noBrowser := fs.Bool("no-browser", false, "skip auto-opening the browser; copy the URL by hand instead")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := cliargs.RejectPositionals(fs); err != nil {
 		return err
 	}
 
