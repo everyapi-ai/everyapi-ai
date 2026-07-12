@@ -159,6 +159,9 @@ func sellerWithdraw(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return err
+	}
 	// Distinguish an omitted --quota (sweep the full pending balance) from
 	// an explicit value. Overloading amount==0 as the "full balance"
 	// sentinel would turn `--quota 0` (or a caller whose amount computes
@@ -323,6 +326,9 @@ func parseAddKeyArgs(args []string) (*addKeyArgs, error) {
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return nil, err
+	}
 	a.Keys = []string(keys)
 	a.Remarks = []string(remarks)
 	var missing []string
@@ -385,6 +391,9 @@ func parseAddKeyArgs(args []string) (*addKeyArgs, error) {
 func sellerSetup(args []string) error {
 	fs := flag.NewFlagSet("seller setup", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := rejectPositionals(fs); err != nil {
 		return err
 	}
 	client, creds, err := sellerClient()

@@ -85,6 +85,9 @@ func sellerAddOAuthCodex(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return err
+	}
 	*name = strings.TrimSpace(*name)
 	*models = strings.TrimSpace(*models)
 	if *name == "" || *models == "" {
@@ -199,6 +202,9 @@ func sellerAddOAuthClaude(args []string) error {
 	models := fs.String("models", "", "comma-separated models this channel will serve (e.g. claude-3-opus,claude-3-sonnet)")
 	noBrowser := fs.Bool("no-browser", false, "skip auto-opening the authorize URL (you'll copy it manually)")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := rejectPositionals(fs); err != nil {
 		return err
 	}
 	*name = strings.TrimSpace(*name)
@@ -316,6 +322,9 @@ func sellerAddOAuthGemini(args []string) error {
 	noBrowser := fs.Bool("no-browser", false, "skip auto-opening the authorize URL")
 	timeout := fs.Duration("timeout", 5*time.Minute, "how long to wait for the OAuth callback before giving up")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := rejectPositionals(fs); err != nil {
 		return err
 	}
 	if *timeout <= 0 {
@@ -453,6 +462,9 @@ func sellerAddOAuthAntigravity(args []string) error {
 	noBrowser := fs.Bool("no-browser", false, "skip auto-opening the authorize URL")
 	timeout := fs.Duration("timeout", 5*time.Minute, "how long to wait for the OAuth callback before giving up")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := rejectPositionals(fs); err != nil {
 		return err
 	}
 	if *timeout <= 0 {

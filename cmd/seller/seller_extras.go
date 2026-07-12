@@ -44,6 +44,9 @@ func sellerUpdate(args []string) error {
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return err
+	}
 	seen := map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { seen[f.Name] = true })
 	if len(seen) == 0 {
@@ -134,6 +137,9 @@ func sellerRemove(args []string) error {
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
+	if err := rejectPositionals(fs); err != nil {
+		return err
+	}
 	client, _, err := sellerClient()
 	if err != nil {
 		return err
@@ -185,6 +191,9 @@ func sellerRefresh(args []string) error {
 	fs := flag.NewFlagSet("seller refresh", flag.ContinueOnError)
 	kindFlag := fs.String("kind", "", "OAuth kind: codex / claude / gemini (auto-detect by default)")
 	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if err := rejectPositionals(fs); err != nil {
 		return err
 	}
 	client, _, err := sellerClient()
@@ -344,6 +353,9 @@ func sellerCompensationSubmit(args []string) error {
 	proof := fs.String("proof", "", "link to status-page / outage proof")
 	desc := fs.String("description", "", "what happened and why you're claiming")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := rejectPositionals(fs); err != nil {
 		return err
 	}
 	if strings.TrimSpace(*upstream) == "" {
