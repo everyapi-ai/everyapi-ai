@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -362,6 +364,22 @@ func Use(args []string) error {
 		env[k] = v
 	}
 
+	// Sessions created before deferred MCP discovery was enabled have the
+	// eagerly-expanded tool schemas persisted in their transcript. Upgrading
+	// EveryAPI fixes new sessions, but Claude's --resume faithfully restores
+	// that old prefix. Make the otherwise invisible carry-over explicit.
+	if t.ExecName == "claude" {
+		claudeDir := os.Getenv("CLAUDE_CONFIG_DIR")
+		if claudeDir == "" {
+			if home, homeErr := os.UserHomeDir(); homeErr == nil {
+				claudeDir = filepath.Join(home, ".claude")
+			}
+		}
+		if tokens, inflated := claudeInflatedResume(extraArgs, claudeDir); inflated {
+			cliout.Printf(i18n.T("use.claude_inflated_resume")+"\n", tokens)
+		}
+	}
+
 	// Surface the resolved base URL so an aspiring debugger knows
 	// where the requests are heading. One line, just before we hand the
 	// terminal over to the tool.
@@ -434,6 +452,61 @@ func containsFlag(args []string, flag string) bool {
 		}
 	}
 	return false
+}
+
+const claudeInflatedSessionThreshold = 100_000
+
+// claudeInflatedResume returns the first cache-creation size recorded for an
+// explicitly resumed Claude session. Claude stores sessions below
+// <config>/projects/<encoded-cwd>/<uuid>.jsonl; searching by UUID also handles
+// sessions created from a different working directory. Read failures are
+// deliberately non-fatal: this is a diagnostic warning, never a launch gate.
+func claudeInflatedResume(args []string, claudeDir string) (int64, bool) {
+	sessionID := ""
+	for i, arg := range args {
+		switch {
+		case arg == "--resume" || arg == "-r":
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				sessionID = args[i+1]
+			}
+		case strings.HasPrefix(arg, "--resume="):
+			sessionID = strings.TrimPrefix(arg, "--resume=")
+		}
+	}
+	if sessionID == "" || strings.ContainsAny(sessionID, `/\\`) || claudeDir == "" {
+		return 0, false
+	}
+	paths, err := filepath.Glob(filepath.Join(claudeDir, "projects", "*", sessionID+".jsonl"))
+	if err != nil || len(paths) == 0 {
+		return 0, false
+	}
+	f, err := os.Open(paths[0])
+	if err != nil {
+		return 0, false
+	}
+	defer f.Close()
+
+	type record struct {
+		Message struct {
+			Usage struct {
+				CacheCreationInputTokens int64 `json:"cache_creation_input_tokens"`
+			} `json:"usage"`
+		} `json:"message"`
+	}
+	scanner := bufio.NewScanner(f)
+	// Tool results can make individual transcript records much larger than the
+	// Scanner default, even though the first usage record is usually tiny.
+	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
+	for scanner.Scan() {
+		var rec record
+		if json.Unmarshal(scanner.Bytes(), &rec) != nil {
+			continue
+		}
+		if tokens := rec.Message.Usage.CacheCreationInputTokens; tokens > 0 {
+			return tokens, tokens >= claudeInflatedSessionThreshold
+		}
+	}
+	return 0, false
 }
 
 // wantsUseHelp reports whether argv asks for `everyapi use` help.

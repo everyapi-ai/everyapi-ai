@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -13,6 +14,41 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
+
+func TestClaudeInflatedResume(t *testing.T) {
+	root := t.TempDir()
+	project := filepath.Join(root, "projects", "-tmp-project")
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	line := `{"type":"assistant","message":{"usage":{"input_tokens":6611,"cache_creation_input_tokens":249657,"cache_read_input_tokens":0}}}` + "\n"
+	if err := os.WriteFile(filepath.Join(project, "91f317c8-1b35-48fc-85a4-553eac2b5085.jsonl"), []byte(line), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tokens, inflated := claudeInflatedResume([]string{"--resume", "91f317c8-1b35-48fc-85a4-553eac2b5085"}, root)
+	if !inflated || tokens != 249657 {
+		t.Fatalf("claudeInflatedResume = (%d, %v), want (249657, true)", tokens, inflated)
+	}
+}
+
+func TestClaudeInflatedResumeIgnoresFreshAndNonResume(t *testing.T) {
+	root := t.TempDir()
+	project := filepath.Join(root, "projects", "-tmp-project")
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	line := `{"type":"assistant","message":{"usage":{"cache_creation_input_tokens":22659}}}` + "\n"
+	if err := os.WriteFile(filepath.Join(project, "fresh.jsonl"), []byte(line), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, args := range [][]string{nil, {"--resume=fresh"}, {"-r", "fresh"}} {
+		if tokens, inflated := claudeInflatedResume(args, root); inflated || tokens != 22659 && len(args) > 0 {
+			t.Fatalf("claudeInflatedResume(%v) = (%d, %v), want non-inflated", args, tokens, inflated)
+		}
+	}
+}
 
 func TestParseUseArgs(t *testing.T) {
 	cases := []struct {
