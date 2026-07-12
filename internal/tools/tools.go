@@ -244,7 +244,8 @@ var Registry = map[string]*Tool{
 				"ANTHROPIC_AUTH_TOKEN": token,
 				// Preserve Claude Code's deferred MCP ToolSearch behavior when
 				// the CLI is pointed at the EveryAPI gateway.
-				"ENABLE_TOOL_SEARCH": "1",
+				"ENABLE_TOOL_SEARCH":       "1",
+				"ENABLE_PROMPT_CACHING_1H": "1",
 				// See claudeProviderPreset: clear any ambient
 				// ANTHROPIC_API_KEY so the user's real Anthropic key is
 				// never forwarded to the gateway and can't shadow the

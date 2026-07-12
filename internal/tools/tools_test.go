@@ -42,6 +42,9 @@ func TestEnv_Claude(t *testing.T) {
 	if got := env["ENABLE_TOOL_SEARCH"]; got != "1" {
 		t.Errorf("ENABLE_TOOL_SEARCH = %q, want 1", got)
 	}
+	if got := env["ENABLE_PROMPT_CACHING_1H"]; got != "1" {
+		t.Errorf("ENABLE_PROMPT_CACHING_1H = %q, want 1", got)
+	}
 	// ANTHROPIC_API_KEY must be present and empty: mergeEnv overlays it
 	// onto the child env to neutralise any ambient real Anthropic key so
 	// it can't leak to the gateway or shadow ANTHROPIC_AUTH_TOKEN.
@@ -95,6 +98,9 @@ func TestClaudeProviderPreset(t *testing.T) {
 		}
 		if got := env["ENABLE_TOOL_SEARCH"]; got != "1" {
 			t.Errorf("%s ENABLE_TOOL_SEARCH = %q, want 1", name, got)
+		}
+		if _, ok := env["ENABLE_PROMPT_CACHING_1H"]; ok {
+			t.Errorf("%s must not force Anthropic's 1h cache TTL on a third-party provider", name)
 		}
 		if got, ok := env["ANTHROPIC_API_KEY"]; !ok || got != "" {
 			t.Errorf("%s ANTHROPIC_API_KEY = %q (present=%v), want present and empty", name, got, ok)
