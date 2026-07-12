@@ -345,6 +345,10 @@ func runOAuth(args []string) error {
 		cliout.Println(i18n.T("user.oauth_usage"))
 		return fmt.Errorf(i18n.T("common.missing_subcommand"), "everyapi account user oauth")
 	}
+	if args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
+		cliout.Println(i18n.T("user.oauth_usage"))
+		return nil
+	}
 	switch args[0] {
 	case "list":
 		return runOAuthList(args[1:])

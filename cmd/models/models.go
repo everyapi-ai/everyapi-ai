@@ -17,7 +17,10 @@ import (
 )
 
 func Run(args []string) error {
-	if len(args) == 0 || args[0] == "list" {
+	if len(args) == 0 {
+		return runList(nil)
+	}
+	if args[0] == "list" {
 		return runList(args[1:])
 	}
 	if args[0] == "help" || args[0] == "--help" || args[0] == "-h" {

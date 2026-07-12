@@ -104,3 +104,13 @@ func TestExpiresLabel(t *testing.T) {
 		t.Errorf("concrete timestamp produced %q", got)
 	}
 }
+
+func TestIDSubcommandHelpDoesNotParseHelpAsID(t *testing.T) {
+	for _, sub := range []string{"show", "key", "revoke", "enable", "disable", "usage"} {
+		t.Run(sub, func(t *testing.T) {
+			if err := Run([]string{sub, "--help"}); err != nil {
+				t.Fatalf("token %s --help returned error: %v", sub, err)
+			}
+		})
+	}
+}

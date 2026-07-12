@@ -13,6 +13,10 @@ import (
 )
 
 func edgeModels(args []string) error {
+	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
+		fmt.Println(i18n.T("edge.models.usage"))
+		return nil
+	}
 	// No args + TTY → sub-sub picker. Otherwise keep the original
 	// usage-error so scripted callers see the documented failure
 	// rather than a silent prompt hang.

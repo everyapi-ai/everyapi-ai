@@ -38,3 +38,11 @@ func TestRunNoArgs(t *testing.T) {
 		t.Fatal("expected error for empty args")
 	}
 }
+
+func TestEdgeModelsHelp(t *testing.T) {
+	for _, arg := range []string{"help", "--help", "-h"} {
+		if err := edgeModels([]string{arg}); err != nil {
+			t.Fatalf("edge models %s returned error: %v", arg, err)
+		}
+	}
+}

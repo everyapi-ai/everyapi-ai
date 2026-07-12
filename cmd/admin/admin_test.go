@@ -56,3 +56,19 @@ func TestPrevOrUnset(t *testing.T) {
 		t.Errorf("prevOrUnset(\"false\") = %q, want false", got)
 	}
 }
+
+func TestAdminContainerHelp(t *testing.T) {
+	tests := map[string]func([]string) error{
+		"user":       adminUser,
+		"channel":    adminChannel,
+		"abuse":      adminAbuse,
+		"redemption": adminRedemption,
+	}
+	for name, run := range tests {
+		t.Run(name, func(t *testing.T) {
+			if err := run([]string{"--help"}); err != nil {
+				t.Fatalf("admin %s --help returned error: %v", name, err)
+			}
+		})
+	}
+}

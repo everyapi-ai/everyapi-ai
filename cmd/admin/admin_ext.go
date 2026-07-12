@@ -45,6 +45,10 @@ func adminUser(args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: everyapi admin user {list|search|show|manage|delete}")
 	}
+	if args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
+		cliout.Println("usage: everyapi admin user {list|search|show|manage|delete}")
+		return nil
+	}
 	switch args[0] {
 	case "list":
 		return adminUserList(args[1:])
@@ -228,6 +232,10 @@ func adminUserDelete(args []string) error {
 func adminChannel(args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: everyapi admin channel {test|tag|add-oauth}")
+	}
+	if args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
+		cliout.Println("usage: everyapi admin channel {test|tag|add-oauth}")
+		return nil
 	}
 	switch args[0] {
 	case "test":
@@ -422,6 +430,10 @@ func parseWindow(s string, now time.Time) (int64, error) {
 func adminAbuse(args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: everyapi admin abuse {list|show|update}")
+	}
+	if args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
+		cliout.Println("usage: everyapi admin abuse {list|show|update}")
+		return nil
 	}
 	switch args[0] {
 	case "list":

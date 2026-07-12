@@ -27,6 +27,10 @@ func adminRedemption(args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: everyapi admin redemption {list|search|show|create|update|status|delete|clear-invalid}")
 	}
+	if args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
+		cliout.Println("usage: everyapi admin redemption {list|search|show|create|update|status|delete|clear-invalid}")
+		return nil
+	}
 	switch args[0] {
 	case "list":
 		return adminRedemptionList(args[1:])

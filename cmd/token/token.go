@@ -36,6 +36,10 @@ func Run(args []string) error {
 		}
 		return nil
 	}
+	if len(args) > 1 && (args[1] == "help" || args[1] == "--help" || args[1] == "-h") {
+		cliout.Println(style.Emph(i18n.T("token.usage")))
+		return nil
+	}
 	switch args[0] {
 	case "list":
 		return runList(args[1:])

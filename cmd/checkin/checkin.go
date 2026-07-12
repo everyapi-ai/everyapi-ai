@@ -10,9 +10,9 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -31,6 +31,10 @@ func Run(args []string) error {
 			// would think `status` was all the command did. Adding
 			// `claim` surfaces the claim action in the picker too;
 			// bare-form invocation stays valid.
+			if len(args) > 1 && (args[1] == "help" || args[1] == "--help" || args[1] == "-h") {
+				cliout.Println(i18n.T("checkin.usage"))
+				return nil
+			}
 			return runCheckin()
 		default:
 			// An unknown subcommand must NOT silently fall through to a
@@ -113,4 +117,3 @@ func runStatus(args []string) error {
 	}
 	return nil
 }
-
