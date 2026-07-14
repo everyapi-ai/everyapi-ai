@@ -255,6 +255,51 @@ func Use(args []string) error {
 		}
 	}
 
+	// Claude resume preflight must run before proxy selection: a polluted
+	// transcript is cloned under a fresh ID, and that recovered process must
+	// automatically use the fail-closed response guard below even when the
+	// privacy sanitizer was not requested.
+	claudeDir := ""
+	var recovery *claudeSessionRecovery
+	if t.ExecName == "claude" {
+		claudeDir = os.Getenv("CLAUDE_CONFIG_DIR")
+		if claudeDir == "" {
+			if home, homeErr := os.UserHomeDir(); homeErr == nil {
+				claudeDir = filepath.Join(home, ".claude")
+			}
+		}
+		extraArgs, recovery = prepareClaudeSessionRecovery(extraArgs, claudeDir, newClaudeSessionID)
+		// A launch abandoned after this point (guard startup failure, a
+		// yolo-prompt cancel, a Prepare error) must not leave the freshly
+		// minted clone behind as a phantom resumable session. The happy
+		// path hands off via tools.Exec, which os.Exec/os.Exits and never
+		// runs defers, so the clone survives exactly when the tool runs.
+		defer recovery.discard()
+		switch {
+		case recovery == nil:
+		case recovery.GuardOnly:
+			cliout.Printf(i18n.T("use.claude_polluted_resume_selfrecovered")+"\n",
+				recovery.NewSessionID,
+				recovery.Pollution.FirstTimestamp,
+			)
+		case recovery.Pollution != nil:
+			cliout.Printf(i18n.T("use.claude_polluted_resume_recovered")+"\n",
+				recovery.OriginalSessionID,
+				recovery.Pollution.FirstTimestamp,
+				recovery.Pollution.AffectedMessages,
+				recovery.NewSessionID,
+			)
+		default:
+			cliout.Printf(i18n.T("use.claude_resume_redirected")+"\n",
+				recovery.OriginalSessionID,
+				recovery.NewSessionID,
+			)
+		}
+		if tokens, inflated := claudeInflatedResume(extraArgs, claudeDir); inflated {
+			cliout.Printf(i18n.T("use.claude_inflated_resume")+"\n", tokens)
+		}
+	}
+
 	// Sanitizer integration. Off by default — opt in with --sanitize.
 	// When on, the proxy intercepts the tool's traffic, masks sensitive
 	// substrings before they reach the gateway, and restores them on the
@@ -271,9 +316,16 @@ func Use(args []string) error {
 	// a shared 127.0.0.1:8888 proxy suffered (kill the session that
 	// spawned it and every other session got connection-refused).
 	apiBaseForEnv := creds.APIBase
-	if sanitize {
-		proxyAddr, stop, perr := startInProcessSanitizer(creds.APIBase)
+	guardClaudeRecovery := recovery != nil
+	if sanitize || guardClaudeRecovery {
+		proxyAddr, stop, perr := startInProcessSanitizer(creds.APIBase, sanitize, guardClaudeRecovery)
 		if perr != nil {
+			// Privacy masking is optional and retains its historical direct
+			// fallback. Recovery guarding is correctness-critical: direct
+			// fallback would recreate the exact pollution we just removed.
+			if guardClaudeRecovery {
+				return fmt.Errorf("start Claude recovery response guard: %w", perr)
+			}
 			cliout.Printf(i18n.T("use.sanitizer_warn"), perr)
 			cliout.Printf(i18n.T("use.fallback_direct"), creds.APIBase)
 			cliout.Printf("%s", i18n.T("use.fallback_hint"))
@@ -362,22 +414,6 @@ func Use(args []string) error {
 	}
 	for k, v := range extraEnv {
 		env[k] = v
-	}
-
-	// Sessions created before deferred MCP discovery was enabled have the
-	// eagerly-expanded tool schemas persisted in their transcript. Upgrading
-	// EveryAPI fixes new sessions, but Claude's --resume faithfully restores
-	// that old prefix. Make the otherwise invisible carry-over explicit.
-	if t.ExecName == "claude" {
-		claudeDir := os.Getenv("CLAUDE_CONFIG_DIR")
-		if claudeDir == "" {
-			if home, homeErr := os.UserHomeDir(); homeErr == nil {
-				claudeDir = filepath.Join(home, ".claude")
-			}
-		}
-		if tokens, inflated := claudeInflatedResume(extraArgs, claudeDir); inflated {
-			cliout.Printf(i18n.T("use.claude_inflated_resume")+"\n", tokens)
-		}
 	}
 
 	// Surface the resolved base URL so an aspiring debugger knows
@@ -564,7 +600,7 @@ func wantsUseHelp(args []string) bool {
 // if it abandons the launch (see the call site's defer) — that's what
 // releases the goroutine, the bound port, and the log fd on a
 // fall-back-to-direct or an early return before tools.Exec.
-func startInProcessSanitizer(upstream string) (string, func(), error) {
+func startInProcessSanitizer(upstream string, sanitizeRequests, guardClaudeRecovery bool) (string, func(), error) {
 	// Bind the loopback listener OURSELVES and hold it. Owning the port
 	// end-to-end (rather than picking a free port, closing it, and letting
 	// the server re-bind) closes the TOCTOU window: no other process can
@@ -578,20 +614,25 @@ func startInProcessSanitizer(upstream string) (string, func(), error) {
 	}
 	listen := ln.Addr().String()
 
-	fc, err := sanitizer.LoadFileConfig()
-	if err != nil {
-		_ = ln.Close()
-		return "", nil, fmt.Errorf("load sanitizer config: %w", err)
+	detectors := []sanitizer.Detector{}
+	if sanitizeRequests {
+		fc, configErr := sanitizer.LoadFileConfig()
+		if configErr != nil {
+			_ = ln.Close()
+			return "", nil, fmt.Errorf("load sanitizer config: %w", configErr)
+		}
+		detectors = fc.BuildDetectors()
 	}
 	logger, closeLog := sanitizerLogger()
 	// Construct synchronously so a bad config (e.g. a non-loopback /
 	// malformed upstream) surfaces to the caller as a real error instead
 	// of vanishing into the background goroutine's log file.
 	srv, err := sanitizer.New(sanitizer.Config{
-		Listen:       listen,
-		UpstreamBase: upstream,
-		Detectors:    fc.BuildDetectors(),
-		Logger:       logger,
+		Listen:                    listen,
+		UpstreamBase:              upstream,
+		Detectors:                 detectors,
+		Logger:                    logger,
+		GuardClaudeToolCorruption: guardClaudeRecovery,
 	})
 	if err != nil {
 		_ = ln.Close()
