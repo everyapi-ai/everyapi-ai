@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/BurntSushi/toml"
 )
 
 // codexTestHome redirects ConfigDir() at a fresh tmp dir for one
@@ -76,6 +78,85 @@ func TestPrepareCodex_WritesFiles(t *testing.T) {
 		if !strings.Contains(cfg, want) {
 			t.Errorf("config.toml missing %q\nFull config:\n%s", want, cfg)
 		}
+	}
+}
+
+func TestPrepareCodex_PreservesUserModelDefaults(t *testing.T) {
+	_, codexHome := codexTestHome(t)
+	if err := os.MkdirAll(codexHome, 0o700); err != nil {
+		t.Fatalf("create codex home: %v", err)
+	}
+	configPath := filepath.Join(codexHome, "config.toml")
+	const userDefaults = "model = \"user-selected-model\"\nmodel_reasoning_effort = \"high\"\n"
+	if err := os.WriteFile(configPath, []byte(userDefaults), 0o644); err != nil {
+		t.Fatalf("write existing config: %v", err)
+	}
+
+	if _, err := prepareCodex("https://api.everyapi.ai", "tok"); err != nil {
+		t.Fatalf("prepareCodex error: %v", err)
+	}
+	configBody, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	config := string(configBody)
+	for _, want := range []string{
+		`model = "user-selected-model"`,
+		`model_reasoning_effort = "high"`,
+	} {
+		if !strings.Contains(config, want) {
+			t.Errorf("config.toml missing preserved default %q\nFull config:\n%s", want, config)
+		}
+	}
+}
+
+func TestPrepareCodex_PreservesExistingConfigOnParseError(t *testing.T) {
+	_, codexHome := codexTestHome(t)
+	if err := os.MkdirAll(codexHome, 0o700); err != nil {
+		t.Fatalf("create codex home: %v", err)
+	}
+	configPath := filepath.Join(codexHome, "config.toml")
+	const invalidConfig = "model = \"unterminated\n"
+	if err := os.WriteFile(configPath, []byte(invalidConfig), 0o644); err != nil {
+		t.Fatalf("write invalid config: %v", err)
+	}
+
+	if _, err := prepareCodex("https://api.everyapi.ai", "tok"); err == nil {
+		t.Fatal("prepareCodex succeeded with an invalid existing config")
+	}
+	configBody, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if got := string(configBody); got != invalidConfig {
+		t.Errorf("config.toml was overwritten after a parse error\ngot:  %q\nwant: %q", got, invalidConfig)
+	}
+}
+
+func TestPrepareCodex_PreservesEscapedModelDefault(t *testing.T) {
+	_, codexHome := codexTestHome(t)
+	if err := os.MkdirAll(codexHome, 0o700); err != nil {
+		t.Fatalf("create codex home: %v", err)
+	}
+	configPath := filepath.Join(codexHome, "config.toml")
+	const userDefaults = "model = \"\\b\"\n"
+	if err := os.WriteFile(configPath, []byte(userDefaults), 0o644); err != nil {
+		t.Fatalf("write existing config: %v", err)
+	}
+
+	if _, err := prepareCodex("https://api.everyapi.ai", "tok"); err != nil {
+		t.Fatalf("prepareCodex error: %v", err)
+	}
+	configBody, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	var defaults codexUserDefaults
+	if _, err := toml.Decode(string(configBody), &defaults); err != nil {
+		t.Fatalf("generated config is not valid TOML: %v", err)
+	}
+	if defaults.Model != "\b" {
+		t.Errorf("model = %q, want backspace", defaults.Model)
 	}
 }
 
