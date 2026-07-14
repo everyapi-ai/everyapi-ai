@@ -256,9 +256,8 @@ func Use(args []string) error {
 	}
 
 	// Claude resume preflight must run before proxy selection: a polluted
-	// transcript is cloned under a fresh ID, and that recovered process must
-	// automatically use the fail-closed response guard below even when the
-	// privacy sanitizer was not requested.
+	// transcript is cloned under a fresh ID before the recovered process is
+	// launched.
 	claudeDir := ""
 	var recovery *claudeSessionRecovery
 	if t.ExecName == "claude" {
@@ -320,9 +319,6 @@ func Use(args []string) error {
 	if sanitize || guardClaudeRecovery {
 		proxyAddr, stop, perr := startInProcessSanitizer(creds.APIBase, sanitize, guardClaudeRecovery)
 		if perr != nil {
-			// Privacy masking is optional and retains its historical direct
-			// fallback. Recovery guarding is correctness-critical: direct
-			// fallback would recreate the exact pollution we just removed.
 			if guardClaudeRecovery {
 				return fmt.Errorf("start Claude recovery response guard: %w", perr)
 			}

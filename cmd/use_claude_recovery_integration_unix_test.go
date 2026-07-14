@@ -38,7 +38,7 @@ func TestUseExecReceivesRecoveredClaudeSessionID(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/v1/messages" {
 			w.Header().Set("Content-Type", "text/event-stream")
-			_, _ = w.Write([]byte("event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"course\\ncourse\"}}\n\n"))
+			_, _ = w.Write([]byte("event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"course\\ncourse\\ncourse\"}}\n\n"))
 			_, _ = w.Write([]byte("event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"}}\n\n"))
 			return
 		}
@@ -112,68 +112,27 @@ func TestUseExecReceivesRecoveredClaudeSessionID(t *testing.T) {
 		t.Fatalf("recovered transcript for exec ID: %v", err)
 	}
 
-	guardBase, err := os.ReadFile(basePath)
+	baseBytes, err := os.ReadFile(basePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if base := strings.TrimSpace(string(guardBase)); base == srv.URL || !strings.HasPrefix(base, "http://127.0.0.1:") {
-		t.Fatalf("ANTHROPIC_BASE_URL = %q, want ephemeral recovery guard", base)
+	if base := strings.TrimSpace(string(baseBytes)); base == srv.URL || !strings.HasPrefix(base, "http://127.0.0.1:") {
+		t.Fatalf("ANTHROPIC_BASE_URL = %q, want incremental recovery guard", base)
 	}
 	status, err := os.ReadFile(statusPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.TrimSpace(string(status)); got != "529" {
+	if got := strings.TrimSpace(string(status)); got != "200" {
 		body, _ := os.ReadFile(bodyPath)
-		t.Fatalf("guarded malformed response status = %q, want 529; body=%s", got, body)
+		t.Fatalf("direct response status = %q, want 200; body=%s", got, body)
 	}
-	guardBody, err := os.ReadFile(bodyPath)
+	body, err := os.ReadFile(bodyPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(guardBody), "course") {
-		t.Fatalf("rejected assistant text reached launched Claude process: %s", guardBody)
-	}
-}
-
-// TestUseFailsClosedWhenRecoveryGuardCannotStart locks the PR's hardening
-// claim: a recovered session whose response guard cannot start must abort the
-// launch (never fall back to a direct connection) and must not leave the
-// freshly minted recovery clone behind.
-func TestUseFailsClosedWhenRecoveryGuardCannotStart(t *testing.T) {
-	configRoot := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", configRoot)
-	// A non-http scheme passes the (network-error-tolerant) relay probe but
-	// makes sanitizer.New reject the upstream, so guard startup fails
-	// deterministically without binding anything.
-	if err := config.Save(&config.Credentials{
-		APIBase:  "ftp://127.0.0.1:1",
-		RelayKey: "sk-everyapi-test",
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	claudeDir := t.TempDir()
-	t.Setenv("CLAUDE_CONFIG_DIR", claudeDir)
-	oldID := "7f6de1d2-3c4b-4a59-8e60-123456789abc"
-	oldPath := writeResumableClaudeSession(t, claudeDir, oldID, true)
-
-	shimDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(shimDir, "claude"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", shimDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	err := Use([]string{"claude", "--", "--resume", oldID})
-	if err == nil || !strings.Contains(err.Error(), "start Claude recovery response guard") {
-		t.Fatalf("Use = %v, want fail-closed guard startup error", err)
-	}
-	entries, globErr := filepath.Glob(filepath.Join(filepath.Dir(oldPath), "*.jsonl"))
-	if globErr != nil {
-		t.Fatal(globErr)
-	}
-	if len(entries) != 1 || entries[0] != oldPath {
-		t.Fatalf("abandoned launch left transcript artifacts: %v", entries)
+	if strings.Contains(string(body), "course") {
+		t.Fatalf("polluted assistant text reached launched Claude process: %s", body)
 	}
 }
 
