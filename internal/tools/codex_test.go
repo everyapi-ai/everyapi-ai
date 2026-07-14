@@ -81,6 +81,43 @@ func TestPrepareCodex_WritesFiles(t *testing.T) {
 	}
 }
 
+func TestPrepareCodexTransparentUsesBuiltInOpenAIProviderAndPlaceholder(t *testing.T) {
+	_, codexHome := codexTestHome(t)
+	tool, _ := Lookup("codex")
+
+	extra, err := tool.PrepareTransparent()
+	if err != nil {
+		t.Fatalf("PrepareTransparent: %v", err)
+	}
+	if got := extra["CODEX_HOME"]; got != codexHome {
+		t.Fatalf("CODEX_HOME = %q, want %q", got, codexHome)
+	}
+	authBody, err := os.ReadFile(filepath.Join(codexHome, "auth.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var auth map[string]any
+	if err := json.Unmarshal(authBody, &auth); err != nil {
+		t.Fatal(err)
+	}
+	if got := auth["OPENAI_API_KEY"]; got != transparentPlaceholderCredential {
+		t.Errorf("OPENAI_API_KEY = %v, want connector placeholder", got)
+	}
+	configBody, err := os.ReadFile(filepath.Join(codexHome, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	configText := string(configBody)
+	if !strings.Contains(configText, `model_provider = "openai"`) {
+		t.Errorf("config.toml does not select built-in OpenAI provider:\n%s", configText)
+	}
+	for _, forbidden := range []string{"api.everyapi", "model_providers.everyapi", "openai_base_url"} {
+		if strings.Contains(configText, forbidden) {
+			t.Errorf("config.toml contains transparent-mode forbidden value %q:\n%s", forbidden, configText)
+		}
+	}
+}
+
 func TestPrepareCodex_PreservesUserModelDefaults(t *testing.T) {
 	_, codexHome := codexTestHome(t)
 	if err := os.MkdirAll(codexHome, 0o700); err != nil {

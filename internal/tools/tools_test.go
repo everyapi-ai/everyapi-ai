@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -178,6 +179,142 @@ func TestEnv_Hermes(t *testing.T) {
 	}
 }
 
+func TestTransparentEnvUsesOfficialOriginsWithoutRelayCredential(t *testing.T) {
+	t.Parallel()
+
+	proxyURL := "http://127.0.0.1:43123"
+	caPath := "/tmp/everyapi-connector-ca.pem"
+	cases := []struct {
+		name      string
+		want      map[string]string
+		wantUnset []string
+	}{
+		{
+			name: "claude",
+			want: map[string]string{
+				"ANTHROPIC_AUTH_TOKEN": "everyapi-local-connector",
+				"NODE_EXTRA_CA_CERTS":  caPath,
+			},
+			wantUnset: []string{"ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY"},
+		},
+		{
+			name: "codex",
+			want: map[string]string{
+				"OPENAI_API_KEY":       "everyapi-local-connector",
+				"CODEX_CA_CERTIFICATE": caPath,
+			},
+			wantUnset: []string{"OPENAI_BASE_URL", "OPENAI_API_BASE"},
+		},
+		{
+			name: "gemini",
+			want: map[string]string{
+				"GEMINI_API_KEY":      "everyapi-local-connector",
+				"NODE_EXTRA_CA_CERTS": caPath,
+			},
+			wantUnset: []string{"GOOGLE_GEMINI_BASE_URL", "GOOGLE_API_KEY"},
+		},
+		{
+			name: "glm",
+			want: map[string]string{
+				"ANTHROPIC_AUTH_TOKEN": "everyapi-local-connector",
+				"NODE_EXTRA_CA_CERTS":  caPath,
+			},
+			wantUnset: []string{"ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY"},
+		},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			tool, err := Lookup(c.name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			env, unset, err := tool.TransparentEnv(proxyURL, caPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, key := range []string{"HTTPS_PROXY", "https_proxy"} {
+				if got := env[key]; got != proxyURL {
+					t.Errorf("%s = %q, want %q", key, got, proxyURL)
+				}
+			}
+			for key, want := range c.want {
+				if got := env[key]; got != want {
+					t.Errorf("%s = %q, want %q", key, got, want)
+				}
+			}
+			for _, forbidden := range []string{"relay-key", "https://api.everyapi.ai"} {
+				for key, value := range env {
+					if strings.Contains(value, forbidden) {
+						t.Errorf("%s leaks forbidden value %q", key, value)
+					}
+				}
+			}
+			for _, key := range c.wantUnset {
+				if !containsString(unset, key) {
+					t.Errorf("unset = %v, missing %s", unset, key)
+				}
+			}
+			for _, key := range []string{"HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy"} {
+				if !containsString(unset, key) {
+					t.Errorf("unset = %v, missing ambient proxy variable %s", unset, key)
+				}
+			}
+			if !containsString(unset, "EVERYAPI_RELAY_KEY") {
+				t.Errorf("unset = %v, missing EVERYAPI_RELAY_KEY", unset)
+			}
+		})
+	}
+}
+
+func TestTransparentEnvRejectsUnsupportedTool(t *testing.T) {
+	t.Parallel()
+	tool, err := Lookup("hermes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := tool.TransparentEnv("http://127.0.0.1:1", "/tmp/ca.pem"); err == nil {
+		t.Fatal("TransparentEnv(hermes) unexpectedly succeeded")
+	}
+}
+
+func TestSupportsTransparentMatchesVerifiedTools(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"claude", "codex", "gemini", "glm", "kimi"} {
+		tool, _ := Lookup(name)
+		if !tool.SupportsTransparent() {
+			t.Errorf("%s should support transparent mode", name)
+		}
+	}
+	hermes, _ := Lookup("hermes")
+	if hermes.SupportsTransparent() {
+		t.Error("hermes should not advertise transparent mode")
+	}
+}
+
+func TestTransparentEnvReturnsStableUnsetList(t *testing.T) {
+	t.Parallel()
+	tool, _ := Lookup("codex")
+	_, got, err := tool.TransparentEnv("http://127.0.0.1:1", "/tmp/ca.pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPrefix := []string{"HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy"}
+	if !reflect.DeepEqual(got[:len(wantPrefix)], wantPrefix) {
+		t.Fatalf("unset prefix = %v, want %v", got[:len(wantPrefix)], wantPrefix)
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
 // TestEnv_LocalDevBase verifies the joinBase helper doesn't insert
 // double slashes when the user has a trailing-slash base (a
 // surprisingly common dev typo: `EVERYAPI_BASE=http://localhost:8787/`).
@@ -258,5 +395,30 @@ func TestMergeEnv(t *testing.T) {
 		if n > 1 {
 			t.Errorf("duplicate env entry %q (count=%d)", k, n)
 		}
+	}
+}
+
+func TestMergeEnvRemovingDropsAmbientValues(t *testing.T) {
+	t.Setenv("ANTHROPIC_BASE_URL", "https://ambient.example")
+	t.Setenv("NO_PROXY", "api.anthropic.com")
+	t.Setenv("KEEP_ME", "yes")
+	merged := mergeEnvRemoving(
+		map[string]string{"HTTPS_PROXY": "http://127.0.0.1:43123"},
+		[]string{"ANTHROPIC_BASE_URL", "NO_PROXY"},
+	)
+	got := map[string]string{}
+	for _, kv := range merged {
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			got[kv[:i]] = kv[i+1:]
+		}
+	}
+	if _, ok := got["ANTHROPIC_BASE_URL"]; ok {
+		t.Error("ANTHROPIC_BASE_URL was not removed")
+	}
+	if _, ok := got["NO_PROXY"]; ok {
+		t.Error("NO_PROXY was not removed")
+	}
+	if got["KEEP_ME"] != "yes" || got["HTTPS_PROXY"] != "http://127.0.0.1:43123" {
+		t.Fatalf("merged environment lost required values: %v", got)
 	}
 }

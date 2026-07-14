@@ -83,6 +83,9 @@ everyapi use codex          # OpenAI Codex CLI → EveryAPI
 everyapi use gemini         # Gemini CLI → EveryAPI
 everyapi use hermes         # Nous Research Hermes Agent → EveryAPI (pick a model)
 everyapi use hermes --model gpt-5.1   # pin the model, skip the picker
+everyapi use claude --transparent     # experimental: retain api.anthropic.com
+everyapi use codex --transparent      # experimental: retain api.openai.com
+everyapi use gemini --transparent     # experimental: retain Google's official origin
 everyapi use                # no arg → interactive picker over installed tools
 ```
 
@@ -102,6 +105,22 @@ No more looking up which variable name each tool reads, whether you need to appe
 **hermes config isolation**: `everyapi use hermes` redirects `HERMES_HOME` to `~/.config/everyapi/hermes-home`, so its `config.yaml` (and the sessions/logs that accumulate there) are kept separate from your personal `~/.hermes` — a plain `hermes` invocation is untouched, and the two won't share session history. Bare `hermes` opens the interactive chat; pass `everyapi use hermes -- --tui` for the terminal UI.
 
 > ⚠️ **Subprocess env safety note**: the env vars above contain your relay API key. Third-party CLIs in debug / verbose mode may log env — before running `everyapi use`, make sure the debug flag you turn on does not leak `*_TOKEN` / `*_API_KEY`. Before sharing debug logs, run `sed -i 's/sk-everyapi-[A-Za-z0-9]*/REDACTED/g'`.
+
+#### Experimental transparent connector
+
+`everyapi use <tool> --transparent` keeps supported clients on their vendor's official API origin instead of setting a third-party Base URL. The CLI starts an ephemeral HTTP CONNECT proxy on a random loopback port, creates a per-run CA whose private key stays in memory, and gives the child only the proxy URL, public CA bundle, and a non-secret placeholder credential. Registered model routes are decrypted locally and relayed to EveryAPI with the real relay key; other HTTPS hosts use raw CONNECT passthrough. An unknown path beneath a protected model prefix is blocked, and a relay failure never falls back to the vendor.
+
+The gray-test surface currently covers Claude Code (including the provider presets), Codex CLI, and Gemini CLI. Hermes is rejected because its Python trust/config behavior has not been verified. `--transparent` and `--sanitize` are mutually exclusive.
+
+This mode is experimental and intentionally process-scoped:
+
+- the intercepted client side currently uses HTTP/1.1 and supports normal JSON/SSE requests (HTTP/2 gateway responses are translated to HTTP/1.1); client-side HTTP/2, HTTP/3/QUIC, WebSocket, certificate-pinned clients, and clients that ignore `HTTPS_PROXY` are not covered;
+- Codex's built-in OpenAI provider probes the Responses WebSocket once; Connector returns HTTP 426 so Codex immediately falls back to HTTPS/SSE without consuming its retry budget. Codex may still print that single failed-probe log line;
+- Claude Code still treats the non-secret placeholder as API-key authentication, so claude.ai connectors are disabled even though `ANTHROPIC_BASE_URL` is absent. Transparent mode avoids third-party-origin detection; it cannot make API-key auth behave like a claude.ai OAuth login;
+- it does not install a system CA, require administrator access, or change the default `everyapi use` behavior;
+- it is not undetectable: clients can inspect proxy variables, the local certificate chain, sockets, timing, or response differences;
+- the Connector sees decrypted model content. Its CA signing key is never written or uploaded, and the public CA file is removed on exit;
+- the relay key is absent from the child environment and generated client configs, but the existing `~/.config/everyapi/credentials.json` is still readable by any process running as the same OS user. Transparent mode is credential-injection isolation, not a sandbox against a hostile child process.
 
 ### `everyapi auth login` — Device Authorization Grant + QR sign-in
 

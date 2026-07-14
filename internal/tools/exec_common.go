@@ -16,6 +16,17 @@ type ErrToolNotFound struct {
 	Tool *Tool
 }
 
+// ExecOptions describes one supervised tool launch. Cleanup runs after the
+// child exits and before the parent propagates its exit code, and also runs if
+// launch setup fails. UnsetEnv removes inherited values instead of replacing
+// them with observably-present empty strings.
+type ExecOptions struct {
+	Env      map[string]string
+	UnsetEnv []string
+	Args     []string
+	Cleanup  func()
+}
+
 func (e *ErrToolNotFound) Error() string {
 	return fmt.Sprintf("%s is not installed.\n  %s", e.Tool.ExecName, e.Tool.InstallHint)
 }
@@ -30,22 +41,48 @@ func (e *ErrToolNotFound) Error() string {
 // the merged slice is the correct, side-effect-free contract on both
 // Unix and Windows.
 func mergeEnv(set map[string]string) []string {
+	return mergeEnvRemoving(set, nil)
+}
+
+func mergeEnvRemoving(set map[string]string, unset []string) []string {
 	out := make([]string, 0, len(os.Environ())+len(set))
+	type envValue struct {
+		key   string
+		value string
+	}
+	normalize := func(key string) string {
+		if runtime.GOOS == "windows" {
+			return strings.ToLower(key)
+		}
+		return key
+	}
+	setByKey := make(map[string]envValue, len(set))
+	for key, value := range set {
+		setByKey[normalize(key)] = envValue{key: key, value: value}
+	}
+	removed := make(map[string]struct{}, len(unset))
+	for _, key := range unset {
+		removed[normalize(key)] = struct{}{}
+	}
 	overlaid := make(map[string]struct{}, len(set))
 	for _, kv := range os.Environ() {
 		k := kv
 		if i := strings.IndexByte(kv, '='); i >= 0 {
 			k = kv[:i]
 		}
-		if v, ok := set[k]; ok {
-			out = append(out, k+"="+v)
-			overlaid[k] = struct{}{}
+		normalized := normalize(k)
+		if _, drop := removed[normalized]; drop {
+			continue
+		}
+		if v, ok := setByKey[normalized]; ok {
+			out = append(out, k+"="+v.value)
+			overlaid[normalized] = struct{}{}
 			continue
 		}
 		out = append(out, kv)
 	}
 	for k, v := range set {
-		if _, done := overlaid[k]; done {
+		if _, done := overlaid[normalize(k)]; done {
 			continue
 		}
 		out = append(out, k+"="+v)

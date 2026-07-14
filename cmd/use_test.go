@@ -139,6 +139,93 @@ func TestParseUseArgs(t *testing.T) {
 	}
 }
 
+func TestParseUseArgsWithTransparent(t *testing.T) {
+	cases := []struct {
+		name            string
+		args            []string
+		wantTool        string
+		wantTransparent bool
+		wantExtra       []string
+		wantErr         bool
+	}{
+		{"bare flag", []string{"claude", "--transparent"}, "claude", true, nil, false},
+		{"true value", []string{"--transparent=true", "codex"}, "codex", true, nil, false},
+		{"false value", []string{"gemini", "--transparent=false"}, "gemini", false, nil, false},
+		{"zero value", []string{"gemini", "--transparent=0"}, "gemini", false, nil, false},
+		{"invalid value", []string{"claude", "--transparent=maybe"}, "", false, nil, true},
+		{"separator forwards same name", []string{"claude", "--", "--transparent"}, "claude", false, []string{"--transparent"}, false},
+		{"flag before separator only", []string{"claude", "--transparent", "--", "--transparent=false"}, "claude", true, []string{"--transparent=false"}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tool, _, _, _, transparent, extra, _, err := parseUseArgsWithTransparent(c.args)
+			if (err != nil) != c.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, c.wantErr)
+			}
+			if c.wantErr {
+				return
+			}
+			if tool != c.wantTool || transparent != c.wantTransparent || !reflect.DeepEqual(extra, c.wantExtra) {
+				t.Fatalf("got tool=%q transparent=%v extra=%#v; want tool=%q transparent=%v extra=%#v",
+					tool, transparent, extra, c.wantTool, c.wantTransparent, c.wantExtra)
+			}
+		})
+	}
+}
+
+// TestParseUseArgsTransparentDoesNotEatValueTokens pins that a bare value
+// literally spelled "transparent" — a routing group, a --model value, or the
+// tool positional — is never mistaken for the --transparent flag. Only a
+// dash-prefixed token toggles the connector; a group named "transparent" must
+// still select that group (and keep the experimental MITM mode off).
+func TestParseUseArgsTransparentDoesNotEatValueTokens(t *testing.T) {
+	t.Run("channel value", func(t *testing.T) {
+		tool, group, pick, _, transparent, _, _, err := parseUseArgsWithTransparent(
+			[]string{"--channel", "transparent", "claude"})
+		if err != nil {
+			t.Fatalf("err = %v", err)
+		}
+		if tool != "claude" || group != "transparent" || pick || transparent {
+			t.Fatalf("got tool=%q group=%q pick=%v transparent=%v; want claude/transparent/false/false",
+				tool, group, pick, transparent)
+		}
+	})
+	t.Run("model value", func(t *testing.T) {
+		tool, _, _, _, transparent, _, model, err := parseUseArgsWithTransparent(
+			[]string{"hermes", "--model", "transparent"})
+		if err != nil {
+			t.Fatalf("err = %v", err)
+		}
+		if tool != "hermes" || model != "transparent" || transparent {
+			t.Fatalf("got tool=%q model=%q transparent=%v; want hermes/transparent/false",
+				tool, model, transparent)
+		}
+	})
+	t.Run("tool positional", func(t *testing.T) {
+		tool, _, _, _, transparent, _, _, err := parseUseArgsWithTransparent(
+			[]string{"transparent"})
+		if err != nil {
+			t.Fatalf("err = %v", err)
+		}
+		if tool != "transparent" || transparent {
+			t.Fatalf("got tool=%q transparent=%v; want transparent/false", tool, transparent)
+		}
+	})
+}
+
+func TestUseUsageDocumentsTransparentFlag(t *testing.T) {
+	if !strings.Contains(useUsage, "--transparent") {
+		t.Fatal("use help does not document --transparent")
+	}
+}
+
+func TestUseRejectsSanitizeAndTransparentTogether(t *testing.T) {
+	err := Use([]string{"claude", "--sanitize", "--transparent"})
+	if err == nil || !strings.Contains(err.Error(), "cannot be used together") {
+		t.Fatalf("Use error = %v", err)
+	}
+}
+
 func FuzzParseUseArgsDoesNotPanic(f *testing.F) {
 	seeds := []string{
 		"claude -- --model opus",

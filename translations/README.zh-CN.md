@@ -44,6 +44,9 @@ brew update && brew upgrade everyapi
 everyapi use claude         # Claude Code → EveryAPI
 everyapi use codex          # OpenAI Codex CLI → EveryAPI
 everyapi use gemini         # Gemini CLI → EveryAPI
+everyapi use claude --transparent   # 实验模式：仍请求 api.anthropic.com
+everyapi use codex --transparent    # 实验模式：仍请求 api.openai.com
+everyapi use gemini --transparent   # 实验模式：仍请求 Google 官方域名
 everyapi use                # 无参 → 交互式选择已安装的工具
 ```
 
@@ -58,6 +61,22 @@ everyapi use                # 无参 → 交互式选择已安装的工具
 不必再去查每个工具读哪个变量名、要不要拼 `/v1` 后缀、走哪种 auth header。
 
 > ⚠️ **Subprocess env 安全提示**：上面这些环境变量包含你的 relay API key。第三方 CLI 的 debug / verbose 模式可能会把 env 写进日志——`everyapi use` 之前确认你打开的 debug flag 不会泄漏 `*_TOKEN` / `*_API_KEY`；分享 debug 日志前先 `sed -i 's/sk-everyapi-[A-Za-z0-9]*/REDACTED/g'`。
+
+#### 实验性透明 Connector
+
+`everyapi use <tool> --transparent` 不再设置第三方 Base URL，而是让支持的客户端继续请求供应商官方域名。CLI 会在随机 loopback 端口启动临时 HTTP CONNECT proxy，每次生成一张 CA；CA 私钥只存在于本进程内存。子进程只收到代理地址、公开 CA bundle 和无秘密的占位凭证。明确注册的模型路径会在本机解密后携带真实 relay key 转发 EveryAPI；其他 HTTPS 域名原样 CONNECT 直通。受保护前缀下的未知路径会被阻止，EveryAPI 转发失败也绝不会回落直连供应商。
+
+当前灰度范围包括 Claude Code（含 provider presets）、Codex CLI 和 Gemini CLI。Hermes 的 Python 证书与配置行为尚未验证，因此会明确拒绝。`--transparent` 与 `--sanitize` 不能同时使用。
+
+限制与安全边界：
+
+- 被拦截的客户端侧目前使用 HTTP/1.1，支持普通 JSON/SSE（网关 HTTP/2 响应会转换成 HTTP/1.1）；尚不覆盖客户端侧 HTTP/2、HTTP/3/QUIC、WebSocket、证书固定、忽略 `HTTPS_PROXY` 的客户端；
+- Codex 内置 OpenAI provider 会先探测一次 Responses WebSocket；Connector 返回 HTTP 426，使其不消耗重试预算、立即回落 HTTPS/SSE。Codex 仍可能打印这一条探测失败日志；
+- Claude Code 仍会把无秘密的占位凭证视为 API-key 认证，因此即使没有 `ANTHROPIC_BASE_URL`，claude.ai connectors 仍会被禁用。透明模式避免的是第三方 Origin 判断，不能把 API-key 认证伪装成 claude.ai OAuth 登录；
+- 不安装系统 CA、不需要管理员权限，未传参数时的原有行为完全不变；
+- 不能承诺“不可检测”：客户端仍可检查代理变量、本地证书链、socket、时延和响应差异；
+- Connector 能看到解密后的模型内容；CA 签名私钥不会写盘或上传，公开 CA 文件会在退出时删除；
+- relay key 不进入子进程环境或生成的客户端配置，但同一 OS 用户下的进程仍可直接读取现有的 `~/.config/everyapi/credentials.json`。透明模式解决的是凭证注入隔离，不是针对恶意子进程的文件系统沙箱。
 
 ### `everyapi login` — Device Authorization Grant + QR 登录
 

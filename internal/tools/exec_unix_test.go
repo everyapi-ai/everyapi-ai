@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 )
 
@@ -66,5 +67,32 @@ func TestExecPropagatesChildExitCode(t *testing.T) {
 	}
 	if ee.ExitCode() != 7 {
 		t.Fatalf("helper exit code = %d, want 7 (child's code, not 99 'Exec returned')", ee.ExitCode())
+	}
+}
+
+func TestExecWithOptionsRunsCleanupBeforeExit(t *testing.T) {
+	if os.Getenv("EVERYAPI_EXEC_CLEANUP_HELPER") == "1" {
+		marker := os.Getenv("EVERYAPI_EXEC_CLEANUP_MARKER")
+		_ = ExecWithOptions(&Tool{Name: "sh", ExecName: "sh"}, ExecOptions{
+			Args: []string{"-c", "exit 0"},
+			Cleanup: func() {
+				_ = os.WriteFile(marker, []byte("clean"), 0o600)
+			},
+		})
+		os.Exit(99)
+		return
+	}
+
+	marker := filepath.Join(t.TempDir(), "cleanup-ran")
+	cmd := exec.Command(os.Args[0], "-test.run=^TestExecWithOptionsRunsCleanupBeforeExit$", "-test.v=false")
+	cmd.Env = append(os.Environ(),
+		"EVERYAPI_EXEC_CLEANUP_HELPER=1",
+		"EVERYAPI_EXEC_CLEANUP_MARKER="+marker,
+	)
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("helper: %v", err)
+	}
+	if body, err := os.ReadFile(marker); err != nil || string(body) != "clean" {
+		t.Fatalf("cleanup marker = %q, err=%v", body, err)
 	}
 }

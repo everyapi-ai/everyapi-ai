@@ -47,6 +47,10 @@ func prepareGemini(_, _ string) (map[string]string, error) {
 	return map[string]string{"GEMINI_CLI_SYSTEM_SETTINGS_PATH": path}, nil
 }
 
+func prepareGeminiTransparent() (map[string]string, error) {
+	return prepareGemini("", "")
+}
+
 func geminiSystemSettingsPath() string {
 	if path := os.Getenv("GEMINI_CLI_SYSTEM_SETTINGS_PATH"); path != "" {
 		return path

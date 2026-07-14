@@ -33,13 +33,25 @@ import (
 // t.ExecName so callers can forward user flags (e.g.
 // `--dangerously-skip-permissions` for claude). nil is fine.
 func Exec(t *Tool, env map[string]string, extraArgs []string) error {
+	return ExecWithOptions(t, ExecOptions{Env: env, Args: extraArgs})
+}
+
+// ExecWithOptions is Exec plus explicit inherited-env removal and lifecycle
+// cleanup for process-scoped proxies and temporary trust bundles.
+func ExecWithOptions(t *Tool, opts ExecOptions) error {
+	cleanup := func() {
+		if opts.Cleanup != nil {
+			opts.Cleanup()
+		}
+	}
 	path, err := ResolveExec(t)
 	if err != nil {
+		cleanup()
 		return &ErrToolNotFound{Tool: t}
 	}
-	cmd := exec.Command(path, extraArgs...)
-	cmd.Args = append([]string{t.ExecName}, extraArgs...)
-	cmd.Env = mergeEnv(withExecDirOnPath(env, path))
+	cmd := exec.Command(path, opts.Args...)
+	cmd.Args = append([]string{t.ExecName}, opts.Args...)
+	cmd.Env = mergeEnvRemoving(withExecDirOnPath(opts.Env, path), opts.UnsetEnv)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -80,6 +92,7 @@ func Exec(t *Tool, env map[string]string, extraArgs []string) error {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGHUP)
 	if err := cmd.Start(); err != nil {
 		signal.Stop(sigCh)
+		cleanup()
 		return fmt.Errorf("start %s: %w", t.ExecName, err)
 	}
 	go func() {
@@ -105,6 +118,7 @@ func Exec(t *Tool, env map[string]string, extraArgs []string) error {
 	// and it exits cleanly (signal.Stop alone doesn't close the channel).
 	signal.Stop(sigCh)
 	close(sigCh)
+	cleanup()
 	os.Exit(unixExitCode(waitErr))
 	return nil // unreachable
 }

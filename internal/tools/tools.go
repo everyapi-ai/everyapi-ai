@@ -119,6 +119,17 @@ type Tool struct {
 	// generated config dir. Nil means the tool needs no pre-exec
 	// setup beyond env vars.
 	prepareFn func(apiBase, token string) (map[string]string, error)
+
+	// transparentEnvFn supplies tool-specific placeholder credentials and
+	// CA wiring for the experimental process-scoped connector. It must never
+	// receive or return the EveryAPI relay key. A nil function means this tool
+	// has not yet been verified with transparent mode.
+	transparentEnvFn func(caPath string) (set map[string]string, unset []string)
+
+	// prepareTransparentFn is the transparent counterpart of prepareFn. It
+	// writes only public routing configuration and placeholder credentials;
+	// the real relay key remains inside the connector process.
+	prepareTransparentFn func() (map[string]string, error)
 }
 
 func (t *Tool) Env(apiBase, token string) map[string]string {
@@ -149,6 +160,79 @@ func (t *Tool) Prepare(apiBase, token string) (map[string]string, error) {
 		return nil, nil
 	}
 	return t.prepareFn(apiBase, token)
+}
+
+const transparentPlaceholderCredential = "everyapi-local-connector"
+
+// TransparentEnv returns the complete process proxy overlay and the ambient
+// variables that must be absent from the child environment. Keeping removals
+// explicit is important: setting a Base URL to an empty string is still
+// observably different from not setting it, and inherited real provider keys
+// must not bypass or leak through the connector.
+func (t *Tool) TransparentEnv(proxyURL, caPath string) (map[string]string, []string, error) {
+	if t.transparentEnvFn == nil {
+		return nil, nil, fmt.Errorf("transparent mode is not supported for %s yet", t.Name)
+	}
+	if !strings.HasPrefix(proxyURL, "http://127.0.0.1:") && !strings.HasPrefix(proxyURL, "http://[::1]:") {
+		return nil, nil, fmt.Errorf("transparent connector proxy must be loopback HTTP")
+	}
+	if strings.TrimSpace(caPath) == "" {
+		return nil, nil, fmt.Errorf("transparent connector CA path is required")
+	}
+	set := map[string]string{
+		"HTTPS_PROXY": proxyURL,
+		"https_proxy": proxyURL,
+	}
+	// Do not inherit a corporate/plaintext proxy, a SOCKS fallback, or an
+	// exclusion that could make an official model origin bypass Connector.
+	unset := []string{"HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy", "EVERYAPI_RELAY_KEY"}
+	specific, specificUnset := t.transparentEnvFn(caPath)
+	for key, value := range specific {
+		set[key] = value
+	}
+	unset = append(unset, specificUnset...)
+	return set, unset, nil
+}
+
+// PrepareTransparent runs only setup that preserves the vendor's official
+// origin. It never accepts the gateway base URL or relay credential by design.
+func (t *Tool) PrepareTransparent() (map[string]string, error) {
+	if t.transparentEnvFn == nil {
+		return nil, fmt.Errorf("transparent mode is not supported for %s yet", t.Name)
+	}
+	if t.prepareTransparentFn == nil {
+		return nil, nil
+	}
+	return t.prepareTransparentFn()
+}
+
+func (t *Tool) SupportsTransparent() bool {
+	return t != nil && t.transparentEnvFn != nil
+}
+
+func transparentClaudeEnv(caPath string) (map[string]string, []string) {
+	return map[string]string{
+			"ANTHROPIC_AUTH_TOKEN": transparentPlaceholderCredential,
+			"NODE_EXTRA_CA_CERTS":  caPath,
+			"ENABLE_TOOL_SEARCH":   "1",
+		}, []string{
+			"ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY",
+			"CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
+		}
+}
+
+func transparentCodexEnv(caPath string) (map[string]string, []string) {
+	return map[string]string{
+		"OPENAI_API_KEY":       transparentPlaceholderCredential,
+		"CODEX_CA_CERTIFICATE": caPath,
+	}, []string{"OPENAI_BASE_URL", "OPENAI_API_BASE", "CODEX_API_KEY"}
+}
+
+func transparentGeminiEnv(caPath string) (map[string]string, []string) {
+	return map[string]string{
+		"GEMINI_API_KEY":      transparentPlaceholderCredential,
+		"NODE_EXTRA_CA_CERTS": caPath,
+	}, []string{"GOOGLE_GEMINI_BASE_URL", "GOOGLE_API_KEY"}
 }
 
 // joinBase concatenates the API base and a tool-specific suffix,
@@ -187,6 +271,7 @@ func claudeProviderPreset(name, owner string) *Tool {
 		YoloFlag:           "--dangerously-skip-permissions",
 		YoloLabel:          "skip all permission prompts (--dangerously-skip-permissions)",
 		ModelOwner:         owner,
+		transparentEnvFn:   transparentClaudeEnv,
 		envFn: func(apiBase, token string) map[string]string {
 			// Model is injected by cmd/use after the picker, see
 			// SetClaudeModel — envFn carries only the routing essentials.
@@ -244,6 +329,7 @@ var Registry = map[string]*Tool{
 		InstallCmdUnixOnly: true,
 		YoloFlag:           "--dangerously-skip-permissions",
 		YoloLabel:          "skip all permission prompts (--dangerously-skip-permissions)",
+		transparentEnvFn:   transparentClaudeEnv,
 		envFn: func(apiBase, token string) map[string]string {
 			return map[string]string{
 				"ANTHROPIC_BASE_URL":   joinBase(apiBase, ""),
@@ -273,12 +359,14 @@ var Registry = map[string]*Tool{
 	// The OPENAI_API_KEY env var is still set as belt-and-suspenders
 	// — config.toml's env_key points back at it.
 	"codex": {
-		Name:        "codex",
-		ExecName:    "codex",
-		InstallHint: "Install Codex CLI: https://github.com/openai/codex#installation",
-		InstallCmd:  "npm install -g @openai/codex",
-		YoloFlag:    "--dangerously-bypass-approvals-and-sandbox",
-		YoloLabel:   "bypass approvals + sandbox (--dangerously-bypass-approvals-and-sandbox)",
+		Name:                 "codex",
+		ExecName:             "codex",
+		InstallHint:          "Install Codex CLI: https://github.com/openai/codex#installation",
+		InstallCmd:           "npm install -g @openai/codex",
+		YoloFlag:             "--dangerously-bypass-approvals-and-sandbox",
+		YoloLabel:            "bypass approvals + sandbox (--dangerously-bypass-approvals-and-sandbox)",
+		transparentEnvFn:     transparentCodexEnv,
+		prepareTransparentFn: prepareCodexTransparent,
 		envFn: func(_, token string) map[string]string {
 			return map[string]string{"OPENAI_API_KEY": token}
 		},
@@ -289,13 +377,15 @@ var Registry = map[string]*Tool{
 	// GOOGLE_GEMINI_BASE_URL (alternate base). Gemini CLI appends the
 	// native /v1beta API prefix itself, so this must be the gateway root.
 	"gemini": {
-		Name:             "gemini",
-		ExecName:         "gemini",
-		InstallHint:      "Install Gemini CLI: https://github.com/google-gemini/gemini-cli#installation",
-		InstallCmd:       "npm install -g @google/gemini-cli",
-		YoloFlag:         "--yolo",
-		YoloLabel:        "yolo mode — auto-approve every tool call (--yolo)",
-		RequiredEndpoint: "gemini",
+		Name:                 "gemini",
+		ExecName:             "gemini",
+		InstallHint:          "Install Gemini CLI: https://github.com/google-gemini/gemini-cli#installation",
+		InstallCmd:           "npm install -g @google/gemini-cli",
+		YoloFlag:             "--yolo",
+		YoloLabel:            "yolo mode — auto-approve every tool call (--yolo)",
+		RequiredEndpoint:     "gemini",
+		transparentEnvFn:     transparentGeminiEnv,
+		prepareTransparentFn: prepareGeminiTransparent,
 		envFn: func(apiBase, token string) map[string]string {
 			return map[string]string{
 				"GEMINI_API_KEY":         token,

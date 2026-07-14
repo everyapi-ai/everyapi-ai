@@ -31,7 +31,7 @@ import (
 const useUsage = `everyapi use — launch a third-party CLI routed through EveryAPI
 
 USAGE
-  everyapi use [<tool>] [--group <name> | --channel <name>] [--model <id>] [--sanitize] [-- tool args...]
+  everyapi use [<tool>] [--group <name> | --channel <name>] [--model <id>] [--sanitize | --transparent] [-- tool args...]
 
 ARGUMENTS
   <tool>                 claude | codex | gemini | hermes
@@ -51,6 +51,12 @@ FLAGS
                          catalog. claude/codex/gemini set their own model —
                          pass model flags to them after -- instead.
   --sanitize             Opt in to the local sanitizer proxy (masks detected secrets before they reach the gateway). Off by default — the mask/restore step corrupts coding-agent sessions; for non-agentic SDK traffic use the standalone 'everyapi proxy' instead.
+  --transparent          Experimental: keep the tool on its vendor's official
+                         API origin and relay registered model routes through
+                         a process-scoped local TLS connector. The EveryAPI
+                         relay key is not injected into child env or config.
+                         Verified for claude/codex/gemini and Claude presets;
+                         hermes is not yet supported.
   --                     End of everyapi's option parsing; remaining args are
                          forwarded verbatim to the tool's argv.
 
@@ -61,6 +67,8 @@ answer "n" to keep the tool's native prompts intact.
 
 EXAMPLES
   everyapi use claude
+  everyapi use claude --transparent
+  everyapi use codex --transparent
   everyapi use codex --channel byteplus
   everyapi use claude -- --model opus
   everyapi use glm                     (Claude Code; pick a GLM model)
@@ -108,9 +116,12 @@ func Use(args []string) error {
 		return nil
 	}
 
-	toolName, group, pickGroup, sanitize, extraArgs, model, err := parseUseArgs(args)
+	toolName, group, pickGroup, sanitize, transparent, extraArgs, model, err := parseUseArgsWithTransparent(args)
 	if err != nil {
 		return err
+	}
+	if sanitize && transparent {
+		return errors.New("--sanitize and --transparent cannot be used together")
 	}
 
 	creds, err := config.Load()
@@ -149,6 +160,9 @@ func Use(args []string) error {
 	t, err := tools.Lookup(toolName)
 	if err != nil {
 		return err
+	}
+	if transparent && !t.SupportsTransparent() {
+		return fmt.Errorf("transparent mode is not supported for %s yet", t.Name)
 	}
 
 	// --model applies to tools EveryAPI picks a model for: hermes (ModelEnv)
@@ -316,7 +330,10 @@ func Use(args []string) error {
 	// spawned it and every other session got connection-refused).
 	apiBaseForEnv := creds.APIBase
 	guardClaudeRecovery := recovery != nil
-	if sanitize || guardClaudeRecovery {
+	if transparent && guardClaudeRecovery {
+		return errors.New("--transparent cannot yet launch a Claude session that requires the recovery response guard")
+	}
+	if !transparent && (sanitize || guardClaudeRecovery) {
 		proxyAddr, stop, perr := startInProcessSanitizer(creds.APIBase, sanitize, guardClaudeRecovery)
 		if perr != nil {
 			if guardClaudeRecovery {
@@ -336,7 +353,26 @@ func Use(args []string) error {
 		}
 	}
 
-	env := t.Env(apiBaseForEnv, relayKey)
+	var (
+		env                map[string]string
+		unsetEnv           []string
+		transparentSession *transparentConnectorSession
+	)
+	if transparent {
+		launch, launchErr := startTransparentLaunch(t, creds.APIBase, relayKey)
+		if launchErr != nil {
+			return fmt.Errorf("start transparent mode for %s: %w", t.ExecName, launchErr)
+		}
+		transparentSession = launch.session
+		env = launch.env
+		unsetEnv = launch.unsetEnv
+		// Covers prompt cancellation and prepare failures. On a successful
+		// launch ExecWithOptions also runs stop before propagating the child's
+		// exit code; stop is idempotent.
+		defer transparentSession.stop()
+	} else {
+		env = t.Env(apiBaseForEnv, relayKey)
+	}
 
 	// Pin the provider preset's chosen model. Injected into the env map
 	// (not os.Setenv) so it overrides any ANTHROPIC_MODEL the user has
@@ -397,14 +433,18 @@ func Use(args []string) error {
 		}
 	}
 
-	// Per-tool pre-exec setup — currently only codex uses this
-	// (writes an isolated CODEX_HOME with apikey-mode auth.json +
-	// everyapi-provider config.toml, since codex routes via config
-	// not env vars and defaults to ChatGPT device-login). Runs
+	// Per-tool pre-exec setup — codex writes an isolated CODEX_HOME and
+	// Gemini writes an auth-mode settings overlay. Transparent mode uses
+	// separate hooks that retain the official provider/origin. Runs
 	// AFTER the yolo prompt so a user who Escs out doesn't pay for
 	// a file write that's about to be orphaned. Returned env
 	// overlays t.Env so the hook can pin CODEX_HOME.
-	extraEnv, err := t.Prepare(apiBaseForEnv, relayKey)
+	var extraEnv map[string]string
+	if transparent {
+		extraEnv, err = t.PrepareTransparent()
+	} else {
+		extraEnv, err = t.Prepare(apiBaseForEnv, relayKey)
+	}
 	if err != nil {
 		return fmt.Errorf("prepare %s: %w", t.ExecName, err)
 	}
@@ -415,7 +455,9 @@ func Use(args []string) error {
 	// Surface the resolved base URL so an aspiring debugger knows
 	// where the requests are heading. One line, just before we hand the
 	// terminal over to the tool.
-	if apiBaseForEnv != creds.APIBase {
+	if transparent {
+		cliout.Printf("Launching %s through transparent connector %s → %s\n", t.ExecName, transparentSession.proxyURL, creds.APIBase)
+	} else if apiBaseForEnv != creds.APIBase {
 		cliout.Printf(i18n.T("use.launching_via")+"\n", t.ExecName, apiBaseForEnv, creds.APIBase)
 	} else {
 		cliout.Printf(i18n.T("use.launching")+"\n", t.ExecName, creds.APIBase)
@@ -424,6 +466,14 @@ func Use(args []string) error {
 	// background-color report a huh picker triggered) still buffered on
 	// stdin, so it doesn't leak into the launched tool as phantom input.
 	cliprompt.DrainStdin()
+	if transparent {
+		return tools.ExecWithOptions(t, tools.ExecOptions{
+			Env:      env,
+			UnsetEnv: unsetEnv,
+			Args:     extraArgs,
+			Cleanup:  transparentSession.stop,
+		})
+	}
 	return tools.Exec(t, env, extraArgs)
 }
 
@@ -840,6 +890,48 @@ func parseUseArgs(args []string) (toolName, group string, pickGroup, sanitize bo
 	}
 	pickGroup = groupSeen && !groupHasVal
 	return toolName, group, pickGroup, sanitize, extraArgs, model, nil
+}
+
+// parseUseArgsWithTransparent layers the experimental transparent flag onto
+// the stable parser without changing its long-standing return contract.
+// Tokens after `--` are never inspected, so a tool may receive a flag with the
+// same name verbatim. Like Go boolean flags, the supported forms are a bare
+// flag and an attached =true/false value; repeated flags use the last value.
+func parseUseArgsWithTransparent(args []string) (toolName, group string, pickGroup, sanitize, transparent bool, extraArgs []string, model string, err error) {
+	filtered := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			filtered = append(filtered, args[i:]...)
+			break
+		}
+		// Only a token that begins with a dash can be the --transparent
+		// flag. A bare value — a positional tool name, or the space-form
+		// value of --group/--channel/--model — must pass through verbatim,
+		// even when it literally reads "transparent"; strings.TrimLeft
+		// returns such a token unchanged, so matching it here would eat a
+		// routing group named "transparent" (and silently flip on the
+		// experimental connector) or swallow a --model value.
+		if strings.HasPrefix(a, "-") {
+			name := strings.TrimLeft(a, "-")
+			if name == "transparent" {
+				transparent = true
+				continue
+			}
+			if strings.HasPrefix(name, "transparent=") {
+				value := strings.TrimPrefix(name, "transparent=")
+				parsed, parseErr := strconv.ParseBool(value)
+				if parseErr != nil {
+					return "", "", false, false, false, nil, "", fmt.Errorf("--transparent=%q is not a valid true/false value", value)
+				}
+				transparent = parsed
+				continue
+			}
+		}
+		filtered = append(filtered, a)
+	}
+	toolName, group, pickGroup, sanitize, extraArgs, model, err = parseUseArgs(filtered)
+	return
 }
 
 // resolveToolModel pins the upstream model for tools EveryAPI selects a

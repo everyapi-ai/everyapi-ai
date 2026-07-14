@@ -67,3 +67,25 @@ func TestGeminiTool_PrepareWired(t *testing.T) {
 		t.Fatal("gemini prepare hook was not invoked")
 	}
 }
+
+func TestGeminiToolPrepareTransparentPinsAPIKeyMode(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("GEMINI_CLI_SYSTEM_SETTINGS_PATH", filepath.Join(t.TempDir(), "missing.json"))
+	tool, _ := Lookup("gemini")
+	extra, err := tool.PrepareTransparent()
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(extra["GEMINI_CLI_SYSTEM_SETTINGS_PATH"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+	auth := got["security"].(map[string]any)["auth"].(map[string]any)
+	if auth["selectedType"] != "gemini-api-key" {
+		t.Errorf("selectedType = %v, want gemini-api-key", auth["selectedType"])
+	}
+}
