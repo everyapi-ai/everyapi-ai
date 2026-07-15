@@ -3,6 +3,7 @@
 package tools
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -64,13 +65,18 @@ func ExecWithOptions(t *Tool, opts ExecOptions) error {
 	if err := cmd.Start(); err != nil {
 		signal.Stop(sigCh)
 		cleanup()
+		logToolExit(t.ExecName, 0, "start failed: "+err.Error())
 		return fmt.Errorf("start %s: %w", t.ExecName, err)
 	}
+	// Pair the exit line below with a launch line so a hard-killed parent
+	// is legible as a "launched, never exited" gap.
+	logToolExit(t.ExecName, childPID(cmd), "launched")
 	go func() {
 		// Drain and swallow: the child already received the event via
 		// the shared console group. We register only so the runtime
 		// doesn't terminate us before we reap the child.
-		for range sigCh {
+		for s := range sigCh {
+			logToolSignal(t.ExecName, childPID(cmd), s)
 		}
 	}()
 
@@ -80,6 +86,24 @@ func ExecWithOptions(t *Tool, opts ExecOptions) error {
 	signal.Stop(sigCh)
 	close(sigCh)
 	cleanup()
+	// Record the child's fate before os.Exit skips deferred writes, so a
+	// session that dies with no console output still leaves a breadcrumb.
+	logToolExit(t.ExecName, childPID(cmd), windowsExitCause(waitErr))
 	os.Exit(exitCodeFromWait(waitErr))
 	return nil // unreachable
+}
+
+// windowsExitCause renders the child's termination for the diagnostic
+// log. Windows has no POSIX signal-death status, so a non-zero exit is
+// reported by its code (a task killed by the OS surfaces as a non-zero
+// code here, not a signal).
+func windowsExitCause(waitErr error) string {
+	if waitErr == nil {
+		return "exit=0 (clean)"
+	}
+	var ee *exec.ExitError
+	if errors.As(waitErr, &ee) {
+		return fmt.Sprintf("exit=%d", ee.ExitCode())
+	}
+	return "wait error: " + waitErr.Error()
 }

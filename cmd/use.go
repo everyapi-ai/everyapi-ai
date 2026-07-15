@@ -732,19 +732,14 @@ func startInProcessSanitizer(upstream string, sanitizeRequests, guardClaudeRecov
 // the process exits.
 func sanitizerLogger() (*log.Logger, func()) {
 	discard := func() (*log.Logger, func()) { return log.New(io.Discard, "", 0), func() {} }
-	dir, err := config.ConfigDir()
+	// EnsureLogPath resolves ~/.config/everyapi and creates it if this is
+	// the first command to need it — otherwise a fresh install (where the
+	// dir doesn't exist yet) drops every proxy log line on the floor.
+	path, err := config.EnsureLogPath("sanitizer.log")
 	if err != nil {
 		return discard()
 	}
-	dir = strings.TrimRight(dir, "/")
-	// Create the config dir if this is the first command to need it —
-	// otherwise a fresh install (where ~/.config/everyapi doesn't exist
-	// yet) drops every proxy log line on the floor.
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return discard()
-	}
-	f, err := os.OpenFile(dir+"/sanitizer.log",
-		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return discard()
 	}

@@ -59,7 +59,13 @@ func TestExecPropagatesChildExitCode(t *testing.T) {
 	}
 
 	cmd := exec.Command(os.Args[0], "-test.run=^TestExecPropagatesChildExitCode$", "-test.v=false")
-	cmd.Env = append(os.Environ(), "EVERYAPI_EXEC_HELPER=1")
+	// Redirect the helper's config dir into a temp dir: Exec now writes a
+	// use.log launch/exit line, and without this the helper would append
+	// to the developer's real ~/.config/everyapi/use.log.
+	cmd.Env = append(os.Environ(),
+		"EVERYAPI_EXEC_HELPER=1",
+		"XDG_CONFIG_HOME="+t.TempDir(),
+	)
 	err := cmd.Run()
 	var ee *exec.ExitError
 	if !errors.As(err, &ee) {
@@ -83,11 +89,15 @@ func TestExecWithOptionsRunsCleanupBeforeExit(t *testing.T) {
 		return
 	}
 
-	marker := filepath.Join(t.TempDir(), "cleanup-ran")
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "cleanup-ran")
 	cmd := exec.Command(os.Args[0], "-test.run=^TestExecWithOptionsRunsCleanupBeforeExit$", "-test.v=false")
+	// Redirect the helper's config dir so its use.log write lands in the
+	// temp dir, not the developer's real ~/.config/everyapi.
 	cmd.Env = append(os.Environ(),
 		"EVERYAPI_EXEC_CLEANUP_HELPER=1",
 		"EVERYAPI_EXEC_CLEANUP_MARKER="+marker,
+		"XDG_CONFIG_HOME="+dir,
 	)
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("helper: %v", err)

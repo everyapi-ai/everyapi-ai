@@ -93,22 +93,42 @@ func ExecWithOptions(t *Tool, opts ExecOptions) error {
 	if err := cmd.Start(); err != nil {
 		signal.Stop(sigCh)
 		cleanup()
+		logToolExit(t.ExecName, 0, "start failed: "+err.Error())
 		return fmt.Errorf("start %s: %w", t.ExecName, err)
 	}
+	// Pair the exit line below with a launch line, so a parent that is
+	// itself hard-killed (SIGKILL from the OOM killer leaves no chance to
+	// log an exit) is legible as a "launched, never exited" gap.
+	logToolExit(t.ExecName, childPID(cmd), "launched")
 	go func() {
 		for s := range sigCh {
+			// Only log signals that will actually END the child, so the
+			// diagnostic stays a record of deaths — not a transcript of
+			// every Ctrl+C. SIGTERM (a targeted kill) and SIGHUP (session
+			// hangup) are terminal reaper fingerprints and always logged.
+			// SIGINT/SIGQUIT are logged ONLY when we forward them (no
+			// controlling terminal): in the interactive foreground group
+			// they're the user interrupting Claude's generation — Claude
+			// traps ^C to interrupt, not exit — so logging each one would
+			// flood use.log and evict the launch/exit history the feature
+			// depends on.
 			switch s {
 			case syscall.SIGTERM:
+				logToolSignal(t.ExecName, childPID(cmd), s)
 				_ = cmd.Process.Signal(s)
-			case syscall.SIGINT, syscall.SIGQUIT, syscall.SIGHUP:
+			case syscall.SIGHUP:
+				logToolSignal(t.ExecName, childPID(cmd), s)
 				if forwardInterrupts {
 					_ = cmd.Process.Signal(s)
 				}
-				// else: in the shared foreground group the kernel already
-				// delivered it to the child on Ctrl+C / hangup; forwarding
-				// would double it. SIGHUP is forwarded here too so a child
-				// launched WITHOUT a controlling terminal (mcp install, a
-				// wrapper, a pipe) can still be hung up via the parent.
+			case syscall.SIGINT, syscall.SIGQUIT:
+				if forwardInterrupts {
+					logToolSignal(t.ExecName, childPID(cmd), s)
+					_ = cmd.Process.Signal(s)
+				}
+				// else: shared foreground group — the kernel already
+				// delivered it to the child, forwarding would double it,
+				// and it's a routine interrupt, not a death. Don't log.
 			}
 		}
 	}()
@@ -119,6 +139,11 @@ func ExecWithOptions(t *Tool, opts ExecOptions) error {
 	signal.Stop(sigCh)
 	close(sigCh)
 	cleanup()
+	// Record the child's fate before os.Exit skips every deferred write.
+	// A session that dies with no terminal output still leaves one line
+	// here naming the signal — the only way to tell an OOM/hangup reaper
+	// from a genuine per-process failure after the fact.
+	logToolExit(t.ExecName, childPID(cmd), unixExitCause(waitErr))
 	os.Exit(unixExitCode(waitErr))
 	return nil // unreachable
 }
@@ -135,6 +160,25 @@ func unixExitCode(waitErr error) int {
 		}
 	}
 	return exitCodeFromWait(waitErr)
+}
+
+// unixExitCause renders the child's termination for the diagnostic log:
+// a clean/normal exit reports its code, a signal death names the signal
+// (e.g. "killed by signal 9 (killed)") so an external reaper is legible
+// at a glance, and an unstartable/lost child is marked as such.
+func unixExitCause(waitErr error) string {
+	if waitErr == nil {
+		return "exit=0 (clean)"
+	}
+	var ee *exec.ExitError
+	if errors.As(waitErr, &ee) {
+		if ws, ok := ee.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+			sig := ws.Signal()
+			return fmt.Sprintf("killed by signal %d (%s)", int(sig), sig)
+		}
+		return fmt.Sprintf("exit=%d", ee.ExitCode())
+	}
+	return "wait error: " + waitErr.Error()
 }
 
 // inForegroundGroup reports whether our process group is the foreground

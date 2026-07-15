@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -8,7 +9,183 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
+	"time"
+
+	"github.com/everyapi-ai/everyapi-sdk/config"
 )
+
+// useExitLogMaxBytes caps ~/.config/everyapi/use.log so a long-lived
+// install can't grow it without bound. When a write would cross this
+// size the oldest lines are dropped and only the most recent
+// useExitLogRetainBytes are kept — a real rolling tail, not a wipe, so
+// the launch/exit history needed to correlate a mass-death survives.
+const useExitLogMaxBytes = 1 << 20
+
+// useExitLogRetainBytes is how much of the tail to keep when rolling.
+// Half the cap leaves plenty of recent history while guaranteeing the
+// file shrinks on every roll.
+const useExitLogRetainBytes = useExitLogMaxBytes / 2
+
+// useLogWriteTimeout bounds how long the exit/signal path will wait for
+// the diagnostic write before giving up. The write runs on its own
+// goroutine; if the config dir lives on a stalled network mount (an
+// NFS/autofs home is exactly the shared-host environment this feature
+// targets), the parent abandons the write instead of blocking os.Exit —
+// the diagnostic must never become the hang it exists to explain.
+const useLogWriteTimeout = 500 * time.Millisecond
+
+// logToolExit records why a supervised tool child terminated, so a
+// launch that vanishes with no output on the terminal still leaves a
+// durable breadcrumb. It is the diagnostic answer to "all my sessions
+// died at once with no message": each `everyapi use` process writes one
+// line naming the tool, its pid, and the precise termination cause
+// (clean exit code, or death by signal N) with a timestamp. Correlating
+// those lines across sessions reveals whether a batch of children was
+// reaped by the same signal at the same instant — the fingerprint of an
+// external reaper (OOM killer → SIGKILL, an ssh/session hangup → SIGHUP)
+// rather than a per-process bug.
+//
+// The write is dispatched to a goroutine and awaited only up to
+// useLogWriteTimeout, so a wedged filesystem can never stall the caller
+// (notably the exit path, which runs this immediately before os.Exit).
+// Best-effort throughout: any failure — timeout, unresolved config dir,
+// I/O error — is swallowed. Diagnostics must not change the exit path or
+// keep the tool from launching.
+func logToolExit(execName string, pid int, cause string) {
+	line := fmt.Sprintf("%s pid=%d tool=%s %s\n",
+		time.Now().Format("2006-01-02T15:04:05.000Z07:00"), pid, execName, cause)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		writeUseLogLine(line)
+	}()
+	select {
+	case <-done:
+	case <-time.After(useLogWriteTimeout):
+		// Abandon the (possibly blocked) write goroutine. It holds no
+		// lock the caller needs and will exit if/when the FS responds;
+		// leaking it for the brief remainder of process life is fine.
+	}
+}
+
+// signalCause renders a received signal identically to the child-exit
+// line's "signal N (name)" shape, so an operator can grep a single
+// "signal 15" across both the parent-received line and the paired child
+// exit line. os.Signal.String() alone yields the name only ("terminated"),
+// which would not match the number-keyed exit line.
+func signalCause(sig os.Signal) string {
+	if s, ok := sig.(syscall.Signal); ok {
+		return fmt.Sprintf("parent received signal %d (%s)", int(s), s)
+	}
+	return "parent received signal " + sig.String()
+}
+
+// logToolSignal records that the supervising parent itself received a
+// terminal/session signal, using the same timeout-guarded path as
+// logToolExit.
+func logToolSignal(execName string, pid int, sig os.Signal) {
+	logToolExit(execName, pid, signalCause(sig))
+}
+
+// writeUseLogLine performs the actual, synchronous, blocking write of one
+// pre-formatted line to ~/.config/everyapi/use.log. It is only ever run
+// from logToolExit's timeout-guarded goroutine, never inline. Concurrent
+// writers (independent `everyapi use` processes and the signal goroutine)
+// are serialized with an advisory file lock so their lines can't interleave
+// or clobber each other, and the file is tail-trimmed under that same lock
+// when it would exceed the cap.
+func writeUseLogLine(line string) {
+	path, err := config.EnsureLogPath("use.log")
+	if err != nil {
+		return
+	}
+	// O_RDWR, NOT O_APPEND: we serialize writers with an advisory lock and
+	// position writes explicitly, and O_APPEND would both defeat the
+	// in-place tail trim (Go rejects WriteAt on an append fd) and force
+	// every write to end-of-file regardless of our seeks.
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+
+	// Hold an advisory exclusive lock across the size check, the tail
+	// trim, and the append so no other writer can rewrite under us or
+	// interleave its line. lockUseLog is a no-op fallback where the OS
+	// lacks advisory locks; that path is best-effort only.
+	unlock := lockUseLog(f)
+	defer unlock()
+
+	if info, statErr := f.Stat(); statErr == nil && info.Size()+int64(len(line)) > useExitLogMaxBytes {
+		// Trim IN PLACE on this same fd so the lock we hold stays valid
+		// (a rename would swap the inode out from under the lock) and
+		// leave the offset at the new end. If the trim can't complete,
+		// fall through and append anyway — an oversized log beats a lost
+		// death line.
+		trimUseLogTailInPlace(f)
+	} else if _, err := f.Seek(0, os.SEEK_END); err != nil {
+		return
+	}
+	_, _ = f.WriteString(line)
+}
+
+// trimUseLogTailInPlace rewrites f to keep only its last
+// useExitLogRetainBytes, aligned to a line boundary, reusing the same
+// open descriptor (and thus the caller's advisory lock and the same
+// inode). It leaves the offset at the new end so the caller's append
+// continues cleanly. Best-effort: on any error f is left unchanged.
+func trimUseLogTailInPlace(f *os.File) {
+	if _, err := f.Seek(0, os.SEEK_SET); err != nil {
+		return
+	}
+	data, err := readAllFromFile(f)
+	if err != nil {
+		return
+	}
+	if len(data) <= useExitLogRetainBytes {
+		if _, err := f.Seek(0, os.SEEK_END); err != nil {
+			return
+		}
+		return
+	}
+	tail := data[len(data)-useExitLogRetainBytes:]
+	// Drop a leading partial line so the retained tail starts clean.
+	if nl := bytes.IndexByte(tail, '\n'); nl >= 0 && nl+1 <= len(tail) {
+		tail = tail[nl+1:]
+	}
+	// Overwrite from the start, then truncate to the new length. Order
+	// matters: write first (so the bytes are in place) then shrink.
+	if _, err := f.WriteAt(tail, 0); err != nil {
+		_, _ = f.Seek(0, os.SEEK_END)
+		return
+	}
+	if err := f.Truncate(int64(len(tail))); err != nil {
+		_, _ = f.Seek(0, os.SEEK_END)
+		return
+	}
+	_, _ = f.Seek(int64(len(tail)), os.SEEK_SET)
+}
+
+// readAllFromFile reads f to EOF from its current offset without pulling
+// in io/ioutil; kept local so exec_common.go's import set stays minimal.
+func readAllFromFile(f *os.File) ([]byte, error) {
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(f); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// childPID returns the started child's pid, or 0 if the process handle
+// is absent (never started / already released). Shared by both platform
+// launchers — it touches only the platform-neutral *exec.Cmd.
+func childPID(cmd *exec.Cmd) int {
+	if cmd == nil || cmd.Process == nil {
+		return 0
+	}
+	return cmd.Process.Pid
+}
 
 // ErrToolNotFound is returned by Exec when the tool's executable
 // isn't on $PATH. cmd/use renders the InstallHint via Error().

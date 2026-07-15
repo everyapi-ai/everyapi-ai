@@ -704,14 +704,10 @@ func reexecDetached(listen, upstream string, parentPID int) error {
 	if err != nil {
 		return fmt.Errorf("locate self for detach: %w", err)
 	}
-	dir, err := config.ConfigDir()
+	logPath, err := config.EnsureLogPath("sanitizer.log")
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create config dir: %w", err)
-	}
-	logPath := strings.TrimRight(dir, "/") + "/sanitizer.log"
 	logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("open sanitizer log %s: %w", logPath, err)
