@@ -144,13 +144,13 @@ func runPricing(args []string) error {
 		sort.Strings(groups)
 		for _, g := range groups {
 			ratio, ok := p.GroupRatio[g]
-			gName := cliout.Sanitize(g)
-			desc := cliout.Sanitize(p.UsableGroup[g])
+			id := cliout.Sanitize(g)
+			name := cliout.Sanitize(p.UsableGroup[g])
 			if !ok {
-				cliout.Printf("  %-12s  (no explicit ratio)  %s\n", gName, desc)
+				cliout.Printf("  %-24s  id=%-12s  (no explicit ratio)\n", name, id)
 				continue
 			}
-			cliout.Printf("  %-12s  ×%g  %s\n", gName, ratio, desc)
+			cliout.Printf("  %-24s  id=%-12s  ×%g\n", name, id, ratio)
 		}
 	}
 	return nil
@@ -176,19 +176,30 @@ func runGroups(args []string) error {
 		cliout.Println(i18n.T("models.no_groups"))
 		return nil
 	}
-	names := make([]string, 0, len(groups))
-	for n := range groups {
-		names = append(names, n)
+	ids := make([]string, 0, len(groups))
+	for id := range groups {
+		ids = append(ids, id)
 	}
-	sort.Strings(names)
-	cliout.Printf("%d routing group(s):\n", len(names))
-	for _, n := range names {
-		g := groups[n]
+	sort.Slice(ids, func(i, j int) bool {
+		left, right := groups[ids[i]].Name, groups[ids[j]].Name
+		if left == right {
+			return ids[i] < ids[j]
+		}
+		return left < right
+	})
+	cliout.Printf("%d routing group(s):\n", len(ids))
+	for _, id := range ids {
+		g := groups[id]
 		// g.Ratio is `any` (the backend may send a number or a string),
 		// so the formatted value is attacker-influenced text — sanitize
 		// it like every other server-sourced field printed here.
 		ratio := cliout.Sanitize(fmt.Sprintf("%v", g.Ratio))
-		cliout.Printf("  %-12s  ratio=%-6s  %s\n", cliout.Sanitize(n), ratio, cliout.Sanitize(g.Desc))
+		availability := "usable"
+		if !g.Usable {
+			availability = "unavailable"
+		}
+		cliout.Printf("  %-24s  id=%-12s  ratio=%-6s  %s\n",
+			cliout.Sanitize(g.Name), cliout.Sanitize(id), ratio, availability)
 	}
 	return nil
 }
