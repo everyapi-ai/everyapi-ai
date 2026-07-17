@@ -140,21 +140,27 @@ func TestParseUseArgs(t *testing.T) {
 }
 
 func TestParseUseArgsWithTransparent(t *testing.T) {
+	// wantTransparent is the tri-state the parser reports: nil = the user said
+	// nothing (Use then applies the per-tool default), non-nil = an explicit
+	// request. "unset" and "explicitly false" are NOT interchangeable now that
+	// transparent is the default — unset falls back silently on a tool with no
+	// adapter, explicit-true errors there.
 	cases := []struct {
 		name            string
 		args            []string
 		wantTool        string
-		wantTransparent bool
+		wantTransparent *bool
 		wantExtra       []string
 		wantErr         bool
 	}{
-		{"bare flag", []string{"claude", "--transparent"}, "claude", true, nil, false},
-		{"true value", []string{"--transparent=true", "codex"}, "codex", true, nil, false},
-		{"false value", []string{"gemini", "--transparent=false"}, "gemini", false, nil, false},
-		{"zero value", []string{"gemini", "--transparent=0"}, "gemini", false, nil, false},
-		{"invalid value", []string{"claude", "--transparent=maybe"}, "", false, nil, true},
-		{"separator forwards same name", []string{"claude", "--", "--transparent"}, "claude", false, []string{"--transparent"}, false},
-		{"flag before separator only", []string{"claude", "--transparent", "--", "--transparent=false"}, "claude", true, []string{"--transparent=false"}, false},
+		{"bare flag", []string{"claude", "--transparent"}, "claude", boolPtr(true), nil, false},
+		{"true value", []string{"--transparent=true", "codex"}, "codex", boolPtr(true), nil, false},
+		{"false value", []string{"gemini", "--transparent=false"}, "gemini", boolPtr(false), nil, false},
+		{"zero value", []string{"gemini", "--transparent=0"}, "gemini", boolPtr(false), nil, false},
+		{"invalid value", []string{"claude", "--transparent=maybe"}, "", nil, nil, true},
+		{"unset stays nil", []string{"claude"}, "claude", nil, nil, false},
+		{"separator forwards same name", []string{"claude", "--", "--transparent"}, "claude", nil, []string{"--transparent"}, false},
+		{"flag before separator only", []string{"claude", "--transparent", "--", "--transparent=false"}, "claude", boolPtr(true), []string{"--transparent=false"}, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -165,9 +171,9 @@ func TestParseUseArgsWithTransparent(t *testing.T) {
 			if c.wantErr {
 				return
 			}
-			if tool != c.wantTool || transparent != c.wantTransparent || !reflect.DeepEqual(extra, c.wantExtra) {
-				t.Fatalf("got tool=%q transparent=%v extra=%#v; want tool=%q transparent=%v extra=%#v",
-					tool, transparent, extra, c.wantTool, c.wantTransparent, c.wantExtra)
+			if tool != c.wantTool || !reflect.DeepEqual(transparent, c.wantTransparent) || !reflect.DeepEqual(extra, c.wantExtra) {
+				t.Fatalf("got tool=%q transparent=%s extra=%#v; want tool=%q transparent=%s extra=%#v",
+					tool, fmtBoolPtr(transparent), extra, c.wantTool, fmtBoolPtr(c.wantTransparent), c.wantExtra)
 			}
 		})
 	}
@@ -185,9 +191,9 @@ func TestParseUseArgsTransparentDoesNotEatValueTokens(t *testing.T) {
 		if err != nil {
 			t.Fatalf("err = %v", err)
 		}
-		if tool != "claude" || group != "transparent" || pick || transparent {
-			t.Fatalf("got tool=%q group=%q pick=%v transparent=%v; want claude/transparent/false/false",
-				tool, group, pick, transparent)
+		if tool != "claude" || group != "transparent" || pick || transparent != nil {
+			t.Fatalf("got tool=%q group=%q pick=%v transparent=%s; want claude/transparent/false/unset",
+				tool, group, pick, fmtBoolPtr(transparent))
 		}
 	})
 	t.Run("model value", func(t *testing.T) {
@@ -196,9 +202,9 @@ func TestParseUseArgsTransparentDoesNotEatValueTokens(t *testing.T) {
 		if err != nil {
 			t.Fatalf("err = %v", err)
 		}
-		if tool != "hermes" || model != "transparent" || transparent {
-			t.Fatalf("got tool=%q model=%q transparent=%v; want hermes/transparent/false",
-				tool, model, transparent)
+		if tool != "hermes" || model != "transparent" || transparent != nil {
+			t.Fatalf("got tool=%q model=%q transparent=%s; want hermes/transparent/unset",
+				tool, model, fmtBoolPtr(transparent))
 		}
 	})
 	t.Run("tool positional", func(t *testing.T) {
@@ -207,8 +213,8 @@ func TestParseUseArgsTransparentDoesNotEatValueTokens(t *testing.T) {
 		if err != nil {
 			t.Fatalf("err = %v", err)
 		}
-		if tool != "transparent" || transparent {
-			t.Fatalf("got tool=%q transparent=%v; want transparent/false", tool, transparent)
+		if tool != "transparent" || transparent != nil {
+			t.Fatalf("got tool=%q transparent=%s; want transparent/unset", tool, fmtBoolPtr(transparent))
 		}
 	})
 }
@@ -217,12 +223,38 @@ func TestUseUsageDocumentsTransparentFlag(t *testing.T) {
 	if !strings.Contains(useUsage, "--transparent") {
 		t.Fatal("use help does not document --transparent")
 	}
+	// Transparent is the default now, so the help must say so and must offer
+	// the opt-out — a user whose tool breaks needs to find the escape hatch in
+	// `everyapi use --help`, not in the source.
+	if !strings.Contains(useUsage, "--transparent=false") {
+		t.Fatal("use help does not document the --transparent=false opt-out")
+	}
+	if !strings.Contains(useUsage, "ON BY DEFAULT") {
+		t.Fatal("use help does not state that transparent mode is the default")
+	}
+	if strings.Contains(useUsage, "Experimental") {
+		t.Fatal("use help still calls transparent mode experimental after the default flip")
+	}
 }
 
-func TestUseRejectsSanitizeAndTransparentTogether(t *testing.T) {
-	err := Use([]string{"claude", "--sanitize", "--transparent"})
-	if err == nil || !strings.Contains(err.Error(), "cannot be used together") {
-		t.Fatalf("Use error = %v", err)
+// TestParseUseArgsAcceptsSanitizeWithTransparent checks only that the parser
+// accepts the two flags together. It deliberately does NOT stand in for the
+// removed TestUseRejectsSanitizeAndTransparentTogether: that gate lived in Use,
+// never in the parser, so a parser-level test passes identically with or
+// without the change and pins nothing about it. The real behavioral
+// replacement — that the two now compose into child -> connector -> sanitizer
+// -> gateway rather than erroring — is
+// TestUseWiresTheSanitizerAsTheConnectorUpstream, which drives Use end to end
+// and fails if Use stops pointing the connector at the sanitizer.
+func TestParseUseArgsAcceptsSanitizeWithTransparent(t *testing.T) {
+	tool, _, _, sanitize, transparent, _, _, err := parseUseArgsWithTransparent(
+		[]string{"claude", "--sanitize", "--transparent"})
+	if err != nil {
+		t.Fatalf("err = %v, want --sanitize and --transparent to coexist", err)
+	}
+	if tool != "claude" || !sanitize || transparent == nil || !*transparent {
+		t.Fatalf("got tool=%q sanitize=%v transparent=%s; want claude/true/true",
+			tool, sanitize, fmtBoolPtr(transparent))
 	}
 }
 
@@ -536,4 +568,19 @@ func TestProviderChatModelsLegacyOwnerAlias(t *testing.T) {
 	if got, want := providerChatModels(mixed, "qwen"), []string{"qwen-max", "qwen3-coder"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("providerChatModels(qwen) = %v, want %v (brand + legacy ali)", got, want)
 	}
+}
+
+func boolPtr(b bool) *bool { return &b }
+
+// fmtBoolPtr renders the parser's tri-state readably in failure messages, so an
+// "unset vs explicitly false" mismatch is obvious rather than printing as a
+// bare pointer address.
+func fmtBoolPtr(b *bool) string {
+	if b == nil {
+		return "unset"
+	}
+	if *b {
+		return "true"
+	}
+	return "false"
 }

@@ -83,9 +83,10 @@ everyapi use codex          # OpenAI Codex CLI → EveryAPI
 everyapi use gemini         # Gemini CLI → EveryAPI
 everyapi use hermes         # Nous Research Hermes Agent → EveryAPI (pick a model)
 everyapi use hermes --model gpt-5.1   # pin the model, skip the picker
-everyapi use claude --transparent     # experimental: retain api.anthropic.com
-everyapi use codex --transparent      # experimental: retain api.openai.com
-everyapi use gemini --transparent     # experimental: retain Google's official origin
+everyapi use claude                    # transparent by default: stays on api.anthropic.com
+everyapi use codex                     # stays on api.openai.com
+everyapi use gemini                    # stays on Google's official origin
+everyapi use claude --transparent=false  # opt out: inject the gateway Base URL + relay key
 everyapi use                # no arg → interactive picker over installed tools
 ```
 
@@ -106,11 +107,15 @@ No more looking up which variable name each tool reads, whether you need to appe
 
 > ⚠️ **Subprocess env safety note**: the env vars above contain your relay API key. Third-party CLIs in debug / verbose mode may log env — before running `everyapi use`, make sure the debug flag you turn on does not leak `*_TOKEN` / `*_API_KEY`. Before sharing debug logs, run `sed -i 's/sk-everyapi-[A-Za-z0-9]*/REDACTED/g'`.
 
-#### Experimental transparent connector
+#### Transparent connector (default)
 
-`everyapi use <tool> --transparent` keeps supported clients on their vendor's official API origin instead of setting a third-party Base URL. The CLI starts an ephemeral HTTP CONNECT proxy on a random loopback port, creates a per-run CA whose private key stays in memory, and gives the child only the proxy URL, public CA bundle, and a non-secret placeholder credential. Registered model routes are decrypted locally and relayed to EveryAPI with the real relay key; other HTTPS hosts use raw CONNECT passthrough. An unknown path beneath a protected model prefix is blocked, and a relay failure never falls back to the vendor.
+Transparent mode keeps supported clients on their vendor's official API origin instead of setting a third-party Base URL. It is the default for every tool that supports it; pass `--transparent=false` to opt out. The CLI starts an ephemeral HTTP CONNECT proxy on a random loopback port, creates a per-run CA whose private key stays in memory, and gives the child only the proxy URL, public CA bundle, and a non-secret placeholder credential. Registered model routes are decrypted locally and relayed to EveryAPI with the real relay key; other HTTPS hosts use raw CONNECT passthrough. An unknown path beneath a protected model prefix is blocked, and a relay failure never falls back to the vendor.
 
-The gray-test surface currently covers Claude Code (including the provider presets), Codex CLI, and Gemini CLI. Hermes is rejected because its Python trust/config behavior has not been verified. `--transparent` and `--sanitize` are mutually exclusive.
+Verified against Claude Code (including the provider presets), Codex CLI, and Gemini CLI, which are the tools it defaults on for. Hermes always uses the injected path: it is an EveryAPI-native client that routes at `<apiBase>/v1` by design, so it has no third-party origin to preserve and transparent mode does not apply to it — passing `--transparent` there is an error rather than a silent no-op.
+
+`--sanitize` composes with transparent mode rather than conflicting with it: the connector relays through the sanitizer (child → connector → sanitizer → gateway), so masking and the Claude recovery response guard apply on either launch path.
+
+If `ALL_PROXY` is your only proxy variable, transparent mode is declined and the launch falls back to the injected path — Go's proxy resolution never reads `ALL_PROXY`, so the connector could not honor it. Set `HTTPS_PROXY` (socks5 included; net/http dials it natively) to keep transparent mode on.
 
 This mode is experimental and intentionally process-scoped:
 

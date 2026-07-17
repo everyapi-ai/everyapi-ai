@@ -29,8 +29,8 @@ type transparentLaunch struct {
 	unsetEnv []string
 }
 
-func startTransparentLaunch(tool *tools.Tool, upstreamBase, relayKey string) (*transparentLaunch, error) {
-	session, err := startTransparentConnector(upstreamBase, relayKey)
+func startTransparentLaunch(tool *tools.Tool, upstreamBase, relayDestination, relayKey string) (*transparentLaunch, error) {
+	session, err := startTransparentConnector(upstreamBase, relayDestination, relayKey)
 	if err != nil {
 		return nil, err
 	}
@@ -46,27 +46,42 @@ func startTransparentLaunch(tool *tools.Tool, upstreamBase, relayKey string) (*t
 // and the Connector goroutine for exactly one `everyapi use` child process.
 // Any startup error is fatal to transparent mode; callers must not fall back to
 // a direct vendor connection or to the legacy Base URL path.
-func startTransparentConnector(upstreamBase, relayKey string) (*transparentConnectorSession, error) {
+// relayDestination is the gateway relayed traffic ultimately reaches. It differs
+// from upstreamBase only when the caller chains the sanitizer in between; the
+// connector's intercepted-origin loop guard validates it, so passing the real
+// gateway here is what keeps that guard meaningful for a chained launch.
+func startTransparentConnector(upstreamBase, relayDestination, relayKey string) (*transparentConnectorSession, error) {
+	// Reap CA bundles orphaned by a previous transparent session hard-killed
+	// (SIGKILL / crash) before its stop() could remove its own ca-*.pem. Runs
+	// before we write this session's bundle so our fresh file is never a
+	// sweep candidate. Best-effort; see sweepStaleConnectorCABundles.
+	sweepStaleConnectorCABundles()
+
 	registry, err := connector.NewRegistry(connector.DefaultTargets())
 	if err != nil {
 		return nil, fmt.Errorf("build transparent connector registry: %w", err)
 	}
+	logger, closeLog := connectorLogger()
 	server, err := connector.New(connector.Config{
-		UpstreamBase: upstreamBase,
-		RelayToken:   relayKey,
-		Registry:     registry,
-		Logger:       log.New(io.Discard, "", 0),
+		UpstreamBase:     upstreamBase,
+		RelayDestination: relayDestination,
+		RelayToken:       relayKey,
+		Registry:         registry,
+		Logger:           logger,
 	})
 	if err != nil {
+		closeLog()
 		return nil, fmt.Errorf("construct transparent connector: %w", err)
 	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
+		closeLog()
 		return nil, fmt.Errorf("bind transparent connector loopback listener: %w", err)
 	}
 	caPath, err := writeTransparentCABundle(server.CACertificatePEM())
 	if err != nil {
 		_ = listener.Close()
+		closeLog()
 		return nil, err
 	}
 
@@ -86,6 +101,7 @@ func startTransparentConnector(upstreamBase, relayKey string) (*transparentConne
 				_ = listener.Close()
 			}
 			_ = os.Remove(caPath)
+			closeLog()
 		})
 	}
 
@@ -97,6 +113,7 @@ func startTransparentConnector(upstreamBase, relayKey string) (*transparentConne
 		case serveErr := <-done:
 			_ = os.Remove(caPath)
 			cancel()
+			closeLog()
 			if serveErr == nil {
 				serveErr = fmt.Errorf("server stopped before becoming ready")
 			}
@@ -181,4 +198,77 @@ func writeTransparentCABundle(connectorCA []byte) (string, error) {
 		return "", fmt.Errorf("close connector CA bundle: %w", err)
 	}
 	return path, nil
+}
+
+// connectorLogger returns a logger writing to ~/.config/everyapi/connector.log
+// (appended) plus a closer for the underlying file. It mirrors
+// cmd.sanitizerLogger: it MUST NOT log to stderr, which is shared with the
+// launched tool's TUI and would corrupt the display, so on any error it falls
+// back to discarding with a no-op closer. Without it, a transparent session's
+// fail-closed blocks and relay/tunnel failures are invisible — the user only
+// sees an opaque 502/403 on the tool side with no way to tell why.
+//
+// The caller closes the file on every startup-failure path; on the happy path
+// the handle is owned by stop() (run by ExecWithOptions after the child exits).
+func connectorLogger() (*log.Logger, func()) {
+	discard := func() (*log.Logger, func()) { return log.New(io.Discard, "", 0), func() {} }
+	path, err := config.EnsureLogPath("connector.log")
+	if err != nil {
+		return discard()
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return discard()
+	}
+	return log.New(f, "", log.LstdFlags), func() { _ = f.Close() }
+}
+
+// staleConnectorCAAge is how old a leftover connector/ca-*.pem must be before
+// sweepStaleConnectorCABundles reaps it. A live session's bundle is written once
+// at launch and never touched again, so ModTime is the session's age, not its
+// idleness — the floor must therefore exceed the longest a session can still be
+// working. That bound is exactly connector.CertificateLifetime: past it the CA
+// in the bundle is expired, so the session it belongs to is already broken and
+// reaping the file takes nothing from it. Derived from the connector's constant
+// rather than restated, so the two cannot drift apart — an earlier version of
+// this hardcoded 24h against a 24h CA and would have deleted the in-use bundle
+// of any session that outlived its own certificate.
+//
+// The extra day is slack for clock skew and for a session that started just
+// before the boundary.
+var staleConnectorCAAge = connector.CertificateLifetime + 24*time.Hour
+
+// sweepStaleConnectorCABundles best-effort removes connector/ca-*.pem files
+// orphaned by a transparent session that was SIGKILLed before stop() could
+// remove its own bundle. Every error is ignored: a sweep failure must never
+// block a launch. Only files older than staleConnectorCAAge are touched, so a
+// concurrently launching session's just-written bundle is never deleted.
+func sweepStaleConnectorCABundles() {
+	dir, err := config.ConfigDir()
+	if err != nil {
+		return
+	}
+	// os.ReadDir + prefix/suffix rather than filepath.Glob: the directory comes
+	// from ConfigDir (XDG_CONFIG_HOME or $HOME), and a glob metacharacter
+	// anywhere in that path — '*', '?', '[' — makes the pattern match nothing
+	// and silently disables the sweep instead of erroring.
+	connectorDir := filepath.Join(dir, "connector")
+	entries, err := os.ReadDir(connectorDir)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-staleConnectorCAAge)
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasPrefix(name, "ca-") || !strings.HasSuffix(name, ".pem") {
+			continue
+		}
+		info, statErr := e.Info()
+		if statErr != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			_ = os.Remove(filepath.Join(connectorDir, name))
+		}
+	}
 }

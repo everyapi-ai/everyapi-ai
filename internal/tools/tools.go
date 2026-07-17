@@ -121,7 +121,7 @@ type Tool struct {
 	prepareFn func(apiBase, token string) (map[string]string, error)
 
 	// transparentEnvFn supplies tool-specific placeholder credentials and
-	// CA wiring for the experimental process-scoped connector. It must never
+	// CA wiring for the process-scoped connector. It must never
 	// receive or return the EveryAPI relay key. A nil function means this tool
 	// has not yet been verified with transparent mode.
 	transparentEnvFn func(caPath string) (set map[string]string, unset []string)
@@ -219,6 +219,19 @@ func transparentClaudeEnv(caPath string) (map[string]string, []string) {
 			"ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY",
 			"CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
 		}
+}
+
+// transparentStandaloneClaudeEnv is the transparent overlay for the plain
+// `everyapi use claude` tool. It layers ENABLE_PROMPT_CACHING_1H on top of the
+// shared transparentClaudeEnv so standalone Claude keeps the 1h prompt-cache
+// window its injected (non-transparent) path already sets (see the "claude"
+// Registry envFn). The Claude Code provider presets (glm/kimi/…) deliberately
+// keep the bare transparentClaudeEnv: their injected envFn doesn't set the 1h
+// flag either, so both preset paths stay byte-for-byte equivalent.
+func transparentStandaloneClaudeEnv(caPath string) (map[string]string, []string) {
+	set, unset := transparentClaudeEnv(caPath)
+	set["ENABLE_PROMPT_CACHING_1H"] = "1"
+	return set, unset
 }
 
 func transparentCodexEnv(caPath string) (map[string]string, []string) {
@@ -329,7 +342,7 @@ var Registry = map[string]*Tool{
 		InstallCmdUnixOnly: true,
 		YoloFlag:           "--dangerously-skip-permissions",
 		YoloLabel:          "skip all permission prompts (--dangerously-skip-permissions)",
-		transparentEnvFn:   transparentClaudeEnv,
+		transparentEnvFn:   transparentStandaloneClaudeEnv,
 		envFn: func(apiBase, token string) map[string]string {
 			return map[string]string{
 				"ANTHROPIC_BASE_URL":   joinBase(apiBase, ""),

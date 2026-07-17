@@ -31,7 +31,7 @@ import (
 const useUsage = `everyapi use — launch a third-party CLI routed through EveryAPI
 
 USAGE
-  everyapi use [<tool>] [--group <name> | --channel <name>] [--model <id>] [--sanitize | --transparent] [-- tool args...]
+  everyapi use [<tool>] [--group <name> | --channel <name>] [--model <id>] [--sanitize] [--transparent[=false]] [-- tool args...]
 
 ARGUMENTS
   <tool>                 claude | codex | gemini | hermes
@@ -51,12 +51,15 @@ FLAGS
                          catalog. claude/codex/gemini set their own model —
                          pass model flags to them after -- instead.
   --sanitize             Opt in to the local sanitizer proxy (masks detected secrets before they reach the gateway). Off by default — the mask/restore step corrupts coding-agent sessions; for non-agentic SDK traffic use the standalone 'everyapi proxy' instead.
-  --transparent          Experimental: keep the tool on its vendor's official
-                         API origin and relay registered model routes through
-                         a process-scoped local TLS connector. The EveryAPI
-                         relay key is not injected into child env or config.
-                         Verified for claude/codex/gemini and Claude presets;
-                         hermes is not yet supported.
+  --transparent[=false]  Transparent mode keeps the tool on its vendor's
+                         official API origin and relays registered model routes
+                         through a process-scoped local TLS connector, so the
+                         EveryAPI relay key never reaches the child's env or
+                         config. ON BY DEFAULT for claude/codex/gemini and the
+                         Claude presets — pass --transparent=false to fall back
+                         to injecting the gateway Base URL + relay key.
+                         hermes is EveryAPI-native (no vendor origin to keep)
+                         and always uses the injected path.
   --                     End of everyapi's option parsing; remaining args are
                          forwarded verbatim to the tool's argv.
 
@@ -66,9 +69,8 @@ prompt" mode (default Yes). Pre-pass the flag with ` + "`-- <flag>`" + ` or
 answer "n" to keep the tool's native prompts intact.
 
 EXAMPLES
-  everyapi use claude
-  everyapi use claude --transparent
-  everyapi use codex --transparent
+  everyapi use claude                  (transparent by default)
+  everyapi use claude --transparent=false
   everyapi use codex --channel byteplus
   everyapi use claude -- --model opus
   everyapi use glm                     (Claude Code; pick a GLM model)
@@ -94,7 +96,11 @@ EXAMPLES
 //	                              interactive picker over the routing
 //	                              groups your enabled keys are bound to)
 //	everyapi use claude --sanitize (opt in to the local sanitizer proxy,
-//	                              which is off by default)
+//	                              which is off by default; it chains behind
+//	                              the transparent connector)
+//	everyapi use claude --transparent=false
+//	                              (opt out of transparent mode, injecting the
+//	                              gateway Base URL + relay key instead)
 //	everyapi use claude -- --dangerously-skip-permissions
 //	                              (everything after `--` is forwarded
 //	                              verbatim to the tool's argv)
@@ -116,12 +122,9 @@ func Use(args []string) error {
 		return nil
 	}
 
-	toolName, group, pickGroup, sanitize, transparent, extraArgs, model, err := parseUseArgsWithTransparent(args)
+	toolName, group, pickGroup, sanitize, transparentFlag, extraArgs, model, err := parseUseArgsWithTransparent(args)
 	if err != nil {
 		return err
-	}
-	if sanitize && transparent {
-		return errors.New("--sanitize and --transparent cannot be used together")
 	}
 
 	creds, err := config.Load()
@@ -161,8 +164,42 @@ func Use(args []string) error {
 	if err != nil {
 		return err
 	}
-	if transparent && !t.SupportsTransparent() {
-		return fmt.Errorf("transparent mode is not supported for %s yet", t.Name)
+	// Transparent mode is the default wherever a tool has an adapter for it:
+	// the tool keeps talking to its vendor's official origin and the relay key
+	// never reaches the child's env or config. A tool without an adapter has no
+	// third-party origin to preserve (hermes is EveryAPI-native and routes at
+	// <apiBase>/v1 by design), so it silently keeps the injected path —
+	// defaulting must not break it. An explicit --transparent on such a tool
+	// still fails: the user asked for something that cannot be delivered.
+	transparent := t.SupportsTransparent()
+	if transparentFlag != nil {
+		if *transparentFlag && !t.SupportsTransparent() {
+			return fmt.Errorf("transparent mode is not supported for %s", t.Name)
+		}
+		transparent = *transparentFlag
+	}
+	// Same principle as an unsupported tool, applied to an unsupported network.
+	// When ALL_PROXY is the user's only proxy variable, neither side honors it:
+	// http.ProxyFromEnvironment ignores ALL_PROXY so the connector dials direct,
+	// and TransparentEnv strips it from the child. On a network where direct
+	// egress is firewalled that hangs every request. Defaulting must not break a
+	// setup that works today, so fall back to the injected path, where the child
+	// reads ALL_PROXY itself exactly as before. An explicit --transparent still
+	// fails loudly: silently doing something other than what was asked is worse.
+	if transparent {
+		if envVar := allProxyOnlyEgressVar(); envVar != "" {
+			if transparentFlag != nil && *transparentFlag {
+				return fmt.Errorf(
+					"--transparent cannot use the proxy configured in %s: the local\n"+
+						"connector resolves proxies the way Go does, which ignores %s. Set\n"+
+						"HTTPS_PROXY instead, or drop --transparent to launch through the\n"+
+						"gateway Base URL.", envVar, envVar)
+			}
+			cliout.Printf(
+				"Note: %s is your only proxy setting, which the transparent connector does\n"+
+					"not read — launching %s on the injected path instead.\n", envVar, t.ExecName)
+			transparent = false
+		}
 	}
 
 	// --model applies to tools EveryAPI picks a model for: hermes (ModelEnv)
@@ -329,11 +366,9 @@ func Use(args []string) error {
 	// a shared 127.0.0.1:8888 proxy suffered (kill the session that
 	// spawned it and every other session got connection-refused).
 	apiBaseForEnv := creds.APIBase
+	connectorUpstream := creds.APIBase
 	guardClaudeRecovery := recovery != nil
-	if transparent && guardClaudeRecovery {
-		return errors.New("--transparent cannot yet launch a Claude session that requires the recovery response guard")
-	}
-	if !transparent && (sanitize || guardClaudeRecovery) {
+	if sanitize || guardClaudeRecovery {
 		proxyAddr, stop, perr := startInProcessSanitizer(creds.APIBase, sanitize, guardClaudeRecovery)
 		if perr != nil {
 			if guardClaudeRecovery {
@@ -343,7 +378,16 @@ func Use(args []string) error {
 			cliout.Printf(i18n.T("use.fallback_direct"), creds.APIBase)
 			cliout.Printf("%s", i18n.T("use.fallback_hint"))
 		} else {
+			// Both launch paths route relayed traffic through the sanitizer, so
+			// its mask/restore and the Claude recovery response guard apply
+			// regardless of transparent mode. The injected path points the tool
+			// straight at it; the transparent path keeps the tool on the vendor
+			// origin and makes the connector relay THROUGH it
+			// (child -> connector -> sanitizer -> gateway). Chaining rather than
+			// porting the guard into the connector keeps one implementation of
+			// the SSE transform instead of two that drift.
 			apiBaseForEnv = proxyAddr
+			connectorUpstream = proxyAddr
 			// Tear the in-process proxy down if Use returns BEFORE handing
 			// off to tools.Exec — a yolo-prompt cancel/EOF, a Prepare
 			// error, etc. (defers are function-scoped, so this fires on
@@ -359,7 +403,9 @@ func Use(args []string) error {
 		transparentSession *transparentConnectorSession
 	)
 	if transparent {
-		launch, launchErr := startTransparentLaunch(t, creds.APIBase, relayKey)
+		// connectorUpstream may be the sanitizer hop; creds.APIBase is always the
+		// real gateway, which is what the connector's loop guard must validate.
+		launch, launchErr := startTransparentLaunch(t, connectorUpstream, creds.APIBase, relayKey)
 		if launchErr != nil {
 			return fmt.Errorf("start transparent mode for %s: %w", t.ExecName, launchErr)
 		}
@@ -456,7 +502,16 @@ func Use(args []string) error {
 	// where the requests are heading. One line, just before we hand the
 	// terminal over to the tool.
 	if transparent {
-		cliout.Printf("Launching %s through transparent connector %s → %s\n", t.ExecName, transparentSession.proxyURL, creds.APIBase)
+		// Print the real topology. connectorUpstream is the sanitizer when the
+		// chain is engaged, and hardcoding creds.APIBase here advertised a
+		// direct hop that no longer existed.
+		if connectorUpstream != creds.APIBase {
+			cliout.Printf("Launching %s through transparent connector %s → %s → %s\n",
+				t.ExecName, transparentSession.proxyURL, connectorUpstream, creds.APIBase)
+		} else {
+			cliout.Printf("Launching %s through transparent connector %s → %s\n",
+				t.ExecName, transparentSession.proxyURL, creds.APIBase)
+		}
 	} else if apiBaseForEnv != creds.APIBase {
 		cliout.Printf(i18n.T("use.launching_via")+"\n", t.ExecName, apiBaseForEnv, creds.APIBase)
 	} else {
@@ -887,12 +942,19 @@ func parseUseArgs(args []string) (toolName, group string, pickGroup, sanitize bo
 	return toolName, group, pickGroup, sanitize, extraArgs, model, nil
 }
 
-// parseUseArgsWithTransparent layers the experimental transparent flag onto
-// the stable parser without changing its long-standing return contract.
+// parseUseArgsWithTransparent layers the transparent flag onto the stable
+// parser without changing its long-standing return contract.
 // Tokens after `--` are never inspected, so a tool may receive a flag with the
 // same name verbatim. Like Go boolean flags, the supported forms are a bare
 // flag and an attached =true/false value; repeated flags use the last value.
-func parseUseArgsWithTransparent(args []string) (toolName, group string, pickGroup, sanitize, transparent bool, extraArgs []string, model string, err error) {
+//
+// transparent is tri-state: nil means the user said nothing, so Use applies the
+// per-tool default. A non-nil value is an explicit request, which Use honors
+// even when that means erroring on a tool with no transparent adapter. The
+// distinction matters now that transparent is the default — "unset" must fall
+// back silently where the mode does not apply, while an explicit --transparent
+// on the same tool must still fail loudly.
+func parseUseArgsWithTransparent(args []string) (toolName, group string, pickGroup, sanitize bool, transparent *bool, extraArgs []string, model string, err error) {
 	filtered := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -906,20 +968,21 @@ func parseUseArgsWithTransparent(args []string) (toolName, group string, pickGro
 		// even when it literally reads "transparent"; strings.TrimLeft
 		// returns such a token unchanged, so matching it here would eat a
 		// routing group named "transparent" (and silently flip on the
-		// experimental connector) or swallow a --model value.
+		// connector) or swallow a --model value.
 		if strings.HasPrefix(a, "-") {
 			name := strings.TrimLeft(a, "-")
 			if name == "transparent" {
-				transparent = true
+				enabled := true
+				transparent = &enabled
 				continue
 			}
 			if strings.HasPrefix(name, "transparent=") {
 				value := strings.TrimPrefix(name, "transparent=")
 				parsed, parseErr := strconv.ParseBool(value)
 				if parseErr != nil {
-					return "", "", false, false, false, nil, "", fmt.Errorf("--transparent=%q is not a valid true/false value", value)
+					return "", "", false, false, nil, nil, "", fmt.Errorf("--transparent=%q is not a valid true/false value", value)
 				}
-				transparent = parsed
+				transparent = &parsed
 				continue
 			}
 		}
@@ -1336,4 +1399,58 @@ func interactivePicker() (string, error) {
 		return "", err
 	}
 	return names[idx], nil
+}
+
+// allProxyOnlyEgressVar names the environment variable that leaves this process
+// with a SOCKS-only route to the internet, or "" when transparent mode can
+// still reach it. It exists because the connector and the child resolve proxies
+// differently, and transparent mode silently strands anyone in the gap.
+//
+// The connector dials its own egress via http.ProxyFromEnvironment, which
+// honors HTTPS_PROXY/HTTP_PROXY/NO_PROXY and ignores ALL_PROXY entirely, and it
+// can only speak CONNECT to an http/https proxy. So:
+//
+//   - HTTPS_PROXY set to a socks:// URL is unusable by the connector outright.
+//   - ALL_PROXY set to socks:// matters only when no proxy the connector
+//     understands is also set: the child would have used ALL_PROXY, but
+//     TransparentEnv removes it and the connector never reads it, so the tunnel
+//     silently degrades to a direct dial that a SOCKS-only network drops.
+//
+// A socks ALL_PROXY alongside an http HTTPS_PROXY is fine and returns "": the
+// connector uses the http proxy, and the child talks only to the connector.
+func allProxyOnlyEgressVar() string {
+	// Only ALL_PROXY matters here, and it matters whatever its scheme.
+	//
+	// An earlier version of this refused transparent mode whenever HTTPS_PROXY
+	// was socks5, on the premise that the connector could not speak socks. That
+	// premise was false: the connector's relay leg is an http.Transport with
+	// Proxy set, and net/http dials socks5/socks5h proxy URLs natively
+	// (verified empirically). Refusing there downgraded a working, secure setup
+	// to the injected path — which writes the real relay key into the child's
+	// environment, the exact exposure transparent mode exists to prevent. So a
+	// socks HTTPS_PROXY is fine and is not reported.
+	//
+	// ALL_PROXY is the real gap, and not only for socks: http.ProxyFromEnvironment
+	// ignores ALL_PROXY entirely, so the connector never sees it and dials
+	// direct, while TransparentEnv strips it from the child so the child cannot
+	// use it either. A user whose ONLY proxy variable is ALL_PROXY is therefore
+	// relying on something neither side will honor, and on a network where
+	// direct egress is firewalled every request hangs.
+	//
+	// The caveat this accepts: with a socks HTTPS_PROXY the relay leg works but
+	// dialTunnel's pass-through CONNECT still falls back to a direct dial
+	// (hand-rolled CONNECT cannot speak socks), so non-model HTTPS may fail on
+	// a socks-only network. Model traffic — the point of the launch — works, and
+	// that is a better trade than leaking the relay key.
+	for _, name := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"} {
+		if strings.TrimSpace(os.Getenv(name)) != "" {
+			return "" // the connector has a proxy variable it will actually read
+		}
+	}
+	for _, name := range []string{"ALL_PROXY", "all_proxy"} {
+		if strings.TrimSpace(os.Getenv(name)) != "" {
+			return name
+		}
+	}
+	return ""
 }
