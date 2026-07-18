@@ -41,6 +41,11 @@ func handleEdgeList(ctx context.Context, _ json.RawMessage) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Login base, NOT ForCredentials: edge is supplier-side and its node
+	// liveness is gateway-local (the node holds its reverse-WS to the login
+	// gateway — register.go dials gatewayURLFromAPIBase(creds.APIBase)). Must
+	// match cmd/edge/client.go so CLI and MCP query the same fleet from the
+	// same base; region is a buyer-path preference and does not apply here.
 	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
 	nodes, err := client.ListEdgeNodes(ctx)
 	if err != nil {
@@ -117,6 +122,7 @@ func handleEdgeStatus(ctx context.Context, raw json.RawMessage) (string, error) 
 	if err != nil {
 		return "", err
 	}
+	// Login base, not ForCredentials — see handleEdgeList: edge is gateway-local.
 	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
 	node, err := client.GetEdgeNode(ctx, args.NodeID)
 	if err != nil {
@@ -238,6 +244,7 @@ func handleEdgeRemove(ctx context.Context, raw json.RawMessage) (string, error) 
 			"This is a destructive tool — surface the deletion to the user before "+
 			"retrying with confirm set.", edgeRemoveConfirmToken)
 	}
+	// Login base, not ForCredentials — see handleEdgeList: edge is gateway-local.
 	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
 	if err := client.DeleteEdgeNode(ctx, args.NodeID); err != nil {
 		return "", classifyAPIErr(err)

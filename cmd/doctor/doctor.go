@@ -62,7 +62,7 @@ func Run(args []string) error {
 		report.summarize()
 		return report.err()
 	}
-	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
+	client := api.ForCredentials(creds)
 
 	report.run(i18n.T("doctor.check.session"), func() (string, string, error) {
 		self, err := client.GetSelf(ctx)

@@ -943,8 +943,7 @@ func sessionRejected(creds *config.Credentials) bool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), launcherProbeTimeout)
 	defer cancel()
-	_, err := api.New(creds.APIBase, creds.AccessToken).
-		WithUserID(creds.UserID).
+	_, err := api.ForCredentials(creds).
 		GetSelf(ctx)
 	return api.IsUnauthorized(err)
 }

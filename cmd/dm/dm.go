@@ -58,7 +58,7 @@ func newClient() (*api.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID), nil
+	return api.ForCredentials(creds), nil
 }
 
 // myUserID loads the caller's own user id from saved credentials. It

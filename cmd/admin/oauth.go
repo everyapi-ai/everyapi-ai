@@ -83,7 +83,7 @@ func adminChannelAddOAuthAntigravity(args []string) error {
 	}
 	// CookieJar is required: the backend stashes the OAuth flow state in a
 	// session keyed by the everyapi_session cookie across start→complete.
-	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID).WithCookieJar()
+	client := api.ForCredentials(creds).WithCookieJar()
 
 	listener, err := oauthloopback.Listen()
 	if err != nil {

@@ -135,6 +135,13 @@ func Use(args []string) error {
 	if err != nil {
 		return err
 	}
+	// The gateway to dial: settings.gateway_region is applied here (not just
+	// at login) so `everyapi settings set gateway_region cn/global` takes
+	// effect without a re-login. creds.APIBase stays the login value —
+	// login is its only author — so the RelayKey cache Save below never
+	// rewrites the stored api_base. A self-hosted --api-base survives
+	// because ResolveAPIBaseForBase returns a non-official creds base as-is.
+	gw := config.ResolveAPIBaseForBase(creds.APIBase)
 
 	// OAuth2 (relay-key) logins carry no management credential, so the
 	// per-group relay-key lookup (uncached ListTokens path) 401s and the
@@ -243,10 +250,10 @@ func Use(args []string) error {
 					"API key assigned to that group in the EveryAPI dashboard (%s),\n"+
 					"then run 'everyapi auth login' again — or drop --group/--channel to use\n"+
 					"the default key.",
-				group, api.WebOriginFromBase(creds.APIBase))
+				group, api.WebOriginFromBase(gw))
 		}
 		if errors.Is(err, errNoRelayKey) {
-			return fmt.Errorf(i18n.T("use.no_relay_key_long"), api.WebOriginFromBase(creds.APIBase))
+			return fmt.Errorf(i18n.T("use.no_relay_key_long"), api.WebOriginFromBase(gw))
 		}
 		// A 401 here means the management token expired while resolving the
 		// relay key (the uncached path calls ListTokens with it). Surface
@@ -272,7 +279,7 @@ func Use(args []string) error {
 	// below, including an explicit --model, so a separate probe would be a
 	// redundant round-trip.
 	if t.ModelOwner == "" {
-		client := api.New(creds.APIBase, relayKey)
+		client := api.New(gw, relayKey)
 		var perr error
 		if t.RequiredEndpoint != "" && toolInvocationNeedsEndpoint(extraArgs) {
 			var catalog []api.RelayModel
@@ -285,7 +292,7 @@ func Use(args []string) error {
 		}
 		if perr != nil && api.IsUnauthorized(perr) {
 			invalidateCachedKeyOnReject(creds, group)
-			return relayKeyRejectedErr(t.ExecName, creds.APIBase)
+			return relayKeyRejectedErr(t.ExecName, gw)
 		}
 	}
 
@@ -372,17 +379,17 @@ func Use(args []string) error {
 	// instance, and therefore none of the cross-session orphaning that
 	// a shared 127.0.0.1:8888 proxy suffered (kill the session that
 	// spawned it and every other session got connection-refused).
-	apiBaseForEnv := creds.APIBase
-	connectorUpstream := creds.APIBase
+	apiBaseForEnv := gw
+	connectorUpstream := gw
 	guardClaudeRecovery := recovery != nil
 	if sanitize || guardClaudeRecovery {
-		proxyAddr, stop, perr := startInProcessSanitizer(creds.APIBase, sanitize, guardClaudeRecovery)
+		proxyAddr, stop, perr := startInProcessSanitizer(gw, sanitize, guardClaudeRecovery)
 		if perr != nil {
 			if guardClaudeRecovery {
 				return fmt.Errorf("start Claude recovery response guard: %w", perr)
 			}
 			cliout.Printf(i18n.T("use.sanitizer_warn"), perr)
-			cliout.Printf(i18n.T("use.fallback_direct"), creds.APIBase)
+			cliout.Printf(i18n.T("use.fallback_direct"), gw)
 			cliout.Printf("%s", i18n.T("use.fallback_hint"))
 		} else {
 			// Both launch paths route relayed traffic through the sanitizer, so
@@ -410,9 +417,9 @@ func Use(args []string) error {
 		transparentSession *transparentConnectorSession
 	)
 	if transparent {
-		// connectorUpstream may be the sanitizer hop; creds.APIBase is always the
+		// connectorUpstream may be the sanitizer hop; gw is always the
 		// real gateway, which is what the connector's loop guard must validate.
-		launch, launchErr := startTransparentLaunch(t, connectorUpstream, creds.APIBase, relayKey)
+		launch, launchErr := startTransparentLaunch(t, connectorUpstream, gw, relayKey)
 		if launchErr != nil {
 			return fmt.Errorf("start transparent mode for %s: %w", t.ExecName, launchErr)
 		}
@@ -510,19 +517,19 @@ func Use(args []string) error {
 	// terminal over to the tool.
 	if transparent {
 		// Print the real topology. connectorUpstream is the sanitizer when the
-		// chain is engaged, and hardcoding creds.APIBase here advertised a
+		// chain is engaged, and hardcoding gw here advertised a
 		// direct hop that no longer existed.
-		if connectorUpstream != creds.APIBase {
+		if connectorUpstream != gw {
 			cliout.Printf("Launching %s through transparent connector %s → %s → %s\n",
-				t.ExecName, transparentSession.proxyURL, connectorUpstream, creds.APIBase)
+				t.ExecName, transparentSession.proxyURL, connectorUpstream, gw)
 		} else {
 			cliout.Printf("Launching %s through transparent connector %s → %s\n",
-				t.ExecName, transparentSession.proxyURL, creds.APIBase)
+				t.ExecName, transparentSession.proxyURL, gw)
 		}
-	} else if apiBaseForEnv != creds.APIBase {
-		cliout.Printf(i18n.T("use.launching_via")+"\n", t.ExecName, apiBaseForEnv, creds.APIBase)
+	} else if apiBaseForEnv != gw {
+		cliout.Printf(i18n.T("use.launching_via")+"\n", t.ExecName, apiBaseForEnv, gw)
 	} else {
-		cliout.Printf(i18n.T("use.launching")+"\n", t.ExecName, creds.APIBase)
+		cliout.Printf(i18n.T("use.launching")+"\n", t.ExecName, gw)
 	}
 	// Discard any terminal control-sequence reply (e.g. the OSC 11
 	// background-color report a huh picker triggered) still buffered on
@@ -587,7 +594,7 @@ func createDefaultRelayKeyInteractive(creds *config.Credentials) (string, error)
 
 func createDefaultRelayKey(creds *config.Credentials) (string, error) {
 	name := "everyapi-cli-" + time.Now().Format("20060102-150405")
-	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
+	client := api.ForCredentials(creds)
 	req := api.TokenCreate{
 		Name:           name,
 		ExpiredTime:    api.TokenExpiresNever,
@@ -1113,12 +1120,13 @@ func invalidateCachedKeyOnReject(creds *config.Credentials, group string) {
 // silently falling back to Claude Code's default Anthropic model would
 // be a worse surprise than a clear "no glm models reachable" error.
 func resolveClaudePresetModel(t *tools.Tool, creds *config.Credentials, relayKey, modelFlag, group string) (string, error) {
+	gw := config.ResolveAPIBaseForBase(creds.APIBase)
 	if !cliprompt.IsInteractive() {
 		if modelFlag == "" {
 			return "", fmt.Errorf(i18n.T("use.preset_needs_model"), t.Name)
 		}
 	}
-	catalog, err := api.New(creds.APIBase, relayKey).RelayModelCatalog(cliout.WithCtx())
+	catalog, err := api.New(gw, relayKey).RelayModelCatalog(cliout.WithCtx())
 	if err != nil {
 		// This fetch doubles as the relay-key probe for presets (Use
 		// skips the standalone probe when we'll reach here), so a 401
@@ -1128,7 +1136,7 @@ func resolveClaudePresetModel(t *tools.Tool, creds *config.Credentials, relayKey
 		// the dead one.
 		if api.IsUnauthorized(err) {
 			invalidateCachedKeyOnReject(creds, group)
-			return "", relayKeyRejectedErr(t.ExecName, creds.APIBase)
+			return "", relayKeyRejectedErr(t.ExecName, gw)
 		}
 		return "", fmt.Errorf(i18n.T("use.preset_catalog_failed"), t.Name, err)
 	}
@@ -1141,7 +1149,7 @@ func resolveClaudePresetModel(t *tools.Tool, creds *config.Credentials, relayKey
 	ids := providerChatModels(catalog, t.ModelOwner)
 	if len(ids) == 0 {
 		return "", fmt.Errorf(i18n.T("use.preset_no_models"),
-			t.Name, api.WebOriginFromBase(creds.APIBase))
+			t.Name, api.WebOriginFromBase(gw))
 	}
 	idx, err := cliprompt.Pick(fmt.Sprintf(i18n.T("use.model_picker"), t.Name), ids)
 	if err != nil {
@@ -1274,7 +1282,8 @@ func toolInvocationNeedsEndpoint(args []string) bool {
 // catalog is non-fatal: it returns "" so the launch proceeds on the
 // tool's built-in default rather than blocking.
 func pickModelInteractive(t *tools.Tool, creds *config.Credentials, relayKey string) (string, error) {
-	models, err := api.New(creds.APIBase, relayKey).RelayModels(cliout.WithCtx())
+	gw := config.ResolveAPIBaseForBase(creds.APIBase)
+	models, err := api.New(gw, relayKey).RelayModels(cliout.WithCtx())
 	if err != nil {
 		cliout.Printf(i18n.T("use.model_fetch_failed")+"\n", err, t.ExecName)
 		return "", nil
@@ -1320,7 +1329,7 @@ func pickModelInteractive(t *tools.Tool, creds *config.Credentials, relayKey str
 // "(default — newest enabled key)" and selecting it returns "" — the
 // normal newest-enabled-key path.
 func pickGroupInteractive(creds *config.Credentials) (string, error) {
-	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
+	client := api.ForCredentials(creds)
 	tokens, err := client.ListTokens(cliout.WithCtx())
 	if err != nil {
 		return "", fmt.Errorf("list tokens for the group picker: %w", err)

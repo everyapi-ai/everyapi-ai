@@ -89,7 +89,7 @@ func Run(args []string) error {
 	if err != nil {
 		return err
 	}
-	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
+	client := api.ForCredentials(creds)
 	rows, err := client.UserQuotaDates(cliout.WithCtx(), start, end)
 	if err != nil {
 		if api.IsUnauthorized(err) {

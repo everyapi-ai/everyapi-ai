@@ -45,7 +45,7 @@ func handleSellerEligibility(ctx context.Context, _ json.RawMessage) (string, er
 	if err != nil {
 		return "", err
 	}
-	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
+	client := api.ForCredentials(creds)
 	elig, err := client.GetSellerEligibility(ctx)
 	if err != nil {
 		return "", classifyAPIErr(err)
@@ -165,7 +165,7 @@ func handleSellerAddKey(ctx context.Context, raw json.RawMessage) (string, error
 			cliout.Sanitize(args.Type), strings.Join(sellertype.Choices(), ", "))
 	}
 
-	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
+	client := api.ForCredentials(creds)
 
 	// Eligibility pre-check, same reasoning as the CLI: failing the
 	// gate AFTER the user handed over a real API key is the worst

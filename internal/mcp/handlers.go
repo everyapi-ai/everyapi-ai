@@ -63,18 +63,22 @@ var (
 	sharedOAuthClientOnce sync.Once
 )
 
-// loadOAuthClient hands back the long-lived OAuth-aware client.
-// Credentials are loaded ONCE on first use — a relogin while the MCP
-// server is running won't be picked up until restart, which matches
-// the CLI's "credentials are stable per process" assumption.
+// loadOAuthClient hands back the long-lived OAuth-aware client. The
+// sync.Once is required: an OAuth flow's start and complete calls must share
+// one cookie jar, so the client (and its dialed base) is frozen on first use.
+// Consequence: both a relogin AND a settings.gateway_region change made while
+// the MCP server is running are ignored until restart — the region base is
+// memoized here even though it is live for every other command. This matches
+// the CLI's "credentials are stable per process" assumption and is the price
+// of a shared jar; a mid-session region flip on a long-lived MCP server is the
+// only case it costs, and the fix is a server restart.
 func loadOAuthClient() (*api.Client, *config.Credentials, error) {
 	creds, err := loadCreds()
 	if err != nil {
 		return nil, nil, err
 	}
 	sharedOAuthClientOnce.Do(func() {
-		sharedOAuthClient = api.New(creds.APIBase, creds.AccessToken).
-			WithUserID(creds.UserID).
+		sharedOAuthClient = api.ForCredentials(creds).
 			WithCookieJar()
 	})
 	return sharedOAuthClient, creds, nil
@@ -109,7 +113,7 @@ func handleStatus(ctx context.Context, _ json.RawMessage) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
+	client := api.ForCredentials(creds)
 	status, err := client.GetStatus(ctx)
 	if err != nil {
 		return "", classifyAPIErr(err)
@@ -177,7 +181,7 @@ func handleSellerList(ctx context.Context, _ json.RawMessage) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
+	client := api.ForCredentials(creds)
 	channels, err := client.ListSellerChannels(ctx)
 	if err != nil {
 		return "", classifyAPIErr(err)
@@ -307,7 +311,7 @@ func handleSellerWithdraw(ctx context.Context, raw json.RawMessage) (string, err
 		return "", errSellerWithdrawNeedsConfirm
 	}
 
-	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
+	client := api.ForCredentials(creds)
 
 	// "Full balance" path: query /self for the pending seller_quota,
 	// then transfer that. Two round-trips, but it's the only way

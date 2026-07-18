@@ -51,7 +51,7 @@ func ensureAdmin() (*api.Client, error) {
 	if !creds.IsAdmin() {
 		return nil, errNotAdmin
 	}
-	return api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID), nil
+	return api.ForCredentials(creds), nil
 }
 
 // ---- everyapi_admin_marketplace_status -------------------------------

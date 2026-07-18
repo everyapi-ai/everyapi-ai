@@ -22,6 +22,12 @@ func edgeClient() (*api.Client, *config.Credentials, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	// Deliberately the login base, NOT api.ForCredentials (which applies
+	// settings.gateway_region): gateway_region is a buyer-path acceleration
+	// choice, and edge is the supplier side. Its REST client stays on the
+	// login base so it matches the reverse-WS gateway (register.go's
+	// gatewayURLFromAPIBase(creds.APIBase)) — the whole edge module dials one
+	// base regardless of the buyer region preference.
 	return api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID), creds, nil
 }
 

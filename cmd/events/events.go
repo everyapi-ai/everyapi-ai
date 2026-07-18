@@ -58,7 +58,7 @@ func Run(args []string) error {
 			wantType[t] = true
 		}
 	}
-	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
+	client := api.ForCredentials(creds)
 
 	// ctx is cancelled on SIGINT/SIGTERM so a Ctrl-C closes the SSE
 	// loop cleanly instead of leaving an open TCP socket to the

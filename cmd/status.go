@@ -66,7 +66,7 @@ func Status(args []string) error {
 		return nil
 	}
 
-	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
+	client := api.ForCredentials(creds)
 
 	status, err := client.GetStatus(ctx)
 	if err != nil {
@@ -132,6 +132,7 @@ func Status(args []string) error {
 // status reports account-level relay health, not a per-group override —
 // always the default key path (group "").
 func printRelayHealth(ctx context.Context, creds *config.Credentials) {
+	gw := config.ResolveAPIBaseForBase(creds.APIBase)
 	relayKey, rkErr := resolveRelayKey(creds, "")
 	switch {
 	case errors.Is(rkErr, errNoRelayKey):
@@ -142,7 +143,7 @@ func printRelayHealth(ctx context.Context, creds *config.Credentials) {
 		// verdict on the key — just say we couldn't check.
 		cliout.Printf("  relay:     %s — could not resolve relay key (%v)\n", style.Bold("unknown"), rkErr)
 	default:
-		perr := api.New(creds.APIBase, relayKey).ProbeRelayToken(ctx)
+		perr := api.New(gw, relayKey).ProbeRelayToken(ctx)
 		switch {
 		case perr == nil:
 			cliout.Printf("  relay:     %s\n", style.Bold("ok"))

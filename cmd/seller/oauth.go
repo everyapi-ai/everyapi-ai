@@ -112,7 +112,7 @@ func sellerAddOAuthCodex(args []string) error {
 	// device_auth_id / user_code / name / models keyed by a session
 	// cookie set on /start. Without a jar the /poll call would land
 	// in a fresh session and the handler would 200 with code=expired.
-	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID).WithCookieJar()
+	client := api.ForCredentials(creds).WithCookieJar()
 	ctx, stop := cliout.SignalCtx()
 	defer stop()
 
@@ -230,7 +230,7 @@ func sellerAddOAuthClaude(args []string) error {
 	// WithCookieJar same as codex: backend stashes state/verifier/
 	// name/models under a session keyed by `everyapi_session` cookie,
 	// and the complete call has to land in the SAME session.
-	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID).WithCookieJar()
+	client := api.ForCredentials(creds).WithCookieJar()
 	ctx, stop := cliout.SignalCtx()
 	defer stop()
 
@@ -350,7 +350,7 @@ func sellerAddOAuthGemini(args []string) error {
 	if err != nil {
 		return err
 	}
-	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID).WithCookieJar()
+	client := api.ForCredentials(creds).WithCookieJar()
 
 	// Start the listener BEFORE eligibility check — we need the
 	// loopback URL to hand to /start. Eligibility-fail path Close()s
@@ -490,7 +490,7 @@ func sellerAddOAuthAntigravity(args []string) error {
 	if err != nil {
 		return err
 	}
-	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID).WithCookieJar()
+	client := api.ForCredentials(creds).WithCookieJar()
 
 	// Start the listener BEFORE eligibility — we need the loopback URL to
 	// hand to /start (same ordering as gemini).

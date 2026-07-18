@@ -75,7 +75,7 @@ func newClient() (*api.Client, *config.Credentials, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID), creds, nil
+	return api.ForCredentials(creds), creds, nil
 }
 
 func classifyErr(err error) error {

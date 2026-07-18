@@ -54,7 +54,7 @@ func Topup(args []string) error {
 	if creds.OAuthClientID != "" {
 		return errors.New(i18n.T("topup.relay_key_mode"))
 	}
-	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
+	client := api.ForCredentials(creds)
 
 	res, err := client.CreateJumpSession(cliout.WithCtx())
 	if err != nil {
