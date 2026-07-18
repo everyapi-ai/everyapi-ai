@@ -148,19 +148,13 @@ func TestEnv_Codex(t *testing.T) {
 	}
 }
 
-// TestEnv_Gemini verifies the Gemini env contract. Gemini CLI's SDK appends
-// /v1beta itself, so GOOGLE_GEMINI_BASE_URL must remain at the gateway root.
+// TestEnv_Gemini verifies that the native Antigravity child never receives
+// EveryAPI's relay credential or gateway routing variables.
 func TestEnv_Gemini(t *testing.T) {
 	tool, _ := Lookup("gemini")
-	if tool.RequiredEndpoint != "gemini" {
-		t.Errorf("RequiredEndpoint = %q, want gemini", tool.RequiredEndpoint)
-	}
 	env := tool.Env("https://api.everyapi.ai", "my-token")
-	if got := env["GEMINI_API_KEY"]; got != "my-token" {
-		t.Errorf("GEMINI_API_KEY = %q", got)
-	}
-	if got := env["GOOGLE_GEMINI_BASE_URL"]; got != "https://api.everyapi.ai" {
-		t.Errorf("GOOGLE_GEMINI_BASE_URL = %q, want gateway root", got)
+	if len(env) != 0 {
+		t.Errorf("native agy Env should be empty, got %v", env)
 	}
 }
 
@@ -204,14 +198,6 @@ func TestTransparentEnvUsesOfficialOriginsWithoutRelayCredential(t *testing.T) {
 				"CODEX_CA_CERTIFICATE": caPath,
 			},
 			wantUnset: []string{"OPENAI_BASE_URL", "OPENAI_API_BASE"},
-		},
-		{
-			name: "gemini",
-			want: map[string]string{
-				"GEMINI_API_KEY":      "everyapi-local-connector",
-				"NODE_EXTRA_CA_CERTS": caPath,
-			},
-			wantUnset: []string{"GOOGLE_GEMINI_BASE_URL", "GOOGLE_API_KEY"},
 		},
 		{
 			name: "glm",
@@ -281,15 +267,17 @@ func TestTransparentEnvRejectsUnsupportedTool(t *testing.T) {
 
 func TestSupportsTransparentMatchesVerifiedTools(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"claude", "codex", "gemini", "glm", "kimi"} {
+	for _, name := range []string{"claude", "codex", "glm", "kimi"} {
 		tool, _ := Lookup(name)
 		if !tool.SupportsTransparent() {
 			t.Errorf("%s should support transparent mode", name)
 		}
 	}
-	hermes, _ := Lookup("hermes")
-	if hermes.SupportsTransparent() {
-		t.Error("hermes should not advertise transparent mode")
+	for _, name := range []string{"gemini", "hermes"} {
+		tool, _ := Lookup(name)
+		if tool.SupportsTransparent() {
+			t.Errorf("%s should not advertise transparent mode", name)
+		}
 	}
 }
 
@@ -313,25 +301,6 @@ func containsString(values []string, want string) bool {
 		}
 	}
 	return false
-}
-
-// TestEnv_LocalDevBase verifies the joinBase helper doesn't insert
-// double slashes when the user has a trailing-slash base (a
-// surprisingly common dev typo: `EVERYAPI_BASE=http://localhost:8787/`).
-// Gemini still proves this end-to-end via envFn; for codex the same
-// joinBase invariant is covered through prepareCodex's config.toml
-// (see TestPrepareCodex_TrailingSlashBase).
-func TestEnv_LocalDevBase(t *testing.T) {
-	tool, _ := Lookup("gemini")
-	env := tool.Env("http://localhost:8787/", "tok")
-	got := env["GOOGLE_GEMINI_BASE_URL"]
-	if got != "http://localhost:8787" {
-		t.Errorf("GOOGLE_GEMINI_BASE_URL = %q (expected single slash join)", got)
-	}
-	// Defensive: no `://` anomalies introduced
-	if strings.Contains(got, "//v1beta") {
-		t.Errorf("found double slash: %q", got)
-	}
 }
 
 // TestLookup_Unknown returns an error listing supported names so the

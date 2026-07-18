@@ -27,6 +27,10 @@ type Tool struct {
 	ExecName    string
 	InstallHint string
 
+	// Native launches a client that owns its own authentication and upstream
+	// routing. Use must not resolve or expose an EveryAPI relay key for it.
+	Native bool
+
 	// InstallCmd is the shell command 'everyapi use' offers to run
 	// on the user's behalf when ExecName isn't on $PATH. Executed
 	// via `sh -c` on Unix and `cmd /C` on Windows; an empty value
@@ -386,26 +390,20 @@ var Registry = map[string]*Tool{
 		prepareFn: prepareCodex,
 	},
 
-	// Google Gemini CLI: reads GEMINI_API_KEY (auth) and
-	// GOOGLE_GEMINI_BASE_URL (alternate base). Gemini CLI appends the
-	// native /v1beta API prefix itself, so this must be the gateway root.
+	// Antigravity CLI: keep `everyapi use gemini` as the familiar entry point,
+	// but launch the locally authenticated `agy` client. agy owns its Google
+	// OAuth credential and upstream routing, so never pass the EveryAPI relay
+	// key or transparent-connector environment into the child.
 	"gemini": {
-		Name:                 "gemini",
-		ExecName:             "gemini",
-		InstallHint:          "Install Gemini CLI: https://github.com/google-gemini/gemini-cli#installation",
-		InstallCmd:           "npm install -g @google/gemini-cli",
-		YoloFlag:             "--yolo",
-		YoloLabel:            "yolo mode — auto-approve every tool call (--yolo)",
-		RequiredEndpoint:     "gemini",
-		transparentEnvFn:     transparentGeminiEnv,
-		prepareTransparentFn: prepareGeminiTransparent,
-		envFn: func(apiBase, token string) map[string]string {
-			return map[string]string{
-				"GEMINI_API_KEY":         token,
-				"GOOGLE_GEMINI_BASE_URL": joinBase(apiBase, ""),
-			}
+		Name:        "gemini",
+		ExecName:    "agy",
+		InstallHint: "Install the Antigravity CLI (`agy`) and sign in once before running `everyapi use gemini`.",
+		Native:      true,
+		YoloFlag:    "--dangerously-skip-permissions",
+		YoloLabel:   "skip all permission prompts (--dangerously-skip-permissions)",
+		envFn: func(_, _ string) map[string]string {
+			return map[string]string{}
 		},
-		prepareFn: prepareGemini,
 	},
 
 	// Nous Research Hermes Agent (Python CLI, binary `hermes`). Unlike

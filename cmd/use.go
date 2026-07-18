@@ -55,8 +55,9 @@ FLAGS
                          official API origin and relays registered model routes
                          through a process-scoped local TLS connector, so the
                          EveryAPI relay key never reaches the child's env or
-                         config. ON BY DEFAULT for claude/codex/gemini and the
-                         Claude presets — pass --transparent=false to fall back
+                         config. ON BY DEFAULT for claude/codex and the Claude
+                         presets. The gemini entry launches native agy instead.
+                         Pass --transparent=false to fall back
                          to injecting the gateway Base URL + relay key.
                          hermes is EveryAPI-native (no vendor origin to keep)
                          and always uses the injected path.
@@ -219,6 +220,12 @@ func Use(args []string) error {
 	// to npm's global prefix from a script that didn't ask for it.
 	if err := ensureToolInstalled(t); err != nil {
 		return err
+	}
+	if t.Native {
+		if sanitize {
+			return fmt.Errorf("--sanitize is not supported for native %s", t.ExecName)
+		}
+		return launchNativeTool(t, extraArgs)
 	}
 
 	// The device-auth access token can't relay (it's a management
@@ -530,6 +537,30 @@ func Use(args []string) error {
 		})
 	}
 	return tools.Exec(t, env, extraArgs)
+}
+
+func launchNativeTool(t *tools.Tool, args []string) error {
+	if t.YoloFlag != "" && !containsFlag(args, t.YoloFlag) && cliprompt.IsInteractive() {
+		enable, err := cliprompt.YesNo(
+			bufio.NewReader(os.Stdin),
+			fmt.Sprintf(i18n.T("use.yolo_prompt"), t.YoloLabel),
+			true,
+		)
+		if err != nil {
+			if errors.Is(err, cliprompt.ErrPickCancelled) {
+				return err
+			}
+			if !errors.Is(err, io.EOF) {
+				return err
+			}
+		}
+		if enable {
+			args = append([]string{t.YoloFlag}, args...)
+		}
+	}
+	cliout.Printf("Launching native %s (Antigravity authentication)\n", t.ExecName)
+	cliprompt.DrainStdin()
+	return tools.Exec(t, map[string]string{}, args)
 }
 
 // createDefaultRelayKeyInteractive is the first-run repair path for

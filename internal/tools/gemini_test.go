@@ -55,37 +55,24 @@ func TestPrepareGemini_PreservesSystemSettingsAndPinsAPIKeyAuth(t *testing.T) {
 	}
 }
 
-func TestGeminiTool_PrepareWired(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("GEMINI_CLI_SYSTEM_SETTINGS_PATH", filepath.Join(t.TempDir(), "missing.json"))
-	tool, _ := Lookup("gemini")
-	extra, err := tool.Prepare("https://api.everyapi.ai", "tok")
+func TestGeminiEntryLaunchesNativeAntigravityCLI(t *testing.T) {
+	tool, err := Lookup("gemini")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if extra["GEMINI_CLI_SYSTEM_SETTINGS_PATH"] == "" {
-		t.Fatal("gemini prepare hook was not invoked")
+	if tool.ExecName != "agy" {
+		t.Fatalf("ExecName = %q, want agy", tool.ExecName)
 	}
-}
-
-func TestGeminiToolPrepareTransparentPinsAPIKeyMode(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("GEMINI_CLI_SYSTEM_SETTINGS_PATH", filepath.Join(t.TempDir(), "missing.json"))
-	tool, _ := Lookup("gemini")
-	extra, err := tool.PrepareTransparent()
-	if err != nil {
-		t.Fatal(err)
+	if tool.YoloFlag != "--dangerously-skip-permissions" {
+		t.Errorf("YoloFlag = %q", tool.YoloFlag)
 	}
-	body, err := os.ReadFile(extra["GEMINI_CLI_SYSTEM_SETTINGS_PATH"])
-	if err != nil {
-		t.Fatal(err)
+	if !tool.Native {
+		t.Fatal("agy must launch natively without resolving an EveryAPI relay key")
 	}
-	var got map[string]any
-	if err := json.Unmarshal(body, &got); err != nil {
-		t.Fatal(err)
+	if tool.SupportsTransparent() {
+		t.Fatal("native agy must not receive the EveryAPI transparent connector")
 	}
-	auth := got["security"].(map[string]any)["auth"].(map[string]any)
-	if auth["selectedType"] != "gemini-api-key" {
-		t.Errorf("selectedType = %v, want gemini-api-key", auth["selectedType"])
+	if env := tool.Env("https://api.everyapi.ai", "secret-relay-key"); len(env) != 0 {
+		t.Fatalf("native agy must not receive gateway credentials: %#v", env)
 	}
 }

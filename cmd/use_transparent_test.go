@@ -258,16 +258,15 @@ func TestTransparentConnectorChainsThroughRecoveryGuard(t *testing.T) {
 // the contract the whole flip rests on:
 //
 //   - a tool with an adapter defaults to transparent;
-//   - a tool without one (hermes is EveryAPI-native and routes at <apiBase>/v1
-//     by design, so there is no vendor origin to preserve) silently keeps the
-//     injected path — defaulting must never break it;
+//   - a tool without one (hermes is EveryAPI-native; the gemini entry launches
+//     the natively authenticated agy client) silently keeps its direct path;
 //   - an explicit --transparent on such a tool still fails loudly, because the
 //     user asked for something that cannot be delivered.
 //
 // The resolution itself lives inline in Use; this asserts the two inputs it
 // reads (the parser's tri-state and Tool.SupportsTransparent) agree per tool.
 func TestTransparentDefaultResolution(t *testing.T) {
-	for _, name := range []string{"claude", "codex", "gemini", "glm", "kimi"} {
+	for _, name := range []string{"claude", "codex", "glm", "kimi"} {
 		tool, err := tools.Lookup(name)
 		if err != nil {
 			t.Fatalf("Lookup(%s): %v", name, err)
@@ -276,12 +275,14 @@ func TestTransparentDefaultResolution(t *testing.T) {
 			t.Errorf("%s must support transparent — it is in the default-on set", name)
 		}
 	}
-	hermes, err := tools.Lookup("hermes")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if hermes.SupportsTransparent() {
-		t.Error("hermes must NOT claim transparent support: it is EveryAPI-native with no vendor origin to preserve, so the default must fall back to the injected path")
+	for _, name := range []string{"gemini", "hermes"} {
+		tool, err := tools.Lookup(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tool.SupportsTransparent() {
+			t.Errorf("%s must NOT claim transparent support", name)
+		}
 	}
 }
 

@@ -18,7 +18,6 @@ func TestRegistry_HasInstallCmds(t *testing.T) {
 	cases := map[string]string{
 		"claude": "curl -fsSL https://claude.ai/install.sh | bash",
 		"codex":  "npm install -g @openai/codex",
-		"gemini": "npm install -g @google/gemini-cli",
 	}
 	for name, want := range cases {
 		tool, err := Lookup(name)
@@ -60,7 +59,7 @@ func TestCanAutoInstall_ClaudeWindows(t *testing.T) {
 // gating these would needlessly send Windows users back to the
 // install-hint URL when `npm install -g @openai/codex` would work.
 func TestCanAutoInstall_NpmCrossPlatform(t *testing.T) {
-	for _, name := range []string{"codex", "gemini"} {
+	for _, name := range []string{"codex"} {
 		tool, _ := Lookup(name)
 		if tool.InstallCmdUnixOnly {
 			t.Errorf("%s.InstallCmdUnixOnly = true, but npm is cross-platform", name)
