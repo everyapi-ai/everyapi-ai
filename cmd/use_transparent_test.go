@@ -335,19 +335,20 @@ func TestStartTransparentConnectorGuardsChainedInterceptedDestination(t *testing
 }
 
 // TestAllProxyOnlyEgressVar pins which proxy environments transparent mode must
-// decline. Only ALL_PROXY qualifies, and its scheme is irrelevant.
+// decline. All transparent-mode traffic is https (the relay leg, the CONNECT
+// tunnel, and the injected-path gateway are all https://), and proxy resolution
+// is per-scheme on every side, so only HTTPS_PROXY rescues a launch and only a
+// lone ALL_PROXY strands one.
 //
-// An earlier version of this function — and this test — refused whenever
-// HTTPS_PROXY was socks5, on the premise that the connector could not speak
-// socks. That premise is false: the relay leg is an http.Transport with Proxy
-// set and net/http dials socks5 natively (verified empirically with a real
-// SOCKS5 server). The test asserted the wrong answer and pinned a downgrade
-// that pushed working, secure setups onto the injected path — which writes the
-// real relay key into the child env.
-//
-// What genuinely strands a launch is ALL_PROXY being the only setting:
-// http.ProxyFromEnvironment never reads it, so the connector dials direct,
-// while TransparentEnv strips it from the child. Nobody honors it.
+// An earlier version of this function — and this test — got two things wrong.
+// First, it refused whenever HTTPS_PROXY was socks5, on the premise that the
+// connector could not speak socks; that premise is false (net/http dials socks5
+// natively, verified with a real SOCKS5 server), and the downgrade wrote the
+// real relay key into the child env. Second, it treated HTTP_PROXY as a proxy
+// "the connector reads": it does not — HTTP_PROXY applies only to http targets,
+// of which transparent mode has none — so an HTTP_PROXY set beside an ALL_PROXY
+// wrongly short-circuited the ALL_PROXY fallback and hung a user who had a
+// working catch-all proxy.
 func TestAllProxyOnlyEgressVar(t *testing.T) {
 	all := []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"}
 
@@ -362,7 +363,14 @@ func TestAllProxyOnlyEgressVar(t *testing.T) {
 		// transparent must NOT be declined. Only pass-through CONNECT degrades.
 		{"socks HTTPS_PROXY is usable — net/http speaks socks5", map[string]string{"HTTPS_PROXY": "socks5://127.0.0.1:1080"}, ""},
 		{"lowercase socks https_proxy is usable", map[string]string{"https_proxy": "socks5h://127.0.0.1:1080"}, ""},
-		{"HTTP_PROXY alone is read by the connector", map[string]string{"HTTP_PROXY": "http://corp:8080"}, ""},
+		// HTTP_PROXY is inert for the connector's https legs, so a lone HTTP_PROXY
+		// stays transparent: the common non-firewalled launch works and the relay
+		// key never reaches the child. Reporting it instead would divert every
+		// such launch onto the injected path and leak the key for no gain. (The
+		// narrow firewalled + HTTP_PROXY-only case can't reach the gateway either
+		// way — the user should set HTTPS_PROXY — so it's not worth a key-leaking
+		// fallback.)
+		{"HTTP_PROXY alone stays transparent — inert for an https dial", map[string]string{"HTTP_PROXY": "http://corp:8080"}, ""},
 		// ALL_PROXY alone: nobody reads it. Scheme does not matter.
 		{"socks ALL_PROXY alone strands", map[string]string{"ALL_PROXY": "socks5://127.0.0.1:1080"}, "ALL_PROXY"},
 		{"http ALL_PROXY alone strands too", map[string]string{"ALL_PROXY": "http://corp:8080"}, "ALL_PROXY"},
@@ -371,9 +379,13 @@ func TestAllProxyOnlyEgressVar(t *testing.T) {
 		{"ALL_PROXY beside HTTPS_PROXY is fine", map[string]string{
 			"ALL_PROXY": "socks5://127.0.0.1:1080", "HTTPS_PROXY": "http://corp:8080",
 		}, ""},
-		{"ALL_PROXY beside HTTP_PROXY is fine", map[string]string{
+		// An irrelevant HTTP_PROXY must NOT suppress the ALL_PROXY fallback: it
+		// contributes nothing to an https dial, so this must behave exactly like
+		// "ALL_PROXY alone" and report ALL_PROXY. Pinning the old "" here hung a
+		// user whose catch-all proxy would have worked on the injected path.
+		{"ALL_PROXY beside an irrelevant HTTP_PROXY still strands", map[string]string{
 			"ALL_PROXY": "socks5://127.0.0.1:1080", "HTTP_PROXY": "http://corp:8080",
-		}, ""},
+		}, "ALL_PROXY"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, k := range all {

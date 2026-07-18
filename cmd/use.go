@@ -1442,51 +1442,63 @@ func interactivePicker() (string, error) {
 }
 
 // allProxyOnlyEgressVar names the environment variable that leaves this process
-// with a SOCKS-only route to the internet, or "" when transparent mode can
-// still reach it. It exists because the connector and the child resolve proxies
-// differently, and transparent mode silently strands anyone in the gap.
+// with an egress route neither the connector nor the child will honor under
+// transparent mode, or "" when transparent mode can still reach the network. It
+// exists because the connector and the child resolve proxies differently, and
+// transparent mode silently strands anyone in the gap.
 //
-// The connector dials its own egress via http.ProxyFromEnvironment, which
-// honors HTTPS_PROXY/HTTP_PROXY/NO_PROXY and ignores ALL_PROXY entirely, and it
-// can only speak CONNECT to an http/https proxy. So:
+// The connector dials only https under transparent mode: its relay leg dials the
+// https gateway (roundTrip forces the upstream scheme) and its pass-through
+// CONNECT tunnels https. Go's http.ProxyFromEnvironment is per-scheme and reads
+// HTTPS_PROXY — not HTTP_PROXY — for an https target, and never reads ALL_PROXY
+// (both verified empirically). So from the connector's vantage only HTTPS_PROXY
+// is usable, and HTTP_PROXY and ALL_PROXY are both inert. What each means:
 //
-//   - HTTPS_PROXY set to a socks:// URL is unusable by the connector outright.
-//   - ALL_PROXY set to socks:// matters only when no proxy the connector
-//     understands is also set: the child would have used ALL_PROXY, but
-//     TransparentEnv removes it and the connector never reads it, so the tunnel
-//     silently degrades to a direct dial that a SOCKS-only network drops.
+//   - HTTPS_PROXY (any scheme, incl. socks5) is honored by the connector's relay
+//     leg — net/http dials socks5/socks5h proxy URLs natively — so it rescues
+//     the launch and is not reported.
+//   - HTTP_PROXY is inert for the connector's https legs, so it must not count as
+//     connector-usable: it cannot rescue a launch (so it must not suppress an
+//     ALL_PROXY that would), and reporting it would needlessly divert an
+//     otherwise-fine transparent launch onto the injected path, writing the
+//     relay key into the child. So a lone HTTP_PROXY returns "" (stay
+//     transparent): the common non-firewalled launch works with no key leak.
+//     Known narrow limitation: on a network where direct egress is firewalled
+//     and HTTP_PROXY is the only variable, the connector cannot reach the
+//     gateway — set HTTPS_PROXY, the correct variable for https egress. (Whether
+//     the injected path would have fared better there is child-dependent: a
+//     catch-all client like gaxios reads HTTP_PROXY for https, a per-scheme one
+//     like reqwest does not — so falling back is not a reliable rescue, and it
+//     always leaks the key.)
+//   - ALL_PROXY is the real gap: http.ProxyFromEnvironment never reads it so the
+//     connector dials direct, while TransparentEnv strips it from the child. But
+//     ALL_PROXY is a catch-all by definition — a user who set it means it for all
+//     traffic — and ALL_PROXY-only leaves the connector with no usable proxy at
+//     all, so fall back to the injected path where the child reads ALL_PROXY
+//     itself. That is the author's existing bet; the point here is only that an
+//     inert HTTP_PROXY must not pre-empt it.
 //
-// A socks ALL_PROXY alongside an http HTTPS_PROXY is fine and returns "": the
-// connector uses the http proxy, and the child talks only to the connector.
+// The earlier version listed HTTP_PROXY alongside HTTPS_PROXY as "a proxy the
+// connector reads". It reads neither for an https dial, and treating HTTP_PROXY
+// as connector-usable let an HTTP_PROXY set beside an ALL_PROXY short-circuit
+// the ALL_PROXY fallback: the launch stayed transparent, the connector dialed
+// direct, and a user who had a working catch-all proxy hung instead of falling
+// back to the injected path that would have used it.
 func allProxyOnlyEgressVar() string {
-	// Only ALL_PROXY matters here, and it matters whatever its scheme.
-	//
-	// An earlier version of this refused transparent mode whenever HTTPS_PROXY
-	// was socks5, on the premise that the connector could not speak socks. That
-	// premise was false: the connector's relay leg is an http.Transport with
-	// Proxy set, and net/http dials socks5/socks5h proxy URLs natively
-	// (verified empirically). Refusing there downgraded a working, secure setup
-	// to the injected path — which writes the real relay key into the child's
-	// environment, the exact exposure transparent mode exists to prevent. So a
-	// socks HTTPS_PROXY is fine and is not reported.
-	//
-	// ALL_PROXY is the real gap, and not only for socks: http.ProxyFromEnvironment
-	// ignores ALL_PROXY entirely, so the connector never sees it and dials
-	// direct, while TransparentEnv strips it from the child so the child cannot
-	// use it either. A user whose ONLY proxy variable is ALL_PROXY is therefore
-	// relying on something neither side will honor, and on a network where
-	// direct egress is firewalled every request hangs.
-	//
-	// The caveat this accepts: with a socks HTTPS_PROXY the relay leg works but
-	// dialTunnel's pass-through CONNECT still falls back to a direct dial
-	// (hand-rolled CONNECT cannot speak socks), so non-model HTTPS may fail on
-	// a socks-only network. Model traffic — the point of the launch — works, and
-	// that is a better trade than leaking the relay key.
-	for _, name := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"} {
+	// Only HTTPS_PROXY rescues transparent mode (the sole traffic is https), and
+	// it does so whatever its scheme — an earlier version refused a socks5
+	// HTTPS_PROXY on the false premise that net/http could not speak socks, which
+	// downgraded a working, secure setup to the injected path and wrote the real
+	// relay key into the child env. HTTP_PROXY is deliberately absent: it applies
+	// only to http targets and so neither rescues nor strands an https launch.
+	for _, name := range []string{"HTTPS_PROXY", "https_proxy"} {
 		if strings.TrimSpace(os.Getenv(name)) != "" {
 			return "" // the connector has a proxy variable it will actually read
 		}
 	}
+	// ALL_PROXY as the only usable variable strands the launch: neither the
+	// connector nor the transparent child reads it. Report it so Use falls back
+	// to the injected path.
 	for _, name := range []string{"ALL_PROXY", "all_proxy"} {
 		if strings.TrimSpace(os.Getenv(name)) != "" {
 			return name
