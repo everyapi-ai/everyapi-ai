@@ -3,7 +3,7 @@ package sellertype
 import "testing"
 
 // TestResolveKindSlug pins the alias→kind_slug contract to the backend
-// allow-list (backend/internal/controller/channel_seller.go
+// allow-list (backend/internal/transport/http/channeladmin/seller.go
 // sellerAllowedChannelKinds). The backend binds `kind_slug` and 422s on
 // anything outside this set, so a drift here silently breaks every
 // `seller add-key` mount.

@@ -4,10 +4,10 @@
 // seller tools (internal/mcp) so the two surfaces can't drift.
 //
 // The backend retired the numeric `type` column for seller mounts:
-// controller.SellerChannelCreate now binds `kind_slug string` and
+// channeladmin.SellerChannelCreate now binds `kind_slug string` and
 // validates it against a fixed allow-list (openai / anthropic /
 // codex / gemini / vertex_ai / aws / xai / deepseek — see
-// backend/internal/controller/channel_seller.go sellerAllowedChannelKinds).
+// backend/internal/transport/http/channeladmin/seller.go sellerAllowedChannelKinds).
 // This package therefore maps human aliases to those canonical slugs;
 // sending the old integer id makes the backend drop the field and 422.
 //

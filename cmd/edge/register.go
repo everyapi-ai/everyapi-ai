@@ -24,7 +24,7 @@ func edgeRegister(args []string) error {
 	country := fs.String("country", "", "Two-letter country code (optional; advertised to buyers for latency).")
 	region := fs.String("region", "", "Region label (optional; freeform, e.g. 'us-west').")
 	// attachTo wires the seller's "one channel, N machines" mode
-	// from EDGE_NODE.md §5. Default 0 = unset, which the SDK maps to
+	// from specs/edge-node.md §5. Default 0 = unset, which the SDK maps to
 	// omitting the field and the backend interprets as "create a
 	// fresh channel for this node." A non-zero value validates
 	// server-side: must be an edge-kind channel owned by the same
