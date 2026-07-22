@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/everyapi-ai/everyapi-sdk/sanitizer"
 )
 
 const (
@@ -94,7 +96,7 @@ type claudeAssistantGroup struct {
 	text       strings.Builder
 	weak       bool
 	strong     bool
-	standalone int
+	loneTokens map[string]int
 	userTurn   int
 }
 
@@ -789,33 +791,33 @@ func newClaudeSessionID() (string, error) {
 
 func classifyClaudeAssistantGroup(group *claudeAssistantGroup) {
 	cleaned := stripClaudeMarkdownCode(group.text.String())
-	standalone := 0
-	for _, line := range strings.Split(cleaned, "\n") {
-		switch strings.ToLower(strings.TrimSpace(line)) {
-		case "call", "course", "court", "count", "invoke", "parameter", "課":
-			standalone++
-		}
-	}
-	hintCount := strings.Count(cleaned, "课件")
-	// Match `invoke name="` without requiring the leading `<`: in-the-wild
-	// variants of the corruption mangle the opening bracket (e.g. a leaked
-	// `antml:invoke name="...` prefix) while the parameter markup survives.
-	hasLeakedXML := false
-	if invoke := strings.Index(cleaned, `invoke name="`); invoke >= 0 {
-		hasLeakedXML = strings.Contains(cleaned[invoke:], `parameter name=`)
-	}
 	hasTerminalFailure := group.stopReason == "stop_sequence" &&
 		strings.Contains(cleaned, claudeTerminalToolParseFailure)
 	hasToolContext := group.stopReason == "tool_use" || group.stopReason == "stop_sequence"
+	// Token-agnostic shape signals (see everyapi-sdk/sanitizer): the flood
+	// word mutates faster than any word list can track, but "one short token,
+	// line after line" and "one short token back-to-back" are invariant
+	// across every observed variant.
+	loneTokens := sanitizer.StandaloneLineTokens(cleaned)
+	// Per-token maximum, not a sum across distinct tokens: two different
+	// labels alternating twice each ("yes\nno\nyes\nno") is ordinary output,
+	// while ONE token on 3+ lines is the flood shape.
+	maxRepeat := 0
+	for _, n := range loneTokens {
+		if n > maxRepeat {
+			maxRepeat = n
+		}
+	}
+	tokenRun := sanitizer.LongestTokenRun(cleaned)
 
-	group.standalone = standalone
-	group.weak = hintCount > 0 || standalone > 0
-	group.strong = hasLeakedXML || hasTerminalFailure || hasToolContext &&
-		(standalone >= 3 || hintCount >= 2 && standalone > 0)
+	group.loneTokens = loneTokens
+	group.weak = maxRepeat >= 2 || tokenRun >= 4
+	group.strong = sanitizer.LeakedToolMarkup(cleaned) || hasTerminalFailure ||
+		hasToolContext && (maxRepeat >= 3 || tokenRun >= 5)
 }
 
 // claudeStandaloneClusterStart reports whether the window ending at `end`
-// confirms a standalone-control-word cluster, and if so returns the index of
+// confirms a standalone-flood-token cluster, and if so returns the index of
 // the EARLIEST contributing member so the caller can place the pollution
 // boundary before every implicated group (not just the trigger).
 func claudeStandaloneClusterStart(groups []claudeAssistantGroup, end int) (int, bool) {
@@ -826,23 +828,56 @@ func claudeStandaloneClusterStart(groups []claudeAssistantGroup, end int) (int, 
 	if windowStart < 0 {
 		windowStart = 0
 	}
-	tokens := 0
+	// Two passes. First find anchor tokens — tokens some single group already
+	// repeats (>= 2 lone lines): interjection paragraphs like a bare
+	// "Perfect." recur naturally across clean turns, so a token nobody
+	// repeats in-group must not accumulate into a false cluster. Then only
+	// anchored tokens count across the window, so a flood smeared thinly
+	// around one repeating group still pulls its one-line neighbors into the
+	// boundary.
+	anchors := map[string]bool{}
+	for i := windowStart; i <= end; i++ {
+		group := &groups[i]
+		if !claudeGroupsSharePollutionWindow(*group, groups[end]) ||
+			(group.stopReason != "tool_use" && group.stopReason != "stop_sequence") {
+			continue
+		}
+		for token, n := range group.loneTokens {
+			if n >= 2 {
+				anchors[token] = true
+			}
+		}
+	}
+	tokens := map[string]int{}
 	signalGroups := 0
 	first := -1
 	for i := windowStart; i <= end; i++ {
 		group := &groups[i]
-		if !claudeGroupsSharePollutionWindow(*group, groups[end]) || group.standalone == 0 ||
+		if !claudeGroupsSharePollutionWindow(*group, groups[end]) || len(group.loneTokens) == 0 ||
 			(group.stopReason != "tool_use" && group.stopReason != "stop_sequence") {
 			continue
 		}
-		tokens += group.standalone
+		contributed := false
+		for token, n := range group.loneTokens {
+			if anchors[token] {
+				tokens[token] += n
+				contributed = true
+			}
+		}
+		if !contributed {
+			continue
+		}
 		signalGroups++
 		if first < 0 {
 			first = i
 		}
 	}
-	if tokens >= 3 && signalGroups >= 2 {
-		return first, true
+	if signalGroups >= 2 {
+		for _, n := range tokens {
+			if n >= 3 {
+				return first, true
+			}
+		}
 	}
 	return -1, false
 }

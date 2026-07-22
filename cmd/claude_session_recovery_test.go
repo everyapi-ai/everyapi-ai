@@ -24,9 +24,9 @@ func TestDetectClaudeSessionPollutionBacktracksToFirstHint(t *testing.T) {
 		`{"type":"user","uuid":"u1","timestamp":"2026-07-13T02:00:00Z","message":{"role":"user","content":"Audit every interactive screen and fix real bugs."}}`,
 		`{"type":"assistant","uuid":"a1","parentUuid":"u1","timestamp":"2026-07-13T02:01:00Z","message":{"id":"msg_clean","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"The public pages are clean. Next I will inspect admin routes."}]}}`,
 		`{"type":"assistant","uuid":"a2","parentUuid":"a1","timestamp":"2026-07-13T02:01:01Z","message":{"id":"msg_clean","role":"assistant","stop_reason":"tool_use","content":[{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}]}}`,
-		`{"type":"assistant","uuid":"b1","parentUuid":"r1","timestamp":"2026-07-13T02:57:26Z","message":{"id":"msg_bad_1","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"The title mapping is incomplete.\n\n课件我需要看几张交互态，再统一修复。"}]}}`,
+		`{"type":"assistant","uuid":"b1","parentUuid":"r1","timestamp":"2026-07-13T02:57:26Z","message":{"id":"msg_bad_1","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"The title mapping is incomplete.\n\ncourse\n\ncourse"}]}}`,
 		`{"type":"assistant","uuid":"b2","parentUuid":"b1","timestamp":"2026-07-13T02:57:28Z","message":{"id":"msg_bad_1","role":"assistant","stop_reason":"tool_use","content":[{"type":"tool_use","id":"tool_2","name":"TaskCreate","input":{}}]}}`,
-		`{"type":"assistant","uuid":"b3","parentUuid":"r2","timestamp":"2026-07-13T02:58:23Z","message":{"id":"msg_bad_2","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"课件看这些交互态。\n\n課\n\n课件先看主题切换。"}]}}`,
+		`{"type":"assistant","uuid":"b3","parentUuid":"r2","timestamp":"2026-07-13T02:58:23Z","message":{"id":"msg_bad_2","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"看这些交互态。\n\ncourse\n\ncourse\n\ncourse"}]}}`,
 		`{"type":"assistant","uuid":"b4","parentUuid":"r3","timestamp":"2026-07-13T02:59:10Z","message":{"id":"msg_bad_3","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"course\n\ncourse\n\ncourt"}]}}`,
 	)
 
@@ -48,6 +48,72 @@ func TestDetectClaudeSessionPollutionBacktracksToFirstHint(t *testing.T) {
 	}
 }
 
+// Mirrors the 2026-07-22 incident shape: a flood of standalone simplified 课
+// (the classifier's word list previously only carried traditional 課) at a
+// tool_use boundary must classify as pollution on its own.
+func TestDetectClaudeSessionPollutionCatchesSimplifiedCJKFlood(t *testing.T) {
+	path := writeClaudeTranscript(t,
+		`{"type":"user","uuid":"u1","timestamp":"2026-07-22T06:00:00Z","message":{"role":"user","content":"拆了重跑验证"}}`,
+		`{"type":"assistant","uuid":"a1","parentUuid":"u1","timestamp":"2026-07-22T06:02:19Z","message":{"id":"msg_bad_1","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"文档说 ghcr_token 从 ~/.env 来。查那个文件。\n\n课\n\n课\n\n课"}]}}`,
+	)
+
+	got, err := detectClaudeSessionPollution(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil {
+		t.Fatal("expected pollution detection for simplified 课 flood")
+	}
+	if got.FirstMessageID != "msg_bad_1" {
+		t.Fatalf("first pollution = %q, want msg_bad_1", got.FirstMessageID)
+	}
+}
+
+// A flood of a token absent from every word list ("程") must still classify
+// as pollution via the token-agnostic shape signal.
+func TestDetectClaudeSessionPollutionCatchesNovelTokenFlood(t *testing.T) {
+	path := writeClaudeTranscript(t,
+		`{"type":"user","uuid":"u1","timestamp":"2026-07-22T06:00:00Z","message":{"role":"user","content":"continue"}}`,
+		`{"type":"assistant","uuid":"a1","parentUuid":"u1","timestamp":"2026-07-22T06:02:19Z","message":{"id":"msg_bad_1","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"Checking the config file next.\n\n程\n\n程\n\n程"}]}}`,
+	)
+
+	got, err := detectClaudeSessionPollution(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil {
+		t.Fatal("expected pollution detection for novel-token flood")
+	}
+	if got.FirstMessageID != "msg_bad_1" {
+		t.Fatalf("first pollution = %q, want msg_bad_1", got.FirstMessageID)
+	}
+}
+
+func TestDetectClaudeSessionPollutionClusterBoundaryCoversEarliestMember(t *testing.T) {
+	// The cluster confirms only via msg_first_bad (2 tokens) + msg_last_bad
+	// (1 token), separated by two clean groups. The boundary must land on
+	// msg_first_bad, not the trigger, or the polluted member stays in the
+	// "clean" clone.
+	path := writeClaudeTranscript(t,
+		`{"type":"user","origin":{"kind":"human"},"promptSource":"typed","message":{"role":"user","content":"Continue the task."}}`,
+		`{"type":"assistant","timestamp":"2026-07-13T03:00:00Z","message":{"id":"msg_first_bad","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"course\ncourse"}]}}`,
+		`{"type":"assistant","timestamp":"2026-07-13T03:00:20Z","message":{"id":"msg_clean_1","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"Normal clean context A."}]}}`,
+		`{"type":"assistant","timestamp":"2026-07-13T03:00:40Z","message":{"id":"msg_clean_2","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"Normal clean context B."}]}}`,
+		`{"type":"assistant","timestamp":"2026-07-13T03:01:00Z","message":{"id":"msg_last_bad","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"course"}]}}`,
+	)
+
+	got, err := detectClaudeSessionPollution(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil {
+		t.Fatal("expected pollution detection")
+	}
+	if got.FirstMessageID != "msg_first_bad" || got.FirstLine != 2 {
+		t.Fatalf("cluster boundary = (%q, line %d), want (msg_first_bad, line 2)", got.FirstMessageID, got.FirstLine)
+	}
+}
+
 func TestDetectClaudeSessionPollutionCatchesMangledToolXML(t *testing.T) {
 	path := writeClaudeTranscript(t,
 		`{"type":"user","message":{"role":"user","content":"Run the check."}}`,
@@ -63,35 +129,45 @@ func TestDetectClaudeSessionPollutionCatchesMangledToolXML(t *testing.T) {
 	}
 }
 
-func TestDetectClaudeSessionPollutionClusterBoundaryCoversEarliestMember(t *testing.T) {
-	// The cluster confirms only via msg_first_bad (2 tokens) + msg_last_bad
-	// (1 token), separated by two clean groups. The boundary must land on
-	// msg_first_bad, not the trigger, or the polluted member stays in the
-	// "clean" clone.
+func TestDetectClaudeSessionPollutionCatchesBareToolXML(t *testing.T) {
 	path := writeClaudeTranscript(t,
-		`{"type":"user","origin":{"kind":"human"},"promptSource":"typed","message":{"role":"user","content":"Continue the task."}}`,
-		`{"type":"assistant","timestamp":"2026-07-13T03:00:00Z","message":{"id":"msg_first_bad","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"call\ncourse"}]}}`,
-		`{"type":"assistant","timestamp":"2026-07-13T03:00:20Z","message":{"id":"msg_clean_1","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"Normal clean context A."}]}}`,
-		`{"type":"assistant","timestamp":"2026-07-13T03:00:40Z","message":{"id":"msg_clean_2","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"Normal clean context B."}]}}`,
-		`{"type":"assistant","timestamp":"2026-07-13T03:01:00Z","message":{"id":"msg_last_bad","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"count"}]}}`,
+		`{"type":"user","message":{"role":"user","content":"Run the check."}}`,
+		`{"type":"assistant","timestamp":"2026-07-13T03:00:00Z","message":{"id":"msg_xml","role":"assistant","stop_reason":"end_turn","content":[{"type":"text","text":"Checking now:\n<invoke name=\"Bash\">\n<parameter name=\"command\">go test ./...</parameter>\n</invoke>"}]}}`,
 	)
 
 	got, err := detectClaudeSessionPollution(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got == nil {
-		t.Fatal("expected pollution detection")
+	if got == nil || got.FirstMessageID != "msg_xml" {
+		t.Fatalf("detection = %#v, want msg_xml", got)
 	}
-	if got.FirstMessageID != "msg_first_bad" || got.FirstLine != 2 {
-		t.Fatalf("cluster boundary = (%q, line %d), want (msg_first_bad, line 2)", got.FirstMessageID, got.FirstLine)
+}
+
+// A clean agentic run whose turns each open with a lone interjection
+// paragraph ("Perfect.") must NOT cluster into a false pollution: no single
+// group repeats the token, so it never becomes an anchor.
+func TestDetectClaudeSessionPollutionIgnoresRecurringInterjections(t *testing.T) {
+	path := writeClaudeTranscript(t,
+		`{"type":"user","origin":{"kind":"human"},"promptSource":"typed","message":{"role":"user","content":"Continue the task."}}`,
+		`{"type":"assistant","timestamp":"2026-07-13T03:00:00Z","message":{"id":"msg_1","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"Perfect.\n\nThe build passed, moving to the next step."}]}}`,
+		`{"type":"assistant","timestamp":"2026-07-13T03:00:30Z","message":{"id":"msg_2","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"Perfect.\n\nTests are green as well."}]}}`,
+		`{"type":"assistant","timestamp":"2026-07-13T03:01:00Z","message":{"id":"msg_3","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"Perfect.\n\nDeploying now."}]}}`,
+	)
+
+	got, err := detectClaudeSessionPollution(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
+		t.Fatalf("clean interjection-opening turns misclassified as pollution: %#v", got)
 	}
 }
 
 func TestDetectClaudeSessionPollutionMarksSelfRecoveredSessions(t *testing.T) {
 	lines := []string{
 		`{"type":"user","origin":{"kind":"human"},"promptSource":"typed","message":{"role":"user","content":"Continue the task."}}`,
-		`{"type":"assistant","timestamp":"2026-07-13T03:00:00Z","message":{"id":"msg_bad","role":"assistant","stop_reason":"end_turn","content":[{"type":"text","text":"Checking now:\n<invoke name=\"Bash\">\n<parameter name=\"command\">go test ./...</parameter>\n</invoke>"}]}}`,
+		`{"type":"assistant","timestamp":"2026-07-13T03:00:00Z","message":{"id":"msg_bad","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"Checking now:\n\ncourse\n\ncourse\n\ncourse"}]}}`,
 		`{"type":"user","origin":{"kind":"human"},"promptSource":"typed","message":{"role":"user","content":"Looks broken, keep going."}}`,
 	}
 	for i := 0; i < 4; i++ {
@@ -117,21 +193,6 @@ func TestDetectClaudeSessionPollutionMarksSelfRecoveredSessions(t *testing.T) {
 	}
 	if got2 == nil || got2.SelfRecovered {
 		t.Fatalf("tail-less pollution misclassified: %#v", got2)
-	}
-}
-
-func TestDetectClaudeSessionPollutionCatchesBareToolXML(t *testing.T) {
-	path := writeClaudeTranscript(t,
-		`{"type":"user","message":{"role":"user","content":"Run the check."}}`,
-		`{"type":"assistant","timestamp":"2026-07-13T03:00:00Z","message":{"id":"msg_xml","role":"assistant","stop_reason":"end_turn","content":[{"type":"text","text":"Checking now:\n<invoke name=\"Bash\">\n<parameter name=\"command\">go test ./...</parameter>\n</invoke>"}]}}`,
-	)
-
-	got, err := detectClaudeSessionPollution(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got == nil || got.FirstMessageID != "msg_xml" {
-		t.Fatalf("detection = %#v, want msg_xml", got)
 	}
 }
 
@@ -201,9 +262,9 @@ func TestDetectClaudeSessionPollutionIgnoresStandaloneWordsWithoutToolContext(t 
 func TestDetectClaudeSessionPollutionClustersWithinOneUserTurn(t *testing.T) {
 	path := writeClaudeTranscript(t,
 		`{"type":"user","origin":{"kind":"human"},"promptSource":"typed","message":{"role":"user","content":"Continue the task."}}`,
-		`{"type":"assistant","timestamp":"2026-07-13T03:00:00Z","message":{"id":"msg_1","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"call"}]}}`,
-		`{"type":"assistant","timestamp":"2026-07-13T03:00:30Z","message":{"id":"msg_2","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"course"}]}}`,
-		`{"type":"assistant","timestamp":"2026-07-13T03:01:00Z","message":{"id":"msg_3","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"count"}]}}`,
+		`{"type":"assistant","timestamp":"2026-07-13T03:00:00Z","message":{"id":"msg_1","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"course"}]}}`,
+		`{"type":"assistant","timestamp":"2026-07-13T03:00:30Z","message":{"id":"msg_2","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"course\n\ncourse"}]}}`,
+		`{"type":"assistant","timestamp":"2026-07-13T03:01:00Z","message":{"id":"msg_3","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"course"}]}}`,
 	)
 
 	got, err := detectClaudeSessionPollution(path)
@@ -220,11 +281,11 @@ func TestDetectClaudeSessionPollutionFailsOpenForMalformedJSONL(t *testing.T) {
 		"malformed middle record": {
 			`{"type":"user","message":{"role":"user","content":"Continue."}}`,
 			`{"type":"assistant"`,
-			`{"type":"assistant","message":{"id":"msg_bad","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"call\ncourse\ncount"}]}}`,
+			`{"type":"assistant","message":{"id":"msg_bad","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"course\ncourse\ncourse"}]}}`,
 		},
 		"malformed message content": {
 			`{"type":"user","message":{"role":"user","content":{"unexpected":true}}}`,
-			`{"type":"assistant","message":{"id":"msg_bad","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"call\ncourse\ncount"}]}}`,
+			`{"type":"assistant","message":{"id":"msg_bad","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"course\ncourse\ncourse"}]}}`,
 		},
 	}
 	for name, lines := range tests {
@@ -243,7 +304,7 @@ func TestDetectClaudeSessionPollutionDoesNotBacktrackAcrossWeakBoundary(t *testi
 		`{"type":"assistant","timestamp":"2026-07-13T03:00:00Z","message":{"id":"msg_weak","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"course"}]}}`,
 		`{"type":"assistant","timestamp":"2026-07-13T03:00:10Z","message":{"id":"msg_clean_1","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"Normal clean context A."}]}}`,
 		`{"type":"assistant","timestamp":"2026-07-13T03:00:20Z","message":{"id":"msg_clean_2","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"Normal clean context B."}]}}`,
-		`{"type":"assistant","timestamp":"2026-07-13T03:00:30Z","message":{"id":"msg_bad","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"call\ncourt\ncount"}]}}`,
+		`{"type":"assistant","timestamp":"2026-07-13T03:00:30Z","message":{"id":"msg_bad","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"course\ncourse\ncourse"}]}}`,
 	)
 
 	got, err := detectClaudeSessionPollution(path)
@@ -263,7 +324,7 @@ func TestDetectClaudeSessionPollutionDoesNotBacktrackAcrossUserTurns(t *testing.
 		`{"type":"user","origin":{"kind":"human"},"promptSource":"typed","message":{"role":"user","content":"Translate one word."}}`,
 		`{"type":"assistant","timestamp":"2026-07-13T03:00:00Z","message":{"id":"msg_legit","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"course"}]}}`,
 		`{"type":"user","origin":{"kind":"human"},"promptSource":"typed","message":{"role":"user","content":"NEW TASK"}}`,
-		`{"type":"assistant","timestamp":"2026-07-13T03:00:30Z","message":{"id":"msg_bad","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"call\ncourse\ncount"}]}}`,
+		`{"type":"assistant","timestamp":"2026-07-13T03:00:30Z","message":{"id":"msg_bad","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"course\ncourse\ncourse"}]}}`,
 	)
 
 	got, err := detectClaudeSessionPollution(path)
@@ -282,7 +343,7 @@ func TestDetectClaudeSessionPollutionDoesNotBacktrackAcrossLongGap(t *testing.T)
 	path := writeClaudeTranscript(t,
 		`{"type":"user","origin":{"kind":"human"},"promptSource":"typed","message":{"role":"user","content":"Long-running task."}}`,
 		`{"type":"assistant","timestamp":"2026-07-13T03:00:00Z","message":{"id":"msg_legit","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"course"}]}}`,
-		`{"type":"assistant","timestamp":"2026-07-13T04:00:00Z","message":{"id":"msg_bad","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"call\ncourse\ncount"}]}}`,
+		`{"type":"assistant","timestamp":"2026-07-13T04:00:00Z","message":{"id":"msg_bad","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"course\ncourse\ncourse"}]}}`,
 	)
 
 	got, err := detectClaudeSessionPollution(path)
@@ -308,9 +369,9 @@ func writeResumableClaudeSession(t *testing.T, claudeDir, sessionID string, poll
 	}
 	if polluted {
 		lines = append(lines,
-			`{"type":"assistant","timestamp":"2026-07-13T02:57:26Z","message":{"id":"msg_bad_1","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"课件我需要继续检查。"}]}}`,
-			`{"type":"assistant","timestamp":"2026-07-13T02:58:23Z","message":{"id":"msg_bad_2","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"课件继续。\n\n課\n\n课件执行。"}]}}`,
-			`{"type":"assistant","timestamp":"2026-07-13T02:59:10Z","message":{"id":"msg_bad_3","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"course\n\ncourt\n\ncount"}]}}`,
+			`{"type":"assistant","timestamp":"2026-07-13T02:57:26Z","message":{"id":"msg_bad_1","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"继续检查。\n\ncourse\n\ncourse"}]}}`,
+			`{"type":"assistant","timestamp":"2026-07-13T02:58:23Z","message":{"id":"msg_bad_2","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"继续。\n\ncourse\n\ncourse\n\ncourse"}]}}`,
+			`{"type":"assistant","timestamp":"2026-07-13T02:59:10Z","message":{"id":"msg_bad_3","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"course\n\ncourse\n\ncourt"}]}}`,
 		)
 	}
 	cwd, err := os.Getwd()
