@@ -24,10 +24,6 @@ builds:
       - CGO_ENABLED=0
     goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
-    # 5-platform matrix to match the original; no windows/arm64.
-    ignore:
-      - goos: windows
-        goarch: arm64
     ldflags:
       - -s -w
       - -X github.com/everyapi-ai/everyapi-ai/internal/version.Version={{ .Env.EVERYAPI_VERSION }}

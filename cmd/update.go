@@ -416,15 +416,15 @@ func installScriptOneLiner() string {
 
 // releaseAssetName is the goreleaser archive for the running platform
 // — zip on Windows, tar.gz elsewhere (.goreleaser.yml format_overrides).
-// Windows is always the amd64 artifact: .goreleaser.yml ignores
-// windows/arm64 (no native build), and Windows-on-ARM runs the amd64
-// binary under emulation — the same mapping install.ps1 makes. Naming
-// the literal GOARCH there would print a 404 link.
 func releaseAssetName() string {
-	if runtime.GOOS == "windows" {
-		return "everyapi_windows_amd64.zip"
+	return releaseAssetNameFor(runtime.GOOS, runtime.GOARCH)
+}
+
+func releaseAssetNameFor(goos, goarch string) string {
+	if goos == "windows" {
+		return fmt.Sprintf("everyapi_windows_%s.zip", goarch)
 	}
-	return fmt.Sprintf("everyapi_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+	return fmt.Sprintf("everyapi_%s_%s.tar.gz", goos, goarch)
 }
 
 func printUnknownInstallHint(latest string) {

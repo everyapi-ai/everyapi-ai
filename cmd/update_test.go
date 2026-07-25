@@ -594,3 +594,9 @@ func TestReleaseAssetName(t *testing.T) {
 		t.Errorf("releaseAssetName() = %q, want it to name %s/%s", got, runtime.GOOS, runtime.GOARCH)
 	}
 }
+
+func TestReleaseAssetNameForWindowsArm64(t *testing.T) {
+	if got, want := releaseAssetNameFor("windows", "arm64"), "everyapi_windows_arm64.zip"; got != want {
+		t.Errorf("releaseAssetNameFor(windows, arm64) = %q, want %q", got, want)
+	}
+}

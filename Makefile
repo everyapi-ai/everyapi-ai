@@ -34,7 +34,7 @@ help:
 	@echo "  make test          Run the full unit test suite"
 	@echo "  make fmt           gofmt -w ."
 	@echo "  make lint          go vet ./..."
-	@echo "  make cli-release   Cross-compile 5 platform binaries into ./dist"
+	@echo "  make cli-release   Cross-compile 6 platform binaries into ./dist"
 	@echo "  make clean         Remove bin/ + dist/"
 
 # Fail fast if `go list -m` returned nothing. Without this, the -X
@@ -65,7 +65,7 @@ lint:
 cli-release: _require-module
 	@echo "Cross-compiling everyapi $(CLI_VERSION) @ $(CLI_COMMIT) ..."
 	@mkdir -p dist
-	@for target in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64 windows_amd64; do \
+	@for target in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64 windows_amd64 windows_arm64; do \
 	  GOOS=$${target%_*}; GOARCH=$${target#*_}; \
 	  EXT=""; \
 	  [ "$$GOOS" = "windows" ] && EXT=".exe"; \
