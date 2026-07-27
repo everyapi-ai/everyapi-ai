@@ -905,23 +905,29 @@ install_usage = '''everyapi mcp install — everyapi を AI CLI の MCP サー�
   everyapi mcp install [client]
 
 引数
-  client    claude、codex、gemini のいずれか。デフォルトは claude。
+  client    claude、codex、gemini、librefang のいずれか。デフォルトは claude。
 
 内部的に `<client> mcp add everyapi everyapi mcp` を実行します（各
 クライアントが期待する構文で）。完了後、AI CLI は必要に応じて
-`everyapi mcp` を起動し、4 つの everyapi_* ツール (status、topup、
+`everyapi mcp` を起動し、everyapi_* ツール (status、topup、
 seller_list、seller_withdraw) を公開します。
 
 選択したクライアントの CLI が PATH にある必要があります。未インストール
 の場合、エラーメッセージにインストールリンクと、クライアントの設定に
-手動で貼り付けられる設定スニペットが含まれます。'''
+手動で貼り付けられる設定スニペットが含まれます。
+
+librefang は独自の MCP レジストリを持つ CLI ではなくデーモンであり、その
+`mcp add` はカタログ id しか受け付けません。したがって設定は自動では書き
+込まれません。本コマンドは ~/.librefang/config.toml に貼り付ける
+[[mcp_servers]] ブロックと、デーモン全体への登録では不足する各エージェント
+の mcp_servers 許可リストの手順を表示します。'''
 uninstall_usage = '''everyapi mcp uninstall — AI CLI から everyapi を登録解除
 
 使用法
   everyapi mcp uninstall [client]
 
 引数
-  client    claude、codex、gemini のいずれか。デフォルトは claude。
+  client    claude、codex、gemini、librefang のいずれか。デフォルトは claude。
 
 内部的に `<client> mcp remove everyapi` を実行し、`everyapi mcp install
 [client]` が行った登録を取り消します。実行後、サーバープロセスを
@@ -929,17 +935,29 @@ uninstall_usage = '''everyapi mcp uninstall — AI CLI から everyapi を登録
 
 選択したクライアントの CLI が PATH にある必要があります。クライアントの
 設定を手動編集して everyapi を登録した場合、mcpServers オブジェクトから
-"everyapi" エントリを手動で削除してください。'''
+"everyapi" エントリを手動で削除してください。
+
+librefang は install と対称で、自動では何も削除しません。本コマンドは
+~/.librefang/config.toml から削除すべき [[mcp_servers]] ブロックを表示し、
+各エージェントの mcp_servers 許可リストから "everyapi" を外すよう促します。
+併せて `librefang mcp remove everyapi` も案内します。これは最初の手順を
+実行し、稼働中のデーモンをホットリロードしますが、config.toml をコメント
+なしで書き換えます。'''
 status_usage = '''everyapi mcp status — どの MCP クライアントが everyapi を登録済みかを表示
 
 使用法
   everyapi mcp status
 
-既知の各クライアント (claude / codex / gemini) について、以下のいずれかを報告:
+既知の各クライアント (claude / codex / gemini / librefang) について、以下のいずれかを報告:
   registered      — everyapi がこのクライアントの MCP サーバーリストに登録済み
   not registered  — クライアントはインストール済みだがサーバー未追加
   not on PATH     — クライアントバイナリがインストールされていない
   (probe failed)  — クライアントバイナリは存在するが `mcp list` が失敗
+
+librefang の registered は、デーモンの config.toml に登録済みという意味
+だけで、エージェントが呼び出せることは意味しません。各エージェント自身の
+mcp_servers 許可リストに "everyapi" を記載する必要があり、空のリストは
+何も許可しません。
 '''
 
 [proxy]

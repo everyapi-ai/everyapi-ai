@@ -912,24 +912,31 @@ VERWENDUNG
   everyapi mcp install [Client]
 
 ARGUMENTE
-  Client    Einer von: claude, codex, gemini. Standard ist claude.
+  Client    Einer von: claude, codex, gemini, librefang. Standard ist claude.
 
 Führt intern `<Client> mcp add everyapi everyapi mcp` aus (mit der
 Syntax, die der jeweilige Client erwartet). Danach startet dein KI-CLI
-`everyapi mcp` bei Bedarf und stellt die vier everyapi_*-Tools
+`everyapi mcp` bei Bedarf und stellt die everyapi_*-Tools
 (status, topup, seller_list, seller_withdraw) bereit.
 
 Erfordert das CLI des gewählten Clients im PATH. Falls es nicht
 installiert ist, enthält die Fehlermeldung den Installationslink und
 ein Konfigurations-Snippet, das du von Hand in die Client-Einstellungen
-einfügen kannst.'''
+einfügen kannst.
+
+librefang ist ein Daemon und kein CLI mit eigener MCP-Registry; sein
+`mcp add` akzeptiert nur eine Katalog-id, daher wird nichts für dich
+geschrieben. Der Befehl gibt den [[mcp_servers]]-Block zum Einfügen in
+~/.librefang/config.toml aus, dazu den Schritt für die mcp_servers-
+Freigabeliste jedes Agents, den eine daemonweite Registrierung nicht
+abdeckt.'''
 uninstall_usage = '''everyapi mcp uninstall — everyapi aus einem KI-CLI entfernen
 
 VERWENDUNG
   everyapi mcp uninstall [Client]
 
 ARGUMENTE
-  Client    Einer von: claude, codex, gemini. Standard ist claude.
+  Client    Einer von: claude, codex, gemini, librefang. Standard ist claude.
 
 Führt intern `<Client> mcp remove everyapi` aus und macht damit
 rückgängig, was `everyapi mcp install [Client]` getan hat. Starte den
@@ -937,17 +944,30 @@ Client danach neu, um den laufenden Server-Prozess zu beenden.
 
 Erfordert das CLI des gewählten Clients im PATH. Falls du everyapi
 durch manuelles Bearbeiten der Client-Einstellungen registriert hast,
-entferne den Eintrag "everyapi" aus dem mcpServers-Objekt von Hand.'''
+entferne den Eintrag "everyapi" aus dem mcpServers-Objekt von Hand.
+
+librefang verhält sich symmetrisch zu install: es wird nichts für dich
+entfernt. Der Befehl gibt aus, welchen [[mcp_servers]]-Block du aus
+~/.librefang/config.toml löschen musst, und erinnert daran, "everyapi"
+aus der mcp_servers-Liste jedes Agents zu streichen. Er weist außerdem auf
+`librefang mcp remove everyapi` hin, das den ersten Schritt erledigt und
+einen laufenden Daemon neu lädt — allerdings schreibt es config.toml ohne
+die enthaltenen Kommentare neu.'''
 status_usage = '''everyapi mcp status — zeigen, welche MCP-Clients everyapi registriert haben
 
 VERWENDUNG
   everyapi mcp status
 
-Meldet für jeden bekannten Client (claude / codex / gemini) einen von:
+Meldet für jeden bekannten Client (claude / codex / gemini / librefang) einen von:
   registered      — everyapi ist in der MCP-Serverliste dieses Clients eingetragen
   not registered  — Client ist installiert, aber der Server ist noch nicht hinzugefügt
   not on PATH     — Client-Binary ist gar nicht installiert
   (probe failed)  — Client-Binary existiert, aber `mcp list` ist fehlgeschlagen
+
+Bei librefang bedeutet "registered" nur, dass der Server in der
+config.toml des Daemons steht. Es bedeutet NICHT, dass ein Agent ihn
+aufrufen kann — die mcp_servers-Liste jedes Agents muss "everyapi"
+nennen, eine leere Liste gewährt nichts.
 '''
 
 [proxy]

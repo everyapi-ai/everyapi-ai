@@ -914,24 +914,31 @@ UTILISATION
   everyapi mcp install [client]
 
 ARGUMENTS
-  client    Un parmi : claude, codex, gemini. Par défaut claude.
+  client    Un parmi : claude, codex, gemini, librefang. Par défaut claude.
 
 Exécute en interne `<client> mcp add everyapi everyapi mcp` (avec la
 syntaxe attendue par chaque client). Ensuite votre CLI d'IA lancera
-`everyapi mcp` à la demande, exposant les quatre outils everyapi_*
+`everyapi mcp` à la demande, exposant les outils everyapi_*
 (status, topup, seller_list, seller_withdraw).
 
 Requiert le CLI du client choisi dans le PATH. S'il n'est pas
 installé, le message d'erreur inclut le lien d'installation et un
 extrait de configuration que vous pouvez coller à la main dans les
-paramètres du client.'''
+paramètres du client.
+
+librefang est un démon et non un CLI doté de son propre registre MCP ;
+son `mcp add` n'accepte qu'un id de catalogue, donc rien n'est écrit à
+votre place. La commande affiche le bloc [[mcp_servers]] à coller dans
+~/.librefang/config.toml, ainsi que l'étape de la liste d'autorisation
+mcp_servers de chaque agent, que l'enregistrement global du démon ne
+couvre pas.'''
 uninstall_usage = '''everyapi mcp uninstall — désenregistrer everyapi d'un CLI d'IA
 
 UTILISATION
   everyapi mcp uninstall [client]
 
 ARGUMENTS
-  client    Un parmi : claude, codex, gemini. Par défaut claude.
+  client    Un parmi : claude, codex, gemini, librefang. Par défaut claude.
 
 Exécute en interne `<client> mcp remove everyapi`, annulant ce que
 `everyapi mcp install [client]` a fait. Redémarrez le client ensuite
@@ -939,17 +946,30 @@ pour terminer le processus serveur en cours.
 
 Requiert le CLI du client choisi dans le PATH. Si vous avez enregistré
 everyapi en éditant à la main les paramètres du client, retirez
-manuellement l'entrée "everyapi" de l'objet mcpServers.'''
+manuellement l'entrée "everyapi" de l'objet mcpServers.
+
+librefang est symétrique d'install : rien n'est supprimé à votre place.
+La commande indique quel bloc [[mcp_servers]] supprimer de
+~/.librefang/config.toml et rappelle de retirer "everyapi" de la liste
+mcp_servers de chaque agent. Elle signale aussi `librefang mcp remove
+everyapi`, qui effectue la première étape et recharge à chaud un démon en
+cours d'exécution, au prix d'une réécriture de config.toml sans ses
+commentaires.'''
 status_usage = '''everyapi mcp status — afficher quels clients MCP ont enregistré everyapi
 
 UTILISATION
   everyapi mcp status
 
-Indique pour chaque client connu (claude / codex / gemini) un parmi :
+Indique pour chaque client connu (claude / codex / gemini / librefang) un parmi :
   registered      — everyapi est inscrit dans la liste des serveurs MCP de ce client
   not registered  — client installé mais serveur non ajouté
   not on PATH     — binaire client non installé
   (probe failed)  — binaire client présent mais `mcp list` a échoué
+
+Pour librefang, « registered » signifie que le serveur figure dans le
+config.toml du démon. Cela ne signifie PAS qu'un agent peut l'appeler :
+la liste mcp_servers de chaque agent doit nommer "everyapi", et une
+liste vide n'accorde rien.
 '''
 
 [proxy]

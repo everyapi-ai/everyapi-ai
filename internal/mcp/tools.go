@@ -71,3 +71,21 @@ func registerTools() []Tool {
 		toolAdminMarketplaceSet(),
 	}
 }
+
+// ToolNames returns the name of every tool this server exposes, in
+// registration order.
+//
+// Exported for `cmd/mcp`, which prints per-client setup instructions that
+// include approval-gating advice keyed to individual tool names. That advice
+// has to stay in step with what the server actually registers: a new write
+// tool that no caller knows about would be advertised to an agent while
+// sitting outside every published gate. Reading the registry here makes the
+// drift a test failure instead of a silent gap.
+func ToolNames() []string {
+	tools := registerTools()
+	names := make([]string, 0, len(tools))
+	for _, t := range tools {
+		names = append(names, t.Name)
+	}
+	return names
+}

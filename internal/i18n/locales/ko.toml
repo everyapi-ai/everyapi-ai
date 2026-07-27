@@ -904,23 +904,29 @@ install_usage = '''everyapi mcp install — everyapi 를 AI CLI 의 MCP 서버�
   everyapi mcp install [client]
 
 인자
-  client    claude, codex, gemini 중 하나. 기본값은 claude.
+  client    claude, codex, gemini, librefang 중 하나. 기본값은 claude.
 
 내부적으로 `<client> mcp add everyapi everyapi mcp` 를 실행합니다 (각
 클라이언트가 요구하는 구문으로). 이후 AI CLI 는 필요 시 `everyapi mcp` 를
-실행하여 네 개의 everyapi_* 도구 (status, topup, seller_list,
+실행하여 everyapi_* 도구 (status, topup, seller_list,
 seller_withdraw) 를 노출합니다.
 
 선택한 클라이언트의 CLI 가 PATH 에 있어야 합니다. 설치되어 있지 않으면
 오류 메시지에 설치 링크와 클라이언트 설정에 손으로 붙여넣을 수 있는
-구성 스니펫이 포함됩니다.'''
+구성 스니펫이 포함됩니다.
+
+librefang 은 자체 MCP 레지스트리를 가진 CLI 가 아니라 데몬이며, 그
+`mcp add` 는 카탈로그 id 만 받습니다. 따라서 설정을 대신 기록하지 않습니다.
+이 명령은 ~/.librefang/config.toml 에 붙여넣을 [[mcp_servers]] 블록과,
+데몬 전체 등록만으로는 부족한 각 에이전트의 mcp_servers 허용 목록 단계를
+출력합니다.'''
 uninstall_usage = '''everyapi mcp uninstall — AI CLI 에서 everyapi 등록 해제
 
 사용법
   everyapi mcp uninstall [client]
 
 인자
-  client    claude, codex, gemini 중 하나. 기본값은 claude.
+  client    claude, codex, gemini, librefang 중 하나. 기본값은 claude.
 
 내부적으로 `<client> mcp remove everyapi` 를 실행하여 `everyapi mcp install
 [client]` 가 수행한 등록을 취소합니다. 이후 실행 중인 서버 프로세스를
@@ -928,17 +934,28 @@ uninstall_usage = '''everyapi mcp uninstall — AI CLI 에서 everyapi 등록 �
 
 선택한 클라이언트의 CLI 가 PATH 에 있어야 합니다. 클라이언트 설정을
 수동 편집해서 everyapi 를 등록한 경우, mcpServers 객체에서 "everyapi"
-항목을 수동으로 제거하세요.'''
+항목을 수동으로 제거하세요.
+
+librefang 은 install 과 대칭으로, 대신 삭제해 주지 않습니다. 이 명령은
+~/.librefang/config.toml 에서 삭제할 [[mcp_servers]] 블록을 출력하고, 각
+에이전트의 mcp_servers 허용 목록에서 "everyapi" 를 빼도록 안내합니다.
+아울러 `librefang mcp remove everyapi` 도 알려줍니다. 이 명령은 첫 단계를
+수행하고 실행 중인 데몬을 핫 리로드하지만, config.toml 을 주석 없이
+다시 씁니다.'''
 status_usage = '''everyapi mcp status — 어떤 MCP 클라이언트에 everyapi 가 등록되어 있는지 표시
 
 사용법
   everyapi mcp status
 
-알려진 각 클라이언트 (claude / codex / gemini) 에 대해 다음 중 하나를 보고:
+알려진 각 클라이언트 (claude / codex / gemini / librefang) 에 대해 다음 중 하나를 보고:
   registered      — everyapi 가 이 클라이언트의 MCP 서버 목록에 등록됨
   not registered  — 클라이언트는 설치되어 있으나 서버가 추가되지 않음
   not on PATH     — 클라이언트 바이너리가 설치되어 있지 않음
   (probe failed)  — 클라이언트 바이너리는 있으나 `mcp list` 실행 실패
+
+librefang 의 registered 는 데몬의 config.toml 에 등록되었다는 뜻일 뿐,
+에이전트가 호출할 수 있다는 뜻은 아닙니다. 각 에이전트 자신의 mcp_servers
+허용 목록에 "everyapi" 가 있어야 하며, 빈 목록은 아무것도 허용하지 않습니다.
 '''
 
 [proxy]

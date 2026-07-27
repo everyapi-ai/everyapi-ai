@@ -894,37 +894,52 @@ install_usage = '''everyapi mcp install — 将 everyapi 注册为 AI CLI 的 MC
   everyapi mcp install [client]
 
 参数
-  client    可选 claude、codex、gemini。默认 claude。
+  client    可选 claude、codex、gemini、librefang。默认 claude。
 
 底层运行 `<client> mcp add everyapi everyapi mcp`（按对应客户端要求的语法）。
-完成后，AI CLI 会按需启动 `everyapi mcp`，向其暴露四个 everyapi_* 工具
+完成后，AI CLI 会按需启动 `everyapi mcp`，向其暴露 everyapi_* 工具
 （status、topup、seller_list、seller_withdraw）。
 
 要求所选客户端的 CLI 在 PATH 中。若未安装，错误信息会包含安装链接和一段
-可手动粘贴到客户端配置的片段。'''
+可手动粘贴到客户端配置的片段。
+
+librefang 是守护进程，并非自带 MCP 注册表的 CLI，其 `mcp add` 只接受目录
+（catalog）id——因此不会替你写入任何文件。该命令会打印需要粘贴到
+~/.librefang/config.toml 的 [[mcp_servers]] 配置块，以及守护进程级注册
+并不覆盖的每个 agent 的 mcp_servers 白名单步骤。'''
 uninstall_usage = '''everyapi mcp uninstall — 从 AI CLI 中卸载 everyapi
 
 用法
   everyapi mcp uninstall [client]
 
 参数
-  client    可选 claude、codex、gemini。默认 claude。
+  client    可选 claude、codex、gemini、librefang。默认 claude。
 
 底层运行 `<client> mcp remove everyapi`，撤销 `everyapi mcp install [client]`
 所做的注册。卸载后需重启客户端以结束已运行的服务器进程。
 
 要求所选客户端的 CLI 在 PATH 中。若你曾手动编辑客户端配置注册 everyapi，
-请手动从 mcpServers 中删除 "everyapi" 条目。'''
+请手动从 mcpServers 中删除 "everyapi" 条目。
+
+librefang 与 install 对称：不会替你删除任何内容。该命令会打印需要从
+~/.librefang/config.toml 中删除的 [[mcp_servers]] 配置块，并提醒你从各
+agent 的 mcp_servers 白名单中移除 "everyapi"。同时也会提示
+`librefang mcp remove everyapi`——它能完成第一步并 hot-reload 运行中的
+守护进程，代价是重写 config.toml 时会丢掉注释。'''
 status_usage = '''everyapi mcp status — 显示哪些 MCP 客户端已注册 everyapi
 
 用法
   everyapi mcp status
 
-对每个已知客户端（claude / codex / gemini）输出以下状态之一：
+对每个已知客户端（claude / codex / gemini / librefang）输出以下状态之一：
   registered      — everyapi 已写入该客户端的 MCP 服务器列表
   not registered  — 客户端已安装但尚未添加该服务器
   not on PATH     — 客户端二进制未安装
   (probe failed)  — 客户端存在但 `mcp list` 执行失败
+
+对 librefang 而言，registered 仅表示该服务器已写入守护进程的 config.toml，
+并不代表任何 agent 能调用它——每个 agent 自己的 mcp_servers 白名单必须列出
+"everyapi"，空列表不授予任何权限。
 '''
 
 [proxy]

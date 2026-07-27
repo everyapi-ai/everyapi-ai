@@ -38,6 +38,18 @@ func Uninstall(args []string) error {
 		return err
 	}
 
+	// ManualOnly targets: install printed a block for the user to paste, so
+	// uninstall tells them what to delete. Symmetry is the point — driving
+	// deletion of a config we refused to write would be incoherent in the
+	// dangerous direction. `librefang mcp remove everyapi` does exist, but
+	// its "not configured" error is localized and goes to stdout, so
+	// isNotRegistered could not classify it and a second uninstall would
+	// hard-fail for every non-English user.
+	if c.ManualOnly {
+		fmt.Fprint(os.Stdout, manualUninstallText(c))
+		return nil
+	}
+
 	// Same resolution `use` applies — a client sitting in an off-$PATH
 	// npm global dir counts as installed here too.
 	if _, _, ok := tools.LookupExecName(c.Name); !ok {
@@ -106,6 +118,32 @@ func Uninstall(args []string) error {
 
 	fmt.Fprintf(os.Stdout, "Unregistered `everyapi` from %s. Restart %s to drop the running server.\n", c.Name, c.Name)
 	return nil
+}
+
+// manualUninstallText is the inverse of manualInstallText: it names what to
+// delete rather than what to paste. Mentions the per-agent allowlist because
+// install told the user to edit it — leaving a stale "everyapi" entry there
+// is harmless but confusing.
+//
+// Unlike install, the target does have a working remove verb: `librefang mcp
+// remove everyapi` matches a hand-pasted entry by name (it resolves on
+// template_id OR name) and hot-reloads a running daemon. We surface it as an
+// option rather than shelling out ourselves, for two different reasons. We
+// can't run it: its "not configured" error is localized and printed to
+// stdout, so a second uninstall would hard-fail instead of reporting an
+// idempotent no-op. And the user should know before running it that it
+// rewrites config.toml through a TOML round-trip, which drops comments — the
+// same reason install refuses to write the file.
+func manualUninstallText(c *mcpClient) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s registrations are hand-edited, so nothing was removed for you.\n\n", c.Name)
+	fmt.Fprintf(&b, "Delete the [[mcp_servers]] block whose name = \"everyapi\" from %s,\n", clientConfigPath(c))
+	fmt.Fprintf(&b, "drop \"everyapi\" from any agent's mcp_servers allowlist, and restart the daemon.\n\n")
+	fmt.Fprintf(&b, "%s can also do the first step for you, and hot-reloads a running daemon:\n\n", c.Name)
+	fmt.Fprintf(&b, "  %s mcp remove everyapi\n\n", c.Name)
+	fmt.Fprintf(&b, "Note that it rewrites %s and drops any comments in that\n", clientConfigPath(c))
+	fmt.Fprintf(&b, "file. Delete the block by hand if you keep comments there.\n")
+	return b.String()
 }
 
 // isNotRegistered detects the "everyapi isn't in this client's config"

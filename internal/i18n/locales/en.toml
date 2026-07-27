@@ -898,23 +898,29 @@ USAGE
   everyapi mcp install [client]
 
 ARGUMENTS
-  client    One of: claude, codex, gemini. Defaults to claude.
+  client    One of: claude, codex, gemini, librefang. Defaults to claude.
 
 Runs `<client> mcp add everyapi everyapi mcp` under the hood (with the
 syntax each client expects). After this your AI CLI spawns `everyapi mcp`
-on demand, exposing the four everyapi_* tools (status, topup, seller_list,
+on demand, exposing the everyapi_* tools (status, topup, seller_list,
 seller_withdraw).
 
 Requires the chosen client's CLI on PATH. If it isn't installed, the
 error message includes the install link and a config snippet you can
-paste into the client's settings by hand.'''
+paste into the client's settings by hand.
+
+librefang is a daemon rather than a CLI that owns an MCP registry, and its
+`mcp add` takes only a catalog id — so nothing is written for you. The
+command prints the [[mcp_servers]] block to paste into
+~/.librefang/config.toml, plus the per-agent mcp_servers allowlist step
+that a daemon-wide registration does NOT cover.'''
 uninstall_usage = '''everyapi mcp uninstall — unregister everyapi from an AI CLI
 
 USAGE
   everyapi mcp uninstall [client]
 
 ARGUMENTS
-  client    One of: claude, codex, gemini. Defaults to claude.
+  client    One of: claude, codex, gemini, librefang. Defaults to claude.
 
 Runs `<client> mcp remove everyapi` under the hood, undoing what
 `everyapi mcp install [client]` did. Restart the client afterward to
@@ -922,17 +928,29 @@ drop the running server process.
 
 Requires the chosen client's CLI on PATH. If you registered everyapi by
 hand-editing the client's settings, remove the "everyapi" entry from the
-mcpServers object manually.'''
+mcpServers object manually.
+
+librefang is symmetric with install: nothing is removed for you. The
+command prints which [[mcp_servers]] block to delete from
+~/.librefang/config.toml and reminds you to drop "everyapi" from any
+agent's mcp_servers allowlist. It also points at `librefang mcp remove
+everyapi`, which does the first step and hot-reloads a running daemon —
+at the cost of rewriting config.toml without its comments.'''
 status_usage = '''everyapi mcp status — show which MCP clients have everyapi registered
 
 USAGE
   everyapi mcp status
 
-Reports for each known client (claude / codex / gemini) one of:
+Reports for each known client (claude / codex / gemini / librefang) one of:
   registered      — everyapi is wired into this client's MCP server list
   not registered  — client is installed but the server isn't added yet
   not on PATH     — client binary not installed at all
   (probe failed)  — client binary exists but `mcp list` errored
+
+For librefang, "registered" means the server is in the daemon's
+config.toml. It does NOT mean any agent can call it — each agent's own
+mcp_servers allowlist has to name "everyapi", and an empty list grants
+nothing.
 '''
 
 [proxy]

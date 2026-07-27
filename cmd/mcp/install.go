@@ -66,6 +66,16 @@ func Install(args []string) error {
 		return err
 	}
 
+	// ManualOnly targets are handled before the PATH check on purpose:
+	// the instructions are the same whether or not the binary is
+	// installed, and gating on PATH would turn a printable answer into
+	// an error for the user who hasn't installed it yet. Not an error
+	// either — printing the config IS the successful outcome here.
+	if c.ManualOnly {
+		fmt.Fprint(os.Stdout, manualInstallText(c))
+		return nil
+	}
+
 	// Same resolution `use` applies — a client sitting in an off-$PATH
 	// npm global dir counts as installed here too.
 	if _, _, ok := tools.LookupExecName(c.Name); !ok {
@@ -141,6 +151,21 @@ Registered as `+"`everyapi`"+` in `+c.Name+`. Restart `+c.Name+` (or run
 	// rootcmd.Use execs into the chosen client; this call doesn't
 	// return on success — control transfers to the client process.
 	return rootcmd.Use([]string{c.Name})
+}
+
+// manualInstallText renders the paste-this-yourself instructions for a
+// ManualOnly target. Returned as a string rather than printed inline so
+// tests can assert the exact output — and so the snippet stays the single
+// source of truth shared with the docs.
+func manualInstallText(c *mcpClient) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s registers MCP servers in its own config file; there is no add\n", c.Name)
+	fmt.Fprintf(&b, "command that takes a server command, so nothing is written for you.\n\n")
+	fmt.Fprintf(&b, "Add this block to %s:\n\n%s\n", clientConfigPath(c), c.ManualSnippet)
+	if c.PostInstallNote != "" {
+		fmt.Fprintf(&b, "\n%s\n", strings.TrimRight(c.PostInstallNote, "\n"))
+	}
+	return b.String()
 }
 
 // isAlreadyRegistered detects the "this MCP server is already in

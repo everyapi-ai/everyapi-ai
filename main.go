@@ -1213,7 +1213,7 @@ func runMCP(args []string) error {
 		fmt.Print("everyapi mcp — MCP server for AI CLIs\n\n" +
 			"USAGE\n" +
 			"  everyapi mcp                    run the stdio MCP server (for AI clients)\n" +
-			"  everyapi mcp install [client]   register everyapi with a client (claude/codex/gemini)\n" +
+			"  everyapi mcp install [client]   register everyapi with a client (claude/codex/gemini/librefang)\n" +
 			"  everyapi mcp uninstall [client] remove the registration\n" +
 			"  everyapi mcp status             show which clients have everyapi registered\n")
 		return nil
