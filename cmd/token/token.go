@@ -77,7 +77,7 @@ func runSwitch(args []string) error {
 	if err != nil {
 		return err
 	}
-	toks, err := client.ListTokens(cliout.WithCtx())
+	toks, err := client.ListEnabledTokens(cliout.WithCtx())
 	if err != nil {
 		return classifyErr(err)
 	}
