@@ -81,42 +81,68 @@ func runSwitch(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	enabled, labels, initial := enabledTokenChoices(toks, creds.RelayKeyTokenID)
-	if len(enabled) == 0 {
-		return api.ErrNoRelayKey
-	}
+	choices, labels, initial := enabledTokenChoices(toks, creds.RelayKeyTokenID)
 	idx, err := cliprompt.PickWithSelected(i18n.T("token.pick_key"), labels, initial)
 	if err != nil {
 		return err
 	}
-	if err := api.SelectRelayKey(cliout.WithCtx(), creds, enabled[idx].ID); err != nil {
+	choice := choices[idx]
+	if choice.Auto {
+		if _, err := api.SelectAutoRelayKey(cliout.WithCtx(), creds); err != nil {
+			return classifyErr(err)
+		}
+	} else if err := api.SelectRelayKey(cliout.WithCtx(), creds, choice.TokenID); err != nil {
 		return classifyErr(err)
 	}
-	cliout.Printf(i18n.T("token.switched")+"\n", enabled[idx].Name)
+	cliout.Printf(i18n.T("token.switched")+"\n", choice.Name)
 	return nil
 }
 
-func enabledTokenChoices(toks []api.TokenSummary, currentID int) ([]api.TokenSummary, []string, int) {
+type relayKeyChoice struct {
+	TokenID int
+	Name    string
+	Auto    bool
+}
+
+func enabledTokenChoices(toks []api.TokenSummary, currentID int) ([]relayKeyChoice, []string, int) {
+	autoID := 0
 	enabled := make([]api.TokenSummary, 0, len(toks))
 	for _, tok := range toks {
-		if tok.Status == api.TokenStatusEnabled {
-			enabled = append(enabled, tok)
+		if tok.Status != api.TokenStatusEnabled {
+			continue
 		}
+		if tok.Group == "auto" {
+			if autoID == 0 {
+				autoID = tok.ID
+			}
+			continue
+		}
+		enabled = append(enabled, tok)
 	}
-	labels := make([]string, len(enabled))
+	choices := make([]relayKeyChoice, 0, len(enabled)+1)
+	choices = append(choices, relayKeyChoice{TokenID: autoID, Name: i18n.T("token.auto_name"), Auto: true})
+	for _, tok := range enabled {
+		choices = append(choices, relayKeyChoice{TokenID: tok.ID, Name: tok.Name})
+	}
+	labels := make([]string, len(choices))
+	labels[0] = i18n.T("token.auto_choice")
 	initial := 0
+	if autoID != 0 && autoID == currentID {
+		labels[0] += "  " + i18n.T("token.current")
+	}
 	for i, tok := range enabled {
 		group := cliout.Sanitize(tok.Group)
 		if group == "" {
 			group = i18n.T("token.label.auto")
 		}
-		labels[i] = fmt.Sprintf("%s  [#%d, group=%s]", cliout.Sanitize(tok.Name), tok.ID, group)
+		choiceIndex := i + 1
+		labels[choiceIndex] = fmt.Sprintf("%s  [#%d, group=%s]", cliout.Sanitize(tok.Name), tok.ID, group)
 		if tok.ID == currentID {
-			labels[i] += "  " + i18n.T("token.current")
-			initial = i
+			labels[choiceIndex] += "  " + i18n.T("token.current")
+			initial = choiceIndex
 		}
 	}
-	return enabled, labels, initial
+	return choices, labels, initial
 }
 
 // --- shared helpers ---------------------------------------------------

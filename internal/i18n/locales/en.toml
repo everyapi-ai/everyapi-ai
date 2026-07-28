@@ -273,6 +273,8 @@ prints. Hand-editing is fine; the CLI re-reads on next invocation.
 pick_key = "Choose the default API key"
 current = "(current)"
 switched = "Default API key switched to %s."
+auto_name = "Auto"
+auto_choice = "Auto  [all available routing groups]"
 revoke_needs_confirm = "Refusing to revoke without confirmation; pass -y to revoke non-interactively."
 no_tokens = "No tokens yet. Use 'everyapi token create --name <n>'."
 count = "%d token(s):"

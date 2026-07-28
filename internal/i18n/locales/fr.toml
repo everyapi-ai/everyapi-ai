@@ -288,6 +288,8 @@ relit le fichier à la prochaine invocation.
 pick_key = "Choisissez la clé API par défaut"
 current = "(actuelle)"
 switched = "Clé API par défaut remplacée par %s."
+auto_name = "Automatique"
+auto_choice = "Automatique  [tous les groupes de routage disponibles]"
 revoke_needs_confirm = "Révocation refusée sans confirmation ; utilisez -y pour révoquer en mode non interactif."
 no_tokens = "Pas encore de tokens. Utilisez 'everyapi token create --name <n>'."
 count = "%d token(s) :"

@@ -287,6 +287,8 @@ das CLI liest die Datei beim nächsten Aufruf neu.
 pick_key = "Standard-API-Schlüssel auswählen"
 current = "(aktuell)"
 switched = "Standard-API-Schlüssel auf %s gewechselt."
+auto_name = "Automatisch"
+auto_choice = "Automatisch  [alle verfügbaren Routing-Gruppen]"
 revoke_needs_confirm = "Widerruf ohne Bestätigung abgelehnt; mit -y nicht interaktiv widerrufen."
 no_tokens = "Noch keine Tokens. Verwende 'everyapi token create --name <n>'."
 count = "%d Token:"

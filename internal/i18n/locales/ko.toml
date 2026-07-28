@@ -282,6 +282,8 @@ everyapi settings — CLI 환경설정 조회 / 변경
 pick_key = "기본 API 키 선택"
 current = "(현재)"
 switched = "기본 API 키를 %s(으)로 전환했습니다."
+auto_name = "자동"
+auto_choice = "자동  [사용 가능한 모든 라우팅 그룹]"
 revoke_needs_confirm = "확인 없이 취소를 거부했습니다. 비대화식으로 취소하려면 -y를 사용하세요."
 no_tokens = "토큰이 없습니다. 'everyapi token create --name <이름>' 으로 생성하세요."
 count = "%d 개의 토큰:"

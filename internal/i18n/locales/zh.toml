@@ -272,6 +272,8 @@ CLI 下次启动时会重新读取。
 pick_key = "选择默认 API Key"
 current = "（当前）"
 switched = "默认 API Key 已切换为 %s。"
+auto_name = "自动"
+auto_choice = "自动  [所有可用分组]"
 revoke_needs_confirm = "未确认，已拒绝吊销；非交互环境请加 -y 重新执行。"
 no_tokens = "暂无 token。运行 'everyapi token create --name <名称>' 创建。"
 count = "共 %d 个 token："

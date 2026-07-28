@@ -53,14 +53,31 @@ func TestEnabledTokenChoicesFiltersAndSelectsCurrent(t *testing.T) {
 		{ID: 3, Name: "default", Status: api.TokenStatusEnabled},
 	}
 	enabled, labels, initial := enabledTokenChoices(toks, 3)
-	if len(enabled) != 2 || enabled[0].ID != 2 || enabled[1].ID != 3 {
+	if len(enabled) != 3 || !enabled[0].Auto || enabled[1].TokenID != 2 || enabled[2].TokenID != 3 {
 		t.Fatalf("enabled choices = %+v", enabled)
 	}
-	if len(labels) != 2 || strings.Contains(strings.Join(labels, " "), "disabled") {
+	if len(labels) != 3 || strings.Contains(strings.Join(labels, " "), "disabled") {
 		t.Fatalf("labels include unusable key: %q", labels)
 	}
-	if initial != 1 || !strings.Contains(labels[1], "current") {
+	if initial != 2 || !strings.Contains(labels[2], "current") {
 		t.Fatalf("current selection: initial=%d labels=%q", initial, labels)
+	}
+}
+
+func TestEnabledTokenChoicesAddsOneSyntheticAutoChoice(t *testing.T) {
+	toks := []api.TokenSummary{
+		{ID: 2, Name: "prod", Status: api.TokenStatusEnabled, Group: "paid"},
+		{ID: 3, Name: "existing-auto", Status: api.TokenStatusEnabled, Group: "auto"},
+	}
+	choices, labels, initial := enabledTokenChoices(toks, 3)
+	if len(choices) != 2 || !choices[0].Auto || choices[0].TokenID != 3 || choices[1].TokenID != 2 {
+		t.Fatalf("choices = %+v", choices)
+	}
+	if len(labels) != 2 || !strings.Contains(labels[0], "Auto") || strings.Contains(strings.Join(labels, " "), "existing-auto") {
+		t.Fatalf("labels = %q", labels)
+	}
+	if initial != 0 || !strings.Contains(labels[0], "current") {
+		t.Fatalf("current auto choice: initial=%d labels=%q", initial, labels)
 	}
 }
 
@@ -69,11 +86,11 @@ func TestEnabledTokenChoicesSanitizesTUILabels(t *testing.T) {
 		ID: 4, Name: "prod\n\x1b[31mspoof", Group: "paid\rgroup", Status: api.TokenStatusEnabled,
 	}}
 	_, labels, _ := enabledTokenChoices(toks, 0)
-	if len(labels) != 1 {
+	if len(labels) != 2 {
 		t.Fatalf("labels = %q", labels)
 	}
-	if strings.ContainsAny(labels[0], "\r\n\x1b") {
-		t.Fatalf("unsafe terminal text in picker label: %q", labels[0])
+	if strings.ContainsAny(labels[1], "\r\n\x1b") {
+		t.Fatalf("unsafe terminal text in picker label: %q", labels[1])
 	}
 }
 
