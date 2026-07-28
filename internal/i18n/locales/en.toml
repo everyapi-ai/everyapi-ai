@@ -178,6 +178,7 @@ self = "Show your subscriptions"
 
 [launcher.subs.token]
 list = "List your tokens (masked keys)"
+switch = "Choose the default API key used by the CLI"
 
 [launcher.subs.log]
 list = "Recent log entries (newest first)"
@@ -269,6 +270,9 @@ prints. Hand-editing is fine; the CLI re-reads on next invocation.
 '''
 
 [token]
+pick_key = "Choose the default API key"
+current = "(current)"
+switched = "Default API key switched to %s."
 revoke_needs_confirm = "Refusing to revoke without confirmation; pass -y to revoke non-interactively."
 no_tokens = "No tokens yet. Use 'everyapi token create --name <n>'."
 count = "%d token(s):"

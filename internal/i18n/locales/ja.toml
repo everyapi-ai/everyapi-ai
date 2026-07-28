@@ -186,6 +186,7 @@ plans = "有効なサブスクリプションプラン一覧"
 self = "自分のサブスクリプションを表示"
 
 [launcher.subs.token]
+switch = "CLI が使用する既定の API キーを選択"
 list = "自分のトークン一覧（キーはマスク表示）"
 
 [launcher.subs.log]
@@ -278,6 +279,9 @@ everyapi settings — CLI 設定の表示 / 変更
 '''
 
 [token]
+pick_key = "既定の API キーを選択"
+current = "（現在）"
+switched = "既定の API キーを %s に切り替えました。"
 revoke_needs_confirm = "確認なしの取り消しを拒否しました。非対話的に取り消すには -y を指定してください。"
 no_tokens = "トークンがまだありません。'everyapi token create --name <名前>' を実行してください。"
 count = "%d 個のトークン:"

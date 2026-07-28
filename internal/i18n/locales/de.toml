@@ -190,6 +190,7 @@ plans = "Aktive Abopläne auflisten"
 self = "Deine Abos anzeigen"
 
 [launcher.subs.token]
+switch = "Standard-API-Schlüssel für die CLI auswählen"
 list = "Deine Tokens auflisten (Keys maskiert)"
 
 [launcher.subs.log]
@@ -283,6 +284,9 @@ das CLI liest die Datei beim nächsten Aufruf neu.
 '''
 
 [token]
+pick_key = "Standard-API-Schlüssel auswählen"
+current = "(aktuell)"
+switched = "Standard-API-Schlüssel auf %s gewechselt."
 revoke_needs_confirm = "Widerruf ohne Bestätigung abgelehnt; mit -y nicht interaktiv widerrufen."
 no_tokens = "Noch keine Tokens. Verwende 'everyapi token create --name <n>'."
 count = "%d Token:"

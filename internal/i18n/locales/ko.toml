@@ -186,6 +186,7 @@ plans = "사용 가능한 구독 플랜 목록"
 self = "내 구독 표시"
 
 [launcher.subs.token]
+switch = "CLI에서 사용할 기본 API 키 선택"
 list = "내 토큰 목록 (키 마스킹)"
 
 [launcher.subs.log]
@@ -278,6 +279,9 @@ everyapi settings — CLI 환경설정 조회 / 변경
 '''
 
 [token]
+pick_key = "기본 API 키 선택"
+current = "(현재)"
+switched = "기본 API 키를 %s(으)로 전환했습니다."
 revoke_needs_confirm = "확인 없이 취소를 거부했습니다. 비대화식으로 취소하려면 -y를 사용하세요."
 no_tokens = "토큰이 없습니다. 'everyapi token create --name <이름>' 으로 생성하세요."
 count = "%d 개의 토큰:"

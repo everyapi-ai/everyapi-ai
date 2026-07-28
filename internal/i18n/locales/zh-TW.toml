@@ -176,6 +176,7 @@ plans = "列出已啟用的訂閱方案"
 self = "查看你的訂閱"
 
 [launcher.subs.token]
+switch = "選擇 CLI 預設使用的 API Key"
 list = "列出你的 token（key 已遮蔽）"
 
 [launcher.subs.log]
@@ -268,6 +269,9 @@ CLI 下次啟動時會重新讀取。
 '''
 
 [token]
+pick_key = "選擇預設 API Key"
+current = "（目前）"
+switched = "預設 API Key 已切換為 %s。"
 revoke_needs_confirm = "未確認，已拒絕撤銷；非互動環境請加 -y 重新執行。"
 no_tokens = "尚無 token。執行 'everyapi token create --name <名稱>' 建立。"
 count = "共 %d 個 token："

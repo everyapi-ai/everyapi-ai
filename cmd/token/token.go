@@ -43,6 +43,8 @@ func Run(args []string) error {
 	switch args[0] {
 	case "list":
 		return runList(args[1:])
+	case "switch":
+		return runSwitch(args[1:])
 	case "show":
 		return runShow(args[1:])
 	case "key":
@@ -63,6 +65,58 @@ func Run(args []string) error {
 		cliout.Println(i18n.T("token.usage"))
 		return fmt.Errorf(i18n.T("common.unknown_subcommand"), "token", args[0])
 	}
+}
+
+// runSwitch renders the API-key picker used by the token TUI menu and saves
+// the chosen enabled key as the default for subsequent relay commands.
+func runSwitch(args []string) error {
+	if len(args) != 0 {
+		return unexpectedPositionals(args)
+	}
+	client, creds, err := newClient()
+	if err != nil {
+		return err
+	}
+	toks, err := client.ListTokens(cliout.WithCtx())
+	if err != nil {
+		return classifyErr(err)
+	}
+	enabled, labels, initial := enabledTokenChoices(toks, creds.RelayKeyTokenID)
+	if len(enabled) == 0 {
+		return api.ErrNoRelayKey
+	}
+	idx, err := cliprompt.PickWithSelected(i18n.T("token.pick_key"), labels, initial)
+	if err != nil {
+		return err
+	}
+	if err := api.SelectRelayKey(cliout.WithCtx(), creds, enabled[idx].ID); err != nil {
+		return classifyErr(err)
+	}
+	cliout.Printf(i18n.T("token.switched")+"\n", enabled[idx].Name)
+	return nil
+}
+
+func enabledTokenChoices(toks []api.TokenSummary, currentID int) ([]api.TokenSummary, []string, int) {
+	enabled := make([]api.TokenSummary, 0, len(toks))
+	for _, tok := range toks {
+		if tok.Status == api.TokenStatusEnabled {
+			enabled = append(enabled, tok)
+		}
+	}
+	labels := make([]string, len(enabled))
+	initial := 0
+	for i, tok := range enabled {
+		group := cliout.Sanitize(tok.Group)
+		if group == "" {
+			group = i18n.T("token.label.auto")
+		}
+		labels[i] = fmt.Sprintf("%s  [#%d, group=%s]", cliout.Sanitize(tok.Name), tok.ID, group)
+		if tok.ID == currentID {
+			labels[i] += "  " + i18n.T("token.current")
+			initial = i
+		}
+	}
+	return enabled, labels, initial
 }
 
 // --- shared helpers ---------------------------------------------------
@@ -94,14 +148,15 @@ func classifyErr(err error) error {
 // so the OAuth2-mode guard (there the cached key IS the refreshable access
 // token — never wipe it) and the nil/empty checks live in one place.
 //
-// It deliberately does NOT first confirm the cached plaintext belongs to THIS
-// token: that confirmation needs a TokenKey fetch, which the backend
-// audit-logs as a key disclosure, so a routine disable/revoke would emit a
-// spurious "key disclosed" event (and pull the plaintext into the CLI for no
-// reason). Clearing unconditionally is safe — re-resolution is cheap and only
-// the next `use` pays for it. Best-effort: a Save failure is warned to stderr
-// but never turns a successful disable/revoke into a command error.
-func clearCachedRelayKey(creds *config.Credentials) {
+// RelayKeyTokenID lets new credentials skip invalidation when a different key
+// was changed. Legacy credentials have ID zero, so they retain the conservative
+// unconditional clear without fetching plaintext and creating a disclosure
+// audit event. Best-effort: a Save failure is warned but never changes the
+// successful disable/revoke result.
+func clearCachedRelayKey(creds *config.Credentials, affectedTokenID int) {
+	if creds != nil && creds.RelayKeyTokenID != 0 && creds.RelayKeyTokenID != affectedTokenID {
+		return
+	}
 	if err := api.InvalidateCachedRelayKey(creds); err != nil {
 		fmt.Fprintln(os.Stderr, "warning: could not clear the cached relay key from credentials.json:", err)
 	}
@@ -558,11 +613,11 @@ func runSetStatus(args []string, status int) (err error) {
 	}
 	// A disable kills the key for relay use; if `everyapi use` cached a key,
 	// drop it so the next run re-resolves to a live sibling instead of the
-	// just-disabled one. Cleared unconditionally (not gated on "is this the
-	// cached token") to avoid the TokenKey disclosure that gating would need —
-	// see clearCachedRelayKey. Enable is not a kill — never invalidate on it.
+	// just-disabled one. RelayKeyTokenID avoids clearing an explicitly selected
+	// sibling; legacy credentials still clear conservatively. Enable is not a
+	// kill — never invalidate on it.
 	if status == api.TokenStatusDisabled {
-		clearCachedRelayKey(creds)
+		clearCachedRelayKey(creds, id)
 	}
 	cliout.Printf(i18n.T("token.status_changed")+"\n", out.ID, statusLabel(out.Status))
 	return nil
@@ -616,11 +671,10 @@ func runRevoke(args []string) error {
 		return classifyErr(err)
 	}
 	// A revoke kills the key; if `everyapi use` cached one, drop it so the next
-	// run re-resolves to a live sibling. Cleared unconditionally rather than
-	// gated on a TokenKey check (which the backend audit-logs as a disclosure)
-	// — see clearCachedRelayKey. No TokenKey call also means the now-deleted
-	// row's missing key endpoint is irrelevant.
-	clearCachedRelayKey(creds)
+	// run re-resolves to a live sibling. RelayKeyTokenID avoids clearing an
+	// explicitly selected sibling without disclosing either key; legacy
+	// credentials still clear conservatively.
+	clearCachedRelayKey(creds, id)
 	cliout.Printf(i18n.T("token.revoked")+"\n", id)
 	return nil
 }

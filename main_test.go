@@ -127,6 +127,19 @@ func TestSubPicker_BackRow(t *testing.T) {
 	})
 }
 
+func TestTokenLauncherOffersAPIKeySwitch(t *testing.T) {
+	c, ok := lookup("token")
+	if !ok {
+		t.Fatal("token command missing")
+	}
+	for _, sub := range c.subs {
+		if len(sub.args) == 1 && sub.args[0] == "switch" {
+			return
+		}
+	}
+	t.Fatal("token TUI menu does not offer API key switching")
+}
+
 // TestSubPicker_AuthUnwindsAfterCleanAction locks the login-lands-on-
 // logout fix: after an auth action returns cleanly, runSubPicker must
 // unwind to the root launcher (ErrPickCancelled) rather than re-render

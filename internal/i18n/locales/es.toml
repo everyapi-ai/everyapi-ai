@@ -192,6 +192,7 @@ plans = "Listar los planes de suscripción activos"
 self = "Mostrar tus suscripciones"
 
 [launcher.subs.token]
+switch = "Elegir la clave API predeterminada de la CLI"
 list = "Listar tus tokens (claves enmascaradas)"
 
 [launcher.subs.log]
@@ -285,6 +286,9 @@ leerlo en la siguiente invocación.
 '''
 
 [token]
+pick_key = "Elige la clave API predeterminada"
+current = "(actual)"
+switched = "Clave API predeterminada cambiada a %s."
 revoke_needs_confirm = "Se rechazó la revocación sin confirmación; use -y para revocar de forma no interactiva."
 no_tokens = "Aún no hay tokens. Usa 'everyapi token create --name <n>'."
 count = "%d token(s):"

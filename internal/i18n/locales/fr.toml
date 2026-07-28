@@ -191,6 +191,7 @@ plans = "Lister les plans d'abonnement actifs"
 self = "Afficher tes abonnements"
 
 [launcher.subs.token]
+switch = "Choisir la clé API par défaut de la CLI"
 list = "Lister tes tokens (clés masquées)"
 
 [launcher.subs.log]
@@ -284,6 +285,9 @@ relit le fichier à la prochaine invocation.
 '''
 
 [token]
+pick_key = "Choisissez la clé API par défaut"
+current = "(actuelle)"
+switched = "Clé API par défaut remplacée par %s."
 revoke_needs_confirm = "Révocation refusée sans confirmation ; utilisez -y pour révoquer en mode non interactif."
 no_tokens = "Pas encore de tokens. Utilisez 'everyapi token create --name <n>'."
 count = "%d token(s) :"

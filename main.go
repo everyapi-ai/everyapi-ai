@@ -382,10 +382,11 @@ var commands = []command{
 	}},
 	{name: "use", desc: "Launch a third-party CLI (claude / codex / gemini / hermes) via EveryAPI", requireLogin: true, run: cmd.Use},
 	{name: "token", desc: "Manage relay API tokens (list / create / key / revoke / …)", requireLogin: true, run: token.Run, subs: []subcommand{
-		// Only flag-free verbs surface in the launcher picker; the
-		// rest (create/update/key/revoke/enable/disable/show) need a
-		// flag or an id and stay command-line-only.
+		// Only flag-free verbs surface in the launcher picker; the rest
+		// (create/update/key/revoke/enable/disable/show) need flags or an
+		// id and stay command-line-only.
 		{name: "list", desc: "List your tokens (masked keys)", args: []string{"list"}},
+		{name: "switch", desc: "Choose the default API key used by the CLI", args: []string{"switch"}},
 	}},
 	{name: "stats", desc: "Usage / request log / model perf / upstream health", run: statsRun, subs: []subcommand{
 		{name: "usage", desc: "Day-by-day quota usage", args: []string{"usage"}},

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
+	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
 // TestRunCreateRequiresQuota locks the boundary guard: `token create`
@@ -18,6 +19,61 @@ func TestRunCreateRequiresQuota(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "quota") {
 		t.Errorf("error should mention quota, got: %v", err)
+	}
+}
+
+func TestClearCachedRelayKeyKeepsExplicitUnrelatedSelection(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	creds := &config.Credentials{
+		APIBase:         "https://api.example.com",
+		RelayKey:        "sk-everyapi-selected",
+		RelayKeyTokenID: 7,
+	}
+	if err := config.Save(creds); err != nil {
+		t.Fatal(err)
+	}
+
+	clearCachedRelayKey(creds, 8)
+	if creds.RelayKey != "sk-everyapi-selected" || creds.RelayKeyTokenID != 7 {
+		t.Fatalf("unrelated token invalidated explicit selection: %+v", creds)
+	}
+}
+
+func TestRunRecognizesSwitch(t *testing.T) {
+	err := Run([]string{"switch", "unexpected"})
+	if err == nil || !strings.Contains(err.Error(), "unexpected positional arguments") {
+		t.Fatalf("error = %v, want switch argument validation", err)
+	}
+}
+
+func TestEnabledTokenChoicesFiltersAndSelectsCurrent(t *testing.T) {
+	toks := []api.TokenSummary{
+		{ID: 1, Name: "disabled", Status: api.TokenStatusDisabled},
+		{ID: 2, Name: "prod", Status: api.TokenStatusEnabled, Group: "paid"},
+		{ID: 3, Name: "default", Status: api.TokenStatusEnabled},
+	}
+	enabled, labels, initial := enabledTokenChoices(toks, 3)
+	if len(enabled) != 2 || enabled[0].ID != 2 || enabled[1].ID != 3 {
+		t.Fatalf("enabled choices = %+v", enabled)
+	}
+	if len(labels) != 2 || strings.Contains(strings.Join(labels, " "), "disabled") {
+		t.Fatalf("labels include unusable key: %q", labels)
+	}
+	if initial != 1 || !strings.Contains(labels[1], "current") {
+		t.Fatalf("current selection: initial=%d labels=%q", initial, labels)
+	}
+}
+
+func TestEnabledTokenChoicesSanitizesTUILabels(t *testing.T) {
+	toks := []api.TokenSummary{{
+		ID: 4, Name: "prod\n\x1b[31mspoof", Group: "paid\rgroup", Status: api.TokenStatusEnabled,
+	}}
+	_, labels, _ := enabledTokenChoices(toks, 0)
+	if len(labels) != 1 {
+		t.Fatalf("labels = %q", labels)
+	}
+	if strings.ContainsAny(labels[0], "\r\n\x1b") {
+		t.Fatalf("unsafe terminal text in picker label: %q", labels[0])
 	}
 }
 
