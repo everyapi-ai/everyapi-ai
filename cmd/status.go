@@ -43,6 +43,11 @@ func Status(args []string) error {
 	if err := rejectFlagPositionals(fs); err != nil {
 		return err
 	}
+	unlock, err := acquireCredentialLock()
+	if err != nil {
+		return fmt.Errorf("lock credential cache: %w", err)
+	}
+	defer unlock()
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
 		return errors.New(i18n.T("auth.not_logged_in"))
@@ -133,7 +138,7 @@ func Status(args []string) error {
 // always the default key path (group "").
 func printRelayHealth(ctx context.Context, creds *config.Credentials) {
 	gw := config.ResolveAPIBaseForBase(creds.APIBase)
-	relayKey, rkErr := resolveRelayKey(creds, "")
+	relayKey, rkErr := resolveRelayKeyLocked(creds, "")
 	switch {
 	case errors.Is(rkErr, errNoRelayKey):
 		cliout.Printf("  relay:     %s — no relay API key on the account\n", style.Bold("NOT CONFIGURED"))

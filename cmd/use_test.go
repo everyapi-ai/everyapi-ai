@@ -383,6 +383,9 @@ func TestCreateDefaultRelayKeyCreatesThenCaches(t *testing.T) {
 	defer srv.Close()
 
 	creds := &config.Credentials{APIBase: srv.URL, AccessToken: "mgmt-token", UserID: 42}
+	if err := config.Save(creds); err != nil {
+		t.Fatal(err)
+	}
 	key, err := createDefaultRelayKey(creds)
 	if err != nil {
 		t.Fatal(err)

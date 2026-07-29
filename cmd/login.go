@@ -49,6 +49,11 @@ func Login(args []string) error {
 	if err := rejectFlagPositionals(fs); err != nil {
 		return err
 	}
+	unlock, err := acquireCredentialLock()
+	if err != nil {
+		return fmt.Errorf("lock credential cache: %w", err)
+	}
+	defer unlock()
 	resolvedAPIBase, err := resolveLoginAPIBase(*apiBase)
 	if err != nil {
 		if errors.Is(err, cliprompt.ErrPickCancelled) {
@@ -226,7 +231,7 @@ func Login(args []string) error {
 	// flow, a noisy "warning: ..." line on stderr would make the user
 	// doubt the login itself, and the next `everyapi use` / `everyapi
 	// status` will retry the resolution anyway.
-	if _, err := resolveRelayKey(creds, ""); err != nil && errors.Is(err, errNoRelayKey) {
+	if _, err := resolveRelayKeyLocked(creds, ""); err != nil && errors.Is(err, errNoRelayKey) {
 		cliout.Println("")
 		cliout.Println(i18n.T("login.no_relay_note_1"))
 		cliout.Println("(it's separate from this login token). Create an API key in the")

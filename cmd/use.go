@@ -1101,6 +1101,17 @@ func invalidateCachedKeyOnReject(creds *config.Credentials, group string) {
 	if group != "" {
 		return
 	}
+	unlock, lockErr := acquireCredentialLock()
+	if lockErr != nil {
+		fmt.Fprintln(os.Stderr, "warning: could not lock credentials.json:", lockErr)
+		return
+	}
+	defer unlock()
+	latest, loadErr := config.Load()
+	if loadErr != nil || latest.RelayKey != creds.RelayKey {
+		return
+	}
+	creds = latest
 	if err := api.InvalidateCachedRelayKey(creds); err != nil {
 		fmt.Fprintln(os.Stderr, "warning: could not clear the rejected relay key from credentials.json:", err)
 	}

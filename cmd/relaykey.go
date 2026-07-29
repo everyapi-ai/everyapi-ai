@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -24,6 +24,23 @@ var (
 // internal/api/relaykey.go for the resolution rules — this layer
 // only owns the side-effect choices.
 func resolveRelayKey(creds *config.Credentials, group string) (string, error) {
+	unlock, err := acquireCredentialLock()
+	if err != nil {
+		return "", fmt.Errorf("lock credential cache: %w", err)
+	}
+	defer unlock()
+	latest, loadErr := config.Load()
+	if loadErr != nil {
+		return "", loadErr
+	}
+	*creds = *latest
+	return resolveRelayKeyLocked(creds, group)
+}
+
+// resolveRelayKeyLocked resolves while an enclosing auth transaction already
+// owns the credential lock (login/status). It avoids recursively flocking the
+// same lock file.
+func resolveRelayKeyLocked(creds *config.Credentials, group string) (string, error) {
 	ctx := cliout.WithCtx()
 	key, err := api.ResolveRelayKey(ctx, creds, group)
 	var saveErr *api.ErrCacheSave

@@ -19,6 +19,7 @@ import (
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/internal/credentiallock"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-ai/internal/style"
 	"github.com/everyapi-ai/everyapi-sdk/api"
@@ -87,6 +88,19 @@ func runSwitch(args []string) error {
 		return err
 	}
 	choice := choices[idx]
+	originalAPIBase, originalUserID, originalAccessToken := creds.APIBase, creds.UserID, creds.AccessToken
+	unlock, err := credentiallock.Acquire()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	creds, err = config.Load()
+	if err != nil {
+		return err
+	}
+	if creds.APIBase != originalAPIBase || creds.UserID != originalUserID || creds.AccessToken != originalAccessToken {
+		return errors.New("credentials changed while selecting a relay key; retry the command")
+	}
 	if choice.Auto {
 		if _, err := api.SelectAutoRelayKey(cliout.WithCtx(), creds); err != nil {
 			return classifyErr(err)
@@ -180,6 +194,21 @@ func classifyErr(err error) error {
 // audit event. Best-effort: a Save failure is warned but never changes the
 // successful disable/revoke result.
 func clearCachedRelayKey(creds *config.Credentials, affectedTokenID int) {
+	originalAPIBase, originalUserID, originalAccessToken := creds.APIBase, creds.UserID, creds.AccessToken
+	unlock, lockErr := credentiallock.Acquire()
+	if lockErr != nil {
+		fmt.Fprintln(os.Stderr, "warning: could not lock credentials.json:", lockErr)
+		return
+	}
+	defer unlock()
+	latest, loadErr := config.Load()
+	if loadErr != nil {
+		return
+	}
+	if latest.APIBase != originalAPIBase || latest.UserID != originalUserID || latest.AccessToken != originalAccessToken {
+		return
+	}
+	creds = latest
 	if creds != nil && creds.RelayKeyTokenID != 0 && creds.RelayKeyTokenID != affectedTokenID {
 		return
 	}
