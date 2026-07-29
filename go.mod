@@ -1,6 +1,6 @@
 module github.com/everyapi-ai/everyapi-ai
 
-go 1.25.1
+go 1.25.12
 
 require (
 	github.com/BurntSushi/toml v1.6.0
@@ -8,7 +8,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/everyapi-ai/everyapi-sdk v0.2.41
+	github.com/everyapi-ai/everyapi-sdk v0.2.42
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/muesli/termenv v0.16.0
 	golang.org/x/sys v0.33.0
