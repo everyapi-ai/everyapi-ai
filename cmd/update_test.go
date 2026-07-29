@@ -535,6 +535,69 @@ func TestClassifyExePath_ScriptInstall(t *testing.T) {
 	}
 }
 
+func TestRunInstallScriptUpgrade_DispatchesInstaller(t *testing.T) {
+	var gotName string
+	var gotArgs []string
+	previous := updateCommandRunner
+	updateCommandRunner = func(name string, args ...string) error {
+		gotName = name
+		gotArgs = append([]string(nil), args...)
+		return nil
+	}
+	t.Cleanup(func() { updateCommandRunner = previous })
+
+	if err := runInstallScriptUpgrade(false); err != nil {
+		t.Fatalf("runInstallScriptUpgrade(false): %v", err)
+	}
+
+	wantName := "bash"
+	wantArgs := []string{"-o", "pipefail", "-c", "curl -fsSL https://dl.everyapi.ai/install.sh | bash"}
+	if runtime.GOOS == "windows" {
+		wantName = "powershell.exe"
+		wantArgs = []string{"-NoProfile", "-Command", "irm https://dl.everyapi.ai/install.ps1 | iex"}
+	}
+	if gotName != wantName || strings.Join(gotArgs, "\x00") != strings.Join(wantArgs, "\x00") {
+		t.Fatalf("installer command = %q %q, want %q %q", gotName, gotArgs, wantName, wantArgs)
+	}
+}
+
+func TestInstallScriptCommandForPlatform(t *testing.T) {
+	tests := []struct {
+		goos     string
+		wantName string
+		wantArgs []string
+	}{
+		{"linux", "bash", []string{"-o", "pipefail", "-c", "curl -fsSL https://dl.everyapi.ai/install.sh | bash"}},
+		{"darwin", "bash", []string{"-o", "pipefail", "-c", "curl -fsSL https://dl.everyapi.ai/install.sh | bash"}},
+		{"windows", "powershell.exe", []string{"-NoProfile", "-Command", "irm https://dl.everyapi.ai/install.ps1 | iex"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.goos, func(t *testing.T) {
+			gotName, gotArgs := installScriptCommandFor(tc.goos)
+			if gotName != tc.wantName || strings.Join(gotArgs, "\x00") != strings.Join(tc.wantArgs, "\x00") {
+				t.Fatalf("installScriptCommandFor(%q) = %q %q, want %q %q", tc.goos, gotName, gotArgs, tc.wantName, tc.wantArgs)
+			}
+		})
+	}
+}
+
+func TestRunInstallScriptUpgrade_DryRunDoesNotDispatch(t *testing.T) {
+	previous := updateCommandRunner
+	called := false
+	updateCommandRunner = func(string, ...string) error {
+		called = true
+		return nil
+	}
+	t.Cleanup(func() { updateCommandRunner = previous })
+
+	if err := runInstallScriptUpgrade(true); err != nil {
+		t.Fatalf("runInstallScriptUpgrade(true): %v", err)
+	}
+	if called {
+		t.Fatal("dry-run dispatched the installer command")
+	}
+}
+
 // A GOBIN deliberately pointed at the script dir must classify as go
 // install — `go install` is what actually overwrites that binary, so
 // its upgrade flow is the right one to run.

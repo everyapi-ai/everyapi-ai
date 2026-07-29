@@ -47,11 +47,11 @@ import (
 // could re-implement here, and self-replacing a running executable
 // is platform-hostile (Windows in particular).
 //
-// Install-script installs get the script's one-liner printed rather
-// than exec'd: on Windows the running everyapi.exe write-locks the
-// very file install.ps1 must replace, and on any platform piping a
-// freshly downloaded script through a shell is something the user
-// should opt into by running the command themselves.
+// Install-script installs run the published installer after the user
+// explicitly chooses "Update now" (or invokes `version update`). The
+// installers already handle replacement safely: install.sh uses an
+// atomic rename and install.ps1 moves a locked running executable to
+// .old before copying the new binary into place.
 //
 // For unknown install methods we fall back to printing the manual
 // download + SHA256 + cosign flow from the README — that's the same
@@ -169,10 +169,7 @@ func updateRun(args []string) (dispatched bool, err error) {
 	case installMethodGoInstall:
 		return !*dryRun, runGoInstallUpgrade(*dryRun)
 	case installMethodScript:
-		// Print, don't exec — see the doc comment above for why the
-		// install script is never piped through a shell by us.
-		printScriptUpgradeHint(latest)
-		return false, nil
+		return !*dryRun, runInstallScriptUpgrade(*dryRun)
 	default:
 		// Unknown install path — we can't safely auto-replace the
 		// binary because we don't know where the user wants it.
@@ -394,21 +391,48 @@ func runGoInstallUpgrade(dryRun bool) error {
 	return nil
 }
 
-// printScriptUpgradeHint is the action for installMethodScript: the
-// binary sits in the install script's own bin dir, so re-running the
-// script's published one-liner upgrades it in place (with the script's
-// SHA256 + cosign verification). Printed, never exec'd — rationale in
-// the Update doc comment.
-func printScriptUpgradeHint(latest string) {
-	cliout.Printf("%s\n\n", i18n.T("update.rerun_script"))
-	cliout.Printf("  %s\n", installScriptOneLiner())
-	cliout.Printf("\n"+i18n.T("update.release_notes")+"\n", releaseTagURL(latest))
+// updateCommandRunner is replaceable in tests so the install-script path can
+// assert real dispatch without downloading or executing a remote script.
+var updateCommandRunner = runCmd
+
+func runInstallScriptUpgrade(dryRun bool) error {
+	if dryRun {
+		cliout.Printf("  %s\n", installScriptOneLiner())
+		return nil
+	}
+
+	name, args := installScriptCommand()
+	cliout.Printf("$ %s\n", installScriptOneLiner())
+	if err := updateCommandRunner(name, args...); err != nil {
+		return fmt.Errorf("install script: %w", err)
+	}
+	cliout.Printf("\n%s\n", i18n.T("update.done_confirm"))
+	return nil
+}
+
+// installScriptCommand turns the documented one-liner into the platform's
+// foreground shell invocation. The command text is a fixed application
+// constant; no release metadata or user input is interpolated into it.
+func installScriptCommand() (string, []string) {
+	return installScriptCommandFor(runtime.GOOS)
+}
+
+func installScriptCommandFor(goos string) (string, []string) {
+	oneLiner := installScriptOneLinerFor(goos)
+	if goos == "windows" {
+		return "powershell.exe", []string{"-NoProfile", "-Command", oneLiner}
+	}
+	return "bash", []string{"-o", "pipefail", "-c", oneLiner}
 }
 
 // installScriptOneLiner returns the platform's copy-paste install/
 // upgrade command — the same one the README and docs publish.
 func installScriptOneLiner() string {
-	if runtime.GOOS == "windows" {
+	return installScriptOneLinerFor(runtime.GOOS)
+}
+
+func installScriptOneLinerFor(goos string) string {
+	if goos == "windows" {
 		return "irm https://dl.everyapi.ai/install.ps1 | iex"
 	}
 	return "curl -fsSL https://dl.everyapi.ai/install.sh | bash"
