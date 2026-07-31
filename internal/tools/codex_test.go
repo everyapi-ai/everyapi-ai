@@ -118,6 +118,36 @@ func TestPrepareCodexTransparentUsesBuiltInOpenAIProviderAndPlaceholder(t *testi
 	}
 }
 
+func TestPrepareCodexTransparentPreservesUserModelDefaults(t *testing.T) {
+	_, codexHome := codexTestHome(t)
+	if err := os.MkdirAll(codexHome, 0o700); err != nil {
+		t.Fatalf("create codex home: %v", err)
+	}
+	configPath := filepath.Join(codexHome, "config.toml")
+	const userDefaults = "model = \"gpt-5.6-terra\"\nmodel_reasoning_effort = \"high\"\n"
+	if err := os.WriteFile(configPath, []byte(userDefaults), 0o644); err != nil {
+		t.Fatalf("write existing config: %v", err)
+	}
+
+	if _, err := prepareCodexTransparent(); err != nil {
+		t.Fatalf("prepareCodexTransparent error: %v", err)
+	}
+	configBody, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	config := string(configBody)
+	for _, want := range []string{
+		`model_provider = "openai"`,
+		`model = "gpt-5.6-terra"`,
+		`model_reasoning_effort = "high"`,
+	} {
+		if !strings.Contains(config, want) {
+			t.Errorf("config.toml missing preserved default %q\nFull config:\n%s", want, config)
+		}
+	}
+}
+
 func TestPrepareCodex_PreservesUserModelDefaults(t *testing.T) {
 	_, codexHome := codexTestHome(t)
 	if err := os.MkdirAll(codexHome, 0o700); err != nil {
