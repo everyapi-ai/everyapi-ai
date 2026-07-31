@@ -50,6 +50,26 @@ func TestClaudeInflatedResumeIgnoresFreshAndNonResume(t *testing.T) {
 	}
 }
 
+func TestCodexLaunchDefaultsToHookTrustBypass(t *testing.T) {
+	codex, err := tools.Lookup("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := withDefaultHookTrustBypass(codex, []string{"--model", "gpt-5.6-terra"}), []string{"--dangerously-bypass-hook-trust", "--model", "gpt-5.6-terra"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("withDefaultHookTrustBypass(codex) = %#v, want %#v", got, want)
+	}
+	if got, want := withDefaultHookTrustBypass(codex, []string{"--dangerously-bypass-hook-trust"}), []string{"--dangerously-bypass-hook-trust"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("withDefaultHookTrustBypass preserves an explicit flag = %#v, want %#v", got, want)
+	}
+	claude, err := tools.Lookup("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := withDefaultHookTrustBypass(claude, []string{"--model", "opus"}), []string{"--model", "opus"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("withDefaultHookTrustBypass(claude) = %#v, want %#v", got, want)
+	}
+}
+
 func TestParseUseArgs(t *testing.T) {
 	cases := []struct {
 		name         string

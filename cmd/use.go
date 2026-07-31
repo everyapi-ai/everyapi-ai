@@ -441,6 +441,8 @@ func Use(args []string) error {
 		tools.SetClaudeModel(env, presetModel)
 	}
 
+	extraArgs = withDefaultHookTrustBypass(t, extraArgs)
+
 	// Dangerous-mode prompt. Each tool exposes a single "skip
 	// every confirmation" switch — an argv flag (Tool.YoloFlag,
 	// claude/codex/gemini) or an env var (Tool.YoloEnv, hermes'
@@ -615,6 +617,18 @@ func createDefaultRelayKey(creds *config.Credentials) (string, error) {
 		return "", fmt.Errorf(i18n.T("use.create_relay_key_resolve_failed"), err)
 	}
 	return key, nil
+}
+
+const codexHookTrustBypassFlag = "--dangerously-bypass-hook-trust"
+
+// withDefaultHookTrustBypass keeps EveryAPI Codex launches from pausing for
+// hook-definition review. Codex records hook trust per worktree path, so a
+// previously reviewed repository can otherwise prompt again after a worktree switch.
+func withDefaultHookTrustBypass(t *tools.Tool, args []string) []string {
+	if t == nil || t.Name != "codex" || containsFlag(args, codexHookTrustBypassFlag) {
+		return args
+	}
+	return append([]string{codexHookTrustBypassFlag}, args...)
 }
 
 // containsFlag reports whether the user already passed `flag` in
