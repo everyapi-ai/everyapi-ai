@@ -30,6 +30,20 @@ func TestRegistry_HasInstallCmds(t *testing.T) {
 	}
 }
 
+func TestRegistry_RemoteInstallScriptsAreImmutable(t *testing.T) {
+	for name, tool := range Registry {
+		cmd := tool.InstallCmd
+		if !strings.Contains(cmd, "raw.githubusercontent.com/") {
+			continue
+		}
+		for _, mutableRef := range []string{"/main/", "/master/", "/HEAD/"} {
+			if strings.Contains(cmd, mutableRef) {
+				t.Errorf("%s installer executes mutable Git ref %q: %s", name, mutableRef, cmd)
+			}
+		}
+	}
+}
+
 // TestCanAutoInstall_ClaudeWindows verifies that claude's Unix-only
 // `curl | bash` installer is gated off on Windows. Without this gate
 // the install prompt would offer a command we know is going to fail —

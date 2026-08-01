@@ -417,10 +417,13 @@ var Registry = map[string]*Tool{
 	// model.api_key. envFn therefore sets nothing — HERMES_HOME comes
 	// from prepareFn. Yolo is env-based (HERMES_YOLO_MODE), not a flag.
 	"hermes": {
-		Name:               "hermes",
-		ExecName:           "hermes",
-		InstallHint:        "Install Hermes Agent: https://github.com/NousResearch/hermes-agent (or: pip install hermes-agent)",
-		InstallCmd:         "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash",
+		Name:        "hermes",
+		ExecName:    "hermes",
+		InstallHint: "Install Hermes Agent: https://github.com/NousResearch/hermes-agent (or: pip install hermes-agent)",
+		// Pin the third-party script to an immutable commit. Updating Hermes
+		// requires reviewing the new script and deliberately changing this SHA;
+		// never point an auto-executed installer at main/master/HEAD.
+		InstallCmd:         "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/e444d165807f489b5c1ab8e4a612c8d09c2e67a2/scripts/install.sh | bash",
 		InstallCmdUnixOnly: true,
 		YoloEnv:            "HERMES_YOLO_MODE",
 		YoloLabel:          "yolo mode — disable all approval prompts (HERMES_YOLO_MODE)",
