@@ -13,6 +13,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
@@ -68,6 +69,8 @@ func runList(args []string) error {
 	cliout.Printf("  %s: %s\n", i18n.T("settings.lang_label"), labelLanguage(s.Language))
 	cliout.Printf("  %s: %s\n", i18n.T("settings.menu_label"), labelMenuLayout(s.MenuLayout))
 	cliout.Printf("  %s: %s\n", "gateway_region", labelGatewayRegion(s.GatewayRegion))
+	cliout.Printf("  %s: %s\n", "codex_hook_trust_bypass", labelOptionalBool(s.CodexHookTrustBypass))
+	cliout.Printf("  %s: %s\n", "dangerous_mode", labelOptionalBool(s.DangerousMode))
 	path, _ := config.SettingsPath()
 	if path != "" {
 		cliout.Printf("\n%s %s\n", i18n.T("settings.file_at"), path)
@@ -248,6 +251,10 @@ func readKey(s *config.Settings, key string) (string, bool) {
 		return effectiveMenuLayout(s.MenuLayout), true
 	case "gateway_region":
 		return config.EffectiveGatewayRegion(s.GatewayRegion), true
+	case "codex_hook_trust_bypass":
+		return labelOptionalBool(s.CodexHookTrustBypass), true
+	case "dangerous_mode":
+		return labelOptionalBool(s.DangerousMode), true
 	}
 	return "", false
 }
@@ -291,8 +298,26 @@ func writeKey(s *config.Settings, key, value string) error {
 		default:
 			return errors.New("gateway_region must be global or cn")
 		}
+	case "codex_hook_trust_bypass", "dangerous_mode":
+		v, err := strconv.ParseBool(strings.TrimSpace(value))
+		if err != nil {
+			return fmt.Errorf("%s must be true or false", key)
+		}
+		if key == "codex_hook_trust_bypass" {
+			s.CodexHookTrustBypass = &v
+		} else {
+			s.DangerousMode = &v
+		}
+		return nil
 	}
 	return fmt.Errorf(i18n.T("settings.unknown_key"), key)
+}
+
+func labelOptionalBool(value *bool) string {
+	if value == nil {
+		return "unset"
+	}
+	return strconv.FormatBool(*value)
 }
 
 // effectiveMenuLayout maps the stored value (possibly empty) to the

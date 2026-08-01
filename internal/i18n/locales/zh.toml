@@ -1278,6 +1278,7 @@ sanitize_bad_value = "--sanitize=%q 不是有效的 true/false 值 — 使用 --
 tool_picker = "选一个工具："
 group_picker = "选一个路由分组："
 yolo_prompt = "启用 %s？（将跳过所有安全确认）"
+hook_trust_prompt = "允许 Codex 不经逐项审查直接运行仓库 hooks？"
 launching = "正在启动 %s，目标 %s"
 launching_via = "正在启动 %s，目标 %s → %s"
 claude_inflated_resume = "警告：这个 Claude 会话创建时注入了膨胀的 %d token 工具 schema 前缀。EveryAPI 的修复只对新会话生效，--resume 会原样恢复旧记录；要去掉它，请新开 Claude 会话。"

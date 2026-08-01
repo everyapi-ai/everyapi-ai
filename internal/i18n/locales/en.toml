@@ -1293,6 +1293,7 @@ sanitize_bad_value = "--sanitize=%q is not a valid true/false value — use --sa
 tool_picker = "Pick a tool:"
 group_picker = "Pick a routing group:"
 yolo_prompt = "Enable %s? (skips every safety prompt)"
+hook_trust_prompt = "Allow Codex to run repository hooks without reviewing them first?"
 launching = "Launching %s against %s"
 launching_via = "Launching %s against %s → %s"
 claude_inflated_resume = "Warning: this Claude session was created with an inflated %d-token tool-schema prefix. The EveryAPI fix applies to new sessions, but --resume restores the old transcript unchanged. Start a new Claude session to remove it."

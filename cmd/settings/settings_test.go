@@ -136,3 +136,27 @@ func TestGatewayRegion_WriteReadRoundTrip(t *testing.T) {
 		t.Error("writeKey accepted an invalid gateway_region value")
 	}
 }
+
+func TestSafetyPreferencesWriteReadRoundTrip(t *testing.T) {
+	s := &config.Settings{}
+	for _, key := range []string{"codex_hook_trust_bypass", "dangerous_mode"} {
+		if got, ok := readKey(s, key); !ok || got != "unset" {
+			t.Fatalf("readKey(%s) unset = %q,%v; want unset,true", key, got, ok)
+		}
+		if err := writeKey(s, key, "true"); err != nil {
+			t.Fatalf("writeKey(%s, true): %v", key, err)
+		}
+		if got, _ := readKey(s, key); got != "true" {
+			t.Fatalf("readKey(%s) = %q, want true", key, got)
+		}
+		if err := writeKey(s, key, "false"); err != nil {
+			t.Fatalf("writeKey(%s, false): %v", key, err)
+		}
+		if got, _ := readKey(s, key); got != "false" {
+			t.Fatalf("readKey(%s) = %q, want false", key, got)
+		}
+		if err := writeKey(s, key, "maybe"); err == nil {
+			t.Fatalf("writeKey(%s) accepted invalid boolean", key)
+		}
+	}
+}

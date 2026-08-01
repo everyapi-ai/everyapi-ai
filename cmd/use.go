@@ -64,10 +64,10 @@ FLAGS
   --                     End of everyapi's option parsing; remaining args are
                          forwarded verbatim to the tool's argv.
 
-Yolo: when launched on a TTY without a pre-passed dangerous flag,
-everyapi asks once whether to enable the tool's "skip every safety
-prompt" mode (default Yes). Pre-pass the flag with ` + "`-- <flag>`" + ` or
-answer "n" to keep the tool's native prompts intact.
+Safety preferences: on the first interactive launch, everyapi asks whether to
+enable dangerous mode (and, for Codex, whether to bypass hook trust review).
+Your choices are saved in settings.json and reused without prompting. The
+prompt defaults to Yes, but no dangerous option is enabled before you confirm.
 
 EXAMPLES
   everyapi use claude                  (transparent by default)
@@ -441,34 +441,61 @@ func Use(args []string) error {
 		tools.SetClaudeModel(env, presetModel)
 	}
 
-	extraArgs = withDefaultHookTrustBypass(t, extraArgs)
+	settings, err := config.LoadSettings()
+	if err != nil {
+		return err
+	}
+	interactive := cliprompt.IsInteractive()
+	if t.Name == "codex" && !containsFlag(extraArgs, codexHookTrustBypassFlag) {
+		enable, prefErr := resolveLaunchPreference(
+			settings.CodexHookTrustBypass,
+			interactive,
+			func() (bool, error) {
+				return cliprompt.YesNo(
+					bufio.NewReader(os.Stdin),
+					i18n.T("use.hook_trust_prompt"),
+					true,
+				)
+			},
+			func(value bool) error {
+				settings.CodexHookTrustBypass = boolPointer(value)
+				return config.SaveSettings(settings)
+			},
+		)
+		if prefErr != nil {
+			return prefErr
+		}
+		if enable {
+			extraArgs = append([]string{codexHookTrustBypassFlag}, extraArgs...)
+		}
+	}
 
 	// Dangerous-mode prompt. Each tool exposes a single "skip
 	// every confirmation" switch — an argv flag (Tool.YoloFlag,
 	// claude/codex/gemini) or an env var (Tool.YoloEnv, hermes'
 	// HERMES_YOLO_MODE). If the user hasn't already passed the flag
-	// via `-- <flags>`, offer it through a TTY confirm so they don't
-	// have to remember the exact string. Default is YES — `everyapi
-	// use` is meant to be the "just run the agent" shortcut, so the
-	// press-Enter happy path keeps you out of the per-tool permission
-	// loop. Pick "no" once if you want the prompts back.
+	// via `-- <flags>`, use the persisted choice or ask once on a TTY.
+	// The prompt defaults to YES, but the mode stays disabled until the
+	// user confirms and the choice is saved.
 	yoloAlreadyPassed := t.YoloFlag != "" && containsFlag(extraArgs, t.YoloFlag)
-	if (t.YoloFlag != "" || t.YoloEnv != "") && !yoloAlreadyPassed && cliprompt.IsInteractive() {
-		enable, perr := cliprompt.YesNo(
-			bufio.NewReader(os.Stdin),
-			fmt.Sprintf(i18n.T("use.yolo_prompt"), t.YoloLabel),
-			true,
+	if (t.YoloFlag != "" || t.YoloEnv != "") && !yoloAlreadyPassed {
+		enable, perr := resolveLaunchPreference(
+			settings.DangerousMode,
+			interactive,
+			func() (bool, error) {
+				return cliprompt.YesNo(
+					bufio.NewReader(os.Stdin),
+					fmt.Sprintf(i18n.T("use.yolo_prompt"), t.YoloLabel),
+					true,
+				)
+			},
+			func(value bool) error {
+				settings.DangerousMode = boolPointer(value)
+				return config.SaveSettings(settings)
+			},
 		)
 		if perr != nil {
-			// Esc / Ctrl-C in the prompt → propagate the cancel
-			// sentinel so the launcher loop catches it. EOF on a
-			// piped stdin (no answer) defaults to "no, don't enable".
-			if errors.Is(perr, cliprompt.ErrPickCancelled) {
-				return perr
-			}
-			if !errors.Is(perr, io.EOF) {
-				return perr
-			}
+			return perr
 		}
 		if enable {
 			if t.YoloFlag != "" {
@@ -549,19 +576,28 @@ func Use(args []string) error {
 }
 
 func launchNativeTool(t *tools.Tool, args []string) error {
-	if t.YoloFlag != "" && !containsFlag(args, t.YoloFlag) && cliprompt.IsInteractive() {
-		enable, err := cliprompt.YesNo(
-			bufio.NewReader(os.Stdin),
-			fmt.Sprintf(i18n.T("use.yolo_prompt"), t.YoloLabel),
-			true,
+	if t.YoloFlag != "" && !containsFlag(args, t.YoloFlag) {
+		settings, err := config.LoadSettings()
+		if err != nil {
+			return err
+		}
+		enable, err := resolveLaunchPreference(
+			settings.DangerousMode,
+			cliprompt.IsInteractive(),
+			func() (bool, error) {
+				return cliprompt.YesNo(
+					bufio.NewReader(os.Stdin),
+					fmt.Sprintf(i18n.T("use.yolo_prompt"), t.YoloLabel),
+					true,
+				)
+			},
+			func(value bool) error {
+				settings.DangerousMode = boolPointer(value)
+				return config.SaveSettings(settings)
+			},
 		)
 		if err != nil {
-			if errors.Is(err, cliprompt.ErrPickCancelled) {
-				return err
-			}
-			if !errors.Is(err, io.EOF) {
-				return err
-			}
+			return err
 		}
 		if enable {
 			args = append([]string{t.YoloFlag}, args...)
@@ -621,14 +657,30 @@ func createDefaultRelayKey(creds *config.Credentials) (string, error) {
 
 const codexHookTrustBypassFlag = "--dangerously-bypass-hook-trust"
 
-// withDefaultHookTrustBypass keeps EveryAPI Codex launches from pausing for
-// hook-definition review. Codex records hook trust per worktree path, so a
-// previously reviewed repository can otherwise prompt again after a worktree switch.
-func withDefaultHookTrustBypass(t *tools.Tool, args []string) []string {
-	if t == nil || t.Name != "codex" || containsFlag(args, codexHookTrustBypassFlag) {
-		return args
+func boolPointer(value bool) *bool { return &value }
+
+// resolveLaunchPreference distinguishes an absent preference from an explicit
+// false. First interactive use asks and persists; scripts default safely off.
+func resolveLaunchPreference(
+	stored *bool,
+	interactive bool,
+	ask func() (bool, error),
+	persist func(bool) error,
+) (bool, error) {
+	if stored != nil {
+		return *stored, nil
 	}
-	return append([]string{codexHookTrustBypassFlag}, args...)
+	if !interactive {
+		return false, nil
+	}
+	value, err := ask()
+	if err != nil {
+		return false, err
+	}
+	if err := persist(value); err != nil {
+		return false, err
+	}
+	return value, nil
 }
 
 // containsFlag reports whether the user already passed `flag` in

@@ -1311,6 +1311,7 @@ sanitize_bad_value = "--sanitize=%q ist kein gültiger true/false-Wert — verwe
 tool_picker = "Tool auswählen:"
 group_picker = "Routing-Gruppe auswählen:"
 yolo_prompt = "%s aktivieren? (überspringt jede Sicherheitsabfrage)"
+hook_trust_prompt = "Codex erlauben, Repository-Hooks ohne vorherige Prüfung auszuführen?"
 launching = "Starte %s gegen %s"
 launching_via = "Starte %s gegen %s → %s"
 claude_inflated_resume = "Warnung: Diese Claude-Sitzung wurde mit einem aufgeblähten Tool-Schema-Präfix von %d Token erstellt. Die EveryAPI-Korrektur gilt für neue Sitzungen, aber --resume stellt das alte Protokoll unverändert wieder her. Starten Sie eine neue Claude-Sitzung, um es zu entfernen."

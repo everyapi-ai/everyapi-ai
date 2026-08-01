@@ -50,23 +50,47 @@ func TestClaudeInflatedResumeIgnoresFreshAndNonResume(t *testing.T) {
 	}
 }
 
-func TestCodexLaunchDefaultsToHookTrustBypass(t *testing.T) {
-	codex, err := tools.Lookup("codex")
-	if err != nil {
-		t.Fatal(err)
+func TestResolveLaunchPreferenceUsesStoredChoiceWithoutPrompting(t *testing.T) {
+	for _, stored := range []bool{false, true} {
+		stored := stored
+		asked, saved := false, false
+		got, err := resolveLaunchPreference(&stored, true, func() (bool, error) {
+			asked = true
+			return !stored, nil
+		}, func(bool) error {
+			saved = true
+			return nil
+		})
+		if err != nil || got != stored || asked || saved {
+			t.Fatalf("resolve stored %v = (%v, %v), asked=%v saved=%v", stored, got, err, asked, saved)
+		}
 	}
-	if got, want := withDefaultHookTrustBypass(codex, []string{"--model", "gpt-5.6-terra"}), []string{"--dangerously-bypass-hook-trust", "--model", "gpt-5.6-terra"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("withDefaultHookTrustBypass(codex) = %#v, want %#v", got, want)
+}
+
+func TestResolveLaunchPreferencePromptsAndPersistsFirstInteractiveChoice(t *testing.T) {
+	var persisted *bool
+	got, err := resolveLaunchPreference(nil, true, func() (bool, error) {
+		return true, nil
+	}, func(value bool) error {
+		persisted = &value
+		return nil
+	})
+	if err != nil || !got || persisted == nil || !*persisted {
+		t.Fatalf("resolve first choice = (%v, %v), persisted=%v", got, err, persisted)
 	}
-	if got, want := withDefaultHookTrustBypass(codex, []string{"--dangerously-bypass-hook-trust"}), []string{"--dangerously-bypass-hook-trust"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("withDefaultHookTrustBypass preserves an explicit flag = %#v, want %#v", got, want)
-	}
-	claude, err := tools.Lookup("claude")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := withDefaultHookTrustBypass(claude, []string{"--model", "opus"}), []string{"--model", "opus"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("withDefaultHookTrustBypass(claude) = %#v, want %#v", got, want)
+}
+
+func TestResolveLaunchPreferenceDefaultsOffWithoutTTY(t *testing.T) {
+	asked, saved := false, false
+	got, err := resolveLaunchPreference(nil, false, func() (bool, error) {
+		asked = true
+		return true, nil
+	}, func(bool) error {
+		saved = true
+		return nil
+	})
+	if err != nil || got || asked || saved {
+		t.Fatalf("non-interactive resolve = (%v, %v), asked=%v saved=%v", got, err, asked, saved)
 	}
 }
 

@@ -1316,6 +1316,7 @@ sanitize_bad_value = "--sanitize=%q n'est pas une valeur true/false valide — u
 tool_picker = "Choisissez un outil :"
 group_picker = "Choisissez un groupe de routage :"
 yolo_prompt = "Activer %s ? (saute toutes les confirmations de sécurité)"
+hook_trust_prompt = "Autoriser Codex à exécuter les hooks du dépôt sans vérification préalable ?"
 launching = "Lancement de %s contre %s"
 launching_via = "Lancement de %s contre %s → %s"
 claude_inflated_resume = "Avertissement : cette session Claude a été créée avec un préfixe de schémas d’outils gonflé de %d tokens. Le correctif EveryAPI s’applique aux nouvelles sessions, mais --resume restaure l’ancien historique sans modification. Démarrez une nouvelle session Claude pour le supprimer."
