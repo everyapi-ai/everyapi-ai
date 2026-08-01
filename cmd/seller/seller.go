@@ -61,8 +61,6 @@ func Run(args []string) error {
 		return sellerSales(rest)
 	case "eligibility":
 		return sellerEligibility(rest)
-	case "compensation":
-		return sellerCompensation(rest)
 	default:
 		cliout.Printf("%s\n", sellerUsage)
 		return fmt.Errorf(i18n.T("common.unknown_subcommand"), "seller", sub)
@@ -92,10 +90,6 @@ SUBCOMMANDS
                                     OAuth-mounted channel (codex/claude/gemini)
   sales [--page P] [--limit N]      Recent buyer-charge rows (anonymised)
   eligibility                       Show why you can / can't mount more channels
-  compensation submit  --upstream <p> --description <d> [--proof <url>]
-                                    File a compensation claim for an upstream outage
-  compensation list   [--status pending|approved|rejected]
-                                    List your filed claims
   help                              Show this message`
 
 // ---- seller list ---------------------------------------------------

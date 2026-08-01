@@ -16,10 +16,7 @@ func TestWriteCommandsRejectExtraPositionalsBeforeAPI(t *testing.T) {
 			_, err := parseAddKeyArgs([]string{"--type", "openai", "--name", "n", "--key", "k", "--models", "m", "extra"})
 			return err
 		},
-		"setup": func() error { return sellerSetup([]string{"extra"}) },
-		"compensation": func() error {
-			return sellerCompensationSubmit([]string{"--upstream", "x", "--description", "d", "extra"})
-		},
+		"setup":             func() error { return sellerSetup([]string{"extra"}) },
 		"oauth codex":       func() error { return sellerAddOAuthCodex(oauthArgs) },
 		"oauth claude":      func() error { return sellerAddOAuthClaude(oauthArgs) },
 		"oauth gemini":      func() error { return sellerAddOAuthGemini(oauthArgs) },
