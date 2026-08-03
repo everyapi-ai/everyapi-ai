@@ -16,6 +16,7 @@ func hermesTestHome(t *testing.T) (xdg, wantHermesHome string) {
 	t.Helper()
 	xdg = t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdg)
+	t.Setenv(hermesModelEnv, "catalog-model")
 	return xdg, filepath.Join(xdg, "everyapi", "hermes-home")
 }
 
@@ -41,7 +42,7 @@ func TestPrepareHermes_WritesConfig(t *testing.T) {
 	cfg := string(cfgBody)
 	for _, want := range []string{
 		"provider: custom",
-		`default: "` + defaultHermesModel + `"`,
+		`default: "catalog-model"`,
 		`base_url: "https://api.everyapi.ai/v1"`,
 		`api_key: "sk-everyapi-abc"`,
 		"api_mode: chat_completions",
@@ -49,6 +50,15 @@ func TestPrepareHermes_WritesConfig(t *testing.T) {
 		if !strings.Contains(cfg, want) {
 			t.Errorf("config.yaml missing %q\nFull config:\n%s", want, cfg)
 		}
+	}
+}
+
+func TestPrepareHermesRequiresResolvedModel(t *testing.T) {
+	hermesTestHome(t)
+	t.Setenv(hermesModelEnv, "")
+
+	if _, err := prepareHermes("https://api.everyapi.ai", "tok"); err == nil {
+		t.Fatal("prepareHermes should reject an empty model instead of inserting a hardcoded fallback")
 	}
 }
 
@@ -69,8 +79,8 @@ func TestPrepareHermes_ModelOverride(t *testing.T) {
 	if !strings.Contains(cfg, `default: "gpt-5.1"`) {
 		t.Errorf("EVERYAPI_HERMES_MODEL override not applied\nFull config:\n%s", cfg)
 	}
-	if strings.Contains(cfg, defaultHermesModel) {
-		t.Errorf("default model leaked despite override\nFull config:\n%s", cfg)
+	if strings.Contains(cfg, `default: "catalog-model"`) {
+		t.Errorf("test catalog model leaked despite override\nFull config:\n%s", cfg)
 	}
 }
 

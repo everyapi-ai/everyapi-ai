@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -371,15 +372,27 @@ func TestResolveToolModel(t *testing.T) {
 		}
 	})
 
-	t.Run("no flag, no env, non-interactive → no-op", func(t *testing.T) {
+	t.Run("no flag, no env, non-interactive resolves from live catalog", func(t *testing.T) {
 		t.Setenv(env, "")
-		// go test has no TTY, so the picker branch is skipped and the
-		// resolver leaves the env empty for prepareFn's default.
-		if err := resolveToolModel(hermes, creds, "relay-key", ""); err != nil {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/v1/models" {
+				http.NotFound(w, r)
+				return
+			}
+			_, _ = io.WriteString(w, `{"data":[`+
+				`{"id":"z-image","supported_endpoint_types":["image-generation"]},`+
+				`{"id":"b-openai-chat","supported_endpoint_types":["openai"]},`+
+				`{"id":"a-anthropic-only","supported_endpoint_types":["anthropic"]},`+
+				`{"id":"aa-responses-only","supported_endpoint_types":["openai-response"]}`+
+				`]}`)
+		}))
+		defer srv.Close()
+		catalogCreds := &config.Credentials{APIBase: srv.URL}
+		if err := resolveToolModel(hermes, catalogCreds, "relay-key", ""); err != nil {
 			t.Fatal(err)
 		}
-		if got := os.Getenv(env); got != "" {
-			t.Errorf("non-interactive should not set a model, got %s = %q", env, got)
+		if got := os.Getenv(env); got != "b-openai-chat" {
+			t.Errorf("%s = %q, want first model compatible with hermes' chat_completions transport", env, got)
 		}
 	})
 
@@ -501,11 +514,12 @@ func TestWantsUseHelp(t *testing.T) {
 func TestProviderChatModels(t *testing.T) {
 	catalog := []api.RelayModel{
 		{ID: "MiniMax-M2.7-highspeed", OwnedBy: "minimax", SupportedEndpointTypes: []string{"anthropic", "openai"}},
-		{ID: "MiniMax-M2.7", OwnedBy: "MiniMax", SupportedEndpointTypes: []string{"openai"}},        // owner case-insensitive
-		{ID: "speech-02", OwnedBy: "minimax", SupportedEndpointTypes: []string{"image-generation"}}, // non-chat → drop
-		{ID: "image-01", OwnedBy: "minimax", SupportedEndpointTypes: []string{"embeddings"}},        // non-chat → drop
-		{ID: "legacy-chat", OwnedBy: "minimax", SupportedEndpointTypes: nil},                        // unknown → keep
-		{ID: "glm-5.1", OwnedBy: "zhipu_4v", SupportedEndpointTypes: []string{"anthropic"}},         // other provider → drop
+		{ID: "MiniMax-M2.7", OwnedBy: "MiniMax", SupportedEndpointTypes: []string{"openai"}},                            // owner case-insensitive
+		{ID: "speech-02", OwnedBy: "minimax", SupportedEndpointTypes: []string{"image-generation"}},                     // non-chat → drop
+		{ID: "image-01", OwnedBy: "minimax", SupportedEndpointTypes: []string{"embeddings"}},                            // non-chat → drop
+		{ID: "image-openai-bridge", OwnedBy: "minimax", SupportedEndpointTypes: []string{"image-generation", "openai"}}, // OpenAI image protocol, still not chat → drop
+		{ID: "legacy-chat", OwnedBy: "minimax", SupportedEndpointTypes: nil},                                            // unknown → keep
+		{ID: "glm-5.1", OwnedBy: "zhipu_4v", SupportedEndpointTypes: []string{"anthropic"}},                             // other provider → drop
 	}
 	got := providerChatModels(catalog, "minimax")
 	want := []string{"MiniMax-M2.7", "MiniMax-M2.7-highspeed", "legacy-chat"}
@@ -535,6 +549,7 @@ func TestCatalogSupportsEndpoint(t *testing.T) {
 		{"case insensitive", []api.RelayModel{{ID: "gemini-pro", SupportedEndpointTypes: []string{"Gemini"}}}, "gemini", true},
 		{"explicitly incompatible", []api.RelayModel{{ID: "claude", SupportedEndpointTypes: []string{"anthropic", "openai"}}}, "gemini", false},
 		{"missing metadata fails open", []api.RelayModel{{ID: "legacy"}}, "gemini", true},
+		{"explicit empty metadata fails closed", []api.RelayModel{{ID: "unroutable", SupportedEndpointTypes: []string{}}}, "gemini", false},
 		{"empty catalog", nil, "gemini", false},
 	}
 	for _, tc := range cases {
@@ -543,6 +558,21 @@ func TestCatalogSupportsEndpoint(t *testing.T) {
 				t.Errorf("catalogSupportsEndpoint() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestChatCapabilityDistinguishesMissingFromExplicitEmptyMetadata(t *testing.T) {
+	if !chatCapable(nil) {
+		t.Fatal("missing metadata from an older gateway must remain compatible")
+	}
+	if chatCapable([]string{}) {
+		t.Fatal("an explicit empty endpoint list means this key has no callable protocol")
+	}
+	if !supportsEndpoint(nil, "openai") {
+		t.Fatal("missing metadata from an older gateway must remain compatible")
+	}
+	if supportsEndpoint([]string{}, "openai") {
+		t.Fatal("an explicit empty endpoint list must not satisfy a required protocol")
 	}
 }
 

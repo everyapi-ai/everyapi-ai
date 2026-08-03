@@ -50,7 +50,7 @@ func adminChannelAddOAuth(args []string) error {
 func adminChannelAddOAuthAntigravity(args []string) error {
 	fs := flag.NewFlagSet("admin channel add-oauth antigravity", flag.ContinueOnError)
 	name := fs.String("name", "", "channel display name")
-	models := fs.String("models", "", "comma-separated models this channel will serve (e.g. gemini-3.1-pro-low,claude-sonnet-4-6)")
+	models := fs.String("models", "", "comma-separated models this channel will serve (e.g. gemini-3.1-pro-low,claude-opus-4-6-thinking)")
 	group := fs.String("group", "", "route-group ID this channel serves (empty uses the platform fallback)")
 	noBrowser := fs.Bool("no-browser", false, "skip auto-opening the authorize URL")
 	timeout := fs.Duration("timeout", 5*time.Minute, "how long to wait for the OAuth callback before giving up")

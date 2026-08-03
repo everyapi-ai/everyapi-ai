@@ -35,7 +35,7 @@ type credentialOutput struct {
 type credentialOutputModel struct {
 	ID                     string   `json:"id"`
 	OwnedBy                string   `json:"owned_by,omitempty"`
-	SupportedEndpointTypes []string `json:"supported_endpoint_types,omitempty"`
+	SupportedEndpointTypes []string `json:"supported_endpoint_types"`
 }
 
 // credentialError keeps machine failures stable while allowing the existing

@@ -428,6 +428,7 @@ var Registry = map[string]*Tool{
 		YoloEnv:            "HERMES_YOLO_MODE",
 		YoloLabel:          "yolo mode — disable all approval prompts (HERMES_YOLO_MODE)",
 		ModelEnv:           hermesModelEnv,
+		RequiredEndpoint:   "openai",
 		envFn: func(_, _ string) map[string]string {
 			// Routing is config-file driven; see prepareHermes.
 			return map[string]string{}

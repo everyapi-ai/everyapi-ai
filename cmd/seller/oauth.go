@@ -458,7 +458,7 @@ func sellerAddOAuthGemini(args []string) error {
 func sellerAddOAuthAntigravity(args []string) error {
 	fs := flag.NewFlagSet("seller add-oauth antigravity", flag.ContinueOnError)
 	name := fs.String("name", "", "channel display name")
-	models := fs.String("models", "", "comma-separated models this channel will serve (e.g. gemini-3.1-pro-low,claude-sonnet-4-6)")
+	models := fs.String("models", "", "comma-separated models this channel will serve (e.g. gemini-3.1-pro-low,claude-opus-4-6-thinking)")
 	noBrowser := fs.Bool("no-browser", false, "skip auto-opening the authorize URL")
 	timeout := fs.Duration("timeout", 5*time.Minute, "how long to wait for the OAuth callback before giving up")
 	if err := fs.Parse(args); err != nil {

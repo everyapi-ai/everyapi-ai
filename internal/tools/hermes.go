@@ -9,16 +9,6 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// defaultHermesModel is the model hermes boots with when the user
-// hasn't overridden it via EVERYAPI_HERMES_MODEL. hermes uses
-// provider=custom, which — unlike claude/codex/gemini — carries no
-// built-in vendor default, so the first request would go out with an
-// empty model (and 400 at the gateway) if we didn't pin one. Both
-// claude and gpt families are reachable through the same EveryAPI /v1
-// endpoint; this is just the boot default — switch at runtime with
-// `hermes model` or per-launch with EVERYAPI_HERMES_MODEL.
-const defaultHermesModel = "claude-sonnet-4-6"
-
 // hermesModelEnv lets a user override the boot model without editing
 // the generated config: `EVERYAPI_HERMES_MODEL=gpt-5.1 everyapi use hermes`.
 const hermesModelEnv = "EVERYAPI_HERMES_MODEL"
@@ -74,7 +64,7 @@ func prepareHermes(apiBase, token string) (map[string]string, error) {
 // generated hermes config.yaml, or "" if none exists yet (first run,
 // unreadable file, or no recognizable default: line). `everyapi use
 // hermes` uses it to default its model picker to your previous choice
-// instead of always snapping back to defaultHermesModel.
+// instead of snapping back to the first model in the current catalog.
 func LastHermesModel() string {
 	cfgDir, err := config.ConfigDir()
 	if err != nil {
@@ -133,7 +123,7 @@ func writeHermesConfigYAML(hermesHome, apiBase, token string) error {
 	base := joinBase(apiBase, "/v1")
 	model := strings.TrimSpace(os.Getenv(hermesModelEnv))
 	if model == "" {
-		model = defaultHermesModel
+		return fmt.Errorf("%s is empty: resolve a live catalog model before preparing hermes", hermesModelEnv)
 	}
 
 	var b strings.Builder

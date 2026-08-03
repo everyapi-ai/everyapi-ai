@@ -1103,9 +1103,9 @@ func parseUseArgsWithTransparent(args []string) (toolName, group string, pickGro
 //
 //  1. --model <id> (explicit flag) → use it, no prompt.
 //  2. t.ModelEnv already set in the environment → respect it, no prompt.
-//  3. interactive TTY → model picker over the gateway catalog.
-//  4. non-interactive with nothing set → no-op; prepareFn falls back to
-//     its built-in default (so scripts/CI still launch).
+//  3. interactive TTY → model picker over the live gateway catalog.
+//  4. non-interactive with nothing set → deterministically select the
+//     first chat-capable model in that same live catalog.
 //
 // A no-op for claude/codex/gemini, whose CLIs default the model
 // themselves and route it by name through the gateway.
@@ -1120,7 +1120,11 @@ func resolveToolModel(t *tools.Tool, creds *config.Credentials, relayKey, modelF
 		return nil // explicit env override; respect it
 	}
 	if !cliprompt.IsInteractive() {
-		return nil // let prepareFn use its built-in default
+		models, err := toolChatModels(t, creds, relayKey)
+		if err != nil {
+			return err
+		}
+		return os.Setenv(t.ModelEnv, preferredToolModel(models))
 	}
 	chosen, err := pickModelInteractive(t, creds, relayKey)
 	if err != nil {
@@ -1130,6 +1134,34 @@ func resolveToolModel(t *tools.Tool, creds *config.Credentials, relayKey, modelF
 		return os.Setenv(t.ModelEnv, chosen)
 	}
 	return nil
+}
+
+// toolChatModels returns the chat-capable model ids the relay key can
+// actually route to. A missing catalog is fatal because ModelEnv tools
+// have no vendor-side model default; callers can always bypass catalog
+// discovery explicitly with --model or the tool's model environment.
+func toolChatModels(t *tools.Tool, creds *config.Credentials, relayKey string) ([]string, error) {
+	gw := config.ResolveAPIBaseForBase(creds.APIBase)
+	catalog, err := api.New(gw, relayKey).RelayModelCatalog(cliout.WithCtx())
+	if err != nil {
+		return nil, fmt.Errorf("could not resolve a model for %s from the live catalog (%w); pass --model <id> to select one explicitly", t.ExecName, err)
+	}
+	models := chatModels(catalog, t.RequiredEndpoint)
+	if len(models) == 0 {
+		return nil, fmt.Errorf("no chat-capable models are reachable for %s with this key/group; add a compatible channel or pass --model <id>", t.ExecName)
+	}
+	return models, nil
+}
+
+func preferredToolModel(models []string) string {
+	if last := tools.LastHermesModel(); last != "" {
+		for _, model := range models {
+			if model == last {
+				return last
+			}
+		}
+	}
+	return models[0]
 }
 
 // relayKeyRejectedErr is the actionable message shown when EveryAPI
@@ -1257,6 +1289,18 @@ var chatCapableEndpoints = map[string]bool{
 	"gemini":                  true,
 }
 
+// Some dedicated media endpoints also advertise "openai" because their wire
+// shape belongs to the OpenAI API family (for example gpt-image via
+// /v1/images). The dedicated endpoint is the stronger signal: these models
+// cannot be sent to /chat/completions even though "openai" is also present.
+var nonChatEndpoints = map[string]bool{
+	"audio-speech":     true,
+	"embeddings":       true,
+	"image-generation": true,
+	"jina-rerank":      true,
+	"openai-video":     true,
+}
+
 // legacyOwnerAliases tolerates gateways that haven't shipped the
 // owned_by de-channelization. A preset owner is the model BRAND the
 // gateway now reports (e.g. "zhipu", "qwen"); an older gateway instead
@@ -1304,17 +1348,61 @@ func providerChatModels(catalog []api.RelayModel, owner string) []string {
 	return ids
 }
 
-// chatCapable reports whether a model serving these endpoint types can
-// be driven as a Claude Code chat model. Empty/unknown → true
-// (fail-open): the gateway populates the field, so empty means "not
-// reported", and hiding a model on missing metadata is worse than
-// showing one extra.
-func chatCapable(types []string) bool {
-	if len(types) == 0 {
+// chatModels returns all unique chat-capable ids in lexical order. When a
+// tool declares a required wire endpoint, models that only expose a different
+// chat protocol are excluded; missing metadata still fails open for older
+// gateways.
+func chatModels(catalog []api.RelayModel, requiredEndpoint string) []string {
+	seen := make(map[string]struct{}, len(catalog))
+	ids := make([]string, 0, len(catalog))
+	for _, model := range catalog {
+		if !chatCapable(model.SupportedEndpointTypes) {
+			continue
+		}
+		if requiredEndpoint != "" && !supportsEndpoint(model.SupportedEndpointTypes, requiredEndpoint) {
+			continue
+		}
+		id := cliout.Sanitize(model.ID)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func supportsEndpoint(types []string, required string) bool {
+	if types == nil {
 		return true
 	}
-	for _, t := range types {
-		if chatCapableEndpoints[t] {
+	for _, endpoint := range types {
+		if strings.EqualFold(endpoint, required) {
+			return true
+		}
+	}
+	return false
+}
+
+// chatCapable reports whether a model serving these endpoint types can
+// be driven as a Claude Code chat model. A nil slice means an older gateway
+// omitted the field and remains fail-open; a non-nil empty slice is an
+// explicit statement that this key has no callable protocol for the model.
+func chatCapable(types []string) bool {
+	if types == nil {
+		return true
+	}
+	for _, endpoint := range types {
+		if nonChatEndpoints[strings.ToLower(endpoint)] {
+			return false
+		}
+	}
+	for _, endpoint := range types {
+		if chatCapableEndpoints[strings.ToLower(endpoint)] {
 			return true
 		}
 	}
@@ -1327,7 +1415,7 @@ func chatCapable(types []string) bool {
 // where every model explicitly declares only other endpoints fails closed.
 func catalogSupportsEndpoint(catalog []api.RelayModel, endpoint string) bool {
 	for _, model := range catalog {
-		if len(model.SupportedEndpointTypes) == 0 {
+		if model.SupportedEndpointTypes == nil {
 			return true
 		}
 		for _, supported := range model.SupportedEndpointTypes {
@@ -1351,32 +1439,18 @@ func toolInvocationNeedsEndpoint(args []string) bool {
 	}
 }
 
-// pickModelInteractive lists the models the relay key can route to
+// pickModelInteractive lists the chat-capable models the relay key can route to
 // (GET /v1/models with the relay key — group-scoped, so the picker only
 // offers models the launched tool will really reach) and asks the user
 // to pick one. The cursor defaults to the model pinned on the last
 // launch when it's still offered. A catalog-fetch failure or an empty
-// catalog is non-fatal: it returns "" so the launch proceeds on the
-// tool's built-in default rather than blocking.
+// catalog is fatal because ModelEnv tools have no hidden built-in model
+// fallback; --model remains the explicit offline/script escape hatch.
 func pickModelInteractive(t *tools.Tool, creds *config.Credentials, relayKey string) (string, error) {
-	gw := config.ResolveAPIBaseForBase(creds.APIBase)
-	models, err := api.New(gw, relayKey).RelayModels(cliout.WithCtx())
+	models, err := toolChatModels(t, creds, relayKey)
 	if err != nil {
-		cliout.Printf(i18n.T("use.model_fetch_failed")+"\n", err, t.ExecName)
-		return "", nil
+		return "", err
 	}
-	if len(models) == 0 {
-		cliout.Printf(i18n.T("use.model_none")+"\n", t.ExecName)
-		return "", nil
-	}
-	// Server-supplied model IDs render directly in the interactive picker
-	// below; strip any embedded ANSI/control sequences before display,
-	// matching cliout.Sanitize's use elsewhere in the CLI for backend-
-	// relayed strings (model names, channel names, ...).
-	for i, m := range models {
-		models[i] = cliout.Sanitize(m)
-	}
-	sort.Strings(models)
 	// Default the cursor to last launch's model when it's still in the
 	// catalog. LastHermesModel is hermes-specific, which is fine while
 	// hermes is the only ModelEnv tool; generalize if that changes.

@@ -133,7 +133,7 @@ func TestCredentialCanIncludeTheRelayScopedModelCatalog(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer sk-everyapi-models" {
 			t.Fatalf("Authorization = %q", got)
 		}
-		_, _ = w.Write([]byte(`{"data":[{"id":"image-only","owned_by":"vendor","supported_endpoint_types":["image-generation"]},{"id":"chat-model","owned_by":"vendor","supported_endpoint_types":["openai"]}]}`))
+		_, _ = w.Write([]byte(`{"data":[{"id":"image-only","owned_by":"vendor","supported_endpoint_types":["image-generation"]},{"id":"chat-model","owned_by":"vendor","supported_endpoint_types":["openai"]},{"id":"no-endpoint","owned_by":"vendor","supported_endpoint_types":[]}]}`))
 	}))
 	defer srv.Close()
 	if err := config.Save(&config.Credentials{
@@ -156,8 +156,19 @@ func TestCredentialCanIncludeTheRelayScopedModelCatalog(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Models) != 2 || got.Models[0].ID != "chat-model" || got.Models[0].SupportedEndpointTypes[0] != "openai" {
+	if len(got.Models) != 3 || got.Models[0].ID != "chat-model" || got.Models[0].SupportedEndpointTypes[0] != "openai" {
 		t.Fatalf("models = %#v", got.Models)
+	}
+	var raw struct {
+		Models []map[string]any `json:"models"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &raw); err != nil {
+		t.Fatal(err)
+	}
+	if endpoints, ok := raw.Models[2]["supported_endpoint_types"]; !ok {
+		t.Fatal("credential model omitted an explicit empty supported_endpoint_types field")
+	} else if values, ok := endpoints.([]any); !ok || len(values) != 0 {
+		t.Fatalf("supported_endpoint_types = %#v, want []", endpoints)
 	}
 }
 
