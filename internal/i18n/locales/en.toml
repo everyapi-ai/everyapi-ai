@@ -454,6 +454,10 @@ reward_range = "Reward range: %d – %d quota per day"
 today_claimed = "Today: already claimed."
 today_unclaimed = "Today: not yet claimed — run 'everyapi checkin' to grab it."
 month_days = "\n%d day(s) this month:"
+makeup_success = "Made up %s — streak kept, no reward granted."
+makeup_available = "Make-up available for: %s"
+makeup_marker = "(made up, no reward)"
+makeup_date_required = "a date is required, e.g. everyapi checkin makeup 2026-08-01"
 usage = '''
 everyapi checkin — daily check-in for quota grants
 
@@ -462,6 +466,7 @@ USAGE
   everyapi checkin claim                 Claim today's reward (explicit verb)
   everyapi checkin status [--month YYYY-MM]
                                          Show the calendar of past check-ins
+  everyapi checkin makeup <YYYY-MM-DD>   Cover a missed day (keeps the streak, no reward)
 '''
 
 [seller]

@@ -452,6 +452,10 @@ reward_range = "奖励范围：每天 %d – %d 额度"
 today_claimed = "今日：已签到。"
 today_unclaimed = "今日：未签到 — 运行 'everyapi checkin' 领取。"
 month_days = "\n本月签到 %d 天："
+makeup_success = "已补签 %s —— 连续记录保住了，本次不发放奖励。"
+makeup_available = "可补签的日期：%s"
+makeup_marker = "（补签，无奖励）"
+makeup_date_required = "需要指定日期，例如 everyapi checkin makeup 2026-08-01"
 usage = '''
 everyapi checkin — 每日签到领取额度
 
@@ -460,6 +464,7 @@ everyapi checkin — 每日签到领取额度
   everyapi checkin claim                 领取今日奖励（显式动词）
   everyapi checkin status [--month YYYY-MM]
                                          查看历史签到日历
+  everyapi checkin makeup <YYYY-MM-DD>   补签漏掉的某天（保住连续记录，无奖励）
 '''
 
 [seller]

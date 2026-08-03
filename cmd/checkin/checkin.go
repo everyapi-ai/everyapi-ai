@@ -1,14 +1,16 @@
 // Package checkin wires `everyapi checkin` — daily check-in for
-// quota grants. Two shapes:
+// quota grants. Three shapes:
 //
 //	everyapi checkin                claim today's reward
 //	everyapi checkin status [...]   monthly history
+//	everyapi checkin makeup <date>  cover a missed day (no reward)
 package checkin
 
 import (
 	"errors"
 	"flag"
 	"fmt"
+	"strings"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
@@ -25,6 +27,8 @@ func Run(args []string) error {
 			return nil
 		case "status":
 			return runStatus(args[1:])
+		case "makeup":
+			return runMakeup(args[1:])
 		case "claim":
 			// Explicit alias for bare `everyapi checkin`. The bare
 			// form predates the explicit verb but the picker only
@@ -111,13 +115,52 @@ func runStatus(args []string) error {
 	} else {
 		cliout.Println(i18n.T("checkin.today_unclaimed"))
 	}
+	if stat.Makeup.Enabled && len(stat.Makeup.EligibleDates) > 0 {
+		cliout.Printf(i18n.T("checkin.makeup_available")+"\n",
+			strings.Join(stat.Makeup.EligibleDates, ", "))
+	}
 	if len(stat.Stats.Records) == 0 {
 		cliout.Println(i18n.T("checkin.no_records"))
 		return nil
 	}
 	cliout.Printf(i18n.T("checkin.month_days")+"\n", stat.Stats.CheckinCount)
 	for _, r := range stat.Stats.Records {
+		if r.IsMakeup {
+			// A made-up day pays nothing; printing "+0 quota" would read as a
+			// broken reward rather than as the deliberate trade-off it is.
+			cliout.Printf("  %s  %s\n", r.CheckinDate, i18n.T("checkin.makeup_marker"))
+			continue
+		}
 		cliout.Printf("  %s  +%d quota\n", r.CheckinDate, r.QuotaAwarded)
 	}
+	return nil
+}
+
+func runMakeup(args []string) error {
+	fs := flag.NewFlagSet("checkin makeup", flag.ContinueOnError)
+	date := fs.String("date", "", "YYYY-MM-DD (UTC) day to cover")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	// Accept the date as a bare positional too — `everyapi checkin makeup
+	// 2026-08-01` is the shape a user reaches for first.
+	if *date == "" && fs.NArg() == 1 {
+		*date = fs.Arg(0)
+	} else if err := cliargs.RejectPositionals(fs); err != nil {
+		return err
+	}
+	if *date == "" {
+		cliout.Println(i18n.T("checkin.usage"))
+		return errors.New(i18n.T("checkin.makeup_date_required"))
+	}
+	client, err := newClient()
+	if err != nil {
+		return err
+	}
+	res, err := client.DoCheckinMakeup(cliout.WithCtx(), *date)
+	if err != nil {
+		return classifyErr(err)
+	}
+	cliout.Printf(i18n.T("checkin.makeup_success")+"\n", res.CheckinDate)
 	return nil
 }

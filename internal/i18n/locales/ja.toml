@@ -463,6 +463,10 @@ reward_range = "報酬範囲: 1 日あたり %d – %d クォータ"
 today_claimed = "本日: すでに受け取り済み。"
 today_unclaimed = "本日: 未受け取り — 'everyapi checkin' を実行して受け取ってください。"
 month_days = "\n今月のチェックイン %d 日:"
+makeup_success = "%s を追いチェックインしました — 連続記録は維持、報酬はありません。"
+makeup_available = "追いチェックイン可能な日: %s"
+makeup_marker = "(追いチェックイン、報酬なし)"
+makeup_date_required = "日付の指定が必要です。例: everyapi checkin makeup 2026-08-01"
 usage = '''
 everyapi checkin — クォータ付与のためのデイリーチェックイン
 
@@ -471,6 +475,7 @@ everyapi checkin — クォータ付与のためのデイリーチェックイ�
   everyapi checkin claim                 本日の報酬を受け取る (明示形)
   everyapi checkin status [--month YYYY-MM]
                                          過去のチェックインカレンダーを表示
+  everyapi checkin makeup <YYYY-MM-DD>   見逃した日を埋める (連続記録は維持、報酬なし)
 '''
 
 [seller]

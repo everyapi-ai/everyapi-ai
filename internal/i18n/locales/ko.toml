@@ -462,6 +462,10 @@ reward_range = "보상 범위: 일일 %d – %d 쿼터"
 today_claimed = "오늘: 이미 수령함."
 today_unclaimed = "오늘: 미수령 — 'everyapi checkin' 으로 수령하세요."
 month_days = "\n이번 달 %d 일:"
+makeup_success = "%s 보충 체크인 완료 — 연속 기록 유지, 보상은 없습니다."
+makeup_available = "보충 체크인 가능한 날짜: %s"
+makeup_marker = "(보충 체크인, 보상 없음)"
+makeup_date_required = "날짜가 필요합니다. 예: everyapi checkin makeup 2026-08-01"
 usage = '''
 everyapi checkin — 쿼터 지급 데일리 체크인
 
@@ -470,6 +474,7 @@ everyapi checkin — 쿼터 지급 데일리 체크인
   everyapi checkin claim                 오늘 보상 수령 (명시적 동사)
   everyapi checkin status [--month YYYY-MM]
                                          과거 체크인 캘린더 표시
+  everyapi checkin makeup <YYYY-MM-DD>   놓친 날 채우기 (연속 기록 유지, 보상 없음)
 '''
 
 [seller]

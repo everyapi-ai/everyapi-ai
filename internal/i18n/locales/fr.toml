@@ -469,6 +469,10 @@ reward_range = "Plage de récompense : %d – %d quota par jour"
 today_claimed = "Aujourd'hui : déjà réclamé."
 today_unclaimed = "Aujourd'hui : pas encore réclamé — exécutez 'everyapi checkin' pour le récupérer."
 month_days = "\n%d jour(s) ce mois-ci :"
+makeup_success = "%s rattrapé : série préservée, aucune récompense."
+makeup_available = "Rattrapage possible pour : %s"
+makeup_marker = "(rattrapé, sans récompense)"
+makeup_date_required = "une date est requise, par ex. everyapi checkin makeup 2026-08-01"
 usage = '''
 everyapi checkin — check-in quotidien pour attribution de quota
 
@@ -477,6 +481,7 @@ UTILISATION
   everyapi checkin claim                 Récupérer la récompense du jour (verbe explicite)
   everyapi checkin status [--month YYYY-MM]
                                          Afficher le calendrier des check-ins passés
+  everyapi checkin makeup <YYYY-MM-DD>   Combler un jour manqué (préserve la série, sans récompense)
 '''
 
 [seller]

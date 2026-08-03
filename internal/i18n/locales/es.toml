@@ -470,6 +470,10 @@ reward_range = "Rango de recompensa: %d – %d cuota por día"
 today_claimed = "Hoy: ya reclamado."
 today_unclaimed = "Hoy: aún no reclamado — ejecuta 'everyapi checkin' para obtenerlo."
 month_days = "\n%d día(s) este mes:"
+makeup_success = "%s recuperado: racha intacta, sin recompensa."
+makeup_available = "Recuperación disponible para: %s"
+makeup_marker = "(recuperado, sin recompensa)"
+makeup_date_required = "se requiere una fecha, p. ej. everyapi checkin makeup 2026-08-01"
 usage = '''
 everyapi checkin — check-in diario para concesiones de cuota
 
@@ -478,6 +482,7 @@ USO
   everyapi checkin claim                 Reclamar la recompensa de hoy (verbo explícito)
   everyapi checkin status [--month YYYY-MM]
                                          Mostrar el calendario de check-ins pasados
+  everyapi checkin makeup <YYYY-MM-DD>   Cubrir un día perdido (mantiene la racha, sin recompensa)
 '''
 
 [seller]

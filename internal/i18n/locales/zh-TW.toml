@@ -452,6 +452,10 @@ reward_range = "獎勵範圍：每天 %d – %d 額度"
 today_claimed = "今日：已簽到。"
 today_unclaimed = "今日：未簽到 — 執行 'everyapi checkin' 領取。"
 month_days = "\n本月簽到 %d 天："
+makeup_success = "已補簽 %s —— 連續紀錄保住了，本次不發放獎勵。"
+makeup_available = "可補簽的日期：%s"
+makeup_marker = "（補簽，無獎勵）"
+makeup_date_required = "需要指定日期，例如 everyapi checkin makeup 2026-08-01"
 usage = '''
 everyapi checkin — 每日簽到領取額度
 
@@ -460,6 +464,7 @@ everyapi checkin — 每日簽到領取額度
   everyapi checkin claim                 領取今日獎勵（明確動詞）
   everyapi checkin status [--month YYYY-MM]
                                          查看歷史簽到行事曆
+  everyapi checkin makeup <YYYY-MM-DD>   補簽漏掉的某天（保住連續紀錄，無獎勵）
 '''
 
 [seller]

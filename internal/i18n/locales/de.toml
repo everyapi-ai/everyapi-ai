@@ -468,6 +468,10 @@ reward_range = "Belohnungsbereich: %d – %d Quota pro Tag"
 today_claimed = "Heute: bereits abgeholt."
 today_unclaimed = "Heute: noch nicht abgeholt — führe 'everyapi checkin' aus, um sie zu holen."
 month_days = "\n%d Tag(e) in diesem Monat:"
+makeup_success = "%s nachgeholt — Serie erhalten, keine Belohnung."
+makeup_available = "Nachholen möglich für: %s"
+makeup_marker = "(nachgeholt, keine Belohnung)"
+makeup_date_required = "ein Datum ist erforderlich, z. B. everyapi checkin makeup 2026-08-01"
 usage = '''
 everyapi checkin — täglicher Check-in für Quota-Zuteilungen
 
@@ -476,6 +480,7 @@ VERWENDUNG
   everyapi checkin claim                 Heutige Belohnung abholen (explizites Verb)
   everyapi checkin status [--month YYYY-MM]
                                          Kalender vergangener Check-ins anzeigen
+  everyapi checkin makeup <YYYY-MM-DD>   Verpassten Tag nachholen (Serie bleibt, keine Belohnung)
 '''
 
 [seller]
