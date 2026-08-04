@@ -73,6 +73,7 @@ func TestRenderComposeMacOS(t *testing.T) {
 	out, err := renderCompose(composeData{
 		NodeID:            3,
 		Mode:              ModeMacOS,
+		MemoryGB:          48,
 		Gateway:           "wss://api.everyapi.ai",
 		RegistrationToken: "rt_m",
 	})
@@ -84,6 +85,9 @@ func TestRenderComposeMacOS(t *testing.T) {
 		"OLLAMA_URL: http://host.docker.internal:11434",
 		"host.docker.internal:host-gateway",
 		"container_name: everyapi-edge-3-agent",
+		`EVERYAPI_GPU_MODEL: "Apple Silicon"`,
+		`EVERYAPI_VRAM_GB: "48"`,
+		`EVERYAPI_PLATFORM: "darwin/arm64"`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("missing %q in macos render", want)
@@ -92,6 +96,16 @@ func TestRenderComposeMacOS(t *testing.T) {
 	// No ollama sidecar in compose for macOS.
 	if strings.Contains(s, "container_name: everyapi-edge-3-ollama") {
 		t.Errorf("macOS render unexpectedly includes ollama sidecar")
+	}
+}
+
+func TestUnifiedMemoryGBRoundsUpHostBytes(t *testing.T) {
+	const bytes = int64(48*1024*1024*1024 - 1)
+	if got := unifiedMemoryGB(bytes); got != 48 {
+		t.Fatalf("unifiedMemoryGB(%d) = %d, want 48", bytes, got)
+	}
+	if got := unifiedMemoryGB(0); got != 0 {
+		t.Fatalf("unifiedMemoryGB(0) = %d, want 0", got)
 	}
 }
 

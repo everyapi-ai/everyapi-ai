@@ -107,6 +107,11 @@ services:
       OLLAMA_URL: http://host.docker.internal:11434
       EVERYAPI_IDENTITY_PATH: /var/lib/everyapi-edge/identity.json
       EVERYAPI_NODE_NAME: {{.NodeName | yamlStr}}
+      EVERYAPI_GPU_MODEL: "Apple Silicon"
+      EVERYAPI_PLATFORM: "darwin/arm64"
+      {{- if .MemoryGB }}
+      EVERYAPI_VRAM_GB: "{{.MemoryGB}}"
+      {{- end }}
       {{- if .Workloads }}
       EVERYAPI_WORKLOADS: {{.Workloads | joinComma | yamlStr}}
       {{- end }}
@@ -126,6 +131,7 @@ type composeData struct {
 	AgentImage        string
 	OllamaImage       string
 	OllamaHostNative  bool // true for macOS — no ollama service in compose
+	MemoryGB          int  // Apple Silicon unified host memory; zero omits the hint
 	// Workloads is the capability declaration persisted at register
 	// time. Rendered as EVERYAPI_WORKLOADS so the agent reports the
 	// same set the seller declared (used by the gateway only as a

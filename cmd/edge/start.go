@@ -74,6 +74,7 @@ func edgeStart(args []string) error {
 		RegistrationToken: meta.RegistrationToken,
 		AgentImage:        agentImage,
 		OllamaImage:       ollamaImage,
+		MemoryGB:          memoryGBForMode(resolved),
 		Workloads:         meta.Workloads,
 	}
 	composePath, err := writeCompose(dir, cd)

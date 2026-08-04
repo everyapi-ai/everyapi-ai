@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os/exec"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
@@ -92,4 +94,27 @@ func resolveMode(m Mode) Mode {
 		return detectMode()
 	}
 	return m
+}
+
+func memoryGBForMode(mode Mode) int {
+	if mode != ModeMacOS {
+		return 0
+	}
+	output, err := exec.Command("sysctl", "-n", "hw.memsize").Output()
+	if err != nil {
+		return 0
+	}
+	totalBytes, err := strconv.ParseInt(strings.TrimSpace(string(output)), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return unifiedMemoryGB(totalBytes)
+}
+
+func unifiedMemoryGB(totalBytes int64) int {
+	if totalBytes <= 0 {
+		return 0
+	}
+	const gib = int64(1024 * 1024 * 1024)
+	return int((totalBytes + gib - 1) / gib)
 }

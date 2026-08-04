@@ -62,6 +62,7 @@ func edgeUpdate(args []string) error {
 		RegistrationToken: meta.RegistrationToken,
 		AgentImage:        meta.AgentImage,
 		OllamaImage:       meta.OllamaImage,
+		MemoryGB:          memoryGBForMode(mode),
 		Workloads:         meta.Workloads,
 	}
 	if _, err := writeCompose(dir, cd); err != nil {
