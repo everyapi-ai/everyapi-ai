@@ -1347,6 +1347,7 @@ preset_needs_model = "%s benötigt ein Modell — übergib --model <id> im nicht
 preset_catalog_failed = "Modellliste für %s konnte nicht abgerufen werden (%v)"
 preset_no_models = "keine %s-Modelle mit deinem aktuellen Key/Gruppe erreichbar — füge im EveryAPI-Dashboard (%s) einen Kanal/Key hinzu oder nutze --group"
 tool_not_installed = "%s ist nicht installiert. Installationsbefehl:"
+claude_update_available = "Claude Code %s ist installiert; Version %s ist verfügbar. Führe 'claude update' aus oder aktualisiere über deinen Paketmanager."
 install_prompt = "%s jetzt installieren?"
 installing = "Installiere %s ..."
 installed = "%s installiert."

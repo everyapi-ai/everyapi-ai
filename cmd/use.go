@@ -228,6 +228,7 @@ func Use(args []string) error {
 	if err := ensureToolInstalled(t); err != nil {
 		return err
 	}
+	maybeNotifyClaudeUpdate(toolName)
 	if t.Native {
 		if sanitize {
 			return fmt.Errorf("--sanitize is not supported for native %s", t.ExecName)
