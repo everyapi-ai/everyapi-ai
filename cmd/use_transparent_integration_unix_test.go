@@ -54,7 +54,7 @@ func TestUseTransparentChildEnvironmentAndCleanup(t *testing.T) {
 		}
 		probeAuth <- r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data":[]}`))
+		_, _ = w.Write([]byte(`{"data":[{"id":"claude-test","owned_by":"anthropic","supported_endpoint_types":["anthropic"]}]}`))
 	}))
 	defer gateway.Close()
 

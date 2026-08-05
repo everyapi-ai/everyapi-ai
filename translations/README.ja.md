@@ -2,7 +2,7 @@
 
 # `everyapi` CLI
 
-[EveryAPI](https://everyapi.ai) AI API ゲートウェイの buyer onboarding CLI。任意の Claude Code / Codex / Gemini CLI を**1 分以内に**ゲートウェイに接続できます。
+[EveryAPI](https://everyapi.ai) AI API ゲートウェイの buyer onboarding CLI。Claude Code、Codex、Antigravity、Grok Build、Qwen Code、Kimi Code を**1 分以内に**起動できます。
 
 ステータス：**コアフロー実装済み** —— buyer onboarding、seller コマンド（plain-key + OAuth 3 プロバイダー）、sanitizer proxy、QR sign-in メインパス、anti-phishing レイヤーすべて実装済み。残る未実装は OS レベルの code signing と platform keychain backend のみ（末尾「このバイナリにまだ含まれていないもの」を参照）。
 
@@ -38,12 +38,15 @@ brew update && brew upgrade everyapi
 
 ### `everyapi use <tool>` —— サードパーティ CLI に exec（EveryAPI ゲートウェイを指す）
 
-この CLI をインストールする主な理由。対象のサードパーティツールの環境変数をその規約通りに設定し、exec します —— 既存の Claude Code / OpenAI Codex CLI / Gemini CLI は**設定変更なしで** EveryAPI ゲートウェイを指すようになります。
+この CLI は、対応するコーディングクライアントを EveryAPI 経由で設定・起動します。`gemini` エントリは認証済みの Antigravity CLI を起動します。
 
 ```bash
 everyapi use claude         # Claude Code → EveryAPI
 everyapi use codex          # OpenAI Codex CLI → EveryAPI
-everyapi use gemini         # Gemini CLI → EveryAPI
+everyapi use gemini         # Antigravity を起動
+everyapi use grok           # xAI Grok Build → EveryAPI
+everyapi use qwen-code      # Alibaba Qwen Code → EveryAPI
+everyapi use kimi-code      # Moonshot Kimi Code → EveryAPI
 everyapi use                # 引数なし → インストール済みツールから対話的に選択
 ```
 
@@ -53,7 +56,10 @@ everyapi use                # 引数なし → インストール済みツール
 |---|---|
 | claude | `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN` |
 | codex | `OPENAI_BASE_URL`、`OPENAI_API_KEY` |
-| gemini | `GEMINI_API_KEY`、`GOOGLE_GEMINI_BASE_URL` |
+| gemini | Antigravity ネイティブランチャー (`agy`) |
+| grok | `XAI_API_KEY`、`GROK_MODELS_BASE_URL` |
+| qwen-code | `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`；分離された `QWEN_HOME` |
+| kimi-code | `KIMI_MODEL_API_KEY`、`KIMI_MODEL_BASE_URL`、`KIMI_MODEL_NAME`；分離された `KIMI_CODE_HOME` |
 
 どの変数名を読むのか、`/v1` を付けるべきか、どの auth ヘッダー形式かを毎回調べる必要はもうありません。
 

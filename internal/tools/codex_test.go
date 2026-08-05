@@ -321,6 +321,36 @@ func TestCodexTool_PrepareWired(t *testing.T) {
 	}
 }
 
+func TestPrepareCodexWithModelsWritesPickerCatalog(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	original := codexBundledCatalog
+	codexBundledCatalog = func() ([]byte, error) {
+		return []byte(`{"models":[{"slug":"gpt-template","display_name":"Template","description":"template","default_reasoning_level":null,"supported_reasoning_levels":[],"shell_type":"shell_command","visibility":"list","supported_in_api":true,"priority":1,"availability_nux":null,"upgrade":null,"base_instructions":"You are a coding agent.","support_verbosity":false,"default_verbosity":null,"apply_patch_tool_type":"freeform","truncation_policy":{"mode":"bytes","limit":10000},"supports_parallel_tool_calls":true,"experimental_supported_tools":[]}]}`), nil
+	}
+	t.Cleanup(func() { codexBundledCatalog = original })
+	tool, _ := Lookup("codex")
+	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "tok", testLaunchCatalog[:1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer TakePreparedCleanup(extra)()
+	home := extra["CODEX_HOME"]
+	configBody, err := os.ReadFile(filepath.Join(home, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(configBody), `model_catalog_json = "`) {
+		t.Fatalf("Codex config missing model_catalog_json: %s", configBody)
+	}
+	catalogBody, err := os.ReadFile(filepath.Join(home, "models.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(catalogBody), `"slug": "gpt-5.6-terra"`) {
+		t.Fatalf("Codex catalog missing relay model: %s", catalogBody)
+	}
+}
+
 // TestClaudeTool_NoPrepare guards the negative case: claude
 // don't need pre-exec setup, so tool.Prepare must be a clean no-op
 // (nil map, nil err). A future regression that accidentally wires a

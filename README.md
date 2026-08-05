@@ -2,7 +2,7 @@
 
 # `everyapi` CLI
 
-Buyer-onboarding CLI for the [EveryAPI](https://everyapi.ai) AI API gateway. Point any Claude Code / Codex / Gemini CLI at the gateway **in under a minute**.
+Buyer-onboarding CLI for the [EveryAPI](https://everyapi.ai) AI API gateway. Launch Claude Code, Codex, Antigravity, Grok Build, Qwen Code, or Kimi Code **in under a minute**.
 
 Status: **core flows shipped** — buyer onboarding, seller commands (plain-key + OAuth across three providers), sanitizer proxy, QR sign-in main path, and anti-phishing layers are all in place. The only unimplemented items are OS-level code signing and a platform keychain backend (see "What this binary does NOT include yet" at the end).
 
@@ -75,12 +75,15 @@ Same flow as the shell script — resolves the latest tag, downloads `everyapi_w
 
 ### `everyapi use <tool>` — exec into a third-party CLI (pointed at the EveryAPI gateway)
 
-The main reason to install this CLI. It sets the target tool's env vars per the conventions it expects, then execs into it — your existing Claude Code / OpenAI Codex CLI / Gemini CLI **needs no config change** to point at the EveryAPI gateway.
+The main reason to install this CLI. It configures and launches supported coding clients through EveryAPI; the `gemini` entry is the exception and launches your already-authenticated native Antigravity CLI with its own routing.
 
 ```bash
 everyapi use claude         # Claude Code → EveryAPI
 everyapi use codex          # OpenAI Codex CLI → EveryAPI
-everyapi use gemini         # Gemini CLI → EveryAPI
+everyapi use gemini         # Antigravity (native auth and routing)
+everyapi use grok           # xAI Grok Build → EveryAPI
+everyapi use qwen-code      # Alibaba Qwen Code → EveryAPI (pick a model)
+everyapi use kimi-code      # Moonshot Kimi Code → EveryAPI (pick a model)
 everyapi use hermes         # Nous Research Hermes Agent → EveryAPI (pick a model)
 everyapi use hermes --model gpt-5.1   # pin the model, skip the picker
 everyapi use claude                    # transparent by default: stays on api.anthropic.com
@@ -94,16 +97,27 @@ Each tool uses different conventions; the CLI remembers them:
 
 | Tool | How it's pointed at EveryAPI |
 |---|---|
-| claude | env: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` |
-| codex | env: `OPENAI_API_KEY` + generated `CODEX_HOME/config.toml` (codex routes via config, not `OPENAI_BASE_URL`) |
-| gemini | env: `GEMINI_API_KEY`, `GOOGLE_GEMINI_BASE_URL` |
-| hermes | generated `HERMES_HOME/config.yaml` (`provider: custom`, `base_url`, inline `api_key`); hermes ignores `OPENAI_BASE_URL` for its main model |
+| claude | env: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`; live compatible models through gateway discovery |
+| codex | env: `OPENAI_API_KEY` + generated `CODEX_HOME/config.toml` and key-scoped model catalog (codex routes via config, not `OPENAI_BASE_URL`) |
+| gemini | native Antigravity launcher (`agy`) |
+| grok | env: `XAI_API_KEY`, `GROK_MODELS_BASE_URL`; isolated `GROK_HOME`; filtered live model discovery |
+| qwen-code | env: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`; process-scoped `QWEN_HOME` user settings and pinned `--auth-type=openai` |
+| kimi-code | env: `KIMI_MODEL_API_KEY`, `KIMI_MODEL_BASE_URL`, `KIMI_MODEL_PROVIDER_TYPE`, `KIMI_MODEL_NAME`; isolated `KIMI_CODE_HOME` with generated model aliases |
+| hermes | generated `HERMES_HOME/config.yaml` (named custom provider, `base_url`, inline `api_key`); filtered live model discovery |
 
 No more looking up which variable name each tool reads, whether you need to append `/v1`, or which auth-header style applies.
 
-**hermes model selection**: `provider: custom` has no built-in model, so EveryAPI resolves one from the live catalog available to the selected relay key/group. On a TTY, `everyapi use hermes` opens a **model picker**, with the cursor defaulting to your previous choice when it is still reachable. To skip the picker: pass `--model <id>`, or set `EVERYAPI_HERMES_MODEL=<id>`. In a non-interactive run with neither set, EveryAPI deterministically uses the first chat-capable catalog model (or your previous choice when it is still available); there is no hardcoded model fallback. claude/codex/gemini don't take `--model` — their own CLIs default the model; pass tool-specific model flags after `--`. Either way, all models (claude and gpt alike) ride the same `/v1` endpoint, so you can also switch in-session with `hermes model`.
+**model selection**: At launch, EveryAPI fetches the live catalog available to the selected relay key/group, removes incompatible media/embedding protocols, and injects the resulting snapshot into every routed client's native selector. Use `/model` in Claude Code, Codex, Qwen Code, or Kimi Code; use Grok's `/model`/`models` entry or `hermes model` for Hermes. Claude Code provider presets receive only that provider's reachable models. Non-Claude model IDs are represented internally with Claude-compatible aliases but are displayed and sent upstream under their real IDs.
 
-**hermes config isolation**: `everyapi use hermes` redirects `HERMES_HOME` to `~/.config/everyapi/hermes-home`, so its `config.yaml` (and the sessions/logs that accumulate there) are kept separate from your personal `~/.hermes` — a plain `hermes` invocation is untouched, and the two won't share session history. Bare `hermes` opens the interactive chat; pass `everyapi use hermes -- --tui` for the terminal UI.
+Hermes, Qwen Code, and Kimi Code also need a boot model, so a TTY first opens EveryAPI's picker; pass `--model <id>` to skip it. In a non-interactive run EveryAPI deterministically uses the first compatible model. Hermes remembers its previous choice and accepts `EVERYAPI_HERMES_MODEL=<id>`. Plain claude/codex/grok still own their boot-model flags, which you can pass after `--`. The `gemini` entry is deliberately different: it launches native Antigravity (`agy`) with Google authentication, routing, and model catalog, so no EveryAPI models are injected there.
+
+`qwen` and `kimi` remain the existing Claude Code provider presets. Use the explicit `qwen-code` or `kimi-code` names when you want those vendors' official clients.
+
+**hermes config isolation**: `everyapi use hermes` redirects `HERMES_HOME` to a process-scoped directory under `~/.config/everyapi/sessions`; its credential-bearing config and live proxy URL are removed at exit and cannot collide with another key/group. Only the last selected model ID is retained as a safe preference. Your personal `~/.hermes` remains untouched. The generated config registers EveryAPI as a named custom provider so `hermes model` can discover and switch models without falling back to OpenRouter. Bare `hermes` opens the interactive chat; pass `everyapi use hermes -- --tui` for the terminal UI.
+
+**grok config isolation**: `everyapi use grok` redirects `GROK_HOME` to `~/.config/everyapi/grok-home`. This prevents a cached xAI browser session from overriding the EveryAPI relay key and keeps EveryAPI-routed sessions separate from plain `grok`. Pass Grok-specific flags after `--`, for example `everyapi use grok -- --model grok-4.5`.
+
+**Qwen/Kimi config isolation**: each routed launch receives a process-scoped home under `~/.config/everyapi/sessions`, removed when the child exits, so concurrent keys/groups cannot overwrite one another's catalog or loopback URL. Qwen's real system settings remain untouched and retain administrator precedence. If administrator or workspace settings define `modelProviders.openai` (and would hide the live EveryAPI catalog), launch stops with an actionable conflict instead of silently showing stale/incompatible models. Plain `qwen` and `kimi` invocations keep their personal configuration and session history.
 
 > ⚠️ **Subprocess env safety note**: the env vars above contain your relay API key. Third-party CLIs in debug / verbose mode may log env — before running `everyapi use`, make sure the debug flag you turn on does not leak `*_TOKEN` / `*_API_KEY`. Before sharing debug logs, run `sed -i 's/sk-everyapi-[A-Za-z0-9]*/REDACTED/g'`.
 
@@ -111,7 +125,7 @@ No more looking up which variable name each tool reads, whether you need to appe
 
 Transparent mode keeps supported clients on their vendor's official API origin instead of setting a third-party Base URL. It is the default for every tool that supports it; pass `--transparent=false` to opt out. The CLI starts an ephemeral HTTP CONNECT proxy on a random loopback port, creates a per-run CA whose private key stays in memory, and gives the child only the proxy URL, public CA bundle, and a non-secret placeholder credential. Registered model routes are decrypted locally and relayed to EveryAPI with the real relay key; other HTTPS hosts use raw CONNECT passthrough. An unknown path beneath a protected model prefix is blocked, and a relay failure never falls back to the vendor.
 
-Verified against Claude Code (including the provider presets), Codex CLI, and Gemini CLI, which are the tools it defaults on for. Hermes always uses the injected path: it is an EveryAPI-native client that routes at `<apiBase>/v1` by design, so it has no third-party origin to preserve and transparent mode does not apply to it — passing `--transparent` there is an error rather than a silent no-op.
+Verified against Claude Code (including the provider presets) and Codex CLI, which are the tools it defaults on for. The `gemini` entry launches native Antigravity outside the connector. Grok, Qwen Code, Kimi Code, and Hermes always use the injected path, so transparent mode does not apply to them — passing `--transparent` there is an error rather than a silent no-op.
 
 `--sanitize` composes with transparent mode rather than conflicting with it: the connector relays through the sanitizer (child → connector → sanitizer → gateway), so masking and the Claude recovery response guard apply on either launch path.
 

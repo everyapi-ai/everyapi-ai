@@ -665,7 +665,7 @@ fi
 
 echo "Next steps:"
 echo "  • Sign in:        everyapi auth login"
-echo "  • Point a CLI:    everyapi use claude   # or codex / gemini"
+echo "  • Point a CLI:    everyapi use claude   # or codex / gemini / grok / qwen-code / kimi-code"
 echo "  • Check balance:  everyapi auth status"
 echo "  • Help:           everyapi help"
 

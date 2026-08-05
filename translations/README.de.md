@@ -2,7 +2,7 @@
 
 # `everyapi` CLI
 
-Buyer-Onboarding-CLI für das AI-API-Gateway [EveryAPI](https://everyapi.ai). Richte jeden Claude Code / Codex / Gemini CLI **in unter einer Minute** auf das Gateway aus.
+Buyer-Onboarding-CLI für das AI-API-Gateway [EveryAPI](https://everyapi.ai). Starte Claude Code, Codex, Antigravity, Grok Build, Qwen Code oder Kimi Code **in unter einer Minute**.
 
 Status: **Kernabläufe stehen** — Buyer-Onboarding, Seller-Befehle (Plain-Key + OAuth über drei Provider), Sanitizer-Proxy, QR-Sign-In-Hauptpfad und Anti-Phishing-Schichten sind alle vorhanden. Die einzigen noch nicht implementierten Punkte sind OS-level Code-Signing und ein Plattform-Keychain-Backend (siehe „Was dieses Binary noch NICHT enthält" am Ende).
 
@@ -38,12 +38,15 @@ Ohne `brew update` verwendet `brew upgrade everyapi` das gecachte Formula und me
 
 ### `everyapi use <tool>` — exec in ein Drittanbieter-CLI (auf das EveryAPI-Gateway gerichtet)
 
-Der Hauptgrund, dieses CLI zu installieren. Es setzt die Env-Variablen des Zieltools gemäß dessen Konventionen und macht exec — deine bestehenden Claude Code / OpenAI Codex CLI / Gemini CLI **brauchen keine Konfigurationsänderung**, um auf das EveryAPI-Gateway zu zeigen.
+Der Hauptgrund, dieses CLI zu installieren. Es konfiguriert und startet die unterstützten Coding-Clients über EveryAPI; der Eintrag `gemini` startet das bereits authentifizierte Antigravity-CLI.
 
 ```bash
 everyapi use claude         # Claude Code → EveryAPI
 everyapi use codex          # OpenAI Codex CLI → EveryAPI
-everyapi use gemini         # Gemini CLI → EveryAPI
+everyapi use gemini         # Antigravity starten
+everyapi use grok           # xAI Grok Build → EveryAPI
+everyapi use qwen-code      # Alibaba Qwen Code → EveryAPI
+everyapi use kimi-code      # Moonshot Kimi Code → EveryAPI
 everyapi use                # ohne Argument → interaktive Auswahl über installierte Tools
 ```
 
@@ -53,7 +56,10 @@ Jedes Tool verwendet andere Env-Konventionen; das CLI merkt sie sich für dich:
 |---|---|
 | claude | `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` |
 | codex | `OPENAI_BASE_URL`, `OPENAI_API_KEY` |
-| gemini | `GEMINI_API_KEY`, `GOOGLE_GEMINI_BASE_URL` |
+| gemini | nativer Antigravity-Launcher (`agy`) |
+| grok | `XAI_API_KEY`, `GROK_MODELS_BASE_URL` |
+| qwen-code | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`; isoliertes `QWEN_HOME` |
+| kimi-code | `KIMI_MODEL_API_KEY`, `KIMI_MODEL_BASE_URL`, `KIMI_MODEL_NAME`; isoliertes `KIMI_CODE_HOME` |
 
 Kein Nachschlagen mehr, welchen Variablennamen jedes Tool liest, ob du `/v1` anhängen musst oder welche Auth-Header-Form gilt.
 

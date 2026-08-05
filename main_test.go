@@ -140,6 +140,28 @@ func TestTokenLauncherOffersAPIKeySwitch(t *testing.T) {
 	t.Fatal("token TUI menu does not offer API key switching")
 }
 
+func TestUseCommandDescriptionListsGrok(t *testing.T) {
+	c, ok := lookup("use")
+	if !ok {
+		t.Fatal("use command missing")
+	}
+	if !strings.Contains(c.desc, "grok") {
+		t.Fatalf("use command description does not list grok: %q", c.desc)
+	}
+}
+
+func TestUseCommandDescriptionListsOfficialQwenAndKimiCLIs(t *testing.T) {
+	c, ok := lookup("use")
+	if !ok {
+		t.Fatal("use command missing")
+	}
+	for _, name := range []string{"qwen-code", "kimi-code"} {
+		if !strings.Contains(c.desc, name) {
+			t.Errorf("use command description does not list %s: %q", name, c.desc)
+		}
+	}
+}
+
 // TestSubPicker_AuthUnwindsAfterCleanAction locks the login-lands-on-
 // logout fix: after an auth action returns cleanly, runSubPicker must
 // unwind to the root launcher (ErrPickCancelled) rather than re-render

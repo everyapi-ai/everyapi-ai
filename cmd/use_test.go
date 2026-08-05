@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -282,6 +283,83 @@ func TestUseUsageDocumentsTransparentFlag(t *testing.T) {
 	}
 }
 
+func TestUseUsageDocumentsGrok(t *testing.T) {
+	if !strings.Contains(useUsage, "grok") {
+		t.Fatal("use help does not list grok")
+	}
+	if !strings.Contains(useUsage, "everyapi use grok") {
+		t.Fatal("use help does not include a Grok launch example")
+	}
+}
+
+func TestUseUsageDocumentsOfficialQwenAndKimiCLIs(t *testing.T) {
+	for _, name := range []string{"qwen-code", "kimi-code"} {
+		if !strings.Contains(useUsage, name) {
+			t.Errorf("use help does not list %s", name)
+		}
+	}
+	if !strings.Contains(useUsage, "hermes/qwen-code/kimi-code") {
+		t.Error("use help does not document model selection for the new CLIs")
+	}
+}
+
+func TestToolArgsForLaunchPinsQwenToOpenAI(t *testing.T) {
+	qwen, err := tools.Lookup("qwen-code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"no override", []string{"--help"}, []string{"--help", "--auth-type=openai"}},
+		{"equals override", []string{"--auth-type=anthropic", "prompt"}, []string{"prompt", "--auth-type=openai"}},
+		{"space override", []string{"--auth-type", "gemini", "prompt"}, []string{"prompt", "--auth-type=openai"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := toolArgsForLaunch(qwen, tc.args); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("toolArgsForLaunch() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+
+	claude, err := tools.Lookup("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := []string{"--model", "opus"}
+	if got := toolArgsForLaunch(claude, original); !reflect.DeepEqual(got, original) {
+		t.Errorf("non-Qwen args changed: %v", got)
+	}
+}
+
+func TestToolAllowsAutomaticYoloRejectsKimiPromptMode(t *testing.T) {
+	kimi, err := tools.Lookup("kimi-code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"--prompt", "hello"},
+		{"--prompt=hello"},
+		{"-p", "hello"},
+	} {
+		if toolAllowsAutomaticYolo(kimi, args) {
+			t.Errorf("Kimi args %v must not receive an automatic --yolo", args)
+		}
+	}
+	if !toolAllowsAutomaticYolo(kimi, []string{"--help"}) {
+		t.Error("interactive/non-prompt Kimi launch should still honor the dangerous-mode preference")
+	}
+	qwen, err := tools.Lookup("qwen-code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !toolAllowsAutomaticYolo(qwen, []string{"--prompt", "hello"}) {
+		t.Error("Qwen supports --prompt with --yolo")
+	}
+}
+
 // TestParseUseArgsAcceptsSanitizeWithTransparent checks only that the parser
 // accepts the two flags together. It deliberately does NOT stand in for the
 // removed TestUseRejectsSanitizeAndTransparentTogether: that gate lived in Use,
@@ -405,6 +483,68 @@ func TestResolveToolModel(t *testing.T) {
 			t.Errorf("claude should not touch %s, got %q", env, got)
 		}
 	})
+
+	t.Run("non-hermes tool does not inherit hermes history", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		t.Setenv("EVERYAPI_HERMES_MODEL", "z-last-hermes-model")
+		if _, err := hermes.Prepare("https://api.everyapi.ai", "relay-key"); err != nil {
+			t.Fatal(err)
+		}
+		qwen, err := tools.Lookup("qwen-code")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv(qwen.ModelEnv, "")
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.WriteString(w, `{"data":[`+
+				`{"id":"a-first-qwen-model","supported_endpoint_types":["openai"]},`+
+				`{"id":"z-last-hermes-model","supported_endpoint_types":["openai"]}`+
+				`]}`)
+		}))
+		defer srv.Close()
+		if err := resolveToolModel(qwen, &config.Credentials{APIBase: srv.URL}, "relay-key", ""); err != nil {
+			t.Fatal(err)
+		}
+		if got := os.Getenv(qwen.ModelEnv); got != "a-first-qwen-model" {
+			t.Errorf("%s = %q, want qwen's first model rather than Hermes history", qwen.ModelEnv, got)
+		}
+	})
+}
+
+func TestResolveToolModelFromCatalogRejectsFailureAndStaleExplicitSelection(t *testing.T) {
+	t.Setenv("OPENAI_MODEL", "")
+	tool, _ := tools.Lookup("qwen-code")
+	catalogErr := errors.New("catalog unavailable")
+	if err := resolveToolModelFromCatalog(tool, nil, catalogErr, "gpt-stale"); err == nil {
+		t.Fatal("explicit model bypassed a failed live catalog")
+	}
+	catalog := []api.RelayModel{{ID: "qwen-live", SupportedEndpointTypes: []string{"openai"}}}
+	if err := resolveToolModelFromCatalog(tool, catalog, nil, "qwen-stale"); err == nil {
+		t.Fatal("model absent from the current key/group catalog was accepted")
+	}
+}
+
+func TestPreferredToolModelIndexUsesHermesHistoryOnlyForHermes(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("EVERYAPI_HERMES_MODEL", "z-hermes-history")
+	hermes, err := tools.Lookup("hermes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hermes.Prepare("https://api.everyapi.ai", "relay-key"); err != nil {
+		t.Fatal(err)
+	}
+	qwen, err := tools.Lookup("qwen-code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	models := []string{"a-first-model", "z-hermes-history"}
+	if got := preferredToolModelIndex(qwen, models); got != 0 {
+		t.Errorf("Qwen initial index = %d, want first model", got)
+	}
+	if got := preferredToolModelIndex(hermes, models); got != 1 {
+		t.Errorf("Hermes initial index = %d, want saved model", got)
+	}
 }
 
 func TestCreateDefaultRelayKeyCreatesThenCaches(t *testing.T) {
@@ -522,7 +662,7 @@ func TestProviderChatModels(t *testing.T) {
 		{ID: "glm-5.1", OwnedBy: "zhipu_4v", SupportedEndpointTypes: []string{"anthropic"}},                             // other provider → drop
 	}
 	got := providerChatModels(catalog, "minimax")
-	want := []string{"MiniMax-M2.7", "MiniMax-M2.7-highspeed", "legacy-chat"}
+	want := []string{"MiniMax-M2.7-highspeed", "legacy-chat"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("providerChatModels = %v, want %v (sorted, chat-only, owner-scoped)", got, want)
 	}
@@ -535,6 +675,24 @@ func TestProviderChatModels(t *testing.T) {
 	onlyImage := []api.RelayModel{{ID: "img", OwnedBy: "minimax", SupportedEndpointTypes: []string{"image-generation"}}}
 	if got := providerChatModels(onlyImage, "minimax"); len(got) != 0 {
 		t.Errorf("providerChatModels(only-image) = %v, want empty", got)
+	}
+}
+
+func TestLaunchModelsForAllClaudeClientsUsesAnthropicProtocol(t *testing.T) {
+	catalog := []api.RelayModel{
+		{ID: "claude-ok", OwnedBy: "anthropic", SupportedEndpointTypes: []string{"anthropic"}},
+		{ID: "gpt-chat-only", OwnedBy: "openai", SupportedEndpointTypes: []string{"openai"}},
+		{ID: "qwen-openai", OwnedBy: "qwen", SupportedEndpointTypes: []string{"openai"}},
+		{ID: "qwen-anthropic", OwnedBy: "qwen", SupportedEndpointTypes: []string{"anthropic"}},
+		{ID: "qwen-image", OwnedBy: "qwen", SupportedEndpointTypes: []string{"image-generation", "openai"}},
+	}
+	claude, _ := tools.Lookup("claude")
+	if got := launchModelsForTool(claude, catalog); len(got) != 2 || got[0].ID != "claude-ok" || got[1].ID != "qwen-anthropic" {
+		t.Fatalf("plain Claude launch catalog = %#v", got)
+	}
+	qwen, _ := tools.Lookup("qwen")
+	if got := launchModelsForTool(qwen, catalog); len(got) != 1 || got[0].ID != "qwen-anthropic" {
+		t.Fatalf("Qwen Claude preset launch catalog = %#v", got)
 	}
 }
 
@@ -635,8 +793,8 @@ func TestProviderChatModelsLegacyOwnerAlias(t *testing.T) {
 	mixed := []api.RelayModel{
 		{ID: "glm-4.7", OwnedBy: "zhipu", SupportedEndpointTypes: []string{"anthropic"}},       // new gateway
 		{ID: "glm-5.1", OwnedBy: "zhipu_4v", SupportedEndpointTypes: []string{"anthropic"}},    // legacy gateway
-		{ID: "qwen-max", OwnedBy: "qwen", SupportedEndpointTypes: []string{"openai"}},          // new gateway
-		{ID: "qwen3-coder", OwnedBy: "ali", SupportedEndpointTypes: []string{"openai"}},        // legacy gateway
+		{ID: "qwen-max", OwnedBy: "qwen", SupportedEndpointTypes: []string{"anthropic"}},       // new gateway
+		{ID: "qwen3-coder", OwnedBy: "ali", SupportedEndpointTypes: []string{"anthropic"}},     // legacy gateway
 		{ID: "deepseek-chat", OwnedBy: "deepseek", SupportedEndpointTypes: []string{"openai"}}, // unrelated
 	}
 	if got, want := providerChatModels(mixed, "zhipu"), []string{"glm-4.7", "glm-5.1"}; !reflect.DeepEqual(got, want) {

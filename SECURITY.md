@@ -35,7 +35,7 @@
 CLI 的设计威胁模型（这些**不是**漏洞，而是设计权衡）：
 
 1. **`~/.config/everyapi/credentials.json` 明文存 token** — 文件 mode `0600`，但任何能读该文件的本机进程都能以你的身份调用 EveryAPI API。与 `gh auth` / `aws configure` 等业界 CLI 相同。Keychain / DPAPI / Secret Service backend 路线图中，但尚未上。**对策**：在不信任的机器上不要 `everyapi login`；怀疑泄漏立即 `everyapi logout` + 在 dashboard rotate API key。
-2. **默认 `everyapi use <tool>` 把 token 通过 env 传给子进程** — claude / codex / gemini 的 debug 日志可能落档 env。**对策**：分享 debug log 前 redact `*_TOKEN` / `*_API_KEY`；或灰度使用 `--transparent`，让真实 relay key 只留在 EveryAPI 父进程内存。注意同一 OS 用户下的子进程仍能读取第 1 项中的 credentials 文件，这不是恶意进程沙箱。
+2. **默认 `everyapi use <tool>` 把 token 通过 env 传给子进程** — claude / codex / gemini / grok / qwen-code / kimi-code 的 debug 日志可能落档 env。**对策**：分享 debug log 前 redact `*_TOKEN` / `*_API_KEY`；或在支持的客户端中灰度使用 `--transparent`，让真实 relay key 只留在 EveryAPI 父进程内存。注意同一 OS 用户下的子进程仍能读取第 1 项中的 credentials 文件，这不是恶意进程沙箱。
 3. **`--transparent` 在本机终止目标域名 TLS** — Connector 能看到解密后的模型请求和响应；客户端也可检测代理变量和临时 CA。CA 私钥每次启动生成、只存在内存且不上传，公开 CA bundle 在退出时删除，监听地址强制为 loopback，未知模型路径 fail closed。**对策**：只在可信设备使用；不要把“保留官方 origin”理解为客户端到供应商的端到端 TLS，也不要宣称其不可检测。
 4. **MCP server 凭据继承** — `everyapi mcp` 读同一份 credentials 文件，自动跑所有 tool。任何能 spawn `everyapi mcp` 的本机进程（恶意 MCP host、被入侵的 AI agent）都拥有相同权限。**对策**：只在信任的 MCP host 里配 `everyapi`；钱路工具 `everyapi_seller_withdraw` 已加 `confirm: "yes"` 必填字段做 friction step。
 5. **Release 二进制无 OS 级 code signing** — macOS Gatekeeper / Windows SmartScreen 会拦。**对策**：每个 release 附带 `SHA256SUMS` + sigstore cosign keyless 签名（`SHA256SUMS.sig` + `SHA256SUMS.pem`），证明 `SHA256SUMS` 是由 `everyapi-ai/everyapi` 仓的 `cli-release.yml` workflow 在 GitHub Actions 上产生的。务必按 README §安装 部分给的命令走完两层校验；不要绕过 OS 警告直接运行未校验的二进制。OS notarization 路线图中。

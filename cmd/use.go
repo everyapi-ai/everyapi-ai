@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -34,9 +35,10 @@ USAGE
   everyapi use [<tool>] [--group <name> | --channel <name>] [--model <id>] [--sanitize] [--transparent[=false]] [-- tool args...]
 
 ARGUMENTS
-  <tool>                 claude | codex | gemini | hermes
+  <tool>                 claude | codex | gemini | grok | hermes
+                         qwen-code | kimi-code
                          minimax | qwen | deepseek | byteplus | glm | kimi
-                         The second row launches Claude Code against that
+                         The third row launches Claude Code against that
                          provider (routed via EveryAPI) and pops a picker over
                          the provider's models — or pass --model <id> to skip it.
                          Omit to open an interactive picker over installed tools.
@@ -46,10 +48,14 @@ FLAGS
   --channel <name>       Alias of --group.
   (bare --group/--channel, no value) → interactive picker over your
                          enabled keys' routing groups.
-  --model <id>           hermes only: pin the upstream model, skipping the
-                         picker. Omit on a TTY to choose from your model
-                         catalog. claude/codex/gemini set their own model —
-                         pass model flags to them after -- instead.
+  --model <id>           hermes/qwen-code/kimi-code: pin the upstream model,
+                         skipping the picker. Omit on a TTY to choose from your
+                         model catalog. Routed clients also receive the live,
+                         key-scoped compatible catalog in their native model
+                         selector (/model, "models", or "hermes model").
+                         claude/codex/gemini/grok set their boot model — pass
+                         model flags to them after -- instead. Native gemini/agy
+                         keeps Google's own catalog and routing.
   --sanitize             Opt in to the local sanitizer proxy (masks detected secrets before they reach the gateway). Off by default — the mask/restore step corrupts coding-agent sessions; for non-agentic SDK traffic use the standalone 'everyapi proxy' instead.
   --transparent[=false]  Transparent mode keeps the tool on its vendor's
                          official API origin and relays registered model routes
@@ -59,8 +65,8 @@ FLAGS
                          presets. The gemini entry launches native agy instead.
                          Pass --transparent=false to fall back
                          to injecting the gateway Base URL + relay key.
-                         hermes is EveryAPI-native (no vendor origin to keep)
-                         and always uses the injected path.
+                         grok, qwen-code, kimi-code, and hermes always use the
+                         injected path.
   --                     End of everyapi's option parsing; remaining args are
                          forwarded verbatim to the tool's argv.
 
@@ -73,6 +79,9 @@ EXAMPLES
   everyapi use claude                  (transparent by default)
   everyapi use claude --transparent=false
   everyapi use codex --channel byteplus
+  everyapi use grok
+  everyapi use qwen-code              (official Qwen Code; pick a model)
+  everyapi use kimi-code --model kimi-k2.5
   everyapi use claude -- --model opus
   everyapi use glm                     (Claude Code; pick a GLM model)
   everyapi use kimi --model kimi-k2.5  (Claude Code on Kimi, skip the picker)
@@ -88,6 +97,9 @@ EXAMPLES
 //	everyapi use claude
 //	everyapi use codex
 //	everyapi use gemini
+//	everyapi use grok
+//	everyapi use qwen-code
+//	everyapi use kimi-code
 //	everyapi use            (no arg → interactive picker over installed tools)
 //	everyapi use claude --group byteplus   (relay through the key bound to
 //	                              the "byteplus" group instead of the
@@ -111,8 +123,8 @@ EXAMPLES
 // (`--channel team-a`) consumes the next token as the value unless
 // it's another flag or a known tool name — so `everyapi use claude
 // --channel` opens the picker while `--channel team-a claude` is
-// explicit. A group literally named like a tool (claude/codex/gemini/
-// hermes/minimax/qwen/deepseek/byteplus/glm/kimi) needs the `=` form
+// explicit. A group literally named like a tool (claude/codex/gemini/grok/
+// qwen-code/kimi-code/hermes/minimax/qwen/deepseek/byteplus/glm/kimi) needs the `=` form
 // when it appears before the tool positional. A bare `--` ends
 // everyapi's option parsing; everything after is
 // forwarded raw to the tool — use it for tool flags like claude's
@@ -172,6 +184,7 @@ func Use(args []string) error {
 	if err != nil {
 		return err
 	}
+	extraArgs = toolArgsForLaunch(t, extraArgs)
 	// Transparent mode is the default wherever a tool has an adapter for it:
 	// the tool keeps talking to its vendor's official origin and the relay key
 	// never reaches the child's env or config. A tool without an adapter has no
@@ -210,9 +223,10 @@ func Use(args []string) error {
 		}
 	}
 
-	// --model applies to tools EveryAPI picks a model for: hermes (ModelEnv)
+	// --model applies to tools EveryAPI picks a model for: hermes and the
+	// official qwen-code/kimi-code clients (ModelEnv),
 	// and the Claude Code provider presets (ModelOwner, where --model skips
-	// the picker). plain claude/codex/gemini default the model in their own
+	// the picker). Plain claude/codex/gemini/grok default the model in their own
 	// CLI — pass tool model flags after `--` for those.
 	if model != "" && t.ModelEnv == "" && t.ModelOwner == "" {
 		return fmt.Errorf(i18n.T("use.model_unsupported"), t.ExecName, t.ExecName)
@@ -279,32 +293,33 @@ func Use(args []string) error {
 	// Provider presets always validate against the live /v1/models catalog
 	// below, including an explicit --model, so a separate probe would be a
 	// redundant round-trip.
-	if t.ModelOwner == "" {
-		client := api.New(gw, relayKey)
-		var perr error
-		if t.RequiredEndpoint != "" && toolInvocationNeedsEndpoint(extraArgs) {
-			var catalog []api.RelayModel
-			catalog, perr = client.RelayModelCatalog(cliout.WithCtx())
-			if perr == nil && !catalogSupportsEndpoint(catalog, t.RequiredEndpoint) {
-				return fmt.Errorf("no models available through the %s endpoint for this relay key; choose a compatible EveryAPI client or add a channel that supports this endpoint", t.RequiredEndpoint)
-			}
-		} else {
-			perr = client.ProbeRelayToken(cliout.WithCtx())
+	relayCatalog, catalogErr := api.New(gw, relayKey).RelayModelCatalog(cliout.WithCtx())
+	if catalogErr != nil && api.IsUnauthorized(catalogErr) {
+		invalidateCachedKeyOnReject(creds, group)
+		return relayKeyRejectedErr(t.ExecName, gw)
+	}
+	if toolInvocationNeedsEndpoint(extraArgs) {
+		if catalogErr != nil {
+			return fmt.Errorf("load live model catalog for %s: %w", t.ExecName, catalogErr)
 		}
-		if perr != nil && api.IsUnauthorized(perr) {
-			invalidateCachedKeyOnReject(creds, group)
-			return relayKeyRejectedErr(t.ExecName, gw)
+		if len(relayCatalog) == 0 {
+			return fmt.Errorf("no models are available for %s with this relay key/group", t.ExecName)
 		}
 	}
+	if catalogErr == nil && t.RequiredEndpoint != "" && toolInvocationNeedsEndpoint(extraArgs) &&
+		!catalogSupportsEndpoint(relayCatalog, t.RequiredEndpoint) {
+		return fmt.Errorf("no models available through the %s endpoint for this relay key; choose a compatible EveryAPI client or add a channel that supports this endpoint", t.RequiredEndpoint)
+	}
 
-	// Resolve the upstream model for tools EveryAPI picks for (hermes).
+	// Resolve the upstream model for tools EveryAPI picks for (Hermes, Qwen
+	// Code, and Kimi Code).
 	// Sets t.ModelEnv in this process so the tool's prepareFn reads it
 	// when generating its config. Runs after the relay-key probe so we
 	// don't prompt for a model only to bail on a dead key, and uses the
 	// relay key (not the management token) so the catalog is scoped to
 	// what this key/group can actually reach. No-op for
-	// claude/codex/gemini (ModelEnv == "").
-	if err := resolveToolModel(t, creds, relayKey, model); err != nil {
+	// claude/codex/gemini/grok (ModelEnv == "").
+	if err := resolveToolModelFromCatalog(t, relayCatalog, catalogErr, model); err != nil {
 		return err
 	}
 
@@ -315,7 +330,7 @@ func Use(args []string) error {
 	// proxy behind. The chosen id is injected into the tool env below.
 	presetModel := ""
 	if t.ModelOwner != "" {
-		presetModel, err = resolveClaudePresetModel(t, creds, relayKey, model, group)
+		presetModel, err = resolveClaudePresetModelFromCatalog(t, relayCatalog, catalogErr, model, gw)
 		if err != nil {
 			return err
 		}
@@ -382,6 +397,7 @@ func Use(args []string) error {
 	// spawned it and every other session got connection-refused).
 	apiBaseForEnv := gw
 	connectorUpstream := gw
+	var modelCatalogProxyStop func()
 	guardClaudeRecovery := recovery != nil
 	if sanitize || guardClaudeRecovery {
 		proxyAddr, stop, perr := startInProcessSanitizer(gw, sanitize, guardClaudeRecovery)
@@ -411,6 +427,24 @@ func Use(args []string) error {
 			defer stop()
 		}
 	}
+	if toolNeedsFilteredCatalogProxy(t) {
+		filtered := launchModelsForTool(t, relayCatalog)
+		if len(filtered) > 0 {
+			catalogModels := filtered
+			var aliases map[string]string
+			if t.ExecName == "claude" {
+				catalogModels, aliases = claudeCatalogModels(filtered)
+			}
+			proxyURL, stop, proxyErr := startModelCatalogProxy(apiBaseForEnv, catalogModels, aliases)
+			if proxyErr != nil {
+				return fmt.Errorf("start filtered model catalog for %s: %w", t.ExecName, proxyErr)
+			}
+			modelCatalogProxyStop = stop
+			defer stop()
+			apiBaseForEnv = proxyURL
+			connectorUpstream = proxyURL
+		}
+	}
 
 	var (
 		env                map[string]string
@@ -433,6 +467,13 @@ func Use(args []string) error {
 		defer transparentSession.stop()
 	} else {
 		env = t.Env(apiBaseForEnv, relayKey)
+		if modelCatalogProxyStop != nil {
+			// The filtered catalogue proxy is loopback. Keep ambient corporate
+			// HTTPS proxies (and a parent Codex connector) from receiving plain
+			// HTTP requests intended for this process-local listener.
+			env["NO_PROXY"] = "127.0.0.1,localhost"
+			env["no_proxy"] = "127.0.0.1,localhost"
+		}
 	}
 
 	// Pin the provider preset's chosen model. Injected into the env map
@@ -473,13 +514,13 @@ func Use(args []string) error {
 
 	// Dangerous-mode prompt. Each tool exposes a single "skip
 	// every confirmation" switch — an argv flag (Tool.YoloFlag,
-	// claude/codex/gemini) or an env var (Tool.YoloEnv, hermes'
+	// claude/codex/gemini/grok) or an env var (Tool.YoloEnv, hermes'
 	// HERMES_YOLO_MODE). If the user hasn't already passed the flag
 	// via `-- <flags>`, use the persisted choice or ask once on a TTY.
 	// The prompt defaults to YES, but the mode stays disabled until the
 	// user confirms and the choice is saved.
 	yoloAlreadyPassed := t.YoloFlag != "" && containsFlag(extraArgs, t.YoloFlag)
-	if (t.YoloFlag != "" || t.YoloEnv != "") && !yoloAlreadyPassed {
+	if (t.YoloFlag != "" || t.YoloEnv != "") && !yoloAlreadyPassed && toolAllowsAutomaticYolo(t, extraArgs) {
 		enable, perr := resolveLaunchPreference(
 			settings.DangerousMode,
 			interactive,
@@ -502,7 +543,7 @@ func Use(args []string) error {
 			if t.YoloFlag != "" {
 				// Prepend so a user-passed flag after `--` still
 				// wins on conflict (last-flag wins in Go's flag and
-				// in claude/codex/gemini's argv parsing alike).
+				// in claude/codex/gemini/grok's argv parsing alike).
 				extraArgs = append([]string{t.YoloFlag}, extraArgs...)
 			}
 			if t.YoloEnv != "" {
@@ -531,12 +572,16 @@ func Use(args []string) error {
 	// overlays t.Env so the hook can pin CODEX_HOME.
 	var extraEnv map[string]string
 	if transparent {
-		extraEnv, err = t.PrepareTransparent()
+		extraEnv, err = t.PrepareTransparentWithModels(launchModelsForTool(t, relayCatalog))
 	} else {
-		extraEnv, err = t.Prepare(apiBaseForEnv, relayKey)
+		extraEnv, err = t.PrepareWithModels(apiBaseForEnv, relayKey, launchModelsForTool(t, relayCatalog))
 	}
 	if err != nil {
 		return fmt.Errorf("prepare %s: %w", t.ExecName, err)
+	}
+	preparedCleanup := tools.TakePreparedCleanup(extraEnv)
+	if preparedCleanup != nil {
+		defer preparedCleanup()
 	}
 	for k, v := range extraEnv {
 		env[k] = v
@@ -566,14 +611,39 @@ func Use(args []string) error {
 	// stdin, so it doesn't leak into the launched tool as phantom input.
 	cliprompt.DrainStdin()
 	if transparent {
+		cleanup := combineCleanups(transparentSession.stop, modelCatalogProxyStop, preparedCleanup)
 		return tools.ExecWithOptions(t, tools.ExecOptions{
 			Env:      env,
 			UnsetEnv: unsetEnv,
 			Args:     extraArgs,
-			Cleanup:  transparentSession.stop,
+			Cleanup:  cleanup,
 		})
 	}
+	if cleanup := combineCleanups(modelCatalogProxyStop, preparedCleanup); cleanup != nil {
+		return tools.ExecWithOptions(t, tools.ExecOptions{Env: env, Args: extraArgs, Cleanup: cleanup})
+	}
 	return tools.Exec(t, env, extraArgs)
+}
+
+func combineCleanups(cleanups ...func()) func() {
+	active := make([]func(), 0, len(cleanups))
+	for _, cleanup := range cleanups {
+		if cleanup != nil {
+			active = append(active, cleanup)
+		}
+	}
+	if len(active) == 0 {
+		return nil
+	}
+	return func() {
+		for i := len(active) - 1; i >= 0; i-- {
+			active[i]()
+		}
+	}
+}
+
+func toolNeedsFilteredCatalogProxy(t *tools.Tool) bool {
+	return t.ExecName == "claude" || t.Name == "grok" || t.Name == "hermes"
 }
 
 func launchNativeTool(t *tools.Tool, args []string) error {
@@ -694,6 +764,15 @@ func containsFlag(args []string, flag string) bool {
 		}
 	}
 	return false
+}
+
+// toolAllowsAutomaticYolo reports whether a saved dangerous-mode preference
+// can be applied to this invocation. Kimi Code rejects --yolo together with
+// its non-interactive --prompt/-p mode, so leave prompt runs unmodified. An
+// explicitly supplied conflicting --yolo remains the upstream CLI's error to
+// report; this guard only controls EveryAPI's automatic injection.
+func toolAllowsAutomaticYolo(t *tools.Tool, args []string) bool {
+	return t.Name != "kimi-code" || (!containsFlag(args, "--prompt") && !containsFlag(args, "-p"))
 }
 
 const claudeInflatedSessionThreshold = 100_000
@@ -1098,7 +1177,7 @@ func parseUseArgsWithTransparent(args []string) (toolName, group string, pickGro
 }
 
 // resolveToolModel pins the upstream model for tools EveryAPI selects a
-// model for (those with Tool.ModelEnv set — hermes today). It exports
+// model for (those with Tool.ModelEnv set). It exports
 // the resolved id into t.ModelEnv in THIS process so the tool's
 // prepareFn reads it when generating config. Precedence:
 //
@@ -1108,33 +1187,69 @@ func parseUseArgsWithTransparent(args []string) (toolName, group string, pickGro
 //  4. non-interactive with nothing set → deterministically select the
 //     first chat-capable model in that same live catalog.
 //
-// A no-op for claude/codex/gemini, whose CLIs default the model
+// A no-op for claude/codex/gemini/grok, whose CLIs default the model
 // themselves and route it by name through the gateway.
 func resolveToolModel(t *tools.Tool, creds *config.Credentials, relayKey, modelFlag string) error {
 	if t.ModelEnv == "" {
 		return nil
 	}
+	// Compatibility wrapper for callers that already made their own explicit
+	// selection. Use itself calls resolveToolModelFromCatalog after fetching the
+	// live snapshot, so production launches still validate both forms.
 	if modelFlag != "" {
 		return os.Setenv(t.ModelEnv, modelFlag)
 	}
 	if os.Getenv(t.ModelEnv) != "" {
+		return nil
+	}
+	catalog, err := api.New(config.ResolveAPIBaseForBase(creds.APIBase), relayKey).RelayModelCatalog(cliout.WithCtx())
+	return resolveToolModelFromCatalog(t, catalog, err, modelFlag)
+}
+
+func resolveToolModelFromCatalog(t *tools.Tool, catalog []api.RelayModel, catalogErr error, modelFlag string) error {
+	if t.ModelEnv == "" {
+		return nil
+	}
+	if modelFlag != "" {
+		if catalogErr != nil {
+			return fmt.Errorf("validate model %s for %s: %w", modelFlag, t.ExecName, catalogErr)
+		}
+		if !slices.Contains(chatModels(catalog, t.RequiredEndpoint), modelFlag) {
+			return fmt.Errorf("model %q is not available through the %s endpoint for this relay key/group", modelFlag, t.RequiredEndpoint)
+		}
+		return os.Setenv(t.ModelEnv, modelFlag)
+	}
+	if current := strings.TrimSpace(os.Getenv(t.ModelEnv)); current != "" {
+		if catalogErr != nil {
+			return fmt.Errorf("validate %s=%s for %s: %w", t.ModelEnv, current, t.ExecName, catalogErr)
+		}
+		if !slices.Contains(chatModels(catalog, t.RequiredEndpoint), current) {
+			return fmt.Errorf("%s=%q is not available for this relay key/group", t.ModelEnv, current)
+		}
 		return nil // explicit env override; respect it
 	}
 	if !cliprompt.IsInteractive() {
-		models, err := toolChatModels(t, creds, relayKey)
-		if err != nil {
-			return err
+		if catalogErr != nil {
+			return fmt.Errorf("could not resolve a model for %s from the live catalog (%w); pass --model <id> to select one explicitly", t.ExecName, catalogErr)
 		}
-		return os.Setenv(t.ModelEnv, preferredToolModel(models))
+		models := chatModels(catalog, t.RequiredEndpoint)
+		if len(models) == 0 {
+			return fmt.Errorf("no chat-capable models are reachable for %s with this key/group; add a compatible channel or pass --model <id>", t.ExecName)
+		}
+		return os.Setenv(t.ModelEnv, preferredToolModel(t, models))
 	}
-	chosen, err := pickModelInteractive(t, creds, relayKey)
+	if catalogErr != nil {
+		return fmt.Errorf("could not resolve a model for %s from the live catalog (%w); pass --model <id> to select one explicitly", t.ExecName, catalogErr)
+	}
+	models := chatModels(catalog, t.RequiredEndpoint)
+	if len(models) == 0 {
+		return fmt.Errorf("no chat-capable models are reachable for %s with this key/group; add a compatible channel or pass --model <id>", t.ExecName)
+	}
+	idx, err := cliprompt.PickWithSelected(fmt.Sprintf(i18n.T("use.model_picker"), t.Name), models, preferredToolModelIndex(t, models))
 	if err != nil {
 		return err
 	}
-	if chosen != "" {
-		return os.Setenv(t.ModelEnv, chosen)
-	}
-	return nil
+	return os.Setenv(t.ModelEnv, models[idx])
 }
 
 // toolChatModels returns the chat-capable model ids the relay key can
@@ -1154,8 +1269,9 @@ func toolChatModels(t *tools.Tool, creds *config.Credentials, relayKey string) (
 	return models, nil
 }
 
-func preferredToolModel(models []string) string {
-	if last := tools.LastHermesModel(); last != "" {
+func preferredToolModel(t *tools.Tool, models []string) string {
+	if t.Name == "hermes" {
+		last := tools.LastHermesModel()
 		for _, model := range models {
 			if model == last {
 				return last
@@ -1163,6 +1279,16 @@ func preferredToolModel(models []string) string {
 		}
 	}
 	return models[0]
+}
+
+func preferredToolModelIndex(t *tools.Tool, models []string) int {
+	preferred := preferredToolModel(t, models)
+	for i, model := range models {
+		if model == preferred {
+			return i
+		}
+	}
+	return 0
 }
 
 // relayKeyRejectedErr is the actionable message shown when EveryAPI
@@ -1231,24 +1357,22 @@ func invalidateCachedKeyOnReject(creds *config.Credentials, group string) {
 // be a worse surprise than a clear "no glm models reachable" error.
 func resolveClaudePresetModel(t *tools.Tool, creds *config.Credentials, relayKey, modelFlag, group string) (string, error) {
 	gw := config.ResolveAPIBaseForBase(creds.APIBase)
+	catalog, err := api.New(gw, relayKey).RelayModelCatalog(cliout.WithCtx())
+	if err != nil && api.IsUnauthorized(err) {
+		invalidateCachedKeyOnReject(creds, group)
+		return "", relayKeyRejectedErr(t.ExecName, gw)
+	}
+	return resolveClaudePresetModelFromCatalog(t, catalog, err, modelFlag, gw)
+}
+
+func resolveClaudePresetModelFromCatalog(t *tools.Tool, catalog []api.RelayModel, catalogErr error, modelFlag, gw string) (string, error) {
 	if !cliprompt.IsInteractive() {
 		if modelFlag == "" {
 			return "", fmt.Errorf(i18n.T("use.preset_needs_model"), t.Name)
 		}
 	}
-	catalog, err := api.New(gw, relayKey).RelayModelCatalog(cliout.WithCtx())
-	if err != nil {
-		// This fetch doubles as the relay-key probe for presets (Use
-		// skips the standalone probe when we'll reach here), so a 401
-		// gets the same actionable "dead key" guidance — and, when the
-		// rejected key was the default-group cache, clears it so the
-		// next run re-resolves to a live token instead of re-handing-out
-		// the dead one.
-		if api.IsUnauthorized(err) {
-			invalidateCachedKeyOnReject(creds, group)
-			return "", relayKeyRejectedErr(t.ExecName, gw)
-		}
-		return "", fmt.Errorf(i18n.T("use.preset_catalog_failed"), t.Name, err)
+	if catalogErr != nil {
+		return "", fmt.Errorf(i18n.T("use.preset_catalog_failed"), t.Name, catalogErr)
 	}
 	if modelFlag != "" {
 		if err := validateClaudePresetModel(t, catalog, modelFlag); err != nil {
@@ -1266,6 +1390,34 @@ func resolveClaudePresetModel(t *tools.Tool, creds *config.Credentials, relayKey
 		return "", err
 	}
 	return ids[idx], nil
+}
+
+func launchModelsForTool(t *tools.Tool, catalog []api.RelayModel) []tools.Model {
+	models := make([]tools.Model, 0, len(catalog))
+	seen := make(map[string]bool, len(catalog))
+	requiredEndpoint := t.RequiredEndpoint
+	if t.ExecName == "claude" {
+		requiredEndpoint = "anthropic"
+	}
+	for _, model := range catalog {
+		if t.ModelOwner != "" && !ownerMatches(model.OwnedBy, t.ModelOwner) {
+			continue
+		}
+		if !chatCapable(model.SupportedEndpointTypes) {
+			continue
+		}
+		if requiredEndpoint != "" && !supportsEndpoint(model.SupportedEndpointTypes, requiredEndpoint) {
+			continue
+		}
+		id := cliout.Sanitize(model.ID)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		models = append(models, tools.Model{ID: id, OwnedBy: model.OwnedBy, SupportedEndpointTypes: model.SupportedEndpointTypes})
+	}
+	sort.Slice(models, func(i, j int) bool { return models[i].ID < models[j].ID })
+	return models
 }
 
 func validateClaudePresetModel(t *tools.Tool, catalog []api.RelayModel, model string) error {
@@ -1340,7 +1492,7 @@ func providerChatModels(catalog []api.RelayModel, owner string) []string {
 		if !ownerMatches(m.OwnedBy, owner) {
 			continue
 		}
-		if !chatCapable(m.SupportedEndpointTypes) {
+		if !chatCapable(m.SupportedEndpointTypes) || !supportsEndpoint(m.SupportedEndpointTypes, "anthropic") {
 			continue
 		}
 		ids = append(ids, cliout.Sanitize(m.ID))
@@ -1440,6 +1592,30 @@ func toolInvocationNeedsEndpoint(args []string) bool {
 	}
 }
 
+// toolArgsForLaunch pins routing-critical arguments that cannot be expressed
+// safely through a user-scope config file. Qwen project settings override its
+// QWEN_HOME settings, so force the OpenAI protocol at CLI precedence. Remove a
+// caller-supplied auth type first: forwarding another protocol would either
+// bypass the EveryAPI OPENAI_* overlay or make duplicate yargs values ambiguous.
+func toolArgsForLaunch(t *tools.Tool, args []string) []string {
+	if t.Name != "qwen-code" {
+		return args
+	}
+	filtered := make([]string, 0, len(args)+1)
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--auth-type":
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				i++
+			}
+		case strings.HasPrefix(args[i], "--auth-type="):
+		default:
+			filtered = append(filtered, args[i])
+		}
+	}
+	return append(filtered, "--auth-type=openai")
+}
+
 // pickModelInteractive lists the chat-capable models the relay key can route to
 // (GET /v1/models with the relay key — group-scoped, so the picker only
 // offers models the launched tool will really reach) and asks the user
@@ -1452,18 +1628,9 @@ func pickModelInteractive(t *tools.Tool, creds *config.Credentials, relayKey str
 	if err != nil {
 		return "", err
 	}
-	// Default the cursor to last launch's model when it's still in the
-	// catalog. LastHermesModel is hermes-specific, which is fine while
-	// hermes is the only ModelEnv tool; generalize if that changes.
-	initial := 0
-	if last := tools.LastHermesModel(); last != "" {
-		for i, m := range models {
-			if m == last {
-				initial = i
-				break
-			}
-		}
-	}
+	// Hermes remembers its last model; other ModelEnv tools begin at the
+	// deterministic first compatible catalog entry.
+	initial := preferredToolModelIndex(t, models)
 	idx, err := cliprompt.PickWithSelected(
 		fmt.Sprintf(i18n.T("use.model_picker"), t.ExecName),
 		models, initial)

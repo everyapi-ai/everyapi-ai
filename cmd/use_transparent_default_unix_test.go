@@ -64,7 +64,7 @@ func TestUseDefaultsToTransparentForSupportedTool(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": []any{}})
+				_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": []any{map[string]any{"id": "claude-test", "owned_by": "anthropic", "supported_endpoint_types": []string{"anthropic"}}}})
 			}))
 			defer gateway.Close()
 
@@ -130,8 +130,8 @@ func TestUseDefaultsToTransparentForSupportedTool(t *testing.T) {
 					t.Error("the real relay key reached the child under transparent mode")
 				}
 			} else {
-				if got["ANTHROPIC_BASE_URL"] != gateway.URL {
-					t.Errorf("ANTHROPIC_BASE_URL = %q, want the gateway %q", got["ANTHROPIC_BASE_URL"], gateway.URL)
+				if !strings.HasPrefix(got["ANTHROPIC_BASE_URL"], "http://127.0.0.1:") {
+					t.Errorf("ANTHROPIC_BASE_URL = %q, want the process-local filtered catalog proxy", got["ANTHROPIC_BASE_URL"])
 				}
 				if got["ANTHROPIC_AUTH_TOKEN"] != "sk-everyapi-test" {
 					t.Errorf("ANTHROPIC_AUTH_TOKEN = %q, want the relay key on the injected path", got["ANTHROPIC_AUTH_TOKEN"])

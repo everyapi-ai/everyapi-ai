@@ -388,7 +388,7 @@ public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, uint M
   Write-Host ''
   Write-Host 'Next steps:'
   Write-Host '  - Sign in:        everyapi auth login'
-  Write-Host '  - Point a CLI:    everyapi use claude   # or codex / gemini'
+  Write-Host '  - Point a CLI:    everyapi use claude   # or codex / gemini / grok / qwen-code / kimi-code'
   Write-Host '  - Check balance:  everyapi auth status'
   Write-Host '  - Help:           everyapi help'
 }

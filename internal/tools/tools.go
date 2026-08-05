@@ -88,17 +88,18 @@ type Tool struct {
 	// launches the `claude` binary pinned to the chosen id. The preset's
 	// envFn sets only the base URL + token; cmd/use resolves the model
 	// (picker on a TTY, `--model` flag otherwise) and injects it via
-	// SetClaudeModel. Empty for the standalone agents
-	// (claude/codex/gemini/hermes), which pick their own model.
+	// SetClaudeModel. Empty for standalone clients; clients that need
+	// EveryAPI to select a model use ModelEnv instead.
 	ModelOwner string
 
 	// ModelEnv names the env var the tool's prepareFn reads to pin the
 	// upstream model. Set only for tools that don't carry their own
 	// vendor-default model and therefore need EveryAPI to choose one —
-	// hermes (provider=custom) reads EVERYAPI_HERMES_MODEL. When
+	// Hermes reads EVERYAPI_HERMES_MODEL, Qwen Code reads OPENAI_MODEL,
+	// and Kimi Code reads KIMI_MODEL_NAME. When
 	// non-empty, 'everyapi use' offers a model picker (populated from
 	// the gateway's model catalog) before launch and honors a
-	// `--model <id>` flag. Empty for claude/codex/gemini, whose own
+	// `--model <id>` flag. Empty for claude/codex/gemini/grok, whose own
 	// CLIs default the model and route it by name through the gateway.
 	ModelEnv string
 
@@ -122,7 +123,8 @@ type Tool struct {
 	// (last write wins), letting the hook redirect CODEX_HOME at a
 	// generated config dir. Nil means the tool needs no pre-exec
 	// setup beyond env vars.
-	prepareFn func(apiBase, token string) (map[string]string, error)
+	prepareFn        func(apiBase, token string) (map[string]string, error)
+	prepareCatalogFn func(apiBase, token string, models []Model) (map[string]string, error)
 
 	// transparentEnvFn supplies tool-specific placeholder credentials and
 	// CA wiring for the process-scoped connector. It must never
@@ -133,7 +135,18 @@ type Tool struct {
 	// prepareTransparentFn is the transparent counterpart of prepareFn. It
 	// writes only public routing configuration and placeholder credentials;
 	// the real relay key remains inside the connector process.
-	prepareTransparentFn func() (map[string]string, error)
+	prepareTransparentFn        func() (map[string]string, error)
+	prepareTransparentCatalogFn func(models []Model) (map[string]string, error)
+}
+
+// Model is the launch-safe subset of the relay model catalogue. Credentials
+// never enter this value; prepare hooks may persist it for a client's native
+// /model picker without writing the relay key alongside it.
+type Model struct {
+	ID                     string
+	DisplayName            string
+	OwnedBy                string
+	SupportedEndpointTypes []string
 }
 
 func (t *Tool) Env(apiBase, token string) map[string]string {
@@ -160,6 +173,14 @@ func (t *Tool) InstallPromptDefault() bool {
 // config is preferable to falling back to the user's real ~/.codex
 // and silently going through ChatGPT auth.
 func (t *Tool) Prepare(apiBase, token string) (map[string]string, error) {
+	return t.PrepareWithModels(apiBase, token, nil)
+}
+
+// PrepareWithModels runs setup with the live, relay-key-scoped model snapshot.
+func (t *Tool) PrepareWithModels(apiBase, token string, models []Model) (map[string]string, error) {
+	if t.prepareCatalogFn != nil {
+		return t.prepareCatalogFn(apiBase, token, models)
+	}
 	if t.prepareFn == nil {
 		return nil, nil
 	}
@@ -201,8 +222,16 @@ func (t *Tool) TransparentEnv(proxyURL, caPath string) (map[string]string, []str
 // PrepareTransparent runs only setup that preserves the vendor's official
 // origin. It never accepts the gateway base URL or relay credential by design.
 func (t *Tool) PrepareTransparent() (map[string]string, error) {
+	return t.PrepareTransparentWithModels(nil)
+}
+
+// PrepareTransparentWithModels is the catalogue-aware transparent setup path.
+func (t *Tool) PrepareTransparentWithModels(models []Model) (map[string]string, error) {
 	if t.transparentEnvFn == nil {
 		return nil, fmt.Errorf("transparent mode is not supported for %s yet", t.Name)
+	}
+	if t.prepareTransparentCatalogFn != nil {
+		return t.prepareTransparentCatalogFn(models)
 	}
 	if t.prepareTransparentFn == nil {
 		return nil, nil
@@ -216,9 +245,10 @@ func (t *Tool) SupportsTransparent() bool {
 
 func transparentClaudeEnv(caPath string) (map[string]string, []string) {
 	return map[string]string{
-			"ANTHROPIC_AUTH_TOKEN": transparentPlaceholderCredential,
-			"NODE_EXTRA_CA_CERTS":  caPath,
-			"ENABLE_TOOL_SEARCH":   "1",
+			"ANTHROPIC_AUTH_TOKEN":                       transparentPlaceholderCredential,
+			"NODE_EXTRA_CA_CERTS":                        caPath,
+			"ENABLE_TOOL_SEARCH":                         "1",
+			"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
 		}, []string{
 			"ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY",
 			"CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
@@ -301,7 +331,8 @@ func claudeProviderPreset(name, owner string) *Tool {
 				// into the first request (hundreds of thousands of tokens for
 				// large Jira/Lark installations). Keep the native ToolSearch
 				// behavior while routing through EveryAPI.
-				"ENABLE_TOOL_SEARCH": "1",
+				"ENABLE_TOOL_SEARCH":                         "1",
+				"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
 				// Neutralise any ambient ANTHROPIC_API_KEY: Claude Code
 				// prefers it over ANTHROPIC_AUTH_TOKEN, so a user who has
 				// their real Anthropic key exported would otherwise send
@@ -346,6 +377,7 @@ var Registry = map[string]*Tool{
 		InstallCmdUnixOnly: true,
 		YoloFlag:           "--dangerously-skip-permissions",
 		YoloLabel:          "skip all permission prompts (--dangerously-skip-permissions)",
+		RequiredEndpoint:   "anthropic",
 		transparentEnvFn:   transparentStandaloneClaudeEnv,
 		envFn: func(apiBase, token string) map[string]string {
 			return map[string]string{
@@ -353,8 +385,9 @@ var Registry = map[string]*Tool{
 				"ANTHROPIC_AUTH_TOKEN": token,
 				// Preserve Claude Code's deferred MCP ToolSearch behavior when
 				// the CLI is pointed at the EveryAPI gateway.
-				"ENABLE_TOOL_SEARCH":       "1",
-				"ENABLE_PROMPT_CACHING_1H": "1",
+				"ENABLE_TOOL_SEARCH":                         "1",
+				"ENABLE_PROMPT_CACHING_1H":                   "1",
+				"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
 				// See claudeProviderPreset: clear any ambient
 				// ANTHROPIC_API_KEY so the user's real Anthropic key is
 				// never forwarded to the gateway and can't shadow the
@@ -376,18 +409,21 @@ var Registry = map[string]*Tool{
 	// The OPENAI_API_KEY env var is still set as belt-and-suspenders
 	// — config.toml's env_key points back at it.
 	"codex": {
-		Name:                 "codex",
-		ExecName:             "codex",
-		InstallHint:          "Install Codex CLI: https://github.com/openai/codex#installation",
-		InstallCmd:           "npm install -g @openai/codex",
-		YoloFlag:             "--dangerously-bypass-approvals-and-sandbox",
-		YoloLabel:            "bypass approvals + sandbox (--dangerously-bypass-approvals-and-sandbox)",
-		transparentEnvFn:     transparentCodexEnv,
-		prepareTransparentFn: prepareCodexTransparent,
+		Name:                        "codex",
+		ExecName:                    "codex",
+		InstallHint:                 "Install Codex CLI: https://github.com/openai/codex#installation",
+		InstallCmd:                  "npm install -g @openai/codex",
+		YoloFlag:                    "--dangerously-bypass-approvals-and-sandbox",
+		YoloLabel:                   "bypass approvals + sandbox (--dangerously-bypass-approvals-and-sandbox)",
+		RequiredEndpoint:            "openai-response",
+		transparentEnvFn:            transparentCodexEnv,
+		prepareTransparentFn:        prepareCodexTransparent,
+		prepareTransparentCatalogFn: prepareCodexTransparentWithModels,
 		envFn: func(_, token string) map[string]string {
 			return map[string]string{"OPENAI_API_KEY": token}
 		},
-		prepareFn: prepareCodex,
+		prepareFn:        prepareCodex,
+		prepareCatalogFn: prepareCodexWithModels,
 	},
 
 	// Antigravity CLI: keep `everyapi use gemini` as the familiar entry point,
@@ -404,6 +440,73 @@ var Registry = map[string]*Tool{
 		envFn: func(_, _ string) map[string]string {
 			return map[string]string{}
 		},
+	},
+
+	// xAI Grok Build: GROK_MODELS_BASE_URL controls both inference and model
+	// discovery on an OpenAI-compatible surface; XAI_API_KEY supplies its
+	// bearer credential. prepareGrok isolates EveryAPI-routed configuration and
+	// session history from the user's normal Grok profile.
+	"grok": {
+		Name:             "grok",
+		ExecName:         "grok",
+		InstallHint:      "Install Grok Build: https://docs.x.ai/build/overview (or: npm install -g @xai-official/grok)",
+		InstallCmd:       "npm install -g @xai-official/grok",
+		YoloFlag:         "--always-approve",
+		YoloLabel:        "always approve tool executions (--always-approve)",
+		RequiredEndpoint: "openai-response",
+		envFn: func(apiBase, token string) map[string]string {
+			base := joinBase(apiBase, "/v1")
+			return map[string]string{
+				"XAI_API_KEY":          token,
+				"GROK_MODELS_BASE_URL": base,
+			}
+		},
+		prepareFn: prepareGrok,
+	},
+
+	// Alibaba Qwen Code supports OpenAI-compatible providers through the
+	// standard OPENAI_* environment variables. prepareQwenCode isolates its
+	// launch state; cmd/use pins the OpenAI protocol at CLI precedence.
+	"qwen-code": {
+		Name:             "qwen-code",
+		ExecName:         "qwen",
+		InstallHint:      "Install Qwen Code: https://github.com/QwenLM/qwen-code#installation",
+		InstallCmd:       "npm install -g @qwen-code/qwen-code@latest",
+		YoloFlag:         "--yolo",
+		YoloLabel:        "yolo mode — auto-approve every tool call (--yolo)",
+		ModelEnv:         "OPENAI_MODEL",
+		RequiredEndpoint: "openai",
+		envFn: func(apiBase, token string) map[string]string {
+			return map[string]string{
+				"OPENAI_API_KEY":  token,
+				"OPENAI_BASE_URL": joinBase(apiBase, "/v1"),
+			}
+		},
+		prepareFn:        prepareQwenCode,
+		prepareCatalogFn: prepareQwenCodeWithModels,
+	},
+
+	// Moonshot Kimi Code can synthesize a temporary model entirely from the
+	// KIMI_MODEL_* environment family. Use its OpenAI-compatible provider so
+	// the selected EveryAPI catalogue model rides /v1/chat/completions.
+	"kimi-code": {
+		Name:             "kimi-code",
+		ExecName:         "kimi",
+		InstallHint:      "Install Kimi Code: https://github.com/MoonshotAI/kimi-code#install",
+		InstallCmd:       "npm install -g @moonshot-ai/kimi-code",
+		YoloFlag:         "--yolo",
+		YoloLabel:        "yolo mode — auto-approve every tool call (--yolo)",
+		ModelEnv:         "KIMI_MODEL_NAME",
+		RequiredEndpoint: "openai",
+		envFn: func(apiBase, token string) map[string]string {
+			return map[string]string{
+				"KIMI_MODEL_API_KEY":       token,
+				"KIMI_MODEL_BASE_URL":      joinBase(apiBase, "/v1"),
+				"KIMI_MODEL_PROVIDER_TYPE": "openai",
+			}
+		},
+		prepareFn:        prepareKimiCode,
+		prepareCatalogFn: prepareKimiCodeWithModels,
 	},
 
 	// Nous Research Hermes Agent (Python CLI, binary `hermes`). Unlike
@@ -433,7 +536,8 @@ var Registry = map[string]*Tool{
 			// Routing is config-file driven; see prepareHermes.
 			return map[string]string{}
 		},
-		prepareFn: prepareHermes,
+		prepareFn:        prepareHermes,
+		prepareCatalogFn: prepareHermesWithModels,
 	},
 
 	// Claude Code presets that route the `claude` binary at a third-party
@@ -472,10 +576,10 @@ func Names() []string {
 	// Deterministic order matters for both the error message and the
 	// picker UX. Hand-coded to match the ordering most likely to
 	// reflect user demand: the standalone agents first (Claude, OpenAI,
-	// Gemini, Hermes), then the Claude Code presets pinned to a
-	// third-party flagship.
+	// Gemini, Grok, Qwen Code, Kimi Code, Hermes), then the Claude Code
+	// presets pinned to a third-party flagship.
 	return []string{
-		"claude", "codex", "gemini", "hermes",
+		"claude", "codex", "gemini", "grok", "qwen-code", "kimi-code", "hermes",
 		"minimax", "qwen", "deepseek", "byteplus", "glm", "kimi",
 	}
 }

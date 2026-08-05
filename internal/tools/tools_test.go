@@ -1,7 +1,11 @@
 package tools
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -11,7 +15,7 @@ import (
 // change that breaks this test.
 func TestRegistry_HasExpectedTools(t *testing.T) {
 	want := []string{
-		"claude", "codex", "gemini", "hermes",
+		"claude", "codex", "gemini", "grok", "qwen-code", "kimi-code", "hermes",
 		"minimax", "qwen", "deepseek", "byteplus", "glm", "kimi",
 	}
 	got := Names()
@@ -158,6 +162,126 @@ func TestEnv_Gemini(t *testing.T) {
 	}
 }
 
+// TestEnv_Grok verifies Grok Build's documented environment contract and
+// keeps its browser-login state separate from EveryAPI's relay credential.
+func TestEnv_Grok(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	tool, err := Lookup("grok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tool.ExecName != "grok" {
+		t.Errorf("ExecName = %q, want grok", tool.ExecName)
+	}
+	if tool.InstallCmd != "npm install -g @xai-official/grok" {
+		t.Errorf("InstallCmd = %q", tool.InstallCmd)
+	}
+	if tool.YoloFlag != "--always-approve" {
+		t.Errorf("YoloFlag = %q, want --always-approve", tool.YoloFlag)
+	}
+	if tool.RequiredEndpoint != "openai-response" {
+		t.Errorf("RequiredEndpoint = %q, want openai-response", tool.RequiredEndpoint)
+	}
+
+	env := tool.Env("https://api.everyapi.ai/", "my-token")
+	wantBase := "https://api.everyapi.ai/v1"
+	if got := env["GROK_MODELS_BASE_URL"]; got != wantBase {
+		t.Errorf("GROK_MODELS_BASE_URL = %q, want %q", got, wantBase)
+	}
+	if _, ok := env["GROK_XAI_API_BASE_URL"]; ok {
+		t.Error("GROK_XAI_API_BASE_URL is not read by Grok Build and must not be injected")
+	}
+	if got := env["XAI_API_KEY"]; got != "my-token" {
+		t.Errorf("XAI_API_KEY = %q, want my-token", got)
+	}
+
+	extra, err := tool.Prepare("https://api.everyapi.ai", "my-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantHome := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "everyapi", "grok-home")
+	if got := extra["GROK_HOME"]; got != wantHome {
+		t.Errorf("GROK_HOME = %q, want %q", got, wantHome)
+	}
+	if info, err := os.Stat(wantHome); err != nil {
+		t.Fatalf("stat GROK_HOME: %v", err)
+	} else if runtime.GOOS != "windows" && info.Mode().Perm() != 0o700 {
+		t.Errorf("GROK_HOME permissions = %o, want 0700", info.Mode().Perm())
+	}
+}
+
+func TestEnv_QwenCode(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	tool, err := Lookup("qwen-code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tool.ExecName != "qwen" {
+		t.Errorf("ExecName = %q, want qwen", tool.ExecName)
+	}
+	if tool.InstallCmd != "npm install -g @qwen-code/qwen-code@latest" {
+		t.Errorf("InstallCmd = %q", tool.InstallCmd)
+	}
+	if tool.YoloFlag != "--yolo" || tool.ModelEnv != "OPENAI_MODEL" || tool.RequiredEndpoint != "openai" {
+		t.Errorf("qwen wiring = yolo:%q model:%q endpoint:%q", tool.YoloFlag, tool.ModelEnv, tool.RequiredEndpoint)
+	}
+	env := tool.Env("https://api.everyapi.ai/", "my-token")
+	if env["OPENAI_API_KEY"] != "my-token" || env["OPENAI_BASE_URL"] != "https://api.everyapi.ai/v1" {
+		t.Errorf("qwen env = %#v", env)
+	}
+	wantHome := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "everyapi", "qwen-home")
+	if err := os.MkdirAll(wantHome, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	wantSettings := []byte(`{"theme":"existing-user-choice"}`)
+	if err := os.WriteFile(filepath.Join(wantHome, "settings.json"), wantSettings, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	extra, err := tool.Prepare("https://api.everyapi.ai", "my-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if extra["QWEN_HOME"] != wantHome {
+		t.Errorf("QWEN_HOME = %q, want %q", extra["QWEN_HOME"], wantHome)
+	}
+	body, err := os.ReadFile(filepath.Join(wantHome, "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(body, wantSettings) {
+		t.Errorf("Prepare overwrote existing settings.json: got %s, want %s", body, wantSettings)
+	}
+}
+
+func TestEnv_KimiCode(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	tool, err := Lookup("kimi-code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tool.ExecName != "kimi" {
+		t.Errorf("ExecName = %q, want kimi", tool.ExecName)
+	}
+	if tool.InstallCmd != "npm install -g @moonshot-ai/kimi-code" {
+		t.Errorf("InstallCmd = %q", tool.InstallCmd)
+	}
+	if tool.YoloFlag != "--yolo" || tool.ModelEnv != "KIMI_MODEL_NAME" || tool.RequiredEndpoint != "openai" {
+		t.Errorf("kimi wiring = yolo:%q model:%q endpoint:%q", tool.YoloFlag, tool.ModelEnv, tool.RequiredEndpoint)
+	}
+	env := tool.Env("https://api.everyapi.ai/", "my-token")
+	if env["KIMI_MODEL_API_KEY"] != "my-token" || env["KIMI_MODEL_BASE_URL"] != "https://api.everyapi.ai/v1" || env["KIMI_MODEL_PROVIDER_TYPE"] != "openai" {
+		t.Errorf("kimi env = %#v", env)
+	}
+	extra, err := tool.Prepare("https://api.everyapi.ai", "my-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantHome := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "everyapi", "kimi-code-home")
+	if extra["KIMI_CODE_HOME"] != wantHome {
+		t.Errorf("KIMI_CODE_HOME = %q, want %q", extra["KIMI_CODE_HOME"], wantHome)
+	}
+}
+
 // TestEnv_Hermes verifies hermes' env contract: envFn sets NOTHING.
 // All routing (base_url + relay key) goes through the generated
 // config.yaml in prepareHermes; in particular OPENAI_BASE_URL /
@@ -273,7 +397,7 @@ func TestSupportsTransparentMatchesVerifiedTools(t *testing.T) {
 			t.Errorf("%s should support transparent mode", name)
 		}
 	}
-	for _, name := range []string{"gemini", "hermes"} {
+	for _, name := range []string{"gemini", "grok", "qwen-code", "kimi-code", "hermes"} {
 		tool, _ := Lookup(name)
 		if tool.SupportsTransparent() {
 			t.Errorf("%s should not advertise transparent mode", name)

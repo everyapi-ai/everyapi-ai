@@ -62,7 +62,7 @@ func TestUseWiresTheSanitizerAsTheConnectorUpstream(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": []any{}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": []any{map[string]any{"id": "claude-test", "owned_by": "anthropic", "supported_endpoint_types": []string{"anthropic"}}}})
 	}))
 	defer gateway.Close()
 

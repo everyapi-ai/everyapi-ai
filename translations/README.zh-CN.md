@@ -2,7 +2,7 @@
 
 # `everyapi` CLI
 
-[EveryAPI](https://everyapi.ai) AI API 网关的 buyer onboarding CLI。让任何 Claude Code / Codex / Gemini CLI **一分钟内**接到网关。
+[EveryAPI](https://everyapi.ai) AI API 网关的 buyer onboarding CLI。**一分钟内**启动 Claude Code、Codex、Antigravity、Grok Build、Qwen Code 或 Kimi Code。
 
 状态：**核心流程已就位** —— buyer onboarding、seller 命令（plain-key + OAuth 三家）、sanitizer proxy、QR sign-in 主路径、防钓鱼分层均已落地。仍未实现的只有 OS 级 code signing 与 platform keychain backend（见文末「这个二进制还不包含什么」）。
 
@@ -38,15 +38,17 @@ brew update && brew upgrade everyapi
 
 ### `everyapi use <tool>` — exec 进第三方 CLI（指向 EveryAPI 网关）
 
-装这个 CLI 的主要理由。它把目标第三方工具的环境变量按惯例配置好，然后 exec 进去——你既有的 Claude Code / OpenAI Codex CLI / Gemini CLI **不用改任何配置**就指向了 EveryAPI 网关。
+它会通过 EveryAPI 配置并启动支持的编码客户端；`gemini` 入口启动已登录的 Antigravity CLI。
 
 ```bash
 everyapi use claude         # Claude Code → EveryAPI
 everyapi use codex          # OpenAI Codex CLI → EveryAPI
-everyapi use gemini         # Gemini CLI → EveryAPI
+everyapi use gemini         # 启动 Antigravity
+everyapi use grok           # xAI Grok Build → EveryAPI
+everyapi use qwen-code      # 阿里巴巴 Qwen Code → EveryAPI
+everyapi use kimi-code      # Moonshot Kimi Code → EveryAPI
 everyapi use claude --transparent   # 实验模式：仍请求 api.anthropic.com
 everyapi use codex --transparent    # 实验模式：仍请求 api.openai.com
-everyapi use gemini --transparent   # 实验模式：仍请求 Google 官方域名
 everyapi use                # 无参 → 交互式选择已安装的工具
 ```
 
@@ -56,7 +58,10 @@ everyapi use                # 无参 → 交互式选择已安装的工具
 |---|---|
 | claude | `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN` |
 | codex | `OPENAI_BASE_URL`、`OPENAI_API_KEY` |
-| gemini | `GEMINI_API_KEY`、`GOOGLE_GEMINI_BASE_URL` |
+| gemini | Antigravity 原生启动器 (`agy`) |
+| grok | `XAI_API_KEY`、`GROK_MODELS_BASE_URL`；隔离的 `GROK_HOME` |
+| qwen-code | `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`；隔离的 `QWEN_HOME` |
+| kimi-code | `KIMI_MODEL_API_KEY`、`KIMI_MODEL_BASE_URL`、`KIMI_MODEL_NAME`；隔离的 `KIMI_CODE_HOME` |
 
 不必再去查每个工具读哪个变量名、要不要拼 `/v1` 后缀、走哪种 auth header。
 
@@ -66,7 +71,7 @@ everyapi use                # 无参 → 交互式选择已安装的工具
 
 `everyapi use <tool> --transparent` 不再设置第三方 Base URL，而是让支持的客户端继续请求供应商官方域名。CLI 会在随机 loopback 端口启动临时 HTTP CONNECT proxy，每次生成一张 CA；CA 私钥只存在于本进程内存。子进程只收到代理地址、公开 CA bundle 和无秘密的占位凭证。明确注册的模型路径会在本机解密后携带真实 relay key 转发 EveryAPI；其他 HTTPS 域名原样 CONNECT 直通。受保护前缀下的未知路径会被阻止，EveryAPI 转发失败也绝不会回落直连供应商。
 
-当前灰度范围包括 Claude Code（含 provider presets）、Codex CLI 和 Gemini CLI。Hermes 的 Python 证书与配置行为尚未验证，因此会明确拒绝。`--transparent` 与 `--sanitize` 不能同时使用。
+透明模式默认用于 Claude Code（含 provider presets）和 Codex CLI。`gemini` 直接启动 Antigravity；Grok、Qwen Code、Kimi Code 和 Hermes 只支持注入路径，显式传入 `--transparent` 会报错。
 
 限制与安全边界：
 

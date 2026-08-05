@@ -54,7 +54,7 @@ func TestUseExecReceivesRecoveredClaudeSessionID(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"object": "list",
-			"data":   []any{},
+			"data":   []any{map[string]any{"id": "claude-test", "owned_by": "anthropic", "supported_endpoint_types": []string{"anthropic"}}},
 		})
 	}))
 	defer srv.Close()

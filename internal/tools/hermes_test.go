@@ -46,6 +46,9 @@ func TestPrepareHermes_WritesConfig(t *testing.T) {
 		`base_url: "https://api.everyapi.ai/v1"`,
 		`api_key: "sk-everyapi-abc"`,
 		"api_mode: chat_completions",
+		"custom_providers:",
+		`  - name: "EveryAPI"`,
+		"    discover_models: true",
 	} {
 		if !strings.Contains(cfg, want) {
 			t.Errorf("config.yaml missing %q\nFull config:\n%s", want, cfg)
@@ -107,7 +110,8 @@ func TestPrepareHermes_ModelEscaped(t *testing.T) {
 		t.Errorf("model not YAML-escaped\nFull config:\n%s", cfg)
 	}
 	// Structurally: the injected directive must not surface as its own
-	// line, and api_mode must appear exactly once as the legitimate key.
+	// line, and api_mode must appear exactly twice: once for the active model
+	// and once for the named custom provider used by Hermes' native picker.
 	var apiModeLines int
 	for _, line := range strings.Split(cfg, "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -118,8 +122,8 @@ func TestPrepareHermes_ModelEscaped(t *testing.T) {
 			apiModeLines++
 		}
 	}
-	if apiModeLines != 1 {
-		t.Errorf("expected exactly a single api_mode line, got %d\nFull config:\n%s", apiModeLines, cfg)
+	if apiModeLines != 2 {
+		t.Errorf("expected exactly two legitimate api_mode lines, got %d\nFull config:\n%s", apiModeLines, cfg)
 	}
 }
 

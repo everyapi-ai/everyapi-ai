@@ -2,7 +2,7 @@
 
 # `everyapi` CLI
 
-[EveryAPI](https://everyapi.ai) AI API 게이트웨이의 buyer onboarding CLI. 임의의 Claude Code / Codex / Gemini CLI 를 **1 분 안에** 게이트웨이에 연결합니다.
+[EveryAPI](https://everyapi.ai) AI API 게이트웨이의 buyer onboarding CLI. Claude Code, Codex, Antigravity, Grok Build, Qwen Code, Kimi Code 를 **1 분 안에** 실행합니다.
 
 상태: **핵심 흐름 구현 완료** —— buyer onboarding, seller 명령 (plain-key + OAuth 3 개 provider), sanitizer proxy, QR sign-in 메인 경로, anti-phishing 계층까지 모두 구현 완료. 미구현 항목은 OS 레벨 code signing 과 platform keychain backend 뿐입니다 (마지막 「이 바이너리에 아직 포함되지 않은 것」 참조).
 
@@ -38,12 +38,15 @@ brew update && brew upgrade everyapi
 
 ### `everyapi use <tool>` — 서드파티 CLI 로 exec (EveryAPI 게이트웨이를 가리킴)
 
-이 CLI 를 설치하는 주된 이유. 대상 서드파티 도구의 환경 변수를 해당 도구의 관례에 맞춰 설정하고 exec 합니다 —— 기존 Claude Code / OpenAI Codex CLI / Gemini CLI 는 **설정 변경 없이** EveryAPI 게이트웨이를 가리키게 됩니다.
+이 CLI 는 지원하는 코딩 클라이언트를 EveryAPI를 통해 설정하고 실행합니다. `gemini` 항목은 이미 인증된 Antigravity CLI를 실행합니다.
 
 ```bash
 everyapi use claude         # Claude Code → EveryAPI
 everyapi use codex          # OpenAI Codex CLI → EveryAPI
-everyapi use gemini         # Gemini CLI → EveryAPI
+everyapi use gemini         # Antigravity 실행
+everyapi use grok           # xAI Grok Build → EveryAPI
+everyapi use qwen-code      # Alibaba Qwen Code → EveryAPI
+everyapi use kimi-code      # Moonshot Kimi Code → EveryAPI
 everyapi use                # 인자 없음 → 설치된 도구 중 대화형 선택
 ```
 
@@ -53,7 +56,10 @@ everyapi use                # 인자 없음 → 설치된 도구 중 대화형 �
 |---|---|
 | claude | `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` |
 | codex | `OPENAI_BASE_URL`, `OPENAI_API_KEY` |
-| gemini | `GEMINI_API_KEY`, `GOOGLE_GEMINI_BASE_URL` |
+| gemini | Antigravity 네이티브 런처 (`agy`) |
+| grok | `XAI_API_KEY`, `GROK_MODELS_BASE_URL` |
+| qwen-code | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`; 격리된 `QWEN_HOME` |
+| kimi-code | `KIMI_MODEL_API_KEY`, `KIMI_MODEL_BASE_URL`, `KIMI_MODEL_NAME`; 격리된 `KIMI_CODE_HOME` |
 
 어떤 변수 이름을 읽는지, `/v1` 접미사가 필요한지, 어떤 auth header 방식인지 매번 찾아볼 필요가 없습니다.
 

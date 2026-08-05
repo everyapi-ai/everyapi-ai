@@ -34,18 +34,47 @@ const hermesModelEnv = "EVERYAPI_HERMES_MODEL"
 // Writing config.yaml also satisfies hermes' first-run guard
 // (_has_any_provider_configured), so launch skips the setup wizard.
 //
-// HERMES_HOME is redirected (not ~/.hermes) so the user's real hermes
-// config stays untouched for plain `hermes` invocations. The directory
-// is reused across runs (sessions/logs accumulate there per the
-// user's opt-in to a session-isolated EveryAPI environment);
-// config.yaml is rewritten every call so a fresh relay key always
-// wins.
+// HERMES_HOME is redirected (not ~/.hermes) so the user's real hermes config
+// stays untouched. Live-catalog launches use a process-scoped home; the fixed
+// path remains only for compatibility callers without a catalog.
 func prepareHermes(apiBase, token string) (map[string]string, error) {
+	return prepareHermesInHome(apiBase, token, "")
+}
+
+func prepareHermesWithModels(apiBase, token string, models []Model) (map[string]string, error) {
+	if len(models) == 0 {
+		return prepareHermes(apiBase, token)
+	}
+	home, err := newPreparedHome("hermes")
+	if err != nil {
+		return nil, err
+	}
+	env, err := prepareHermesInHome(apiBase, token, home)
+	if err != nil {
+		return nil, err
+	}
+	cfgDir, err := config.ConfigDir()
+	if err != nil {
+		removePreparedHomeAfterQuiet(home)
+		return nil, err
+	}
+	model := strings.TrimSpace(os.Getenv(hermesModelEnv))
+	if err := writeFileAtomic(filepath.Join(cfgDir, "hermes-last-model"), []byte(model+"\n"), 0o600); err != nil {
+		removePreparedHomeAfterQuiet(home)
+		return nil, err
+	}
+	return env, nil
+}
+
+func prepareHermesInHome(apiBase, token, hermesHome string) (map[string]string, error) {
 	cfgDir, err := config.ConfigDir()
 	if err != nil {
 		return nil, fmt.Errorf("resolve everyapi config dir: %w", err)
 	}
-	hermesHome := filepath.Join(cfgDir, "hermes-home")
+	prepared := hermesHome != ""
+	if hermesHome == "" {
+		hermesHome = filepath.Join(cfgDir, "hermes-home")
+	}
 	// 0700 — config.yaml carries an inline bearer token; treat the
 	// whole directory as secret. MkdirAll is a no-op when it already
 	// exists with the right permissions.
@@ -54,9 +83,15 @@ func prepareHermes(apiBase, token string) (map[string]string, error) {
 	}
 
 	if err := writeHermesConfigYAML(hermesHome, apiBase, token); err != nil {
+		if prepared {
+			removePreparedHomeAfterQuiet(hermesHome)
+		}
 		return nil, err
 	}
 
+	if prepared {
+		return preparedHomeEnv("HERMES_HOME", hermesHome), nil
+	}
 	return map[string]string{"HERMES_HOME": hermesHome}, nil
 }
 
@@ -69,6 +104,11 @@ func LastHermesModel() string {
 	cfgDir, err := config.ConfigDir()
 	if err != nil {
 		return ""
+	}
+	if body, readErr := os.ReadFile(filepath.Join(cfgDir, "hermes-last-model")); readErr == nil {
+		if model := strings.TrimSpace(string(body)); model != "" {
+			return model
+		}
 	}
 	body, err := os.ReadFile(filepath.Join(cfgDir, "hermes-home", "config.yaml"))
 	if err != nil {
@@ -141,6 +181,13 @@ func writeHermesConfigYAML(hermesHome, apiBase, token string) error {
 	b.WriteString("  base_url: " + yamlDoubleQuote(base) + "\n")
 	b.WriteString("  api_key: " + yamlDoubleQuote(token) + "\n")
 	b.WriteString("  api_mode: chat_completions\n")
+	b.WriteString("custom_providers:\n")
+	b.WriteString("  - name: \"EveryAPI\"\n")
+	b.WriteString("    base_url: " + yamlDoubleQuote(base) + "\n")
+	b.WriteString("    api_key: " + yamlDoubleQuote(token) + "\n")
+	b.WriteString("    model: " + yamlDoubleQuote(model) + "\n")
+	b.WriteString("    api_mode: chat_completions\n")
+	b.WriteString("    discover_models: true\n")
 	return writeFileAtomic(filepath.Join(hermesHome, "config.yaml"), []byte(b.String()), 0o600)
 }
 
