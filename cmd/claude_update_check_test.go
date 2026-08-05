@@ -55,39 +55,109 @@ func TestMaybeNotifyClaudeUpdate(t *testing.T) {
 	origInteractive := claudeUpdateInteractiveFn
 	origInstalled := installedClaudeVersionFn
 	origLatest := latestClaudeVersionFn
-	origNotice := claudeUpdateNoticeFn
+	origPrompt := claudeUpdatePromptFn
+	origRun := runClaudeUpdateFn
 	t.Cleanup(func() {
 		claudeUpdateInteractiveFn = origInteractive
 		installedClaudeVersionFn = origInstalled
 		latestClaudeVersionFn = origLatest
-		claudeUpdateNoticeFn = origNotice
+		claudeUpdatePromptFn = origPrompt
+		runClaudeUpdateFn = origRun
 	})
 
 	claudeUpdateInteractiveFn = func() bool { return true }
 	installedClaudeVersionFn = func() (string, error) { return "2.1.211", nil }
 	latestClaudeVersionFn = func() (string, error) { return "2.1.222", nil }
 
-	notices := 0
-	claudeUpdateNoticeFn = func(current, latest string) {
-		notices++
+	prompts := 0
+	claudeUpdatePromptFn = func(current, latest string) (bool, error) {
+		prompts++
 		if current != "2.1.211" || latest != "2.1.222" {
-			t.Errorf("notice versions = %q -> %q", current, latest)
+			t.Errorf("prompt versions = %q -> %q", current, latest)
+		}
+		return false, nil
+	}
+	runClaudeUpdateFn = func() error { t.Fatal("later choice must not update"); return nil }
+
+	maybeNotifyClaudeUpdate("codex")
+	if prompts != 0 {
+		t.Fatalf("non-Claude launch emitted %d prompts", prompts)
+	}
+
+	maybeNotifyClaudeUpdate("claude")
+	if prompts != 1 {
+		t.Fatalf("outdated Claude launch emitted %d prompts, want 1", prompts)
+	}
+
+	maybeNotifyClaudeUpdate("claude")
+	if prompts != 1 {
+		t.Fatalf("same Claude release ignored cooldown; prompts = %d", prompts)
+	}
+}
+
+func TestMaybeNotifyClaudeUpdateRunsConfirmedUpdate(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	origInteractive := claudeUpdateInteractiveFn
+	origInstalled := installedClaudeVersionFn
+	origLatest := latestClaudeVersionFn
+	origPrompt := claudeUpdatePromptFn
+	origRun := runClaudeUpdateFn
+	t.Cleanup(func() {
+		claudeUpdateInteractiveFn = origInteractive
+		installedClaudeVersionFn = origInstalled
+		latestClaudeVersionFn = origLatest
+		claudeUpdatePromptFn = origPrompt
+		runClaudeUpdateFn = origRun
+	})
+
+	claudeUpdateInteractiveFn = func() bool { return true }
+	installedClaudeVersionFn = func() (string, error) { return "2.1.211", nil }
+	latestClaudeVersionFn = func() (string, error) { return "2.1.222", nil }
+	claudeUpdatePromptFn = func(current, latest string) (bool, error) { return true, nil }
+	runs := 0
+	runClaudeUpdateFn = func() error { runs++; return nil }
+
+	maybeNotifyClaudeUpdate("claude")
+	if runs != 1 {
+		t.Fatalf("confirmed update ran %d times, want 1", runs)
+	}
+}
+
+func TestMaybeNotifyClaudeUpdateReportsFailureAndReturnsToLaunch(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	origInteractive := claudeUpdateInteractiveFn
+	origInstalled := installedClaudeVersionFn
+	origLatest := latestClaudeVersionFn
+	origPrompt := claudeUpdatePromptFn
+	origRun := runClaudeUpdateFn
+	origError := claudeUpdateErrorFn
+	t.Cleanup(func() {
+		claudeUpdateInteractiveFn = origInteractive
+		installedClaudeVersionFn = origInstalled
+		latestClaudeVersionFn = origLatest
+		claudeUpdatePromptFn = origPrompt
+		runClaudeUpdateFn = origRun
+		claudeUpdateErrorFn = origError
+	})
+
+	claudeUpdateInteractiveFn = func() bool { return true }
+	installedClaudeVersionFn = func() (string, error) { return "2.1.211", nil }
+	latestClaudeVersionFn = func() (string, error) { return "2.1.222", nil }
+	claudeUpdatePromptFn = func(_, _ string) (bool, error) { return true, nil }
+	runClaudeUpdateFn = func() error { return errors.New("updater failed") }
+	reported := 0
+	claudeUpdateErrorFn = func(err error) {
+		reported++
+		if err.Error() != "updater failed" {
+			t.Errorf("reported error = %v", err)
 		}
 	}
 
-	maybeNotifyClaudeUpdate("codex")
-	if notices != 0 {
-		t.Fatalf("non-Claude launch emitted %d notices", notices)
-	}
-
 	maybeNotifyClaudeUpdate("claude")
-	if notices != 1 {
-		t.Fatalf("outdated Claude launch emitted %d notices, want 1", notices)
-	}
-
-	maybeNotifyClaudeUpdate("claude")
-	if notices != 1 {
-		t.Fatalf("same Claude release ignored cooldown; notices = %d", notices)
+	if reported != 1 {
+		t.Fatalf("update failures reported %d times, want 1", reported)
 	}
 }
 
@@ -97,18 +167,21 @@ func TestMaybeNotifyClaudeUpdateFailsOpen(t *testing.T) {
 	origInteractive := claudeUpdateInteractiveFn
 	origInstalled := installedClaudeVersionFn
 	origLatest := latestClaudeVersionFn
-	origNotice := claudeUpdateNoticeFn
+	origPrompt := claudeUpdatePromptFn
 	t.Cleanup(func() {
 		claudeUpdateInteractiveFn = origInteractive
 		installedClaudeVersionFn = origInstalled
 		latestClaudeVersionFn = origLatest
-		claudeUpdateNoticeFn = origNotice
+		claudeUpdatePromptFn = origPrompt
 	})
 
 	claudeUpdateInteractiveFn = func() bool { return true }
 	installedClaudeVersionFn = func() (string, error) { return "", errors.New("version command failed") }
 	latestClaudeVersionFn = func() (string, error) { return "", errors.New("offline") }
-	claudeUpdateNoticeFn = func(_, _ string) { t.Fatal("failed check must not notify") }
+	claudeUpdatePromptFn = func(_, _ string) (bool, error) {
+		t.Fatal("failed check must not prompt")
+		return false, nil
+	}
 
 	maybeNotifyClaudeUpdate("claude")
 }
@@ -119,12 +192,12 @@ func TestMaybeNotifyClaudeUpdateBacksOffAfterLatestVersionFetchFails(t *testing.
 	origInteractive := claudeUpdateInteractiveFn
 	origInstalled := installedClaudeVersionFn
 	origLatest := latestClaudeVersionFn
-	origNotice := claudeUpdateNoticeFn
+	origPrompt := claudeUpdatePromptFn
 	t.Cleanup(func() {
 		claudeUpdateInteractiveFn = origInteractive
 		installedClaudeVersionFn = origInstalled
 		latestClaudeVersionFn = origLatest
-		claudeUpdateNoticeFn = origNotice
+		claudeUpdatePromptFn = origPrompt
 	})
 
 	claudeUpdateInteractiveFn = func() bool { return true }
@@ -134,7 +207,10 @@ func TestMaybeNotifyClaudeUpdateBacksOffAfterLatestVersionFetchFails(t *testing.
 		fetches++
 		return "", errors.New("offline")
 	}
-	claudeUpdateNoticeFn = func(_, _ string) { t.Fatal("failed fetch must not notify") }
+	claudeUpdatePromptFn = func(_, _ string) (bool, error) {
+		t.Fatal("failed fetch must not prompt")
+		return false, nil
+	}
 
 	maybeNotifyClaudeUpdate("claude")
 	maybeNotifyClaudeUpdate("claude")

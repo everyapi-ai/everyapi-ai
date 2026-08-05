@@ -4,16 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
@@ -41,9 +42,9 @@ var (
 	claudeUpdateInteractiveFn = cliprompt.IsInteractive
 	installedClaudeVersionFn  = installedClaudeVersion
 	latestClaudeVersionFn     = latestClaudeVersion
-	claudeUpdateNoticeFn      = func(current, latest string) {
-		cliout.Printf(i18n.T("use.claude_update_available")+"\n", current, latest)
-	}
+	claudeUpdatePromptFn      = promptClaudeUpdate
+	runClaudeUpdateFn         = runClaudeUpdate
+	claudeUpdateErrorFn       = reportClaudeUpdateError
 )
 
 // maybeNotifyClaudeUpdate checks only the plain `everyapi use claude` launch.
@@ -81,7 +82,38 @@ func maybeNotifyClaudeUpdate(toolName string) {
 	cache.NotifiedVersion = latest
 	cache.LastNotifiedAt = now.Unix()
 	_ = saveClaudeUpdateCheckCache(cache)
-	claudeUpdateNoticeFn(current, latest)
+	updateNow, err := claudeUpdatePromptFn(current, latest)
+	if err != nil || !updateNow {
+		return
+	}
+	if err := runClaudeUpdateFn(); err != nil {
+		claudeUpdateErrorFn(err)
+	}
+}
+
+func reportClaudeUpdateError(err error) {
+	fmt.Fprintf(os.Stderr, i18n.T("use.claude_update_failed")+"\n", err)
+}
+
+func promptClaudeUpdate(current, latest string) (bool, error) {
+	title := fmt.Sprintf(i18n.T("use.claude_update_available"), current, latest) +
+		"\n" + i18n.T("update.choice_prompt")
+	idx, err := cliprompt.Pick(title, []string{
+		i18n.T("update.choice_yes"),
+		i18n.T("update.choice_later"),
+	})
+	return idx == 0, err
+}
+
+func runClaudeUpdate() error {
+	c := exec.Command("claude", "update")
+	c.Stdin = os.Stdin
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	interrupts := make(chan os.Signal, 1)
+	signal.Notify(interrupts, os.Interrupt)
+	defer signal.Stop(interrupts)
+	return c.Run()
 }
 
 func installedClaudeVersion() (string, error) {
