@@ -9,11 +9,12 @@ import (
 )
 
 // IsInstalled reports whether the tool's executable can be found — on
-// $PATH, or (for npm-installed tools) in npm's global bin directory even
-// when that dir isn't on $PATH. Delegates to ResolveExec so the preflight
-// check matches exactly what Exec will resolve a moment later, which is
-// what keeps `everyapi use` from looping on "not installed" after a
-// successful `npm install -g` whose bin dir never made it onto PATH.
+// $PATH, in the tool's own ExtraBinDirs, or (for npm-installed tools) in
+// npm's global bin directory, even when those dirs aren't on $PATH.
+// Delegates to ResolveExec so the preflight check matches exactly what
+// Exec will resolve a moment later, which is what keeps `everyapi use`
+// from looping on "not installed" after an install whose output dir never
+// made it onto PATH.
 func IsInstalled(t *Tool) bool {
 	if t == nil {
 		return false
@@ -81,9 +82,10 @@ func installRequires(t *Tool) string {
 // shell, streaming stdout/stderr/stdin so npm/curl/bash progress
 // reaches the user's terminal live. After the shell returns, it
 // re-checks via ResolveExec; an exit-0 install that still leaves the
-// binary unfindable — on $PATH OR in npm's global bin dir — surfaces as
-// an actionable error (naming the dirs searched) instead of letting the
-// caller re-exec into a still-missing tool.
+// binary unfindable — on $PATH, in the tool's ExtraBinDirs, or in npm's
+// global bin dir — surfaces as an actionable error (naming the dirs
+// searched) instead of letting the caller re-exec into a still-missing
+// tool.
 //
 // On Windows the command is passed to `cmd /C`. Pipelines like
 // `curl … | bash` won't work there, so callers should gate this
@@ -121,12 +123,14 @@ func RunInstall(t *Tool) error {
 
 // ErrInstalledButNotOnPath signals that the install command exited
 // cleanly but the executable still can't be resolved — not on $PATH and
-// (for npm tools) not in any npm global bin dir we know to search. The
-// canonical example is `npm install -g …` succeeding while npm's global
-// bin directory is on neither $PATH nor a version-manager env var. Dirs
-// carries the npm global directories that WERE searched (empty for
-// non-npm tools) so the message can point the user at a concrete place
-// to add to PATH instead of guessing.
+// not in any fallback directory we know to search. The canonical example
+// is `npm install -g …` succeeding while npm's global bin directory is on
+// neither $PATH nor a version-manager env var; the same shape applies to
+// an installer with a fixed output dir (Antigravity writes ~/.local/bin).
+// Dirs carries the directories that WERE searched — the tool's
+// ExtraBinDirs plus, for npm tools, the npm global candidates — so the
+// message can point the user at a concrete place to add to PATH instead
+// of guessing.
 type ErrInstalledButNotOnPath struct {
 	Tool *Tool
 	Dirs []string
@@ -135,8 +139,8 @@ type ErrInstalledButNotOnPath struct {
 func (e *ErrInstalledButNotOnPath) Error() string {
 	if len(e.Dirs) > 0 {
 		return fmt.Sprintf(
-			"%s installed but not found on $PATH or in npm's global bin (searched: %s). "+
-				"Add npm's global bin directory to PATH, or open a new shell.",
+			"%s installed but not found on $PATH or in its known install directories (searched: %s). "+
+				"Add the directory holding the binary to PATH, or open a new shell.",
 			e.Tool.ExecName, strings.Join(e.Dirs, ", "),
 		)
 	}

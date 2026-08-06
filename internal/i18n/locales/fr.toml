@@ -1355,8 +1355,8 @@ install_prompt = "Installer %s maintenant ?"
 installing = "Installation de %s ..."
 installed = "%s installé."
 installed_not_on_path = "%s a été installé mais n'est pas encore dans $PATH. Ouvrez un nouveau shell ou ajoutez le répertoire bin de l'installateur à PATH."
-installed_not_on_path_dirs = "%[1]s a été installé mais introuvable dans $PATH ni dans le bin global de npm (recherché : %[2]s). Ajoutez le répertoire bin global de npm à PATH, ou ouvrez un nouveau shell puis relancez."
-installer_missing = "%[1]s n'est pas installé, mais son installateur a besoin de %[2]q, qui n'est pas dans votre PATH (un npm fourni par un gestionnaire de versions uniquement sous forme de fonction shell ne sera pas visible ici). Installez %[2]s puis réessayez, ou installez %[1]s vous-même :\n  %[3]s"
+installed_not_on_path_dirs = "%[1]s a été installé mais introuvable dans $PATH ni dans ses répertoires d'installation connus (recherché : %[2]s). Ajoutez à PATH le répertoire contenant le binaire, ou ouvrez un nouveau shell puis relancez."
+installer_missing = "%[1]s n'est pas installé, mais son installateur a besoin de %[2]q, absent de votre PATH (l'installateur s'exécute dans un shell non interactif qui ne charge pas votre configuration : les chemins ajoutés par votre rc — ou une commande qui n'existe que sous forme de fonction shell — n'y sont pas visibles). Installez %[2]s puis relancez, ou installez %[1]s vous-même :\n  %[3]s"
 
 [upstream]
 none = "Aucun fournisseur upstream configuré."

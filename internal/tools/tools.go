@@ -56,6 +56,21 @@ type Tool struct {
 	// script on the user's machine.
 	InstallCmdUnixOnly bool
 
+	// ExtraBinDirs lists installer-specific directories to search for
+	// ExecName when $PATH misses, as $HOME-relative paths ("" segments
+	// and absolute paths are ignored). The npm-global fallback in
+	// resolveExecDirs only covers `npm install -g` tools; an installer
+	// that writes somewhere else — Antigravity's install.sh drops `agy`
+	// into ~/.local/bin — needs its own candidates, or a user whose
+	// shell adds that dir in an rc file everyapi never sources stays
+	// permanently "not installed" and loops on reinstall offers.
+	//
+	// Same contract as InstallCmd: compile-time literals only. These
+	// paths are joined onto the user's home dir and stat'd, never
+	// executed as shell text, but keeping them static preserves the
+	// "no user input reaches tool resolution" property.
+	ExtraBinDirs []string
+
 	// YoloFlag is the tool-specific "skip every confirmation"
 	// argument the user might want to pass — claude's
 	// --dangerously-skip-permissions, codex's
@@ -296,9 +311,12 @@ var Registry = map[string]*Tool{
 		InstallHint:        "Install Claude Code: https://docs.claude.com/en/docs/claude-code/setup",
 		InstallCmd:         "curl -fsSL https://claude.ai/install.sh | bash",
 		InstallCmdUnixOnly: true,
-		YoloFlag:           "--dangerously-skip-permissions",
-		YoloLabel:          "skip all permission prompts (--dangerously-skip-permissions)",
-		RequiredEndpoint:   "anthropic",
+		// claude.ai/install.sh hands off to `<binary> install`, which links the
+		// launcher into ~/.local/bin — the same off-PATH cohort gemini hits.
+		ExtraBinDirs:     []string{".local/bin"},
+		YoloFlag:         "--dangerously-skip-permissions",
+		YoloLabel:        "skip all permission prompts (--dangerously-skip-permissions)",
+		RequiredEndpoint: "anthropic",
 		transparentEnvFn:   transparentStandaloneClaudeEnv,
 		envFn: func(apiBase, token string) map[string]string {
 			return map[string]string{
@@ -351,12 +369,31 @@ var Registry = map[string]*Tool{
 	// OAuth credential and upstream routing, so never pass the EveryAPI relay
 	// key or transparent-connector environment into the child.
 	"gemini": {
-		Name:        "gemini",
-		ExecName:    "agy",
-		InstallHint: "Install the Antigravity CLI (`agy`) and sign in once before running `everyapi use gemini`.",
-		Native:      true,
-		YoloFlag:    "--dangerously-skip-permissions",
-		YoloLabel:   "skip all permission prompts (--dangerously-skip-permissions)",
+		Name:     "gemini",
+		ExecName: "agy",
+		// Deliberately platform-neutral: this string is what Windows users
+		// see (CanAutoInstall is false for them), and the docs page carries
+		// the correct per-platform command. Inlining the Unix pipeline here
+		// would hand PowerShell users a `curl` that resolves to
+		// Invoke-WebRequest and fails.
+		InstallHint: "Install the Antigravity CLI (`agy`): https://antigravity.google/docs/cli/install " +
+			"— then sign in once before running `everyapi use gemini`.",
+		// Antigravity's own installer, per the install docs above. It
+		// writes the binary to ~/.local/bin/agy — hence ExtraBinDirs, so
+		// the post-install re-check finds it even when the user's shell
+		// only puts that dir on $PATH from an rc file we never source.
+		//
+		// Windows uses a separate .cmd/.ps1 installer and registers agy
+		// under %LOCALAPPDATA%\agy\bin, so this pipeline is Unix-only.
+		// That directory is env-var-derived rather than $HOME-relative, so
+		// ExtraBinDirs cannot express it; Windows users whose PATH lacks it
+		// still fall back to the hint above.
+		InstallCmd:         "curl -fsSL https://antigravity.google/cli/install.sh | bash",
+		InstallCmdUnixOnly: true,
+		ExtraBinDirs:       []string{".local/bin"},
+		Native:             true,
+		YoloFlag:           "--dangerously-skip-permissions",
+		YoloLabel:          "skip all permission prompts (--dangerously-skip-permissions)",
 		envFn: func(_, _ string) map[string]string {
 			return map[string]string{}
 		},
@@ -448,10 +485,14 @@ var Registry = map[string]*Tool{
 		// never point an auto-executed installer at main/master/HEAD.
 		InstallCmd:         "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/e444d165807f489b5c1ab8e4a612c8d09c2e67a2/scripts/install.sh | bash",
 		InstallCmdUnixOnly: true,
-		YoloEnv:            "HERMES_YOLO_MODE",
-		YoloLabel:          "yolo mode — disable all approval prompts (HERMES_YOLO_MODE)",
-		ModelEnv:           hermesModelEnv,
-		RequiredEndpoint:   "openai",
+		// That script's get_command_link_dir() links the command into
+		// $HOME/.local/bin for the default non-root install (/usr/local/bin
+		// when run as root, which is already a conventional PATH entry).
+		ExtraBinDirs:     []string{".local/bin"},
+		YoloEnv:          "HERMES_YOLO_MODE",
+		YoloLabel:        "yolo mode — disable all approval prompts (HERMES_YOLO_MODE)",
+		ModelEnv:         hermesModelEnv,
+		RequiredEndpoint: "openai",
 		envFn: func(_, _ string) map[string]string {
 			// Routing is config-file driven; see prepareHermes.
 			return map[string]string{}

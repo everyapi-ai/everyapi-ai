@@ -18,6 +18,7 @@ func TestRegistry_HasInstallCmds(t *testing.T) {
 	cases := map[string]string{
 		"claude": "curl -fsSL https://claude.ai/install.sh | bash",
 		"codex":  "npm install -g @openai/codex",
+		"gemini": "curl -fsSL https://antigravity.google/cli/install.sh | bash",
 	}
 	for name, want := range cases {
 		tool, err := Lookup(name)
@@ -26,6 +27,16 @@ func TestRegistry_HasInstallCmds(t *testing.T) {
 		}
 		if tool.InstallCmd != want {
 			t.Errorf("%s.InstallCmd = %q, want %q", name, tool.InstallCmd, want)
+		}
+	}
+
+	// The pinned cases above only cover the tools someone thought to
+	// list. Sweep the whole registry too — gemini shipped without an
+	// InstallCmd for exactly as long as this test hardcoded two names,
+	// which is the silent degradation the doc comment warns about.
+	for key, tool := range Registry {
+		if tool.InstallCmd == "" {
+			t.Errorf("%s has no InstallCmd; `everyapi use %s` cannot offer to install it", key, key)
 		}
 	}
 }
@@ -120,8 +131,9 @@ func TestIsInstalled(t *testing.T) {
 func TestInstallPromptDefault(t *testing.T) {
 	cases := map[string]bool{
 		"claude": false, // curl|bash → default No
+		"gemini": false, // curl|bash (Antigravity install.sh) → default No
 		"codex":  true,  // npm → default Yes
-		"gemini": true,  // npm → default Yes
+		"grok":   true,  // npm → default Yes
 	}
 	for name, want := range cases {
 		tool, _ := Lookup(name)
@@ -248,6 +260,55 @@ func TestRunInstall_InstalledButNotOnPath(t *testing.T) {
 	}
 	if notOnPath.Tool != tool {
 		t.Errorf("ErrInstalledButNotOnPath.Tool = %v, want the input tool", notOnPath.Tool)
+	}
+}
+
+// TestErrInstalledButNotOnPath_MessageIsNotNpmSpecific pins that the
+// "searched" list and its prose stay accurate for non-npm tools. The
+// searched set now includes a tool's ExtraBinDirs, so a message naming
+// npm's global bin would be telling a gemini user to fix a directory
+// that was never involved.
+func TestErrInstalledButNotOnPath_MessageIsNotNpmSpecific(t *testing.T) {
+	err := &ErrInstalledButNotOnPath{
+		Tool: &Tool{Name: "geminiish", ExecName: "agy", ExtraBinDirs: []string{".local/bin"}},
+		Dirs: []string{"/home/u/.local/bin"},
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "npm") {
+		t.Errorf("message names npm for a non-npm tool: %q", msg)
+	}
+	if !strings.Contains(msg, "/home/u/.local/bin") {
+		t.Errorf("message omits the searched dir: %q", msg)
+	}
+}
+
+// TestRunInstall_ReportsExtraBinDirs pins that a failed post-install
+// re-check names the tool's own install directory. Without this the user
+// gets "not on PATH" with no concrete dir to add, which is the dead end
+// that made `use gemini` unrecoverable.
+func TestRunInstall_ReportsExtraBinDirs(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", t.TempDir())
+	}
+	tool := &Tool{
+		Name:         "extradirs",
+		ExecName:     "definitely-not-real-extradirs-zzz",
+		InstallCmd:   "true",
+		ExtraBinDirs: []string{".local/bin"},
+	}
+	if runtime.GOOS == "windows" {
+		tool.InstallCmd = "exit 0"
+	}
+	var notOnPath *ErrInstalledButNotOnPath
+	if err := RunInstall(tool); !errors.As(err, &notOnPath) {
+		t.Fatalf("got %T (%v), want *ErrInstalledButNotOnPath", err, err)
+	}
+	if len(notOnPath.Dirs) == 0 {
+		t.Fatal("Dirs is empty; the tool's ExtraBinDirs should be reported as searched")
+	}
+	if !strings.Contains(strings.Join(notOnPath.Dirs, ","), filepath.Join(".local", "bin")) {
+		t.Errorf("Dirs = %v, want it to include the tool's .local/bin", notOnPath.Dirs)
 	}
 }
 

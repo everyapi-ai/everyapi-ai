@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 )
@@ -14,20 +15,20 @@ import (
 //
 // It first consults $PATH via exec.LookPath — the fast, universal case
 // that every already-on-PATH tool hits without any extra work. When that
-// fails AND the tool is installed with `npm install -g`, it falls back to
-// the locations a global npm install ACTUALLY writes to: the bin dir a
-// Node version manager (nvm/volta/fnm) exports into the environment, an
+// misses it searches the tool's own ExtraBinDirs (where THIS tool's
+// installer writes), and then, for `npm install -g` tools only, the
+// locations a global npm install actually writes to: the bin dir a Node
+// version manager (nvm/volta/fnm) exports into the environment, an
 // explicit npm prefix, `npm prefix -g`, and the common static prefixes.
 //
-// This is the whole point of the fallback: `npm install -g @openai/codex`
-// drops `codex` into npm's global bin directory, and on a great many
-// setups (nvm, a hand-set prefix, Linux distros that don't add it by
-// default) that directory is NOT on the $PATH everyapi inherits. Relying
-// on exec.LookPath alone then makes the tool permanently invisible — the
-// install "succeeds", the re-check still can't see it, and `everyapi use`
-// loops forever offering to reinstall. Resolving the npm global bin dir
-// directly and launching by absolute path removes that failure mode on
-// every platform.
+// This is the whole point of the fallback: an installer drops its binary
+// somewhere the $PATH everyapi inherits doesn't cover — npm's global bin
+// under nvm or a hand-set prefix, or ~/.local/bin added only by a shell
+// rc file we never source. Relying on exec.LookPath alone then makes the
+// tool permanently invisible: the install "succeeds", the re-check still
+// can't see it, and `everyapi use` loops forever offering to reinstall.
+// Resolving the installer's output directory directly and launching by
+// absolute path removes that failure mode on every platform.
 //
 // Returns os.ErrNotExist when nothing resolves.
 func ResolveExec(t *Tool) (string, error) {
@@ -36,7 +37,8 @@ func ResolveExec(t *Tool) (string, error) {
 }
 
 // LookupExecName resolves a bare executable name for launching, the
-// way Exec launches tools: exec.LookPath first, then the npm global
+// way Exec launches tools: exec.LookPath first, then the ExtraBinDirs of
+// the registry entry running that binary (if any), then the npm global
 // bin dirs (env-derived, then `npm prefix -g`). The env return is
 // ready for exec.Cmd.Env, with the resolved dir appended to the
 // child's PATH so a co-located node/npm resolves — nil means "inherit
@@ -44,15 +46,23 @@ func ResolveExec(t *Tool) (string, error) {
 // callers should keep the bare name so exec.Command's own not-found
 // error still surfaces.
 //
-// Exported for the mcp subcommands, which launch the same
-// npm-installed client CLIs (claude / codex / gemini) outside the
+// The argument is an executable name, not a registry key: callers pass
+// the binary they intend to run. `use gemini` launches Antigravity's
+// `agy`, so LookupExecName("gemini") deliberately finds no registry
+// entry — that name belongs to Google's separate gemini CLI, which must
+// not inherit agy's install directories.
+//
+// Exported for the mcp subcommands, which launch client CLIs outside the
 // *Tool plumbing — without this they'd fail for exactly the off-PATH
 // cohort `use` handles.
 func LookupExecName(execName string) (path string, env []string, ok bool) {
 	if p, err := exec.LookPath(execName); err == nil {
 		return p, nil, true
 	}
-	dirs := npmEnvBinDirs()
+	// Mirror resolveExecDirs: an installer-specific dir beats npm's
+	// global root, and applies even when the tool isn't npm-installed.
+	dirs := extraBinDirs(toolByExecName(execName))
+	dirs = dedupeStrings(append(dirs, npmEnvBinDirs()...))
 	if d := npmPrefixBinDir(); d != "" {
 		dirs = dedupeStrings(append(dirs, d))
 	}
@@ -64,11 +74,13 @@ func LookupExecName(execName string) (path string, env []string, ok bool) {
 	return "", nil, false
 }
 
-// resolveExecDirs is ResolveExec plus the npm global bin directories it
-// searched. The extra return lets the failure path (RunInstall) name the
-// dirs in its error WITHOUT recomputing them — recomputing would spawn a
-// second `npm prefix -g`. searched is nil when the $PATH fast path hits or
-// the tool isn't an npm install (nothing was scanned).
+// resolveExecDirs is ResolveExec plus the fallback directories it
+// searched: the tool's ExtraBinDirs, plus the npm global bin candidates
+// for npm-installed tools. The extra return lets the failure path
+// (RunInstall) name the dirs in its error WITHOUT recomputing them —
+// recomputing would spawn a second `npm prefix -g`. searched is nil when
+// the $PATH fast path hits, and for a non-npm tool it holds just that
+// tool's ExtraBinDirs (empty when it declares none).
 func resolveExecDirs(t *Tool) (path string, searched []string, err error) {
 	if t == nil {
 		return "", nil, os.ErrNotExist
@@ -76,12 +88,23 @@ func resolveExecDirs(t *Tool) (path string, searched []string, err error) {
 	if p, e := exec.LookPath(t.ExecName); e == nil {
 		return p, nil, nil
 	}
+	// Installer-specific directories come first: they're free to compute
+	// and they're where THIS tool's installer actually wrote the binary,
+	// which makes them a better guess than npm's global root. Applies to
+	// every tool, npm-installed or not — a curl|bash installer with a
+	// known output dir is exactly the case exec.LookPath alone strands.
+	searched = extraBinDirs(t)
+	for _, dir := range searched {
+		if p, ok := findExecutable(dir, t.ExecName); ok {
+			return p, searched, nil
+		}
+	}
 	if !installUsesNpm(t) {
-		return "", nil, os.ErrNotExist
+		return "", searched, os.ErrNotExist
 	}
 	// Cheap, subprocess-free candidates first (env vars only), so the
 	// common version-manager case resolves without ever shelling out.
-	searched = npmEnvBinDirs()
+	searched = dedupeStrings(append(searched, npmEnvBinDirs()...))
 	for _, dir := range searched {
 		if p, ok := findExecutable(dir, t.ExecName); ok {
 			return p, searched, nil
@@ -103,6 +126,89 @@ func resolveExecDirs(t *Tool) (path string, searched []string, err error) {
 // ResolveExec makes sense (a curl|bash installer writes elsewhere).
 func installUsesNpm(t *Tool) bool {
 	return installRequires(t) == "npm"
+}
+
+// toolByExecName finds the registry entry that launches execName, so
+// callers holding only a bare binary name can still reach that tool's
+// ExtraBinDirs. Returns nil when nothing matches — extraBinDirs treats
+// that as "no extra candidates".
+//
+// Matching is on ExecName, not the registry key: `use gemini` launches
+// Antigravity's `agy`, so a caller passing the literal "gemini" (the mcp
+// subcommands name Google's separate gemini CLI that way) correctly does
+// NOT pick up agy's install dirs.
+//
+// Covers the whole Registry, not just Names() — the latter orders the
+// interactive picker and would silently skip a registered tool that
+// hadn't been added to it. Registry is a map, so the keys are sorted
+// first: several entries sharing an ExecName is a legitimate shape (the
+// retired provider presets all ran `claude`), and without an order the
+// winner would vary per run and take its ExtraBinDirs with it.
+func toolByExecName(execName string) *Tool {
+	if execName == "" {
+		return nil
+	}
+	keys := make([]string, 0, len(Registry))
+	for name := range Registry {
+		keys = append(keys, name)
+	}
+	sort.Strings(keys)
+	for _, name := range keys {
+		if t := Registry[name]; t != nil && t.ExecName == execName {
+			return t
+		}
+	}
+	return nil
+}
+
+// extraBinDirs resolves the tool's ExtraBinDirs against the user's home
+// directory. Entries that are empty, absolute, or that escape $HOME via
+// ".." are skipped: the field is documented as $HOME-relative, and
+// silently accepting a path outside the home dir would make the
+// "compile-time literal, home-anchored" contract harder to audit.
+// Returns nil when the tool declares none or the home dir can't be
+// determined.
+//
+// The ".." check can't be a plain prefix test on the raw entry —
+// filepath.Join Cleans its result, so "sub/../../elsewhere" escapes
+// without ever starting with "..". Comparing the joined path back
+// against home is what actually enforces containment.
+func extraBinDirs(t *Tool) []string {
+	if t == nil || len(t.ExtraBinDirs) == 0 {
+		return nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	var dirs []string
+	for _, rel := range t.ExtraBinDirs {
+		if rel == "" || filepath.IsAbs(rel) {
+			continue
+		}
+		dir := filepath.Join(home, rel)
+		if !isSubpath(home, dir) {
+			continue
+		}
+		dirs = append(dirs, dir)
+	}
+	return dedupeStrings(dirs)
+}
+
+// isSubpath reports whether dir lies strictly inside base. Both are
+// expected to be Clean absolute paths (filepath.Join guarantees that for
+// dir). A dir equal to base is rejected: an entry resolving to the home
+// dir itself would scan $HOME for executables, which no installer layout
+// warrants.
+func isSubpath(base, dir string) bool {
+	rel, err := filepath.Rel(base, dir)
+	if err != nil {
+		return false
+	}
+	if rel == "." || rel == ".." {
+		return false
+	}
+	return !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // npmEnvBinDirs lists candidate global-bin directories derivable from the

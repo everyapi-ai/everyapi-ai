@@ -216,6 +216,30 @@ func TestLocaleParity(t *testing.T) {
 	}
 }
 
+// TestInstallDiagnosticsAreNotNpmSpecific guards the two install-failure
+// strings that any tool can reach. Resolution used to search only npm's
+// global bin, so both messages named npm; they now also render for the
+// curl|bash installers (gemini/claude/hermes), where telling the user to
+// fix "npm's global bin directory" points at a directory that was never
+// involved. Every locale has to stay neutral, not just en — these are the
+// strings cmd/use actually prints, unlike the Go-side Error() text.
+func TestInstallDiagnosticsAreNotNpmSpecific(t *testing.T) {
+	keys := []string{"use.installed_not_on_path_dirs", "use.installer_missing"}
+	for lang, tbl := range locales {
+		for _, k := range keys {
+			v, ok := tbl[k]
+			if !ok {
+				t.Errorf("%s: missing key %q", lang, k)
+				continue
+			}
+			if strings.Contains(strings.ToLower(v), "npm") {
+				t.Errorf("%s: %q still names npm; it renders for curl-installed tools too:\n  %s",
+					lang, k, v)
+			}
+		}
+	}
+}
+
 // TestLocaleMarkersBalanced ensures every locale value has an even
 // number of ** emphasis markers. An unclosed marker would bold the rest
 // of the string on a styled terminal, or leave a stray ** when piped.
