@@ -71,7 +71,7 @@ everyapi use                # 无参 → 交互式选择已安装的工具
 
 `everyapi use <tool> --transparent` 不再设置第三方 Base URL，而是让支持的客户端继续请求供应商官方域名。CLI 会在随机 loopback 端口启动临时 HTTP CONNECT proxy，每次生成一张 CA；CA 私钥只存在于本进程内存。子进程只收到代理地址、公开 CA bundle 和无秘密的占位凭证。明确注册的模型路径会在本机解密后携带真实 relay key 转发 EveryAPI；其他 HTTPS 域名原样 CONNECT 直通。受保护前缀下的未知路径会被阻止，EveryAPI 转发失败也绝不会回落直连供应商。
 
-透明模式默认用于 Claude Code（含 provider presets）和 Codex CLI。`gemini` 直接启动 Antigravity；Grok、Qwen Code、Kimi Code 和 Hermes 只支持注入路径，显式传入 `--transparent` 会报错。
+透明模式默认用于 Claude Code 和 Codex CLI。`gemini` 直接启动 Antigravity；Grok、Qwen Code、Kimi Code 和 Hermes 只支持注入路径，显式传入 `--transparent` 会报错。
 
 限制与安全边界：
 

@@ -37,10 +37,6 @@ USAGE
 ARGUMENTS
   <tool>                 claude | codex | gemini | grok | hermes
                          qwen-code | kimi-code
-                         minimax | qwen | deepseek | byteplus | glm | kimi
-                         The third row launches Claude Code against that
-                         provider (routed via EveryAPI) and pops a picker over
-                         the provider's models — or pass --model <id> to skip it.
                          Omit to open an interactive picker over installed tools.
 
 FLAGS
@@ -61,8 +57,8 @@ FLAGS
                          official API origin and relays registered model routes
                          through a process-scoped local TLS connector, so the
                          EveryAPI relay key never reaches the child's env or
-                         config. ON BY DEFAULT for claude/codex and the Claude
-                         presets. The gemini entry launches native agy instead.
+                         config. ON BY DEFAULT for claude/codex. The gemini
+                         entry launches native agy instead.
                          Pass --transparent=false to fall back
                          to injecting the gateway Base URL + relay key.
                          grok, qwen-code, kimi-code, and hermes always use the
@@ -83,8 +79,6 @@ EXAMPLES
   everyapi use qwen-code              (official Qwen Code; pick a model)
   everyapi use kimi-code --model kimi-k2.5
   everyapi use claude -- --model opus
-  everyapi use glm                     (Claude Code; pick a GLM model)
-  everyapi use kimi --model kimi-k2.5  (Claude Code on Kimi, skip the picker)
   everyapi use hermes                  (pick a model interactively)
   everyapi use hermes --model gpt-5.1  (skip the picker)
 `
@@ -124,8 +118,8 @@ EXAMPLES
 // it's another flag or a known tool name — so `everyapi use claude
 // --channel` opens the picker while `--channel team-a claude` is
 // explicit. A group literally named like a tool (claude/codex/gemini/grok/
-// qwen-code/kimi-code/hermes/minimax/qwen/deepseek/byteplus/glm/kimi) needs the `=` form
-// when it appears before the tool positional. A bare `--` ends
+// qwen-code/kimi-code/hermes) needs the `=` form when it appears before the
+// tool positional. A bare `--` ends
 // everyapi's option parsing; everything after is
 // forwarded raw to the tool — use it for tool flags like claude's
 // `--dangerously-skip-permissions` or codex's `--dangerously-bypass-*`.
@@ -224,11 +218,10 @@ func Use(args []string) error {
 	}
 
 	// --model applies to tools EveryAPI picks a model for: hermes and the
-	// official qwen-code/kimi-code clients (ModelEnv),
-	// and the Claude Code provider presets (ModelOwner, where --model skips
-	// the picker). Plain claude/codex/gemini/grok default the model in their own
+	// official qwen-code/kimi-code clients (ModelEnv). Plain
+	// claude/codex/gemini/grok default the model in their own
 	// CLI — pass tool model flags after `--` for those.
-	if model != "" && t.ModelEnv == "" && t.ModelOwner == "" {
+	if model != "" && t.ModelEnv == "" {
 		return fmt.Errorf(i18n.T("use.model_unsupported"), t.ExecName, t.ExecName)
 	}
 
@@ -290,9 +283,6 @@ func Use(args []string) error {
 	// tool's own retry — false-blocking a working setup on a flaky
 	// probe is worse than letting it through.
 	//
-	// Provider presets always validate against the live /v1/models catalog
-	// below, including an explicit --model, so a separate probe would be a
-	// redundant round-trip.
 	relayCatalog, catalogErr := api.New(gw, relayKey).RelayModelCatalog(cliout.WithCtx())
 	if catalogErr != nil && api.IsUnauthorized(catalogErr) {
 		invalidateCachedKeyOnReject(creds, group)
@@ -321,19 +311,6 @@ func Use(args []string) error {
 	// claude/codex/gemini/grok (ModelEnv == "").
 	if err := resolveToolModelFromCatalog(t, relayCatalog, catalogErr, model); err != nil {
 		return err
-	}
-
-	// Claude Code provider presets (`everyapi use glm/kimi/…`) resolve
-	// their model here: a picker scoped to the provider's catalog on a
-	// TTY, or the --model flag. Done before the sanitizer spawns so we
-	// fail fast (bad pick / empty catalog) without leaving a detached
-	// proxy behind. The chosen id is injected into the tool env below.
-	presetModel := ""
-	if t.ModelOwner != "" {
-		presetModel, err = resolveClaudePresetModelFromCatalog(t, relayCatalog, catalogErr, model, gw)
-		if err != nil {
-			return err
-		}
 	}
 
 	// Claude resume preflight must run before proxy selection: a polluted
@@ -474,13 +451,6 @@ func Use(args []string) error {
 			env["NO_PROXY"] = "127.0.0.1,localhost"
 			env["no_proxy"] = "127.0.0.1,localhost"
 		}
-	}
-
-	// Pin the provider preset's chosen model. Injected into the env map
-	// (not os.Setenv) so it overrides any ANTHROPIC_MODEL the user has
-	// exported globally — mergeEnv lets the map win over os.Environ.
-	if presetModel != "" {
-		tools.SetClaudeModel(env, presetModel)
 	}
 
 	settings, err := config.LoadSettings()
@@ -1292,10 +1262,9 @@ func preferredToolModelIndex(t *tools.Tool, models []string) int {
 }
 
 // relayKeyRejectedErr is the actionable message shown when EveryAPI
-// 401s a relay key. Shared by the pre-launch probe and the preset
-// catalog fetch (both hit /v1/models with the same TokenAuth), so a
-// dead key gives identical "check / top up / refresh" guidance wherever
-// it's first noticed.
+// 401s a relay key. The pre-launch probe hits /v1/models with the same
+// TokenAuth as inference, so a dead key gets actionable guidance before
+// the client enters its own retry loop.
 func relayKeyRejectedErr(execName, apiBase string) error {
 	wallet := api.WebOriginFromBase(apiBase) + "/wallet"
 	return fmt.Errorf(
@@ -1342,56 +1311,6 @@ func invalidateCachedKeyOnReject(creds *config.Credentials, group string) {
 	}
 }
 
-// resolveClaudePresetModel picks the upstream model for a Claude Code
-// provider preset (Tool.ModelOwner set — glm/kimi/minimax/…). Precedence:
-//
-//  1. --model <id> (explicit flag) → use it, no picker.
-//  2. interactive TTY → picker over the provider's models, filtered from
-//     the live gateway catalog by the model's `owned_by`.
-//  3. non-interactive with no --model → error: a script must name the
-//     model so we never silently pick on the user's behalf.
-//
-// Unlike resolveToolModel (hermes), an empty/failed catalog is FATAL
-// here: the whole point of `everyapi use glm` is to run a glm model, so
-// silently falling back to Claude Code's default Anthropic model would
-// be a worse surprise than a clear "no glm models reachable" error.
-func resolveClaudePresetModel(t *tools.Tool, creds *config.Credentials, relayKey, modelFlag, group string) (string, error) {
-	gw := config.ResolveAPIBaseForBase(creds.APIBase)
-	catalog, err := api.New(gw, relayKey).RelayModelCatalog(cliout.WithCtx())
-	if err != nil && api.IsUnauthorized(err) {
-		invalidateCachedKeyOnReject(creds, group)
-		return "", relayKeyRejectedErr(t.ExecName, gw)
-	}
-	return resolveClaudePresetModelFromCatalog(t, catalog, err, modelFlag, gw)
-}
-
-func resolveClaudePresetModelFromCatalog(t *tools.Tool, catalog []api.RelayModel, catalogErr error, modelFlag, gw string) (string, error) {
-	if !cliprompt.IsInteractive() {
-		if modelFlag == "" {
-			return "", fmt.Errorf(i18n.T("use.preset_needs_model"), t.Name)
-		}
-	}
-	if catalogErr != nil {
-		return "", fmt.Errorf(i18n.T("use.preset_catalog_failed"), t.Name, catalogErr)
-	}
-	if modelFlag != "" {
-		if err := validateClaudePresetModel(t, catalog, modelFlag); err != nil {
-			return "", err
-		}
-		return modelFlag, nil
-	}
-	ids := providerChatModels(catalog, t.ModelOwner)
-	if len(ids) == 0 {
-		return "", fmt.Errorf(i18n.T("use.preset_no_models"),
-			t.Name, api.WebOriginFromBase(gw))
-	}
-	idx, err := cliprompt.Pick(fmt.Sprintf(i18n.T("use.model_picker"), t.Name), ids)
-	if err != nil {
-		return "", err
-	}
-	return ids[idx], nil
-}
-
 func launchModelsForTool(t *tools.Tool, catalog []api.RelayModel) []tools.Model {
 	models := make([]tools.Model, 0, len(catalog))
 	seen := make(map[string]bool, len(catalog))
@@ -1400,9 +1319,6 @@ func launchModelsForTool(t *tools.Tool, catalog []api.RelayModel) []tools.Model 
 		requiredEndpoint = "anthropic"
 	}
 	for _, model := range catalog {
-		if t.ModelOwner != "" && !ownerMatches(model.OwnedBy, t.ModelOwner) {
-			continue
-		}
 		if !chatCapable(model.SupportedEndpointTypes) {
 			continue
 		}
@@ -1420,20 +1336,9 @@ func launchModelsForTool(t *tools.Tool, catalog []api.RelayModel) []tools.Model 
 	return models
 }
 
-func validateClaudePresetModel(t *tools.Tool, catalog []api.RelayModel, model string) error {
-	for _, id := range providerChatModels(catalog, t.ModelOwner) {
-		if id == model {
-			return nil
-		}
-	}
-	return fmt.Errorf("model %q is not currently reachable for %s through this relay key", model, t.Name)
-}
-
 // chatCapableEndpoints are the GET /v1/models `supported_endpoint_types`
-// a Claude Code preset can actually drive — text chat over the
-// OpenAI/Anthropic/Gemini wire. Image, embeddings, rerank and video
-// models share a provider's owned_by (MiniMax's speech-02/image-01, for
-// one) but Claude Code can't use them, so the preset picker hides them.
+// supported by routed text clients. Dedicated media and embedding protocols
+// are excluded from model pickers.
 var chatCapableEndpoints = map[string]bool{
 	"openai":                  true,
 	"openai-response":         true,
@@ -1452,53 +1357,6 @@ var nonChatEndpoints = map[string]bool{
 	"image-generation": true,
 	"jina-rerank":      true,
 	"openai-video":     true,
-}
-
-// legacyOwnerAliases tolerates gateways that haven't shipped the
-// owned_by de-channelization. A preset owner is the model BRAND the
-// gateway now reports (e.g. "zhipu", "qwen"); an older gateway instead
-// reports the channel-adaptor name ("zhipu_4v", "ali"). Accepting both
-// lets `use glm`/`use qwen` work whichever the gateway emits, so the CLI
-// can roll out ahead of the backend. Remove once every gateway reports
-// brands.
-var legacyOwnerAliases = map[string][]string{
-	"zhipu": {"zhipu_4v"},
-	"qwen":  {"ali"},
-}
-
-// ownerMatches reports whether a model's owned_by belongs to the preset
-// owner — the brand slug itself or any legacy channel-name alias.
-func ownerMatches(ownedBy, owner string) bool {
-	if strings.EqualFold(ownedBy, owner) {
-		return true
-	}
-	for _, alias := range legacyOwnerAliases[owner] {
-		if strings.EqualFold(ownedBy, alias) {
-			return true
-		}
-	}
-	return false
-}
-
-// providerChatModels filters a relay catalog down to the chat-capable
-// model ids owned by `owner` (brand slug, case-insensitive; legacy
-// channel names tolerated via ownerMatches), sorted. A model that
-// declares no endpoint types is kept (fail-open) so missing metadata
-// never hides an otherwise-valid chat model — only a model that
-// explicitly serves ONLY non-chat endpoints is dropped.
-func providerChatModels(catalog []api.RelayModel, owner string) []string {
-	var ids []string
-	for _, m := range catalog {
-		if !ownerMatches(m.OwnedBy, owner) {
-			continue
-		}
-		if !chatCapable(m.SupportedEndpointTypes) || !supportsEndpoint(m.SupportedEndpointTypes, "anthropic") {
-			continue
-		}
-		ids = append(ids, cliout.Sanitize(m.ID))
-	}
-	sort.Strings(ids)
-	return ids
 }
 
 // chatModels returns all unique chat-capable ids in lexical order. When a

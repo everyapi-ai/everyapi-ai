@@ -16,7 +16,6 @@ import (
 func TestRegistry_HasExpectedTools(t *testing.T) {
 	want := []string{
 		"claude", "codex", "gemini", "grok", "qwen-code", "kimi-code", "hermes",
-		"minimax", "qwen", "deepseek", "byteplus", "glm", "kimi",
 	}
 	got := Names()
 	if len(got) != len(want) {
@@ -62,73 +61,10 @@ func TestEnv_Claude(t *testing.T) {
 	}
 }
 
-// TestClaudeProviderPreset verifies the third-party provider presets:
-// they launch the `claude` binary (Claude Code) and carry a ModelOwner
-// (the /v1/models `owned_by` cmd/use filters the picker on), but the
-// model itself is NOT baked into envFn — it's chosen at launch and
-// injected later. envFn must still honor claude's Anthropic env
-// contract (raw base URL, AUTH_TOKEN, no OpenAI vars, no premature
-// ANTHROPIC_MODEL).
-func TestClaudeProviderPreset(t *testing.T) {
-	// Owners are the model BRAND the gateway reports in owned_by (derived
-	// from the model id), not the channel-adaptor name. qwen/glm moved off
-	// their old channel names ("ali"/"zhipu_4v") when owned_by was
-	// de-channelized; cmd/use's legacyOwnerAliases still tolerates the old
-	// values during rollout.
-	wantOwner := map[string]string{
-		"minimax":  "minimax",
-		"qwen":     "qwen",
-		"deepseek": "deepseek",
-		"byteplus": "byteplus",
-		"glm":      "zhipu",
-		"kimi":     "moonshot",
-	}
-	for name, owner := range wantOwner {
-		tool, err := Lookup(name)
-		if err != nil {
-			t.Fatalf("Lookup(%q): %v", name, err)
-		}
-		if tool.ExecName != "claude" {
-			t.Errorf("%s ExecName = %q, want claude", name, tool.ExecName)
-		}
-		if tool.ModelOwner != owner {
-			t.Errorf("%s ModelOwner = %q, want %q", name, tool.ModelOwner, owner)
-		}
-		env := tool.Env("https://api.everyapi.ai", "my-token")
-		if got := env["ANTHROPIC_BASE_URL"]; got != "https://api.everyapi.ai" {
-			t.Errorf("%s ANTHROPIC_BASE_URL = %q", name, got)
-		}
-		if got := env["ANTHROPIC_AUTH_TOKEN"]; got != "my-token" {
-			t.Errorf("%s ANTHROPIC_AUTH_TOKEN = %q", name, got)
-		}
-		if got := env["ENABLE_TOOL_SEARCH"]; got != "1" {
-			t.Errorf("%s ENABLE_TOOL_SEARCH = %q, want 1", name, got)
-		}
-		if _, ok := env["ENABLE_PROMPT_CACHING_1H"]; ok {
-			t.Errorf("%s must not force Anthropic's 1h cache TTL on a third-party provider", name)
-		}
-		if got, ok := env["ANTHROPIC_API_KEY"]; !ok || got != "" {
-			t.Errorf("%s ANTHROPIC_API_KEY = %q (present=%v), want present and empty", name, got, ok)
-		}
-		if _, ok := env["ANTHROPIC_MODEL"]; ok {
-			t.Errorf("%s envFn should not pin ANTHROPIC_MODEL (chosen at launch)", name)
-		}
-		if _, ok := env["OPENAI_API_KEY"]; ok {
-			t.Errorf("%s env should not set OPENAI_API_KEY", name)
-		}
-	}
-}
-
-// TestSetClaudeModel verifies the launch-time model injection points the
-// main model AND the background/"haiku" model (current + deprecated var)
-// at the same id — so Claude Code never falls back to a default haiku
-// the gateway can't route.
-func TestSetClaudeModel(t *testing.T) {
-	env := map[string]string{"ANTHROPIC_BASE_URL": "https://api.everyapi.ai"}
-	SetClaudeModel(env, "glm-5.1")
-	for _, k := range []string{"ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_SMALL_FAST_MODEL"} {
-		if env[k] != "glm-5.1" {
-			t.Errorf("%s = %q, want glm-5.1", k, env[k])
+func TestProviderNamesAreNotTools(t *testing.T) {
+	for _, name := range []string{"minimax", "qwen", "deepseek", "byteplus", "glm", "kimi"} {
+		if tool, err := Lookup(name); err == nil {
+			t.Errorf("Lookup(%q) = %#v, want unknown tool; providers must be selected as models, not launched as CLIs", name, tool)
 		}
 	}
 }
@@ -323,14 +259,6 @@ func TestTransparentEnvUsesOfficialOriginsWithoutRelayCredential(t *testing.T) {
 			},
 			wantUnset: []string{"OPENAI_BASE_URL", "OPENAI_API_BASE"},
 		},
-		{
-			name: "glm",
-			want: map[string]string{
-				"ANTHROPIC_AUTH_TOKEN": "everyapi-local-connector",
-				"NODE_EXTRA_CA_CERTS":  caPath,
-			},
-			wantUnset: []string{"ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY"},
-		},
 	}
 	for _, c := range cases {
 		c := c
@@ -391,7 +319,7 @@ func TestTransparentEnvRejectsUnsupportedTool(t *testing.T) {
 
 func TestSupportsTransparentMatchesVerifiedTools(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"claude", "codex", "glm", "kimi"} {
+	for _, name := range []string{"claude", "codex"} {
 		tool, _ := Lookup(name)
 		if !tool.SupportsTransparent() {
 			t.Errorf("%s should support transparent mode", name)

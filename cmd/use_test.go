@@ -132,7 +132,7 @@ func TestParseUseArgs(t *testing.T) {
 		{"two positionals → error", []string{"claude", "extra"}, "", "", false, false, nil, "", true},
 		{"unknown flag → error", []string{"claude", "--bogus"}, "", "", false, false, nil, "", true},
 		{"ambiguous: group named like a tool before tool → error", []string{"--group", "codex", "claude"}, "", "", false, false, nil, "", true},
-		{"preset name as group before tool is also ambiguous → error", []string{"--group", "byteplus", "claude"}, "", "", false, false, nil, "", true},
+		{"provider name remains valid as a routing group", []string{"--group", "byteplus", "claude"}, "claude", "byteplus", false, false, nil, "", false},
 		{"eq form lets a tool-named group through", []string{"--channel=codex", "claude"}, "claude", "codex", false, false, nil, "", false},
 		{"eq form lets a preset-named group through", []string{"--channel=byteplus", "claude"}, "claude", "byteplus", false, false, nil, "", false},
 
@@ -647,38 +647,7 @@ func TestWantsUseHelp(t *testing.T) {
 	}
 }
 
-// TestProviderChatModels covers the preset picker filter: scope to one
-// provider's owned_by (case-insensitive), drop non-chat models
-// (image/embeddings/rerank/video) the launched claude can't drive, keep
-// models with no declared endpoint types (fail-open), and sort.
-func TestProviderChatModels(t *testing.T) {
-	catalog := []api.RelayModel{
-		{ID: "MiniMax-M2.7-highspeed", OwnedBy: "minimax", SupportedEndpointTypes: []string{"anthropic", "openai"}},
-		{ID: "MiniMax-M2.7", OwnedBy: "MiniMax", SupportedEndpointTypes: []string{"openai"}},                            // owner case-insensitive
-		{ID: "speech-02", OwnedBy: "minimax", SupportedEndpointTypes: []string{"image-generation"}},                     // non-chat → drop
-		{ID: "image-01", OwnedBy: "minimax", SupportedEndpointTypes: []string{"embeddings"}},                            // non-chat → drop
-		{ID: "image-openai-bridge", OwnedBy: "minimax", SupportedEndpointTypes: []string{"image-generation", "openai"}}, // OpenAI image protocol, still not chat → drop
-		{ID: "legacy-chat", OwnedBy: "minimax", SupportedEndpointTypes: nil},                                            // unknown → keep
-		{ID: "glm-5.1", OwnedBy: "zhipu_4v", SupportedEndpointTypes: []string{"anthropic"}},                             // other provider → drop
-	}
-	got := providerChatModels(catalog, "minimax")
-	want := []string{"MiniMax-M2.7-highspeed", "legacy-chat"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("providerChatModels = %v, want %v (sorted, chat-only, owner-scoped)", got, want)
-	}
-
-	// No models for an owner with only non-chat or no entries → empty,
-	// which the caller turns into the actionable "no models" error.
-	if got := providerChatModels(catalog, "moonshot"); len(got) != 0 {
-		t.Errorf("providerChatModels(moonshot) = %v, want empty", got)
-	}
-	onlyImage := []api.RelayModel{{ID: "img", OwnedBy: "minimax", SupportedEndpointTypes: []string{"image-generation"}}}
-	if got := providerChatModels(onlyImage, "minimax"); len(got) != 0 {
-		t.Errorf("providerChatModels(only-image) = %v, want empty", got)
-	}
-}
-
-func TestLaunchModelsForAllClaudeClientsUsesAnthropicProtocol(t *testing.T) {
+func TestLaunchModelsForClaudeUsesAnthropicProtocol(t *testing.T) {
 	catalog := []api.RelayModel{
 		{ID: "claude-ok", OwnedBy: "anthropic", SupportedEndpointTypes: []string{"anthropic"}},
 		{ID: "gpt-chat-only", OwnedBy: "openai", SupportedEndpointTypes: []string{"openai"}},
@@ -689,10 +658,6 @@ func TestLaunchModelsForAllClaudeClientsUsesAnthropicProtocol(t *testing.T) {
 	claude, _ := tools.Lookup("claude")
 	if got := launchModelsForTool(claude, catalog); len(got) != 2 || got[0].ID != "claude-ok" || got[1].ID != "qwen-anthropic" {
 		t.Fatalf("plain Claude launch catalog = %#v", got)
-	}
-	qwen, _ := tools.Lookup("qwen")
-	if got := launchModelsForTool(qwen, catalog); len(got) != 1 || got[0].ID != "qwen-anthropic" {
-		t.Fatalf("Qwen Claude preset launch catalog = %#v", got)
 	}
 }
 
@@ -744,64 +709,6 @@ func TestToolInvocationNeedsEndpoint(t *testing.T) {
 		if !toolInvocationNeedsEndpoint(args) {
 			t.Errorf("%v should require a model endpoint", args)
 		}
-	}
-}
-
-func TestValidateClaudePresetModel(t *testing.T) {
-	tool, err := tools.Lookup("kimi")
-	if err != nil {
-		t.Fatal(err)
-	}
-	catalog := []api.RelayModel{
-		{ID: "kimi-k2.5", OwnedBy: "moonshot", SupportedEndpointTypes: []string{"anthropic"}},
-		{ID: "other-model", OwnedBy: "deepseek", SupportedEndpointTypes: []string{"anthropic"}},
-	}
-	if err := validateClaudePresetModel(tool, catalog, "kimi-k2.5"); err != nil {
-		t.Fatalf("reachable provider model rejected: %v", err)
-	}
-	if err := validateClaudePresetModel(tool, catalog, "missing-model"); err == nil {
-		t.Fatal("unreachable explicit model accepted")
-	}
-	if err := validateClaudePresetModel(tool, catalog, "other-model"); err == nil {
-		t.Fatal("model owned by another preset accepted")
-	}
-}
-
-// TestProviderChatModels_SanitizesTerminalEscapes proves a server-supplied
-// model ID carrying an embedded ANSI/control escape sequence is stripped
-// before it reaches the interactive picker (cliout.Sanitize), matching the
-// convention used everywhere else in the CLI for backend-relayed strings —
-// otherwise a malicious/compromised catalog entry could manipulate the
-// terminal (hide/relabel entries, move the cursor) while the user is
-// choosing which model to route their session through.
-func TestProviderChatModels_SanitizesTerminalEscapes(t *testing.T) {
-	catalog := []api.RelayModel{
-		{ID: "evil\x1b[31mmodel", OwnedBy: "minimax", SupportedEndpointTypes: []string{"anthropic"}},
-	}
-	got := providerChatModels(catalog, "minimax")
-	want := []string{"evilmodel"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("providerChatModels = %q, want %q (ANSI escape stripped)", got, want)
-	}
-}
-
-// TestProviderChatModelsLegacyOwnerAlias verifies the glm/qwen presets
-// match BOTH the new brand owned_by (zhipu/qwen) and the legacy
-// channel-adaptor name (zhipu_4v/ali) an un-upgraded gateway still emits,
-// so `use glm`/`use qwen` survive the rollout in either order.
-func TestProviderChatModelsLegacyOwnerAlias(t *testing.T) {
-	mixed := []api.RelayModel{
-		{ID: "glm-4.7", OwnedBy: "zhipu", SupportedEndpointTypes: []string{"anthropic"}},       // new gateway
-		{ID: "glm-5.1", OwnedBy: "zhipu_4v", SupportedEndpointTypes: []string{"anthropic"}},    // legacy gateway
-		{ID: "qwen-max", OwnedBy: "qwen", SupportedEndpointTypes: []string{"anthropic"}},       // new gateway
-		{ID: "qwen3-coder", OwnedBy: "ali", SupportedEndpointTypes: []string{"anthropic"}},     // legacy gateway
-		{ID: "deepseek-chat", OwnedBy: "deepseek", SupportedEndpointTypes: []string{"openai"}}, // unrelated
-	}
-	if got, want := providerChatModels(mixed, "zhipu"), []string{"glm-4.7", "glm-5.1"}; !reflect.DeepEqual(got, want) {
-		t.Errorf("providerChatModels(zhipu) = %v, want %v (brand + legacy zhipu_4v)", got, want)
-	}
-	if got, want := providerChatModels(mixed, "qwen"), []string{"qwen-max", "qwen3-coder"}; !reflect.DeepEqual(got, want) {
-		t.Errorf("providerChatModels(qwen) = %v, want %v (brand + legacy ali)", got, want)
 	}
 }
 

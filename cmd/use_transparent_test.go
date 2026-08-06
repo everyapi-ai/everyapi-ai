@@ -266,7 +266,7 @@ func TestTransparentConnectorChainsThroughRecoveryGuard(t *testing.T) {
 // The resolution itself lives inline in Use; this asserts the two inputs it
 // reads (the parser's tri-state and Tool.SupportsTransparent) agree per tool.
 func TestTransparentDefaultResolution(t *testing.T) {
-	for _, name := range []string{"claude", "codex", "glm", "kimi"} {
+	for _, name := range []string{"claude", "codex"} {
 		tool, err := tools.Lookup(name)
 		if err != nil {
 			t.Fatalf("Lookup(%s): %v", name, err)
