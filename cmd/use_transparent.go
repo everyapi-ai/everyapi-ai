@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
@@ -200,27 +199,14 @@ func writeTransparentCABundle(connectorCA []byte) (string, error) {
 	return path, nil
 }
 
-// connectorLogger returns a logger writing to ~/.config/everyapi/connector.log
-// (appended) plus a closer for the underlying file. It mirrors
-// cmd.sanitizerLogger: it MUST NOT log to stderr, which is shared with the
-// launched tool's TUI and would corrupt the display, so on any error it falls
-// back to discarding with a no-op closer. Without it, a transparent session's
+// connectorLogger writes to connector.log. Without it, a transparent session's
 // fail-closed blocks and relay/tunnel failures are invisible — the user only
 // sees an opaque 502/403 on the tool side with no way to tell why.
 //
 // The caller closes the file on every startup-failure path; on the happy path
 // the handle is owned by stop() (run by ExecWithOptions after the child exits).
 func connectorLogger() (*log.Logger, func()) {
-	discard := func() (*log.Logger, func()) { return log.New(io.Discard, "", 0), func() {} }
-	path, err := config.EnsureLogPath("connector.log")
-	if err != nil {
-		return discard()
-	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return discard()
-	}
-	return log.New(f, "", log.LstdFlags), func() { _ = f.Close() }
+	return loopbackProxyLogger("connector.log")
 }
 
 // staleConnectorCAAge is how old a leftover connector/ca-*.pem must be before

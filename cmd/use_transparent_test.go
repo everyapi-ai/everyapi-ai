@@ -200,7 +200,7 @@ func TestTransparentConnectorChainsThroughRecoveryGuard(t *testing.T) {
 	defer gateway.Close()
 
 	// Guard on, masking off — the recovery-guard configuration.
-	sanitizerAddr, stopSanitizer, err := startInProcessSanitizer(gateway.URL, false, true)
+	sanitizerAddr, stopSanitizer, err := startInProcessSanitizer(gateway.URL, false, true, nil)
 	if err != nil {
 		t.Fatalf("startInProcessSanitizer: %v", err)
 	}

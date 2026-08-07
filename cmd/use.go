@@ -374,10 +374,52 @@ func Use(args []string) error {
 	// spawned it and every other session got connection-refused).
 	apiBaseForEnv := gw
 	connectorUpstream := gw
+	// Loopback hops between the tool and the gateway, in the order they are
+	// created. Each new hop takes the previous one as its upstream, so traffic
+	// traverses them in reverse — see transparentTopology.
+	//
+	// A launch adds at most ONE hop, however many transforms it enables: the
+	// catalogue filter and the sanitizer are content transforms, not transport,
+	// so they compose onto a single socket (see modelCatalogTransform). Reach
+	// for a second hop only for something that genuinely needs its own listener
+	// — the connector needs one because it terminates TLS.
+	var relayHops []string
 	var modelCatalogProxyStop func()
+
+	// Build the transforms first; hosting them is a separate decision below.
+	var (
+		catalogTransform func(http.Handler) http.Handler
+		catalogLog       *log.Logger
+	)
+	if toolNeedsFilteredCatalogProxy(t) {
+		if filtered := launchModelsForTool(t, relayCatalog); len(filtered) > 0 {
+			catalogModels := filtered
+			var aliases map[string]string
+			if t.ExecName == "claude" {
+				catalogModels, aliases = claudeCatalogModels(filtered)
+			}
+			// The catalogue keeps its own log file whichever socket ends up
+			// hosting it: a user chasing a wrong /model picker looks for
+			// model-catalog.log, not for whichever hop happened to carry it.
+			var closeCatalogLog func()
+			catalogLog, closeCatalogLog = loopbackProxyLogger("model-catalog.log")
+			defer closeCatalogLog()
+			// Record what the catalogue will publish, here rather than at either
+			// host. The standalone proxy logs its own bind address, but when the
+			// sanitizer hosts the transform — which --sanitize and Claude
+			// recovery both make the default — nothing else writes to this file
+			// at all, so a user following the comment above found it empty
+			// precisely when the catalogue was active.
+			catalogLog.Printf("catalogue: %s publishing %d models, %d aliased",
+				t.ExecName, len(catalogModels), len(aliases))
+			catalogTransform = modelCatalogTransform(catalogModels, aliases, catalogLog)
+		}
+	}
+
 	guardClaudeRecovery := recovery != nil
+	transformsHosted := false
 	if sanitize || guardClaudeRecovery {
-		proxyAddr, stop, perr := startInProcessSanitizer(gw, sanitize, guardClaudeRecovery)
+		proxyAddr, stop, perr := startInProcessSanitizer(gw, sanitize, guardClaudeRecovery, catalogTransform)
 		if perr != nil {
 			if guardClaudeRecovery {
 				return fmt.Errorf("start Claude recovery response guard: %w", perr)
@@ -385,17 +427,22 @@ func Use(args []string) error {
 			cliout.Printf(i18n.T("use.sanitizer_warn"), perr)
 			cliout.Printf(i18n.T("use.fallback_direct"), gw)
 			cliout.Printf("%s", i18n.T("use.fallback_hint"))
+			// Falls through to host the catalogue on its own listener below —
+			// losing the sanitizer must not silently also lose the catalogue
+			// filter, which has nothing to do with why the sanitizer failed.
 		} else {
-			// Both launch paths route relayed traffic through the sanitizer, so
-			// its mask/restore and the Claude recovery response guard apply
-			// regardless of transparent mode. The injected path points the tool
-			// straight at it; the transparent path keeps the tool on the vendor
-			// origin and makes the connector relay THROUGH it
-			// (child -> connector -> sanitizer -> gateway). Chaining rather than
-			// porting the guard into the connector keeps one implementation of
-			// the SSE transform instead of two that drift.
+			// Both launch paths route relayed traffic through this server, so its
+			// mask/restore, the Claude recovery response guard and the catalogue
+			// transform apply regardless of transparent mode. The injected path
+			// points the tool straight at it; the transparent path keeps the tool
+			// on the vendor origin and makes the connector relay THROUGH it
+			// (child -> connector -> transforms -> gateway). Keeping the transforms
+			// out of the connector leaves one implementation of the SSE handling
+			// instead of two that drift.
 			apiBaseForEnv = proxyAddr
 			connectorUpstream = proxyAddr
+			relayHops = append(relayHops, proxyAddr)
+			transformsHosted = true
 			// Tear the in-process proxy down if Use returns BEFORE handing
 			// off to tools.Exec — a yolo-prompt cancel/EOF, a Prepare
 			// error, etc. (defers are function-scoped, so this fires on
@@ -404,23 +451,16 @@ func Use(args []string) error {
 			defer stop()
 		}
 	}
-	if toolNeedsFilteredCatalogProxy(t) {
-		filtered := launchModelsForTool(t, relayCatalog)
-		if len(filtered) > 0 {
-			catalogModels := filtered
-			var aliases map[string]string
-			if t.ExecName == "claude" {
-				catalogModels, aliases = claudeCatalogModels(filtered)
-			}
-			proxyURL, stop, proxyErr := startModelCatalogProxy(apiBaseForEnv, catalogModels, aliases)
-			if proxyErr != nil {
-				return fmt.Errorf("start filtered model catalog for %s: %w", t.ExecName, proxyErr)
-			}
-			modelCatalogProxyStop = stop
-			defer stop()
-			apiBaseForEnv = proxyURL
-			connectorUpstream = proxyURL
+	if catalogTransform != nil && !transformsHosted {
+		proxyURL, stop, proxyErr := startModelCatalogProxy(gw, catalogTransform, catalogLog)
+		if proxyErr != nil {
+			return fmt.Errorf("start filtered model catalog for %s: %w", t.ExecName, proxyErr)
 		}
+		modelCatalogProxyStop = stop
+		defer stop()
+		apiBaseForEnv = proxyURL
+		connectorUpstream = proxyURL
+		relayHops = append(relayHops, proxyURL)
 	}
 
 	var (
@@ -444,12 +484,37 @@ func Use(args []string) error {
 		defer transparentSession.stop()
 	} else {
 		env = t.Env(apiBaseForEnv, relayKey)
-		if modelCatalogProxyStop != nil {
-			// The filtered catalogue proxy is loopback. Keep ambient corporate
-			// HTTPS proxies (and a parent Codex connector) from receiving plain
-			// HTTP requests intended for this process-local listener.
-			env["NO_PROXY"] = "127.0.0.1,localhost"
-			env["no_proxy"] = "127.0.0.1,localhost"
+		if apiBaseForEnv != gw {
+			// The tool is pointed at one of this process's loopback listeners,
+			// whichever one ended up hosting the launch's transforms. Keep
+			// ambient corporate HTTPS proxies (and a parent Codex connector)
+			// from receiving plain HTTP requests intended for it.
+			//
+			// Keyed on the base URL rather than on which hop was started: the
+			// catalogue used to be the only thing that could redirect the tool
+			// to loopback, so testing for its stop func was equivalent — it
+			// stopped being equivalent once the sanitizer could host the
+			// catalogue (leaving that func nil), and it never covered a launch
+			// where the sanitizer runs without a catalogue at all.
+			//
+			// PREPEND rather than replace. mergeEnvRemoving overlays this map
+			// onto os.Environ() by key, so assigning a bare loopback list drops
+			// whatever the user already had — a corporate NO_PROXY naming
+			// internal domains would be silently discarded, and every request
+			// the child makes to those hosts (update checks, spawned MCP
+			// servers) would be forced back through the corporate proxy.
+			exempt := "127.0.0.1,localhost"
+			// One ambient value for both spellings: x/net/http/httpproxy reads
+			// whichever of the two it finds first, so they must not disagree.
+			ambient := strings.TrimSpace(os.Getenv("NO_PROXY"))
+			if ambient == "" {
+				ambient = strings.TrimSpace(os.Getenv("no_proxy"))
+			}
+			if ambient != "" {
+				exempt += "," + ambient
+			}
+			env["NO_PROXY"] = exempt
+			env["no_proxy"] = exempt
 		}
 	}
 
@@ -560,22 +625,44 @@ func Use(args []string) error {
 	// Surface the resolved base URL so an aspiring debugger knows
 	// where the requests are heading. One line, just before we hand the
 	// terminal over to the tool.
-	if transparent {
-		// Print the real topology. connectorUpstream is the sanitizer when the
-		// chain is engaged, and hardcoding gw here advertised a
-		// direct hop that no longer existed.
-		if connectorUpstream != gw {
-			cliout.Printf("Launching %s through transparent connector %s → %s → %s\n",
-				t.ExecName, transparentSession.proxyURL, connectorUpstream, gw)
-		} else {
-			cliout.Printf("Launching %s through transparent connector %s → %s\n",
-				t.ExecName, transparentSession.proxyURL, gw)
-		}
-	} else if apiBaseForEnv != gw {
-		cliout.Printf(i18n.T("use.launching_via")+"\n", t.ExecName, apiBaseForEnv, gw)
-	} else {
-		cliout.Printf(i18n.T("use.launching")+"\n", t.ExecName, gw)
+	// The hop addresses are an implementation detail of how this process reaches
+	// the gateway — ephemeral ports that differ every launch and mean nothing to
+	// someone who just wants to know where their requests are going. Printing
+	// them put that detail at the same weight as the destination and made a
+	// working launch read as a complicated one. They go to a log instead.
+	//
+	// Both paths get a record. The injected path needs one just as much: there
+	// the address is what the tool receives as its base URL, so without this
+	// line nothing connects the tool to the port it is actually talking to.
+	switch {
+	case transparent:
+		// connector.log, where the rest of this path's transport diagnostics
+		// already live.
+		topologyLog, closeTopologyLog := loopbackProxyLogger("connector.log")
+		topologyLog.Printf("launch: %s via %s", t.ExecName,
+			transparentTopology(transparentSession.proxyURL, relayHops, gw))
+		closeTopologyLog()
+	case apiBaseForEnv != gw && catalogLog != nil:
+		// The catalogue's own file — on this path it is the transform being
+		// hosted, so its log is where someone debugging the launch already
+		// looks. A launch with a sanitizer but no catalogue (a tool that needs
+		// no model filtering) has no catalogue log to write to; the sanitizer
+		// records its own bind address there instead.
+		catalogLog.Printf("launch: %s via %s → %s", t.ExecName, apiBaseForEnv, gw)
 	}
+	// One line, same shape whichever path ran: the tool, and the gateway its
+	// traffic ends up at. Transparent mode is flagged because it is the one
+	// difference a user can observe from outside — the tool keeps the vendor's
+	// origin and never sees the gateway address or the relay key.
+	//
+	// A separate key rather than appending a marker to use.launching: the CLI
+	// ships eight locales, and concatenating an English fragment onto a
+	// translated string leaves seven of them emitting a mixed-language line.
+	launchKey := "use.launching"
+	if transparent {
+		launchKey = "use.launching_transparent"
+	}
+	cliout.Printf(i18n.T(launchKey)+"\n", t.ExecName, gw)
 	// Discard any terminal control-sequence reply (e.g. the OSC 11
 	// background-color report a huh picker triggered) still buffered on
 	// stdin, so it doesn't leak into the launched tool as phantom input.
@@ -610,6 +697,28 @@ func combineCleanups(cleanups ...func()) func() {
 			active[i]()
 		}
 	}
+}
+
+// transparentTopology renders the launch path as connector → hops… → gateway.
+//
+// relayHops arrives in CREATION order, and each hop is created pointing at the
+// previous one as its upstream, so traffic traverses them backwards — the
+// earliest hop built sits last, nearest the gateway. Reversing here rather than
+// at the append sites keeps the collection order matching the code that builds
+// the chain.
+//
+// Current launches build at most one hop (the transforms share a socket), so
+// the reversal is not observable today. It stays because the invariant it
+// encodes is a property of how hops are constructed, not of how many there
+// happen to be — a second hop added without it would print the chain backwards.
+func transparentTopology(connectorURL string, relayHops []string, gateway string) string {
+	path := make([]string, 0, len(relayHops)+2)
+	path = append(path, connectorURL)
+	for i := len(relayHops) - 1; i >= 0; i-- {
+		path = append(path, relayHops[i])
+	}
+	path = append(path, gateway)
+	return strings.Join(path, " → ")
 }
 
 func toolNeedsFilteredCatalogProxy(t *tools.Tool) bool {
@@ -855,7 +964,7 @@ func wantsUseHelp(args []string) bool {
 // if it abandons the launch (see the call site's defer) — that's what
 // releases the goroutine, the bound port, and the log fd on a
 // fall-back-to-direct or an early return before tools.Exec.
-func startInProcessSanitizer(upstream string, sanitizeRequests, guardClaudeRecovery bool) (string, func(), error) {
+func startInProcessSanitizer(upstream string, sanitizeRequests, guardClaudeRecovery bool, middleware func(http.Handler) http.Handler) (string, func(), error) {
 	// Bind the loopback listener OURSELVES and hold it. Owning the port
 	// end-to-end (rather than picking a free port, closing it, and letting
 	// the server re-bind) closes the TOCTOU window: no other process can
@@ -888,6 +997,10 @@ func startInProcessSanitizer(upstream string, sanitizeRequests, guardClaudeRecov
 		Detectors:                 detectors,
 		Logger:                    logger,
 		GuardClaudeToolCorruption: guardClaudeRecovery,
+		// Hosting the launch's other transforms here rather than in front of
+		// this server is what keeps the chain flat: one socket carries both,
+		// so adding a transform no longer adds a hop.
+		Middleware: middleware,
 	})
 	if err != nil {
 		_ = ln.Close()
@@ -928,23 +1041,21 @@ func startInProcessSanitizer(upstream string, sanitizeRequests, guardClaudeRecov
 	return "", nil, fmt.Errorf("sanitizer did not become healthy on %s within 2s", listen)
 }
 
-// sanitizerLogger returns a logger writing to
-// ~/.config/everyapi/sanitizer.log (appended) — the same place the
-// standalone `everyapi proxy` writes, so proxy events stay in one spot
-// for the diagnose tooling — plus a closer for the underlying file. It
-// MUST NOT log to stderr: that stream is shared with the interactive
-// tool's TUI and would corrupt the display. Falls back to discarding
-// (and a no-op closer) on any error.
+// loopbackProxyLogger opens ~/.config/everyapi/<name> in append mode and
+// returns a logger writing to it plus a closer for the handle. It backs every
+// in-process loopback hop `everyapi use` can start.
 //
-// The caller closes the file on a startup-failure path; on success the
-// handle is owned by the long-lived proxy goroutine and reclaimed when
-// the process exits.
-func sanitizerLogger() (*log.Logger, func()) {
+// No caller may log to stderr: that stream is shared with the launched tool's
+// interactive TUI and log lines would corrupt the display. So a failure to open
+// the file degrades to discarding rather than falling back to stderr — the hop
+// keeps working, it just stops explaining itself.
+//
+// EnsureLogPath resolves ~/.config/everyapi and creates it if this is the first
+// command to need it — otherwise a fresh install (where the directory does not
+// exist yet) drops every line on the floor.
+func loopbackProxyLogger(name string) (*log.Logger, func()) {
 	discard := func() (*log.Logger, func()) { return log.New(io.Discard, "", 0), func() {} }
-	// EnsureLogPath resolves ~/.config/everyapi and creates it if this is
-	// the first command to need it — otherwise a fresh install (where the
-	// dir doesn't exist yet) drops every proxy log line on the floor.
-	path, err := config.EnsureLogPath("sanitizer.log")
+	path, err := config.EnsureLogPath(name)
 	if err != nil {
 		return discard()
 	}
@@ -953,6 +1064,17 @@ func sanitizerLogger() (*log.Logger, func()) {
 		return discard()
 	}
 	return log.New(f, "", log.LstdFlags), func() { _ = f.Close() }
+}
+
+// sanitizerLogger writes to sanitizer.log — the same file the standalone
+// `everyapi proxy` writes, so proxy events stay in one spot for the diagnose
+// tooling.
+//
+// The caller closes the file on a startup-failure path; on success the handle
+// is owned by the long-lived proxy goroutine and reclaimed when the process
+// exits.
+func sanitizerLogger() (*log.Logger, func()) {
+	return loopbackProxyLogger("sanitizer.log")
 }
 
 // sanitizerHealthy is a 250ms probe to /__sanitizer/health. Returns

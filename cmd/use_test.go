@@ -712,6 +712,43 @@ func TestToolInvocationNeedsEndpoint(t *testing.T) {
 	}
 }
 
+// TestTransparentTopologyReversesCreationOrder pins the direction of the launch
+// line. Hops are collected as they are built, each pointing at the previous one
+// as its upstream, so traffic runs the other way and the first hop built prints
+// last. Emitted in creation order the line stays plausible-looking while naming
+// the chain backwards.
+//
+// Launches currently build at most one hop, so the multi-hop cases here are
+// ahead of the code on purpose: they are what makes the invariant survive
+// someone adding a second hop later.
+func TestTransparentTopologyReversesCreationOrder(t *testing.T) {
+	const (
+		connector = "http://127.0.0.1:1000"
+		first     = "http://127.0.0.1:2000"
+		second    = "http://127.0.0.1:3000"
+		gateway   = "https://api.everyapi.ai"
+	)
+	for _, tc := range []struct {
+		name string
+		hops []string
+		want string
+	}{
+		{"no hops", nil, connector + " → " + gateway},
+		{"single hop", []string{first}, connector + " → " + first + " → " + gateway},
+		{
+			"second hop prints before the first",
+			[]string{first, second},
+			connector + " → " + second + " → " + first + " → " + gateway,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := transparentTopology(connector, tc.hops, gateway); got != tc.want {
+				t.Fatalf("topology = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func boolPtr(b bool) *bool { return &b }
 
 // fmtBoolPtr renders the parser's tri-state readably in failure messages, so an
