@@ -96,6 +96,24 @@ type Tool struct {
 	// switch at all.
 	YoloEnv string
 
+	// FlagProbeArgs is an argv tail that makes this tool parse its
+	// command line, report the result through its exit code, and then do
+	// nothing else — codex's `exec --help` prints usage and exits 0
+	// without starting a session, reading stdin, or firing hooks.
+	//
+	// It enables FlagProbe (see flagprobe.go), which runs the tool once
+	// with a candidate flag prepended to decide whether adding that flag
+	// would abort the launch. That question only has an empirical answer:
+	// the binary on $PATH may be a wrapper that prepends flags of its own,
+	// and a flag the tool declares non-repeatable then arrives twice.
+	//
+	// SAFETY CONTRACT: these args must be observably inert — no session,
+	// no stdin read, no network, no writes, no hooks. They run on every
+	// launch of a tool that declares them. Same compile-time-literal rule
+	// as InstallCmd and ExtraBinDirs. Empty disables probing entirely,
+	// which means every flag EveryAPI wants to add is added unexamined.
+	FlagProbeArgs []string
+
 	// ModelEnv names the env var the tool's prepareFn reads to pin the
 	// upstream model. Set only for tools that don't carry their own
 	// vendor-default model and therefore need EveryAPI to choose one —
@@ -326,7 +344,7 @@ var Registry = map[string]*Tool{
 		YoloFlag:         "--dangerously-skip-permissions",
 		YoloLabel:        "skip all permission prompts (--dangerously-skip-permissions)",
 		RequiredEndpoint: "anthropic",
-		transparentEnvFn:   transparentStandaloneClaudeEnv,
+		transparentEnvFn: transparentStandaloneClaudeEnv,
 		envFn: func(apiBase, token string) map[string]string {
 			return map[string]string{
 				"ANTHROPIC_BASE_URL":   joinBase(apiBase, ""),
@@ -356,12 +374,20 @@ var Registry = map[string]*Tool{
 	// The OPENAI_API_KEY env var is still set as belt-and-suspenders
 	// — config.toml's env_key points back at it.
 	"codex": {
-		Name:                        "codex",
-		ExecName:                    "codex",
-		InstallHint:                 "Install Codex CLI: https://github.com/openai/codex#installation",
-		InstallCmd:                  "npm install -g @openai/codex",
-		YoloFlag:                    "--dangerously-bypass-approvals-and-sandbox",
-		YoloLabel:                   "bypass approvals + sandbox (--dangerously-bypass-approvals-and-sandbox)",
+		Name:        "codex",
+		ExecName:    "codex",
+		InstallHint: "Install Codex CLI: https://github.com/openai/codex#installation",
+		InstallCmd:  "npm install -g @openai/codex",
+		YoloFlag:    "--dangerously-bypass-approvals-and-sandbox",
+		YoloLabel:   "bypass approvals + sandbox (--dangerously-bypass-approvals-and-sandbox)",
+		// `exec --help` parses the full command line, prints usage, and
+		// exits — no session, no stdin, no hooks. Codex needs the probe
+		// more than any other tool here: its parser declares both
+		// --dangerously-bypass-hook-trust and
+		// --dangerously-bypass-approvals-and-sandbox non-repeatable, so a
+		// wrapper that injects either one turns EveryAPI's copy into a
+		// launch-aborting parse error.
+		FlagProbeArgs:               []string{"exec", "--help"},
 		RequiredEndpoint:            "openai-response",
 		transparentEnvFn:            transparentCodexEnv,
 		prepareTransparentFn:        prepareCodexTransparent,

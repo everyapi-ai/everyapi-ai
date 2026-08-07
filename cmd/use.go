@@ -542,6 +542,13 @@ func Use(args []string) error {
 		}
 	}
 
+	// Both preference-driven flags below are prepended to argv, and both can
+	// already be there without appearing in extraArgs: the `codex` on $PATH
+	// may be a wrapper that injects flags of its own before the real binary
+	// parses them. The probe asks the binary we are about to exec whether it
+	// would accept one more copy. See tools.FlagProbe.
+	flagProbe := tools.NewFlagProbe(t)
+
 	if t.Name == "codex" && !containsFlag(extraArgs, codexHookTrustBypassFlag) {
 		enable, prefErr := resolveLaunchPreference(
 			settings.CodexHookTrustBypass,
@@ -561,7 +568,7 @@ func Use(args []string) error {
 		if prefErr != nil {
 			return prefErr
 		}
-		if enable {
+		if enable && flagProbe.Accepts(codexHookTrustBypassFlag) {
 			extraArgs = append([]string{codexHookTrustBypassFlag}, extraArgs...)
 		}
 	}
@@ -594,7 +601,7 @@ func Use(args []string) error {
 			return perr
 		}
 		if enable {
-			if t.YoloFlag != "" {
+			if t.YoloFlag != "" && flagProbe.Accepts(t.YoloFlag) {
 				// Prepend so a user-passed flag after `--` still
 				// wins on conflict (last-flag wins in Go's flag and
 				// in claude/codex/gemini/grok's argv parsing alike).
@@ -868,7 +875,8 @@ func launchNativeTool(t *tools.Tool, args []string) error {
 		if err != nil {
 			return err
 		}
-		if enable {
+		// Same wrapper hazard as the relayed path: probe before prepending.
+		if enable && tools.NewFlagProbe(t).Accepts(t.YoloFlag) {
 			args = append([]string{t.YoloFlag}, args...)
 		}
 	}
