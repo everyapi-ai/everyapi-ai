@@ -38,7 +38,7 @@ func TestQwenPrepareWithModelsWritesNativePickerCatalog(t *testing.T) {
 	}
 	tool, _ := Lookup("qwen-code")
 
-	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", testLaunchCatalog[:1])
+	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", testLaunchCatalog[:1], "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestQwenPrepareRejectsHigherPrecedenceCatalogOverrides(t *testing.T) {
 		if err := os.WriteFile(systemPath, []byte("{\n // managed catalog\n \"modelProviders\": {\"openai\": []}\n}"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := tool.PrepareWithModels("https://api.everyapi.ai", "key", testLaunchCatalog[:1]); err == nil || !strings.Contains(err.Error(), "would override EveryAPI's live catalog") {
+		if _, err := tool.PrepareWithModels("https://api.everyapi.ai", "key", testLaunchCatalog[:1], ""); err == nil || !strings.Contains(err.Error(), "would override EveryAPI's live catalog") {
 			t.Fatalf("system OpenAI catalog conflict was not rejected: %v", err)
 		}
 	})
@@ -100,7 +100,7 @@ func TestQwenPrepareRejectsHigherPrecedenceCatalogOverrides(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(workspace, ".qwen", "settings.json"), []byte(`{"modelProviders":{"openai":[{"id":"workspace-only"}]}}`), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := tool.PrepareWithModels("https://api.everyapi.ai", "key", testLaunchCatalog[:1]); err == nil || !strings.Contains(err.Error(), "workspace settings") {
+		if _, err := tool.PrepareWithModels("https://api.everyapi.ai", "key", testLaunchCatalog[:1], ""); err == nil || !strings.Contains(err.Error(), "workspace settings") {
 			t.Fatalf("workspace OpenAI catalog conflict was not rejected: %v", err)
 		}
 	})
@@ -110,7 +110,7 @@ func TestKimiPrepareWithModelsWritesAliasesWithoutCredential(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("KIMI_MODEL_NAME", "gpt-5.6-terra")
 	tool, _ := Lookup("kimi-code")
-	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", testLaunchCatalog[:1])
+	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", testLaunchCatalog[:1], "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,11 +134,11 @@ func TestKimiPrepareWithModelsWritesAliasesWithoutCredential(t *testing.T) {
 func TestCatalogPreparationsUseIndependentHomesAndCleanThem(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	tool, _ := Lookup("qwen-code")
-	first, err := tool.PrepareWithModels("https://api.everyapi.ai", "key-a", testLaunchCatalog[:1])
+	first, err := tool.PrepareWithModels("https://api.everyapi.ai", "key-a", testLaunchCatalog[:1], "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := tool.PrepareWithModels("https://api.everyapi.ai", "key-b", testLaunchCatalog[:1])
+	second, err := tool.PrepareWithModels("https://api.everyapi.ai", "key-b", testLaunchCatalog[:1], "")
 	if err != nil {
 		t.Fatal(err)
 	}

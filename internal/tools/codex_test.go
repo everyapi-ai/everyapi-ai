@@ -329,7 +329,7 @@ func TestPrepareCodexWithModelsWritesPickerCatalog(t *testing.T) {
 	}
 	t.Cleanup(func() { codexBundledCatalog = original })
 	tool, _ := Lookup("codex")
-	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "tok", testLaunchCatalog[:1])
+	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "tok", testLaunchCatalog[:1], "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -366,5 +366,146 @@ func TestClaudeTool_NoPrepare(t *testing.T) {
 		if extra != nil {
 			t.Errorf("%s tool.Prepare returned %v, want nil (no setup needed)", name, extra)
 		}
+	}
+}
+
+// stubCodexBundledCatalog replaces the bundled-metadata read, which otherwise
+// shells out to the real `codex` binary. CI has no codex on PATH, so any test
+// that passes a non-empty model list must stub this or it fails there while
+// passing on a developer machine that happens to have the CLI installed.
+func stubCodexBundledCatalog(t *testing.T) {
+	t.Helper()
+	original := codexBundledCatalog
+	codexBundledCatalog = func() ([]byte, error) {
+		return []byte(`{"models":[{"slug":"gpt-template","display_name":"Template","description":"template","default_reasoning_level":null,"supported_reasoning_levels":[],"shell_type":"shell_command","visibility":"list","supported_in_api":true,"priority":1,"availability_nux":null,"upgrade":null,"base_instructions":"You are a coding agent.","support_verbosity":false,"default_verbosity":null,"apply_patch_tool_type":"freeform","truncation_policy":{"mode":"bytes","limit":10000},"supports_parallel_tool_calls":true,"experimental_supported_tools":[]}]}`), nil
+	}
+	t.Cleanup(func() { codexBundledCatalog = original })
+}
+
+// TestPrepareCodex_SeedsBootModelIntoAFreshHome covers the gap the
+// "root-level model is preserved" contract cannot fill on the live-catalog
+// path. That path hands codex a process-scoped CODEX_HOME created by
+// os.MkdirTemp and deleted on exit, so there is never a previous config.toml
+// to preserve a model from — whatever codex recorded about its own model died
+// with the last home. The catalogue's first entry is the selection EveryAPI
+// persisted, so it seeds the boot model instead.
+func TestPrepareCodex_SeedsBootModelIntoAFreshHome(t *testing.T) {
+	codexTestHome(t)
+	stubCodexBundledCatalog(t)
+	models := []Model{{ID: "claude-opus-4-8"}, {ID: "ark-doubao-seed"}}
+
+	env, err := prepareCodexWithModels("https://api.everyapi.ai", "tok", models, "claude-opus-4-8")
+	if err != nil {
+		t.Fatalf("prepareCodexWithModels: %v", err)
+	}
+	home := env["CODEX_HOME"]
+	if home == "" {
+		t.Fatal("no CODEX_HOME returned")
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(home) })
+
+	body, err := os.ReadFile(filepath.Join(home, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `model = "claude-opus-4-8"`) {
+		t.Fatalf("fresh home did not get the catalogue's first model as its boot model:\n%s", body)
+	}
+}
+
+// TestPrepareCodex_BootModelDoesNotOverrideAUserChoice keeps the seeding
+// subordinate to the existing contract: a model the user set in a home that
+// survives is still preserved, and the seed only fills an empty field.
+func TestPrepareCodex_BootModelDoesNotOverrideAUserChoice(t *testing.T) {
+	_, codexHome := codexTestHome(t)
+	if err := os.MkdirAll(codexHome, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(codexHome, "config.toml")
+	if err := os.WriteFile(configPath, []byte("model = \"user-selected-model\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// No models → legacy fixed home, which is the shape that can carry a
+	// user's own config forward.
+	if _, err := prepareCodexWithModels("https://api.everyapi.ai", "tok", nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `model = "user-selected-model"`) {
+		t.Fatalf("the user's own model was overwritten:\n%s", body)
+	}
+}
+
+// TestPrepareCodexTransparent_SeedsBootModelIntoAFreshHome is the same seeding
+// on the path codex actually takes by default. Transparent mode is the default
+// for codex, so covering only the injected path would leave plain
+// `everyapi use codex` still booting on whatever the catalogue listed first.
+func TestPrepareCodexTransparent_SeedsBootModelIntoAFreshHome(t *testing.T) {
+	codexTestHome(t)
+	stubCodexBundledCatalog(t)
+	models := []Model{{ID: "gpt-5.1"}, {ID: "ark-doubao-seed"}}
+
+	env, err := prepareCodexTransparentWithModels(models, "gpt-5.1")
+	if err != nil {
+		t.Fatalf("prepareCodexTransparentWithModels: %v", err)
+	}
+	home := env["CODEX_HOME"]
+	if home == "" {
+		t.Fatal("no CODEX_HOME returned")
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(home) })
+
+	body, err := os.ReadFile(filepath.Join(home, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `model = "gpt-5.1"`) {
+		t.Fatalf("transparent fresh home did not get the catalogue's first model:\n%s", body)
+	}
+}
+
+// TestPrepareCodex_DoesNotPinAModelTheUserNeverChose is the guard against
+// turning "EveryAPI has no preference" into "EveryAPI pinned position 0".
+// Seeding the boot model from the catalogue's first entry rather than from an
+// actual selection would silently override codex's own built-in default on
+// every launch — a worse outcome than the alphabetical-ordering bug this
+// branch set out to fix, and applied to users who never asked for a model.
+func TestPrepareCodex_DoesNotPinAModelTheUserNeverChose(t *testing.T) {
+	models := []Model{{ID: "ark-doubao-seed"}, {ID: "gpt-5.1"}}
+	for _, tc := range []struct {
+		name    string
+		prepare func() (map[string]string, error)
+	}{
+		{"injected", func() (map[string]string, error) {
+			return prepareCodexWithModels("https://api.everyapi.ai", "tok", models, "")
+		}},
+		{"transparent", func() (map[string]string, error) {
+			return prepareCodexTransparentWithModels(models, "")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			codexTestHome(t)
+			stubCodexBundledCatalog(t)
+			env, err := tc.prepare()
+			if err != nil {
+				t.Fatal(err)
+			}
+			home := env["CODEX_HOME"]
+			t.Cleanup(func() { _ = os.RemoveAll(home) })
+			body, err := os.ReadFile(filepath.Join(home, "config.toml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			// A root-level `model = ` line, not model_provider or
+			// model_reasoning_effort or model_catalog_json.
+			for _, line := range strings.Split(string(body), "\n") {
+				if strings.HasPrefix(strings.TrimSpace(line), "model = ") {
+					t.Fatalf("codex was pinned to a model with no selection behind it: %q\nFull config:\n%s", line, body)
+				}
+			}
+		})
 	}
 }

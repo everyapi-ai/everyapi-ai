@@ -39,10 +39,10 @@ type codexUserDefaults struct {
 // Returns the env additions to overlay on top of envFn — primarily
 // CODEX_HOME so codex sees our config dir instead of ~/.codex.
 func prepareCodex(apiBase, token string) (map[string]string, error) {
-	return prepareCodexWithModels(apiBase, token, nil)
+	return prepareCodexWithModels(apiBase, token, nil, "")
 }
 
-func prepareCodexWithModels(apiBase, token string, models []Model) (map[string]string, error) {
+func prepareCodexWithModels(apiBase, token string, models []Model, bootModel string) (map[string]string, error) {
 	codexHome := ""
 	var err error
 	if len(models) > 0 {
@@ -75,7 +75,7 @@ func prepareCodexWithModels(apiBase, token string, models []Model) (map[string]s
 		}
 		return nil, err
 	}
-	if err := writeCodexConfigTOMLWithCatalog(codexHome, apiBase, catalogPath); err != nil {
+	if err := writeCodexConfigTOMLWithCatalog(codexHome, apiBase, catalogPath, bootModel); err != nil {
 		if len(models) > 0 {
 			removePreparedHomeAfterQuiet(codexHome)
 		}
@@ -92,10 +92,10 @@ func prepareCodexWithModels(apiBase, token string, models []Model) (map[string]s
 // forcing API-key auth with a non-secret placeholder. Connector replaces that
 // placeholder only after decrypting a registered api.openai.com model route.
 func prepareCodexTransparent() (map[string]string, error) {
-	return prepareCodexTransparentWithModels(nil)
+	return prepareCodexTransparentWithModels(nil, "")
 }
 
-func prepareCodexTransparentWithModels(models []Model) (map[string]string, error) {
+func prepareCodexTransparentWithModels(models []Model, bootModel string) (map[string]string, error) {
 	codexHome := ""
 	var err error
 	if len(models) > 0 {
@@ -124,7 +124,7 @@ func prepareCodexTransparentWithModels(models []Model) (map[string]string, error
 		}
 		return nil, err
 	}
-	if err := writeCodexOfficialConfigTOMLWithCatalog(codexHome, catalogPath); err != nil {
+	if err := writeCodexOfficialConfigTOMLWithCatalog(codexHome, catalogPath, bootModel); err != nil {
 		if len(models) > 0 {
 			removePreparedHomeAfterQuiet(codexHome)
 		}
@@ -137,13 +137,20 @@ func prepareCodexTransparentWithModels(models []Model) (map[string]string, error
 }
 
 func writeCodexOfficialConfigTOML(codexHome string) error {
-	return writeCodexOfficialConfigTOMLWithCatalog(codexHome, "")
+	return writeCodexOfficialConfigTOMLWithCatalog(codexHome, "", "")
 }
 
-func writeCodexOfficialConfigTOMLWithCatalog(codexHome, catalogPath string) error {
+func writeCodexOfficialConfigTOMLWithCatalog(codexHome, catalogPath, bootModel string) error {
 	defaults, err := readCodexUserDefaults(codexHome)
 	if err != nil {
 		return err
+	}
+	// Same fresh-home problem as the injected path, and this is the one that
+	// matters more: transparent mode is the DEFAULT for codex, so seeding only
+	// the injected path would leave `everyapi use codex` — the plain command —
+	// still booting on whatever the catalogue happened to list first.
+	if defaults.Model == "" {
+		defaults.Model = bootModel
 	}
 	encodedDefaults, err := encodeCodexUserDefaults(defaults)
 	if err != nil {
@@ -186,14 +193,24 @@ func writeCodexAuthJSON(codexHome, token string) error {
 // surface. requires_openai_auth = false because EveryAPI's relay key
 // is its own credential, not an OpenAI ChatGPT session token.
 func writeCodexConfigTOML(codexHome, apiBase string) error {
-	return writeCodexConfigTOMLWithCatalog(codexHome, apiBase, "")
+	return writeCodexConfigTOMLWithCatalog(codexHome, apiBase, "", "")
 }
 
-func writeCodexConfigTOMLWithCatalog(codexHome, apiBase, catalogPath string) error {
+func writeCodexConfigTOMLWithCatalog(codexHome, apiBase, catalogPath, bootModel string) error {
 	base := joinBase(apiBase, "/v1")
 	defaults, err := readCodexUserDefaults(codexHome)
 	if err != nil {
 		return err
+	}
+	// A live-catalog launch gets a process-scoped CODEX_HOME created fresh by
+	// os.MkdirTemp and removed on exit, so the read above finds nothing and
+	// "root-level model is preserved" cannot hold there — whatever codex
+	// recorded about its own model died with the previous home. The selection
+	// EveryAPI persisted is the only thing that survives across launches, and
+	// it arrives here already sorted to the head of the catalogue. A model the
+	// user set in a legacy fixed home still wins, so this only fills a gap.
+	if defaults.Model == "" {
+		defaults.Model = bootModel
 	}
 	encodedDefaults, err := encodeCodexUserDefaults(defaults)
 	if err != nil {

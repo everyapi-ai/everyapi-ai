@@ -98,73 +98,74 @@ func TestResolveLaunchPreferenceDefaultsOffWithoutTTY(t *testing.T) {
 
 func TestParseUseArgs(t *testing.T) {
 	cases := []struct {
-		name         string
-		args         []string
-		wantTool     string
-		wantGroup    string
-		wantPick     bool
-		wantSanitize bool
-		wantExtra    []string
-		wantModel    string
-		wantErr      bool
+		name          string
+		args          []string
+		wantTool      string
+		wantGroup     string
+		wantPick      bool
+		wantSanitize  bool
+		wantExtra     []string
+		wantModel     string
+		wantPickModel bool
+		wantErr       bool
 	}{
-		{"bare tool", []string{"claude"}, "claude", "", false, false, nil, "", false},
-		{"no args", nil, "", "", false, false, nil, "", false},
-		{"tool then bare channel → picker", []string{"claude", "--channel"}, "claude", "", true, false, nil, "", false},
-		{"tool then bare group → picker", []string{"claude", "--group"}, "claude", "", true, false, nil, "", false},
-		{"bare channel only → picker, no tool", []string{"--channel"}, "", "", true, false, nil, "", false},
-		{"space value after tool", []string{"claude", "--channel", "byteplus"}, "claude", "byteplus", false, false, nil, "", false},
-		{"space value before tool", []string{"--channel", "team-a", "claude"}, "claude", "team-a", false, false, nil, "", false},
-		{"group alias space value", []string{"claude", "--group", "byteplus"}, "claude", "byteplus", false, false, nil, "", false},
-		{"group and channel aliases conflict", []string{"claude", "--group", "a", "--channel", "b"}, "", "", false, false, nil, "", true},
-		{"eq value", []string{"claude", "--channel=byteplus"}, "claude", "byteplus", false, false, nil, "", false},
-		{"empty eq → picker", []string{"claude", "--channel="}, "claude", "", true, false, nil, "", false},
-		{"single dash space value", []string{"-channel", "team-a", "codex"}, "codex", "team-a", false, false, nil, "", false},
-		{"value position is known tool, no tool yet → it's the tool, picker", []string{"--channel", "claude"}, "claude", "", true, false, nil, "", false},
-		{"next token is a flag → picker", []string{"claude", "--channel", "--sanitize"}, "claude", "", true, true, nil, "", false},
-		{"--direct is no longer a flag → error", []string{"claude", "--direct"}, "", "", false, false, nil, "", true},
-		{"--sanitize opts in", []string{"claude", "--sanitize"}, "claude", "", false, true, nil, "", false},
-		{"--sanitize + group", []string{"claude", "--sanitize", "--channel=byteplus"}, "claude", "byteplus", false, true, nil, "", false},
-		{"--sanitize=true enables", []string{"claude", "--sanitize=true"}, "claude", "", false, true, nil, "", false},
-		{"--sanitize=false disables (not the inverse)", []string{"claude", "--sanitize=false"}, "claude", "", false, false, nil, "", false},
-		{"--sanitize=0 disables", []string{"claude", "--sanitize=0"}, "claude", "", false, false, nil, "", false},
-		{"--sanitize=garbage → error", []string{"claude", "--sanitize=nope"}, "", "", false, false, nil, "", true},
-		{"two positionals → error", []string{"claude", "extra"}, "", "", false, false, nil, "", true},
-		{"unknown flag → error", []string{"claude", "--bogus"}, "", "", false, false, nil, "", true},
-		{"ambiguous: group named like a tool before tool → error", []string{"--group", "codex", "claude"}, "", "", false, false, nil, "", true},
-		{"provider name remains valid as a routing group", []string{"--group", "byteplus", "claude"}, "claude", "byteplus", false, false, nil, "", false},
-		{"eq form lets a tool-named group through", []string{"--channel=codex", "claude"}, "claude", "codex", false, false, nil, "", false},
-		{"eq form lets a preset-named group through", []string{"--channel=byteplus", "claude"}, "claude", "byteplus", false, false, nil, "", false},
+		{"bare tool", []string{"claude"}, "claude", "", false, false, nil, "", false, false},
+		{"no args", nil, "", "", false, false, nil, "", false, false},
+		{"tool then bare channel → picker", []string{"claude", "--channel"}, "claude", "", true, false, nil, "", false, false},
+		{"tool then bare group → picker", []string{"claude", "--group"}, "claude", "", true, false, nil, "", false, false},
+		{"bare channel only → picker, no tool", []string{"--channel"}, "", "", true, false, nil, "", false, false},
+		{"space value after tool", []string{"claude", "--channel", "byteplus"}, "claude", "byteplus", false, false, nil, "", false, false},
+		{"space value before tool", []string{"--channel", "team-a", "claude"}, "claude", "team-a", false, false, nil, "", false, false},
+		{"group alias space value", []string{"claude", "--group", "byteplus"}, "claude", "byteplus", false, false, nil, "", false, false},
+		{"group and channel aliases conflict", []string{"claude", "--group", "a", "--channel", "b"}, "", "", false, false, nil, "", false, true},
+		{"eq value", []string{"claude", "--channel=byteplus"}, "claude", "byteplus", false, false, nil, "", false, false},
+		{"empty eq → picker", []string{"claude", "--channel="}, "claude", "", true, false, nil, "", false, false},
+		{"single dash space value", []string{"-channel", "team-a", "codex"}, "codex", "team-a", false, false, nil, "", false, false},
+		{"value position is known tool, no tool yet → it's the tool, picker", []string{"--channel", "claude"}, "claude", "", true, false, nil, "", false, false},
+		{"next token is a flag → picker", []string{"claude", "--channel", "--sanitize"}, "claude", "", true, true, nil, "", false, false},
+		{"--direct is no longer a flag → error", []string{"claude", "--direct"}, "", "", false, false, nil, "", false, true},
+		{"--sanitize opts in", []string{"claude", "--sanitize"}, "claude", "", false, true, nil, "", false, false},
+		{"--sanitize + group", []string{"claude", "--sanitize", "--channel=byteplus"}, "claude", "byteplus", false, true, nil, "", false, false},
+		{"--sanitize=true enables", []string{"claude", "--sanitize=true"}, "claude", "", false, true, nil, "", false, false},
+		{"--sanitize=false disables (not the inverse)", []string{"claude", "--sanitize=false"}, "claude", "", false, false, nil, "", false, false},
+		{"--sanitize=0 disables", []string{"claude", "--sanitize=0"}, "claude", "", false, false, nil, "", false, false},
+		{"--sanitize=garbage → error", []string{"claude", "--sanitize=nope"}, "", "", false, false, nil, "", false, true},
+		{"two positionals → error", []string{"claude", "extra"}, "", "", false, false, nil, "", false, true},
+		{"unknown flag → error", []string{"claude", "--bogus"}, "", "", false, false, nil, "", false, true},
+		{"ambiguous: group named like a tool before tool → error", []string{"--group", "codex", "claude"}, "", "", false, false, nil, "", false, true},
+		{"provider name remains valid as a routing group", []string{"--group", "byteplus", "claude"}, "claude", "byteplus", false, false, nil, "", false, false},
+		{"eq form lets a tool-named group through", []string{"--channel=codex", "claude"}, "claude", "codex", false, false, nil, "", false, false},
+		{"eq form lets a preset-named group through", []string{"--channel=byteplus", "claude"}, "claude", "byteplus", false, false, nil, "", false, false},
 
 		// --model: pin the upstream model (hermes). Space + eq forms;
 		// a valueless --model is an error (omit it to get the picker).
-		{"model space value", []string{"hermes", "--model", "gpt-5.1"}, "hermes", "", false, false, nil, "gpt-5.1", false},
-		{"model eq value", []string{"hermes", "--model=gpt-5.1"}, "hermes", "", false, false, nil, "gpt-5.1", false},
-		{"model before tool", []string{"--model", "claude-sonnet-4-6", "hermes"}, "hermes", "", false, false, nil, "claude-sonnet-4-6", false},
-		{"model + channel", []string{"hermes", "--channel=byteplus", "--model", "gpt-5.1"}, "hermes", "byteplus", false, false, nil, "gpt-5.1", false},
-		{"bare model → error", []string{"hermes", "--model"}, "", "", false, false, nil, "", true},
-		{"empty eq model → error", []string{"hermes", "--model="}, "", "", false, false, nil, "", true},
-		{"model value missing, next is flag → error", []string{"hermes", "--model", "--sanitize"}, "", "", false, false, nil, "", true},
-		{"model space value won't eat a not-yet-seen tool name → error", []string{"--model", "claude"}, "", "", false, false, nil, "", true},
-		{"model value after tool may be a tool-named id", []string{"hermes", "--model", "claude"}, "hermes", "", false, false, nil, "claude", false},
+		{"model space value", []string{"hermes", "--model", "gpt-5.1"}, "hermes", "", false, false, nil, "gpt-5.1", false, false},
+		{"model eq value", []string{"hermes", "--model=gpt-5.1"}, "hermes", "", false, false, nil, "gpt-5.1", false, false},
+		{"model before tool", []string{"--model", "claude-sonnet-4-6", "hermes"}, "hermes", "", false, false, nil, "claude-sonnet-4-6", false, false},
+		{"model + channel", []string{"hermes", "--channel=byteplus", "--model", "gpt-5.1"}, "hermes", "byteplus", false, false, nil, "gpt-5.1", false, false},
+		{"bare model opens the picker", []string{"hermes", "--model"}, "hermes", "", false, false, nil, "", true, false},
+		{"empty eq model → error", []string{"hermes", "--model="}, "", "", false, false, nil, "", false, true},
+		{"bare model still lets the next flag parse", []string{"hermes", "--model", "--sanitize"}, "hermes", "", false, true, nil, "", true, false},
+		{"model space value won't eat a not-yet-seen tool name", []string{"--model", "claude"}, "claude", "", false, false, nil, "", true, false},
+		{"model value after tool may be a tool-named id", []string{"hermes", "--model", "claude"}, "hermes", "", false, false, nil, "claude", false, false},
 
 		// `--` separator: end of everyapi's option parsing, everything
 		// after is forwarded raw to the tool. The documented escape
 		// hatch for tool flags that collide with everyapi's, e.g.
 		// claude's `--dangerously-skip-permissions` and codex's
 		// `--dangerously-bypass-approvals-and-sandbox`.
-		{"-- forwards a single flag", []string{"claude", "--", "--dangerously-skip-permissions"}, "claude", "", false, false, []string{"--dangerously-skip-permissions"}, "", false},
-		{"-- forwards multiple tokens verbatim", []string{"claude", "--", "--model", "opus", "prompt text"}, "claude", "", false, false, []string{"--model", "opus", "prompt text"}, "", false},
-		{"-- combined with --channel before tool", []string{"--channel", "team-a", "claude", "--", "--dangerously-skip-permissions"}, "claude", "team-a", false, false, []string{"--dangerously-skip-permissions"}, "", false},
-		{"-- combined with --channel after tool", []string{"claude", "--channel=byteplus", "--", "--dangerously-skip-permissions"}, "claude", "byteplus", false, false, []string{"--dangerously-skip-permissions"}, "", false},
-		{"bare -- with no following args", []string{"claude", "--"}, "claude", "", false, false, nil, "", false},
-		{"-- shields what would otherwise be a everyapi flag", []string{"claude", "--", "--group", "byteplus"}, "claude", "", false, false, []string{"--group", "byteplus"}, "", false},
-		{"-- shields what would otherwise be a second positional", []string{"claude", "--", "extra"}, "claude", "", false, false, []string{"extra"}, "", false},
-		{"-- shields --model too", []string{"hermes", "--", "--model", "x"}, "hermes", "", false, false, []string{"--model", "x"}, "", false},
+		{"-- forwards a single flag", []string{"claude", "--", "--dangerously-skip-permissions"}, "claude", "", false, false, []string{"--dangerously-skip-permissions"}, "", false, false},
+		{"-- forwards multiple tokens verbatim", []string{"claude", "--", "--model", "opus", "prompt text"}, "claude", "", false, false, []string{"--model", "opus", "prompt text"}, "", false, false},
+		{"-- combined with --channel before tool", []string{"--channel", "team-a", "claude", "--", "--dangerously-skip-permissions"}, "claude", "team-a", false, false, []string{"--dangerously-skip-permissions"}, "", false, false},
+		{"-- combined with --channel after tool", []string{"claude", "--channel=byteplus", "--", "--dangerously-skip-permissions"}, "claude", "byteplus", false, false, []string{"--dangerously-skip-permissions"}, "", false, false},
+		{"bare -- with no following args", []string{"claude", "--"}, "claude", "", false, false, nil, "", false, false},
+		{"-- shields what would otherwise be a everyapi flag", []string{"claude", "--", "--group", "byteplus"}, "claude", "", false, false, []string{"--group", "byteplus"}, "", false, false},
+		{"-- shields what would otherwise be a second positional", []string{"claude", "--", "extra"}, "claude", "", false, false, []string{"extra"}, "", false, false},
+		{"-- shields --model too", []string{"hermes", "--", "--model", "x"}, "hermes", "", false, false, []string{"--model", "x"}, "", false, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			tool, group, pick, sanitize, extra, model, err := parseUseArgs(c.args)
+			tool, group, pick, sanitize, extra, model, pickModel, err := parseUseArgs(c.args)
 			if (err != nil) != c.wantErr {
 				t.Fatalf("err = %v, wantErr = %v", err, c.wantErr)
 			}
@@ -177,6 +178,9 @@ func TestParseUseArgs(t *testing.T) {
 			}
 			if model != c.wantModel {
 				t.Fatalf("parseUseArgs(%q) model = %q, want %q", c.args, model, c.wantModel)
+			}
+			if pickModel != c.wantPickModel {
+				t.Fatalf("parseUseArgs(%q) pickModel = %v, want %v", c.args, pickModel, c.wantPickModel)
 			}
 			if !reflect.DeepEqual(extra, c.wantExtra) {
 				t.Fatalf("parseUseArgs(%q) extra = %#v, want %#v", c.args, extra, c.wantExtra)
@@ -210,7 +214,7 @@ func TestParseUseArgsWithTransparent(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			tool, _, _, _, transparent, extra, _, err := parseUseArgsWithTransparent(c.args)
+			tool, _, _, _, transparent, extra, _, _, err := parseUseArgsWithTransparent(c.args)
 			if (err != nil) != c.wantErr {
 				t.Fatalf("err = %v, wantErr %v", err, c.wantErr)
 			}
@@ -232,7 +236,7 @@ func TestParseUseArgsWithTransparent(t *testing.T) {
 // still select that group (and keep the experimental MITM mode off).
 func TestParseUseArgsTransparentDoesNotEatValueTokens(t *testing.T) {
 	t.Run("channel value", func(t *testing.T) {
-		tool, group, pick, _, transparent, _, _, err := parseUseArgsWithTransparent(
+		tool, group, pick, _, transparent, _, _, _, err := parseUseArgsWithTransparent(
 			[]string{"--channel", "transparent", "claude"})
 		if err != nil {
 			t.Fatalf("err = %v", err)
@@ -243,7 +247,7 @@ func TestParseUseArgsTransparentDoesNotEatValueTokens(t *testing.T) {
 		}
 	})
 	t.Run("model value", func(t *testing.T) {
-		tool, _, _, _, transparent, _, model, err := parseUseArgsWithTransparent(
+		tool, _, _, _, transparent, _, model, _, err := parseUseArgsWithTransparent(
 			[]string{"hermes", "--model", "transparent"})
 		if err != nil {
 			t.Fatalf("err = %v", err)
@@ -254,7 +258,7 @@ func TestParseUseArgsTransparentDoesNotEatValueTokens(t *testing.T) {
 		}
 	})
 	t.Run("tool positional", func(t *testing.T) {
-		tool, _, _, _, transparent, _, _, err := parseUseArgsWithTransparent(
+		tool, _, _, _, transparent, _, _, _, err := parseUseArgsWithTransparent(
 			[]string{"transparent"})
 		if err != nil {
 			t.Fatalf("err = %v", err)
@@ -370,7 +374,7 @@ func TestToolAllowsAutomaticYoloRejectsKimiPromptMode(t *testing.T) {
 // TestUseWiresTheSanitizerAsTheConnectorUpstream, which drives Use end to end
 // and fails if Use stops pointing the connector at the sanitizer.
 func TestParseUseArgsAcceptsSanitizeWithTransparent(t *testing.T) {
-	tool, _, _, sanitize, transparent, _, _, err := parseUseArgsWithTransparent(
+	tool, _, _, sanitize, transparent, _, _, _, err := parseUseArgsWithTransparent(
 		[]string{"claude", "--sanitize", "--transparent"})
 	if err != nil {
 		t.Fatalf("err = %v, want --sanitize and --transparent to coexist", err)
@@ -399,7 +403,7 @@ func FuzzParseUseArgsDoesNotPanic(f *testing.F) {
 		if len(args) > 64 {
 			args = args[:64]
 		}
-		_, _, _, _, _, _, _ = parseUseArgs(args)
+		_, _, _, _, _, _, _, _ = parseUseArgs(args)
 	})
 }
 
@@ -656,7 +660,7 @@ func TestLaunchModelsForClaudeUsesAnthropicProtocol(t *testing.T) {
 		{ID: "qwen-image", OwnedBy: "qwen", SupportedEndpointTypes: []string{"image-generation", "openai"}},
 	}
 	claude, _ := tools.Lookup("claude")
-	if got := launchModelsForTool(claude, catalog); len(got) != 2 || got[0].ID != "claude-ok" || got[1].ID != "qwen-anthropic" {
+	if got := launchModelsForTool(claude, catalog, ""); len(got) != 2 || got[0].ID != "claude-ok" || got[1].ID != "qwen-anthropic" {
 		t.Fatalf("plain Claude launch catalog = %#v", got)
 	}
 }
@@ -762,4 +766,198 @@ func fmtBoolPtr(b *bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+// TestSortLaunchModelsPutsTheChoiceFirst pins the ordering that decides what a
+// self-selecting client boots on. Plain alphabetical order made position 0 an
+// accident of the id: an account holding "ark-…" models had claude boot on one
+// purely because 'a' sorts before 'c'.
+func TestSortLaunchModelsPutsTheChoiceFirst(t *testing.T) {
+	claude := tools.Registry["claude"]
+	codex := tools.Registry["codex"]
+	ids := func(models []tools.Model) []string {
+		out := make([]string, 0, len(models))
+		for _, m := range models {
+			out = append(out, m.ID)
+		}
+		return out
+	}
+	catalog := func() []tools.Model {
+		return []tools.Model{
+			{ID: "ark-doubao-seed"}, {ID: "claude-sonnet-4-6"},
+			{ID: "zzz-last"}, {ID: "claude-opus-4-8"},
+		}
+	}
+
+	models := catalog()
+	sortLaunchModels(claude, models, "")
+	// No choice yet: claude's own ids come first, alphabetical within each tier.
+	if got := ids(models); !reflect.DeepEqual(got, []string{
+		"claude-opus-4-8", "claude-sonnet-4-6", "ark-doubao-seed", "zzz-last"}) {
+		t.Fatalf("claude order without a choice = %v", got)
+	}
+
+	models = catalog()
+	sortLaunchModels(claude, models, "ark-doubao-seed")
+	if got := ids(models); got[0] != "ark-doubao-seed" {
+		t.Fatalf("a remembered model must sort first, got %v", got)
+	}
+
+	// grok is served a filtered catalogue and boots on its head too, so it gets
+	// the same native tier — without it an unrelated vendor's model sits in
+	// front of grok's own.
+	models = append(catalog(), tools.Model{ID: "grok-4"})
+	sortLaunchModels(tools.Registry["grok"], models, "")
+	if got := ids(models); got[0] != "grok-4" {
+		t.Fatalf("grok order = %v, want its own model first", got)
+	}
+
+	// codex has no native-prefix tier — only the choice is privileged.
+	models = catalog()
+	sortLaunchModels(codex, models, "zzz-last")
+	if got := ids(models); !reflect.DeepEqual(got, []string{
+		"zzz-last", "ark-doubao-seed", "claude-opus-4-8", "claude-sonnet-4-6"}) {
+		t.Fatalf("codex order = %v", got)
+	}
+}
+
+// TestSortSurvivesClaudeAliasing pins the load-bearing link between the two
+// halves of this feature. The chain is sortLaunchModels -> claudeCatalogModels
+// -> the catalogue proxy's /v1/models response, and the remembered model only
+// reaches claude at position 0 if the aliasing step preserves input order.
+//
+// It does today because claudeCatalogModels is a range-and-append. Nothing
+// asserted it, so adding e.g. a "claude-* first" pass inside that function
+// would silently break the guarantee with every other test still green.
+func TestSortSurvivesClaudeAliasing(t *testing.T) {
+	claude := tools.Registry["claude"]
+	models := []tools.Model{
+		{ID: "claude-opus-4-8"}, {ID: "ark-doubao-seed"}, {ID: "zzz-last"},
+	}
+	// A non-claude id is the interesting case: it is the one that gets
+	// republished under a synthetic alias, so its identity survives only in
+	// DisplayName.
+	const chosen = "ark-doubao-seed"
+	sortLaunchModels(claude, models, chosen)
+
+	published, aliases := claudeCatalogModels(models)
+	if len(published) == 0 {
+		t.Fatal("no models published")
+	}
+	if published[0].DisplayName != chosen {
+		t.Fatalf("head of the published catalogue = %q (id %q), want the chosen model %q",
+			published[0].DisplayName, published[0].ID, chosen)
+	}
+	if aliases[published[0].ID] != chosen {
+		t.Fatalf("alias %q does not map back to %q", published[0].ID, chosen)
+	}
+}
+
+// TestResolveRememberedModel covers the precedence and, more importantly, that
+// every failure degrades to the catalogue default instead of aborting. claude
+// and codex ship a built-in default and launched fine before any of this
+// existed, so a catalogue blip or a non-interactive shell must not turn a
+// working launch into an error.
+func TestResolveRememberedModel(t *testing.T) {
+	claude := tools.Registry["claude"]
+	catalog := []api.RelayModel{
+		{ID: "claude-opus-4-8", SupportedEndpointTypes: []string{"anthropic"}},
+		{ID: "claude-sonnet-4-6", SupportedEndpointTypes: []string{"anthropic"}},
+	}
+
+	t.Run("explicit flag wins and is persisted", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		s := &config.Settings{}
+		got, err := resolveRememberedModel(claude, s, catalog, "claude-sonnet-4-6", false, true)
+		if err != nil || got != "claude-sonnet-4-6" {
+			t.Fatalf("got (%q, %v)", got, err)
+		}
+		reloaded, err := config.LoadSettings()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reloaded.ToolModel("claude") != "claude-sonnet-4-6" {
+			t.Fatalf("selection was not persisted: %#v", reloaded.ToolModels)
+		}
+	})
+
+	t.Run("a flag naming an unavailable model is rejected", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		if _, err := resolveRememberedModel(claude, &config.Settings{}, catalog, "gpt-5", false, true); err == nil {
+			t.Fatal("want an error naming the unavailable model")
+		}
+	})
+
+	t.Run("a remembered model is reused without prompting", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		s := &config.Settings{ToolModels: map[string]string{"claude": "claude-sonnet-4-6"}}
+		// interactive=true, yet no picker runs: the test would block if it did.
+		got, err := resolveRememberedModel(claude, s, catalog, "", false, true)
+		if err != nil || got != "claude-sonnet-4-6" {
+			t.Fatalf("got (%q, %v)", got, err)
+		}
+	})
+
+	t.Run("a remembered model the account lost is dropped", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		s := &config.Settings{ToolModels: map[string]string{"claude": "gone-from-the-account"}}
+		got, err := resolveRememberedModel(claude, s, catalog, "", false, false)
+		if err != nil || got != "" {
+			t.Fatalf("got (%q, %v), want the catalogue default", got, err)
+		}
+	})
+
+	t.Run("non-interactive never prompts", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		got, err := resolveRememberedModel(claude, &config.Settings{}, catalog, "", false, false)
+		if err != nil || got != "" {
+			t.Fatalf("got (%q, %v), want a silent fall-through to the catalogue default", got, err)
+		}
+	})
+
+	t.Run("a bare --model still cannot prompt non-interactively", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		s := &config.Settings{ToolModels: map[string]string{"claude": "claude-sonnet-4-6"}}
+		// pickModel=true asks to re-choose, but there is nobody to ask; a
+		// scripted launch must keep the recorded model rather than block.
+		got, err := resolveRememberedModel(claude, s, catalog, "", true, false)
+		if err != nil || got != "claude-sonnet-4-6" {
+			t.Fatalf("got (%q, %v)", got, err)
+		}
+	})
+
+	t.Run("a save that fails does not abort the launch", func(t *testing.T) {
+		// A plain FILE where the config directory should be, so SaveSettings's
+		// MkdirAll fails with ENOTDIR. Deliberately not a read-only directory:
+		// permission bits do not stop root, so that shape passes on a developer
+		// machine and then fails — or silently proves nothing — in a container
+		// CI running as root. ENOTDIR binds for every user.
+		root := filepath.Join(t.TempDir(), "config-home-is-a-file")
+		if err := os.WriteFile(root, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("XDG_CONFIG_HOME", root)
+
+		got, err := resolveRememberedModel(claude, &config.Settings{}, catalog, "claude-opus-4-8", false, true)
+		if err != nil {
+			t.Fatalf("an unwritable settings file must not stop the launch: %v", err)
+		}
+		if got != "claude-opus-4-8" {
+			t.Fatalf("got %q, want the selection to still apply to this launch", got)
+		}
+		// Proves the save really failed, so the test is exercising the
+		// degrade path rather than a chmod that silently did nothing.
+		reloaded, loadErr := config.LoadSettings()
+		if loadErr == nil && reloaded.ToolModel("claude") != "" {
+			t.Fatal("settings were writable after all; this case never reached the failure path")
+		}
+	})
+
+	t.Run("an empty catalogue is not fatal", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		got, err := resolveRememberedModel(claude, &config.Settings{}, nil, "", true, true)
+		if err != nil || got != "" {
+			t.Fatalf("got (%q, %v), want no error", got, err)
+		}
+	})
 }

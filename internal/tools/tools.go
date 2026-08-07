@@ -128,7 +128,7 @@ type Tool struct {
 	// generated config dir. Nil means the tool needs no pre-exec
 	// setup beyond env vars.
 	prepareFn        func(apiBase, token string) (map[string]string, error)
-	prepareCatalogFn func(apiBase, token string, models []Model) (map[string]string, error)
+	prepareCatalogFn func(apiBase, token string, models []Model, bootModel string) (map[string]string, error)
 
 	// transparentEnvFn supplies tool-specific placeholder credentials and
 	// CA wiring for the process-scoped connector. It must never
@@ -140,7 +140,7 @@ type Tool struct {
 	// writes only public routing configuration and placeholder credentials;
 	// the real relay key remains inside the connector process.
 	prepareTransparentFn        func() (map[string]string, error)
-	prepareTransparentCatalogFn func(models []Model) (map[string]string, error)
+	prepareTransparentCatalogFn func(models []Model, bootModel string) (map[string]string, error)
 }
 
 // Model is the launch-safe subset of the relay model catalogue. Credentials
@@ -177,18 +177,27 @@ func (t *Tool) InstallPromptDefault() bool {
 // config is preferable to falling back to the user's real ~/.codex
 // and silently going through ChatGPT auth.
 func (t *Tool) Prepare(apiBase, token string) (map[string]string, error) {
-	return t.PrepareWithModels(apiBase, token, nil)
+	return t.PrepareWithModels(apiBase, token, nil, "")
 }
 
 // PrepareWithModels runs setup with the live, relay-key-scoped model snapshot.
-func (t *Tool) PrepareWithModels(apiBase, token string, models []Model) (map[string]string, error) {
+func (t *Tool) PrepareWithModels(apiBase, token string, models []Model, bootModel string) (map[string]string, error) {
 	if t.prepareCatalogFn != nil {
-		return t.prepareCatalogFn(apiBase, token, models)
+		return t.prepareCatalogFn(apiBase, token, models, bootModel)
 	}
 	if t.prepareFn == nil {
 		return nil, nil
 	}
 	return t.prepareFn(apiBase, token)
+}
+
+// ignoreBootModel adapts a catalog hook that has no boot-model concept. The
+// ModelEnv tools pin their model through an env var their own prepare reads,
+// so the selection EveryAPI records for claude/codex is meaningless to them.
+func ignoreBootModel(fn func(apiBase, token string, models []Model) (map[string]string, error)) func(string, string, []Model, string) (map[string]string, error) {
+	return func(apiBase, token string, models []Model, _ string) (map[string]string, error) {
+		return fn(apiBase, token, models)
+	}
 }
 
 const transparentPlaceholderCredential = "everyapi-local-connector"
@@ -226,16 +235,16 @@ func (t *Tool) TransparentEnv(proxyURL, caPath string) (map[string]string, []str
 // PrepareTransparent runs only setup that preserves the vendor's official
 // origin. It never accepts the gateway base URL or relay credential by design.
 func (t *Tool) PrepareTransparent() (map[string]string, error) {
-	return t.PrepareTransparentWithModels(nil)
+	return t.PrepareTransparentWithModels(nil, "")
 }
 
 // PrepareTransparentWithModels is the catalogue-aware transparent setup path.
-func (t *Tool) PrepareTransparentWithModels(models []Model) (map[string]string, error) {
+func (t *Tool) PrepareTransparentWithModels(models []Model, bootModel string) (map[string]string, error) {
 	if t.transparentEnvFn == nil {
 		return nil, fmt.Errorf("transparent mode is not supported for %s yet", t.Name)
 	}
 	if t.prepareTransparentCatalogFn != nil {
-		return t.prepareTransparentCatalogFn(models)
+		return t.prepareTransparentCatalogFn(models, bootModel)
 	}
 	if t.prepareTransparentFn == nil {
 		return nil, nil
@@ -440,7 +449,7 @@ var Registry = map[string]*Tool{
 			}
 		},
 		prepareFn:        prepareQwenCode,
-		prepareCatalogFn: prepareQwenCodeWithModels,
+		prepareCatalogFn: ignoreBootModel(prepareQwenCodeWithModels),
 	},
 
 	// Moonshot Kimi Code can synthesize a temporary model entirely from the
@@ -463,7 +472,7 @@ var Registry = map[string]*Tool{
 			}
 		},
 		prepareFn:        prepareKimiCode,
-		prepareCatalogFn: prepareKimiCodeWithModels,
+		prepareCatalogFn: ignoreBootModel(prepareKimiCodeWithModels),
 	},
 
 	// Nous Research Hermes Agent (Python CLI, binary `hermes`). Unlike
@@ -498,7 +507,7 @@ var Registry = map[string]*Tool{
 			return map[string]string{}
 		},
 		prepareFn:        prepareHermes,
-		prepareCatalogFn: prepareHermesWithModels,
+		prepareCatalogFn: ignoreBootModel(prepareHermesWithModels),
 	},
 }
 
