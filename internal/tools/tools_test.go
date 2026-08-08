@@ -49,6 +49,9 @@ func TestEnv_Claude(t *testing.T) {
 	if got := env["ENABLE_PROMPT_CACHING_1H"]; got != "1" {
 		t.Errorf("ENABLE_PROMPT_CACHING_1H = %q, want 1", got)
 	}
+	if got := env["CLAUDE_CODE_DISABLE_ADVISOR_TOOL"]; got != "1" {
+		t.Errorf("CLAUDE_CODE_DISABLE_ADVISOR_TOOL = %q, want 1", got)
+	}
 	// ANTHROPIC_API_KEY must be present and empty: mergeEnv overlays it
 	// onto the child env to neutralise any ambient real Anthropic key so
 	// it can't leak to the gateway or shadow ANTHROPIC_AUTH_TOKEN.
@@ -246,8 +249,9 @@ func TestTransparentEnvUsesOfficialOriginsWithoutRelayCredential(t *testing.T) {
 		{
 			name: "claude",
 			want: map[string]string{
-				"ANTHROPIC_AUTH_TOKEN": "everyapi-local-connector",
-				"NODE_EXTRA_CA_CERTS":  caPath,
+				"ANTHROPIC_AUTH_TOKEN":             "everyapi-local-connector",
+				"NODE_EXTRA_CA_CERTS":              caPath,
+				"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1",
 			},
 			wantUnset: []string{"ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY"},
 		},
