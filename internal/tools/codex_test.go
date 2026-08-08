@@ -467,6 +467,83 @@ func TestPrepareCodexTransparent_SeedsBootModelIntoAFreshHome(t *testing.T) {
 	}
 }
 
+func TestPrepareCodexTransparent_InheritsReasoningEffortIntoFreshHome(t *testing.T) {
+	_, persistentHome := codexTestHome(t)
+	stubCodexBundledCatalog(t)
+	if err := os.MkdirAll(persistentHome, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(persistentHome, "config.toml"),
+		[]byte("model = \"old-model\"\nmodel_reasoning_effort = \"medium\"\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	env, err := prepareCodexTransparentWithModels(
+		[]Model{{ID: "gpt-5.6-sol"}},
+		"gpt-5.6-sol",
+	)
+	if err != nil {
+		t.Fatalf("prepareCodexTransparentWithModels: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(env["CODEX_HOME"]) })
+
+	body, err := os.ReadFile(filepath.Join(env["CODEX_HOME"], "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := string(body)
+	if !strings.Contains(config, `model = "gpt-5.6-sol"`) {
+		t.Fatalf("fresh home did not get remembered boot model:\n%s", config)
+	}
+	if !strings.Contains(config, `model_reasoning_effort = "medium"`) {
+		t.Fatalf("fresh home lost persistent reasoning effort:\n%s", config)
+	}
+}
+
+func TestPrepareCodex_InheritsReasoningEffortIntoFreshHome(t *testing.T) {
+	_, persistentHome := codexTestHome(t)
+	stubCodexBundledCatalog(t)
+	if err := os.MkdirAll(persistentHome, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(persistentHome, "config.toml"),
+		[]byte("model = \"old-model\"\nmodel_reasoning_effort = \"medium\"\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	env, err := prepareCodexWithModels(
+		"https://api.everyapi.ai",
+		"tok",
+		[]Model{{ID: "gpt-5.6-sol"}},
+		"gpt-5.6-sol",
+	)
+	if err != nil {
+		t.Fatalf("prepareCodexWithModels: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(env["CODEX_HOME"]) })
+
+	body, err := os.ReadFile(filepath.Join(env["CODEX_HOME"], "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := string(body)
+	if !strings.Contains(config, `model = "gpt-5.6-sol"`) {
+		t.Fatalf("fresh home did not get remembered boot model:\n%s", config)
+	}
+	if strings.Contains(config, `model = "old-model"`) {
+		t.Fatalf("fresh home inherited stale persistent model:\n%s", config)
+	}
+	if !strings.Contains(config, `model_reasoning_effort = "medium"`) {
+		t.Fatalf("fresh home lost persistent reasoning effort:\n%s", config)
+	}
+}
+
 // TestPrepareCodex_DoesNotPinAModelTheUserNeverChose is the guard against
 // turning "EveryAPI has no preference" into "EveryAPI pinned position 0".
 // Seeding the boot model from the catalogue's first entry rather than from an

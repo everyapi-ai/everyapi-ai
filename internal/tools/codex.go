@@ -145,6 +145,9 @@ func writeCodexOfficialConfigTOMLWithCatalog(codexHome, catalogPath, bootModel s
 	if err != nil {
 		return err
 	}
+	if err := inheritPersistentCodexReasoningEffort(&defaults, codexHome, catalogPath); err != nil {
+		return err
+	}
 	// Same fresh-home problem as the injected path, and this is the one that
 	// matters more: transparent mode is the DEFAULT for codex, so seeding only
 	// the injected path would leave `everyapi use codex` — the plain command —
@@ -200,6 +203,9 @@ func writeCodexConfigTOMLWithCatalog(codexHome, apiBase, catalogPath, bootModel 
 	base := joinBase(apiBase, "/v1")
 	defaults, err := readCodexUserDefaults(codexHome)
 	if err != nil {
+		return err
+	}
+	if err := inheritPersistentCodexReasoningEffort(&defaults, codexHome, catalogPath); err != nil {
 		return err
 	}
 	// A live-catalog launch gets a process-scoped CODEX_HOME created fresh by
@@ -346,6 +352,26 @@ func readCodexUserDefaults(codexHome string) (codexUserDefaults, error) {
 		return codexUserDefaults{}, fmt.Errorf("parse existing Codex config: %w", err)
 	}
 	return defaults, nil
+}
+
+func inheritPersistentCodexReasoningEffort(defaults *codexUserDefaults, codexHome, catalogPath string) error {
+	if defaults.ModelReasoningEffort != "" || catalogPath == "" {
+		return nil
+	}
+	configDir, err := config.ConfigDir()
+	if err != nil {
+		return err
+	}
+	persistentHome := filepath.Join(configDir, "codex-home")
+	if filepath.Clean(persistentHome) == filepath.Clean(codexHome) {
+		return nil
+	}
+	persistentDefaults, err := readCodexUserDefaults(persistentHome)
+	if err != nil {
+		return err
+	}
+	defaults.ModelReasoningEffort = persistentDefaults.ModelReasoningEffort
+	return nil
 }
 
 func encodeCodexUserDefaults(defaults codexUserDefaults) (string, error) {
