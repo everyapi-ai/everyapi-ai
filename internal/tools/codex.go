@@ -7,7 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/everyapi-ai/everyapi-sdk/config"
@@ -17,6 +19,19 @@ type codexUserDefaults struct {
 	Model                string `toml:"model"`
 	ModelReasoningEffort string `toml:"model_reasoning_effort"`
 }
+
+type codexSessionIndexEntry struct {
+	ID         string `json:"id"`
+	ThreadName string `json:"thread_name"`
+	UpdatedAt  string `json:"updated_at"`
+}
+
+type codexSessionIndexLine struct {
+	Entry codexSessionIndexEntry
+	Line  string
+}
+
+const codexSessionIndexBaseline = ".session_index.baseline.jsonl"
 
 // prepareCodex generates an isolated CODEX_HOME under
 // ~/.config/everyapi/codex-home and seeds it with the two files codex
@@ -83,7 +98,7 @@ func prepareCodexWithModels(apiBase, token string, models []Model, bootModel str
 	}
 
 	if len(models) > 0 {
-		return preparedHomeEnv("CODEX_HOME", codexHome), nil
+		return preparedCodexHomeEnv(codexHome)
 	}
 	return map[string]string{"CODEX_HOME": codexHome}, nil
 }
@@ -131,9 +146,204 @@ func prepareCodexTransparentWithModels(models []Model, bootModel string) (map[st
 		return nil, err
 	}
 	if len(models) > 0 {
-		return preparedHomeEnv("CODEX_HOME", codexHome), nil
+		return preparedCodexHomeEnv(codexHome)
 	}
 	return map[string]string{"CODEX_HOME": codexHome}, nil
+}
+
+// preparedCodexHomeEnv keeps per-launch credentials and model metadata in the
+// generated CODEX_HOME while joining Codex's durable state back to the legacy
+// persistent home. Codex stores rollout files below CODEX_HOME/sessions. Its
+// SQLite index deliberately stays in the generated home so each launch
+// backfills paths through its own live link instead of persisting paths through
+// a previous launch home that cleanup has already removed.
+func preparedCodexHomeEnv(codexHome string) (env map[string]string, err error) {
+	defer func() {
+		if err != nil {
+			removePreparedHomeAfterQuiet(codexHome)
+		}
+	}()
+	configDir, err := config.ConfigDir()
+	if err != nil {
+		return nil, err
+	}
+	persistentHome := filepath.Join(configDir, "codex-home")
+	if err := os.MkdirAll(persistentHome, 0o700); err != nil {
+		return nil, fmt.Errorf("create persistent codex home: %w", err)
+	}
+	for _, name := range []string{"sessions", "archived_sessions"} {
+		target := filepath.Join(persistentHome, name)
+		if err := os.MkdirAll(target, 0o700); err != nil {
+			return nil, fmt.Errorf("create persistent Codex %s: %w", name, err)
+		}
+		if err := linkCodexStateDirectory(target, filepath.Join(codexHome, name)); err != nil {
+			return nil, fmt.Errorf("link persistent Codex %s: %w", name, err)
+		}
+	}
+	indexTarget := filepath.Join(persistentHome, "session_index.jsonl")
+	indexLock, err := os.OpenFile(indexTarget+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open persistent Codex session index lock: %w", err)
+	}
+	unlock, err := lockCodexSessionIndex(indexLock)
+	if err != nil {
+		_ = indexLock.Close()
+		return nil, fmt.Errorf("lock persistent Codex session index: %w", err)
+	}
+	indexBody, err := os.ReadFile(indexTarget)
+	if err != nil && !os.IsNotExist(err) {
+		unlock()
+		_ = indexLock.Close()
+		return nil, fmt.Errorf("read persistent Codex session index: %w", err)
+	}
+	unlock()
+	if err := indexLock.Close(); err != nil {
+		return nil, fmt.Errorf("close persistent Codex session index lock: %w", err)
+	}
+	if err := writeFileAtomic(filepath.Join(codexHome, "session_index.jsonl"), indexBody, 0o600); err != nil {
+		return nil, err
+	}
+	if err := writeFileAtomic(filepath.Join(codexHome, codexSessionIndexBaseline), indexBody, 0o600); err != nil {
+		return nil, err
+	}
+	env = preparedHomeEnv("CODEX_HOME", codexHome)
+	env[preparedCodexSessionIndexMarker] = indexTarget
+	return env, nil
+}
+
+func persistPreparedCodexSessionIndex(codexHome, target string) error {
+	baseline, err := os.ReadFile(filepath.Join(codexHome, codexSessionIndexBaseline))
+	if err != nil {
+		return fmt.Errorf("read session-index baseline: %w", err)
+	}
+	updated, err := os.ReadFile(filepath.Join(codexHome, "session_index.jsonl"))
+	if err != nil {
+		return fmt.Errorf("read updated session index: %w", err)
+	}
+	lockFile, err := os.OpenFile(target+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return fmt.Errorf("open session-index lock: %w", err)
+	}
+	unlock, err := lockCodexSessionIndex(lockFile)
+	if err != nil {
+		_ = lockFile.Close()
+		return fmt.Errorf("lock session index: %w", err)
+	}
+	defer func() {
+		unlock()
+		_ = lockFile.Close()
+	}()
+	current, err := os.ReadFile(target)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read current session index: %w", err)
+	}
+	merged, err := mergeCodexSessionIndex(baseline, updated, current)
+	if err != nil {
+		return fmt.Errorf("merge session index: %w", err)
+	}
+	if err := writeFileAtomic(target, merged, 0o600); err != nil {
+		return fmt.Errorf("write merged session index: %w", err)
+	}
+	return nil
+}
+
+func mergeCodexSessionIndex(baseline, updated, current []byte) ([]byte, error) {
+	before, err := latestCodexSessionIndexLines(baseline)
+	if err != nil {
+		return nil, fmt.Errorf("parse baseline: %w", err)
+	}
+	after, err := latestCodexSessionIndexLines(updated)
+	if err != nil {
+		return nil, fmt.Errorf("parse updated index: %w", err)
+	}
+	currentLatest, err := latestCodexSessionIndexLines(current)
+	if err != nil {
+		return nil, fmt.Errorf("parse persistent index: %w", err)
+	}
+	deleted := make(map[string]bool)
+	for id, baselineLine := range before {
+		if _, ok := after[id]; !ok {
+			currentLine, exists := currentLatest[id]
+			deleted[id] = exists && currentLine.Entry == baselineLine.Entry
+		}
+	}
+	changed := make(map[string]codexSessionIndexLine)
+	for id, line := range after {
+		previous, existedBefore := before[id]
+		if existedBefore && previous.Entry == line.Entry {
+			continue
+		}
+		currentLine, existsNow := currentLatest[id]
+		if !existsNow {
+			// A concurrent deletion has no timestamp to compare with this
+			// update. Prefer the recoverable operation so cleanup order cannot
+			// silently discard a renamed session.
+			changed[id] = line
+			continue
+		}
+		if existedBefore && currentLine.Entry == previous.Entry {
+			changed[id] = line
+			continue
+		}
+		if codexSessionIndexEntryIsNewer(line.Entry, currentLine.Entry) {
+			changed[id] = line
+		}
+	}
+
+	var merged strings.Builder
+	for _, raw := range strings.Split(string(current), "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" {
+			continue
+		}
+		var entry codexSessionIndexEntry
+		if json.Unmarshal([]byte(line), &entry) == nil && deleted[entry.ID] {
+			continue
+		}
+		merged.WriteString(raw)
+		merged.WriteByte('\n')
+	}
+	ids := make([]string, 0, len(changed))
+	for id := range changed {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		merged.WriteString(changed[id].Line)
+		merged.WriteByte('\n')
+	}
+	return []byte(merged.String()), nil
+}
+
+func codexSessionIndexEntryIsNewer(candidate, current codexSessionIndexEntry) bool {
+	candidateTime, candidateErr := time.Parse(time.RFC3339Nano, candidate.UpdatedAt)
+	currentTime, currentErr := time.Parse(time.RFC3339Nano, current.UpdatedAt)
+	return candidateErr == nil && currentErr == nil && candidateTime.After(currentTime)
+}
+
+func latestCodexSessionIndexLines(body []byte) (map[string]codexSessionIndexLine, error) {
+	latest := make(map[string]codexSessionIndexLine)
+	for lineNumber, raw := range strings.Split(string(body), "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" {
+			continue
+		}
+		var entry codexSessionIndexEntry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			return nil, fmt.Errorf("line %d: %w", lineNumber+1, err)
+		}
+		if entry.ID == "" {
+			return nil, fmt.Errorf("line %d: missing session id", lineNumber+1)
+		}
+		if entry.ThreadName == "" {
+			return nil, fmt.Errorf("line %d: missing thread name", lineNumber+1)
+		}
+		if _, err := time.Parse(time.RFC3339Nano, entry.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("line %d: invalid updated_at: %w", lineNumber+1, err)
+		}
+		latest[entry.ID] = codexSessionIndexLine{Entry: entry, Line: raw}
+	}
+	return latest, nil
 }
 
 func writeCodexOfficialConfigTOML(codexHome string) error {

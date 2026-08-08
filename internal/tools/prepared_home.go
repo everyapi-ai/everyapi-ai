@@ -11,7 +11,10 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-const preparedHomeMarker = "__EVERYAPI_PREPARED_HOME"
+const (
+	preparedHomeMarker              = "__EVERYAPI_PREPARED_HOME"
+	preparedCodexSessionIndexMarker = "__EVERYAPI_CODEX_SESSION_INDEX"
+)
 
 // newPreparedHome creates a process-scoped client home. Live catalog and
 // loopback proxy configuration must not be shared between concurrent launches
@@ -41,6 +44,8 @@ func preparedHomeEnv(key, home string) map[string]string {
 func TakePreparedCleanup(env map[string]string) func() {
 	home := env[preparedHomeMarker]
 	delete(env, preparedHomeMarker)
+	codexSessionIndex := env[preparedCodexSessionIndexMarker]
+	delete(env, preparedCodexSessionIndexMarker)
 	if home == "" {
 		return nil
 	}
@@ -55,7 +60,18 @@ func TakePreparedCleanup(env map[string]string) func() {
 	}
 	var once sync.Once
 	return func() {
-		once.Do(func() { removePreparedHomeAfterQuiet(home) })
+		once.Do(func() {
+			if codexSessionIndex != "" {
+				if err := persistPreparedCodexSessionIndex(home, codexSessionIndex); err != nil {
+					fmt.Fprintf(os.Stderr,
+						"Warning: preserve Codex session names: %v\nTemporary state kept at %s\n",
+						err, home,
+					)
+					return
+				}
+			}
+			removePreparedHomeAfterQuiet(home)
+		})
 	}
 }
 

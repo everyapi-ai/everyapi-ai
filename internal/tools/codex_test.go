@@ -351,6 +351,354 @@ func TestPrepareCodexWithModelsWritesPickerCatalog(t *testing.T) {
 	}
 }
 
+func TestPrepareCodexWithModelsPersistsSessionsAcrossLaunchHomes(t *testing.T) {
+	_, persistentHome := codexTestHome(t)
+	stubCodexBundledCatalog(t)
+	models := []Model{{ID: "gpt-5.6-sol"}}
+
+	first, err := prepareCodexWithModels(
+		"https://api.everyapi.ai",
+		"first-key",
+		models,
+		"gpt-5.6-sol",
+	)
+	if err != nil {
+		t.Fatalf("first prepareCodexWithModels: %v", err)
+	}
+	firstHome := first["CODEX_HOME"]
+	if firstHome == persistentHome {
+		t.Fatalf("live-catalog launch reused persistent CODEX_HOME %q", persistentHome)
+	}
+	if got := first["CODEX_SQLITE_HOME"]; got != "" {
+		t.Fatalf("CODEX_SQLITE_HOME = %q, want launch-local SQLite state", got)
+	}
+
+	sessionPath := filepath.Join(firstHome, "sessions", "2026", "08", "session.jsonl")
+	if err := os.MkdirAll(filepath.Dir(sessionPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sessionPath, []byte("session\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	indexPath := filepath.Join(firstHome, "session_index.jsonl")
+	replacementPath := indexPath + ".tmp"
+	const namedEntry = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"named-session","updated_at":"2026-08-09T00:00:00Z"}` + "\n"
+	if err := os.WriteFile(replacementPath, []byte(namedEntry), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(replacementPath, indexPath); err != nil {
+		t.Fatal(err)
+	}
+	TakePreparedCleanup(first)()
+
+	second, err := prepareCodexWithModels(
+		"https://api.everyapi.ai",
+		"second-key",
+		models,
+		"gpt-5.6-sol",
+	)
+	if err != nil {
+		t.Fatalf("second prepareCodexWithModels: %v", err)
+	}
+	defer TakePreparedCleanup(second)()
+	if second["CODEX_HOME"] == firstHome {
+		t.Fatalf("launches shared temporary CODEX_HOME %q", firstHome)
+	}
+	if body, err := os.ReadFile(filepath.Join(second["CODEX_HOME"], "sessions", "2026", "08", "session.jsonl")); err != nil {
+		t.Fatalf("read session from second launch: %v", err)
+	} else if string(body) != "session\n" {
+		t.Fatalf("persisted session = %q, want %q", body, "session\\n")
+	}
+	if body, err := os.ReadFile(filepath.Join(second["CODEX_HOME"], "session_index.jsonl")); err != nil {
+		t.Fatalf("read named-session index from second launch: %v", err)
+	} else if string(body) != namedEntry {
+		t.Fatalf("persisted session index = %q, want %q", body, namedEntry)
+	}
+}
+
+func TestPrepareCodexWithModelsMergesConcurrentSessionIndexUpdates(t *testing.T) {
+	codexTestHome(t)
+	stubCodexBundledCatalog(t)
+	models := []Model{{ID: "gpt-5.6-sol"}}
+	prepare := func() map[string]string {
+		t.Helper()
+		env, err := prepareCodexWithModels(
+			"https://api.everyapi.ai",
+			"key",
+			models,
+			"gpt-5.6-sol",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return env
+	}
+	replaceIndex := func(env map[string]string, body string) {
+		t.Helper()
+		path := filepath.Join(env["CODEX_HOME"], "session_index.jsonl")
+		tmp := path + ".tmp"
+		if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(tmp, path); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	first := prepare()
+	second := prepare()
+	const firstEntry = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"first","updated_at":"2026-08-09T00:00:01Z"}` + "\n"
+	const secondEntry = `{"id":"22222222-2222-4222-8222-222222222222","thread_name":"second","updated_at":"2026-08-09T00:00:02Z"}` + "\n"
+	replaceIndex(first, firstEntry)
+	replaceIndex(second, secondEntry)
+	TakePreparedCleanup(first)()
+	TakePreparedCleanup(second)()
+
+	third := prepare()
+	defer TakePreparedCleanup(third)()
+	body, err := os.ReadFile(filepath.Join(third["CODEX_HOME"], "session_index.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{firstEntry, secondEntry} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("merged session index missing %q:\n%s", want, body)
+		}
+	}
+}
+
+func TestPrepareCodexWithModelsPreservesStateWhenUpdatedSessionIndexIsCorrupt(t *testing.T) {
+	_, persistentHome := codexTestHome(t)
+	stubCodexBundledCatalog(t)
+	models := []Model{{ID: "gpt-5.6-sol"}}
+	prepare := func() map[string]string {
+		t.Helper()
+		env, err := prepareCodexWithModels(
+			"https://api.everyapi.ai",
+			"key",
+			models,
+			"gpt-5.6-sol",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return env
+	}
+	replaceIndex := func(env map[string]string, body string) {
+		t.Helper()
+		path := filepath.Join(env["CODEX_HOME"], "session_index.jsonl")
+		tmp := path + ".tmp"
+		if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(tmp, path); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	const namedEntry = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"safe","updated_at":"2026-08-09T00:00:00Z"}` + "\n"
+	seed := prepare()
+	replaceIndex(seed, namedEntry)
+	TakePreparedCleanup(seed)()
+
+	corrupt := prepare()
+	corruptHome := corrupt["CODEX_HOME"]
+	replaceIndex(corrupt, "{truncated\n")
+	TakePreparedCleanup(corrupt)()
+	if _, err := os.Stat(corruptHome); err != nil {
+		t.Fatalf("corrupt launch home was not preserved: %v", err)
+	}
+	t.Cleanup(func() { removePreparedHomeAfterQuiet(corruptHome) })
+
+	body, err := os.ReadFile(filepath.Join(persistentHome, "session_index.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != namedEntry {
+		t.Fatalf("persistent session index = %q after corrupt update, want %q", body, namedEntry)
+	}
+}
+
+func TestMergeCodexSessionIndexRejectsIncompleteEntry(t *testing.T) {
+	const original = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"safe","updated_at":"2026-08-09T00:00:00Z"}` + "\n"
+
+	if _, err := mergeCodexSessionIndex([]byte(original), []byte(`{"id":"11111111-1111-4111-8111-111111111111"}`+"\n"), []byte(original)); err == nil {
+		t.Fatal("mergeCodexSessionIndex accepted an incomplete session-index entry")
+	}
+}
+
+func TestPrepareCodexWithModelsDoesNotLetStaleDeleteRemoveConcurrentRename(t *testing.T) {
+	codexTestHome(t)
+	stubCodexBundledCatalog(t)
+	models := []Model{{ID: "gpt-5.6-sol"}}
+	prepare := func() map[string]string {
+		t.Helper()
+		env, err := prepareCodexWithModels("https://api.everyapi.ai", "key", models, "gpt-5.6-sol")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return env
+	}
+	replaceIndex := func(env map[string]string, body string) {
+		t.Helper()
+		path := filepath.Join(env["CODEX_HOME"], "session_index.jsonl")
+		tmp := path + ".tmp"
+		if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(tmp, path); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	const original = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"old","updated_at":"2026-08-09T00:00:00Z"}` + "\n"
+	const renamed = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"new","updated_at":"2026-08-09T00:00:02Z"}` + "\n"
+	seed := prepare()
+	replaceIndex(seed, original)
+	TakePreparedCleanup(seed)()
+
+	deleter := prepare()
+	renamer := prepare()
+	replaceIndex(deleter, "")
+	replaceIndex(renamer, renamed)
+	TakePreparedCleanup(renamer)()
+	TakePreparedCleanup(deleter)()
+
+	check := prepare()
+	defer TakePreparedCleanup(check)()
+	body, err := os.ReadFile(filepath.Join(check["CODEX_HOME"], "session_index.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest, err := latestCodexSessionIndexLines(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := latest["11111111-1111-4111-8111-111111111111"].Entry.ThreadName; got != "new" {
+		t.Fatalf("latest session name = %q after rename/delete race, want %q\n%s", got, "new", body)
+	}
+}
+
+func TestMergeCodexSessionIndexRestoresConcurrentRenameAfterDelete(t *testing.T) {
+	const original = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"old","updated_at":"2026-08-09T00:00:00Z"}` + "\n"
+	const renamed = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"new","updated_at":"2026-08-09T00:00:02Z"}` + "\n"
+
+	merged, err := mergeCodexSessionIndex([]byte(original), []byte(renamed), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest, err := latestCodexSessionIndexLines(merged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := latest["11111111-1111-4111-8111-111111111111"].Entry.ThreadName; got != "new" {
+		t.Fatalf("latest session name = %q after delete/rename race, want %q\n%s", got, "new", merged)
+	}
+}
+
+func TestPrepareCodexWithModelsKeepsNewestConcurrentRename(t *testing.T) {
+	codexTestHome(t)
+	stubCodexBundledCatalog(t)
+	models := []Model{{ID: "gpt-5.6-sol"}}
+	prepare := func() map[string]string {
+		t.Helper()
+		env, err := prepareCodexWithModels("https://api.everyapi.ai", "key", models, "gpt-5.6-sol")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return env
+	}
+	replaceIndex := func(env map[string]string, body string) {
+		t.Helper()
+		path := filepath.Join(env["CODEX_HOME"], "session_index.jsonl")
+		tmp := path + ".tmp"
+		if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(tmp, path); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	const original = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"old","updated_at":"2026-08-09T00:00:00Z"}` + "\n"
+	const olderRename = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"older","updated_at":"2026-08-09T00:00:01Z"}` + "\n"
+	const newerRename = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"newer","updated_at":"2026-08-09T00:00:02Z"}` + "\n"
+	seed := prepare()
+	replaceIndex(seed, original)
+	TakePreparedCleanup(seed)()
+
+	older := prepare()
+	newer := prepare()
+	replaceIndex(older, olderRename)
+	replaceIndex(newer, newerRename)
+	TakePreparedCleanup(newer)()
+	TakePreparedCleanup(older)()
+
+	check := prepare()
+	defer TakePreparedCleanup(check)()
+	body, err := os.ReadFile(filepath.Join(check["CODEX_HOME"], "session_index.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest, err := latestCodexSessionIndexLines(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := latest["11111111-1111-4111-8111-111111111111"].Entry.ThreadName; got != "newer" {
+		t.Fatalf("latest session name = %q after concurrent renames, want %q\n%s", got, "newer", body)
+	}
+}
+
+func TestPrepareCodexTransparentWithModelsUsesPersistentSessionState(t *testing.T) {
+	codexTestHome(t)
+	stubCodexBundledCatalog(t)
+
+	env, err := prepareCodexTransparentWithModels(
+		[]Model{{ID: "gpt-5.6-sol"}},
+		"gpt-5.6-sol",
+	)
+	if err != nil {
+		t.Fatalf("prepareCodexTransparentWithModels: %v", err)
+	}
+	defer TakePreparedCleanup(env)()
+	if got := env["CODEX_SQLITE_HOME"]; got != "" {
+		t.Fatalf("CODEX_SQLITE_HOME = %q, want launch-local SQLite state", got)
+	}
+	if info, err := os.Stat(filepath.Join(env["CODEX_HOME"], "sessions")); err != nil {
+		t.Fatalf("stat linked sessions directory: %v", err)
+	} else if !info.IsDir() {
+		t.Fatalf("linked sessions path is not a directory: %v", info.Mode())
+	}
+}
+
+func TestPrepareCodexWithModelsCleansLaunchHomeWhenSessionStateSetupFails(t *testing.T) {
+	xdg, persistentHome := codexTestHome(t)
+	stubCodexBundledCatalog(t)
+	if err := os.MkdirAll(persistentHome, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(persistentHome, "sessions"), []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prepareCodexWithModels(
+		"https://api.everyapi.ai",
+		"key",
+		[]Model{{ID: "gpt-5.6-sol"}},
+		"gpt-5.6-sol",
+	); err == nil {
+		t.Fatal("prepareCodexWithModels succeeded with an invalid persistent sessions path")
+	}
+	launchRoot := filepath.Join(xdg, "everyapi", "sessions")
+	entries, err := os.ReadDir(launchRoot)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("failed preparation left %d temporary Codex home(s) in %s", len(entries), launchRoot)
+	}
+}
+
 // TestClaudeTool_NoPrepare guards the negative case: claude
 // don't need pre-exec setup, so tool.Prepare must be a clean no-op
 // (nil map, nil err). A future regression that accidentally wires a
