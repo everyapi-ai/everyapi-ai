@@ -89,6 +89,118 @@ func TestStatusMachineReportsSignedOutWithoutError(t *testing.T) {
 	}
 }
 
+func TestStatusMachineIncludesLiveBalanceOnlyWhenRequested(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	const accessToken = "management-balance-secret"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/status":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"data":    map[string]any{"quota_per_unit": 100.0},
+			})
+		case "/api/user/self":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"data": map[string]any{
+					"username":   "alice",
+					"quota":      2500,
+					"used_quota": 900,
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	if err := config.Save(&config.Credentials{
+		APIBase:     server.URL,
+		AccessToken: accessToken,
+		Username:    "alice",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	previous := cliout.Out
+	cliout.Out = &out
+	t.Cleanup(func() { cliout.Out = previous })
+	if err := Status([]string{"--format=json", "--include-balance"}); err != nil {
+		t.Fatalf("Status machine balance: %v", err)
+	}
+
+	var got struct {
+		BalanceUSD *float64 `json:"balance_usd"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.BalanceUSD == nil || *got.BalanceUSD != 25 {
+		t.Fatalf("balance_usd = %v, want 25", got.BalanceUSD)
+	}
+	if strings.Contains(out.String(), accessToken) {
+		t.Fatalf("machine balance leaked access token: %s", out.String())
+	}
+}
+
+func TestStatusMachineIncludesOAuthAccountBalance(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	const relayKey = "sk-everyapi-oauth-balance-secret"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/status":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"data":    map[string]any{"quota_per_unit": 100.0},
+			})
+		case "/api/usage/account":
+			if got := r.Header.Get("Authorization"); got != "Bearer "+relayKey {
+				t.Fatalf("Authorization = %q", got)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"data": map[string]any{
+					"username": "alice",
+					"wallet":   map[string]any{"quota": 4275, "currency": "USD"},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	if err := config.Save(&config.Credentials{
+		APIBase:           server.URL,
+		AccessToken:       relayKey,
+		RelayKey:          relayKey,
+		OAuthClientID:     "everyapi-cli",
+		RelayKeyExpiresAt: time.Now().Add(24 * time.Hour).Unix(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	previous := cliout.Out
+	cliout.Out = &out
+	t.Cleanup(func() { cliout.Out = previous })
+	if err := Status([]string{"--format=json", "--include-balance"}); err != nil {
+		t.Fatalf("Status OAuth machine balance: %v", err)
+	}
+
+	var got struct {
+		BalanceUSD *float64 `json:"balance_usd"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.BalanceUSD == nil || *got.BalanceUSD != 42.75 {
+		t.Fatalf("balance_usd = %v, want 42.75", got.BalanceUSD)
+	}
+	if strings.Contains(out.String(), relayKey) {
+		t.Fatalf("machine balance leaked relay key: %s", out.String())
+	}
+}
+
 // TestStatusLazyMigratesRole covers the pre-Role credentials.json
 // recovery path: a credentials file written before the Role field
 // existed has Role=0, but the live GetSelf returns 100. Status

@@ -42,6 +42,7 @@ func Status(args []string) error {
 		fs.SetOutput(io.Discard)
 	}
 	format := fs.String("format", "human", "output format (human or json)")
+	includeBalance := fs.Bool("include-balance", false, "include live account balance in JSON output")
 	if err := fs.Parse(args); err != nil {
 		if statusMachineRequested(args) {
 			return machineStatusError("invalid_request", err)
@@ -52,10 +53,13 @@ func Status(args []string) error {
 		if fs.NArg() != 0 {
 			return machineStatusError("invalid_request", errors.New("machine status does not accept positional arguments"))
 		}
-		return statusMachine()
+		return statusMachine(*includeBalance)
 	}
 	if *format != "human" {
 		return machineStatusError("invalid_request", fmt.Errorf("unsupported format %q", *format))
+	}
+	if *includeBalance {
+		return errors.New("--include-balance requires --format=json")
 	}
 	if err := rejectFlagPositionals(fs); err != nil {
 		return err
