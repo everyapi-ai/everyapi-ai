@@ -19,8 +19,8 @@
 # constante Lang* et de son inclusion dans SupportedLanguages.
 
 [auth]
-usage = "utilisation : everyapi auth <login|logout|status>"
-unknown_sub = "sous-commande auth inconnue %q (essayez : login, logout, status)"
+usage = "utilisation : everyapi auth <login|logout|status|credential>"
+unknown_sub = "sous-commande auth inconnue %q (essayez : login, logout, status, credential)"
 not_logged_in = "non connecté — exécutez d'abord 'everyapi auth login'"
 session_expired = "votre session a expiré — exécutez 'everyapi auth login' à nouveau"
 

@@ -18,8 +18,8 @@
 # Code-Änderungen nötig.
 
 [auth]
-usage = "Verwendung: everyapi auth <login|logout|status>"
-unknown_sub = "unbekannter auth-Unterbefehl %q (versuche: login, logout, status)"
+usage = "Verwendung: everyapi auth <login|logout|status|credential>"
+unknown_sub = "unbekannter auth-Unterbefehl %q (versuche: login, logout, status, credential)"
 not_logged_in = "nicht angemeldet — führe zuerst 'everyapi auth login' aus"
 session_expired = "deine Sitzung ist abgelaufen — führe 'everyapi auth login' erneut aus"
 

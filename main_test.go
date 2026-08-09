@@ -162,6 +162,16 @@ func TestUseCommandDescriptionListsOfficialQwenAndKimiCLIs(t *testing.T) {
 	}
 }
 
+func TestUseCommandDescriptionListsOpenCode(t *testing.T) {
+	c, ok := lookup("use")
+	if !ok {
+		t.Fatal("use command missing")
+	}
+	if !strings.Contains(c.desc, "opencode") {
+		t.Fatalf("use command description does not list opencode: %q", c.desc)
+	}
+}
+
 // TestSubPicker_AuthUnwindsAfterCleanAction locks the login-lands-on-
 // logout fix: after an auth action returns cleanly, runSubPicker must
 // unwind to the root launcher (ErrPickCancelled) rather than re-render

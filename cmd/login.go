@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -38,13 +39,36 @@ import (
 //	--api-base <url>  override configured/default gateway (dev / self-host)
 //	--no-browser      skip the auto-open; user copies the URL manually
 //	--no-qr           skip the terminal QR (for non-UTF-8 terminals / pipes)
+//	--format          human (default) or the desktop-only json-lines protocol
 func Login(args []string) error {
 	fs := flag.NewFlagSet("login", flag.ContinueOnError)
+	if loginMachineRequested(args) {
+		fs.SetOutput(io.Discard)
+	}
 	apiBase := fs.String("api-base", "", "EveryAPI API base URL")
 	noBrowser := fs.Bool("no-browser", false, "skip opening the browser automatically")
 	noQR := fs.Bool("no-qr", false, "skip rendering the QR code (useful for non-UTF-8 terminals or when piping output)")
+	format := fs.String("format", "human", "output format (human or json-lines)")
 	if err := fs.Parse(args); err != nil {
+		if loginMachineRequested(args) {
+			return machineLoginError("invalid_request", err)
+		}
 		return err
+	}
+	if *format == "json-lines" {
+		var usedHumanFlag bool
+		fs.Visit(func(f *flag.Flag) {
+			if f.Name == "no-browser" || f.Name == "no-qr" {
+				usedHumanFlag = true
+			}
+		})
+		if usedHumanFlag || fs.NArg() != 0 {
+			return machineLoginError("invalid_request", errors.New("machine login accepts only --api-base and --format=json-lines"))
+		}
+		return loginMachine(*apiBase)
+	}
+	if *format != "human" {
+		return machineLoginError("invalid_request", fmt.Errorf("unsupported format %q", *format))
 	}
 	if err := rejectFlagPositionals(fs); err != nil {
 		return err
@@ -184,35 +208,9 @@ func Login(args []string) error {
 		}
 	}
 
-	creds := &config.Credentials{
-		APIBase:     resolvedAPIBase,
-		AccessToken: res.AccessToken,
-		UserID:      res.UserID,
-		Username:    res.Username,
-	}
-	// One extra GetSelf round-trip during login to capture the
-	// user's backend role (admin / common). We persist it so the
-	// help-text renderer can hide admin-only subcommands locally
-	// without per-help-render network traffic. A failure here is
-	// non-fatal — login itself succeeded; role defaults to 0
-	// (treated as non-admin), and the next `everyapi auth status` will
-	// retry the lookup.
-	//
-	// Reuse the SignalCtx so Ctrl+C still cancels (the device-auth
-	// poll just returned, but a stuck TCP connection here would
-	// otherwise wedge the login flow indefinitely). 10s cap because
-	// the device-auth happy path completes in <1s; anything longer
-	// is a transient backend issue worth giving up on rather than
-	// blocking the user.
-	roleCtx, roleCancel := context.WithTimeout(ctx, 10*time.Second)
-	if self, sErr := api.New(resolvedAPIBase, res.AccessToken).
-		WithUserID(res.UserID).
-		GetSelf(roleCtx); sErr == nil {
-		creds.Role = self.Role
-	}
-	roleCancel()
-	if err := config.Save(creds); err != nil {
-		return fmt.Errorf("save credentials: %w", err)
+	creds, err := saveLegacyLoginCredentials(ctx, resolvedAPIBase, res)
+	if err != nil {
+		return err
 	}
 
 	dir, _ := config.ConfigDir()
@@ -288,7 +286,12 @@ const oauth2CLIClientID = "everyapi-cli"
 // status/token commands rely on — and falling back to the OAuth2 device grant
 // only when the legacy endpoint is absent (404). The bool reports whether the
 // OAuth2 flow was used.
-func startDeviceFlow(ctx context.Context, client *api.Client) (*api.DeviceAuthStartResp, bool, error) {
+type deviceFlowStarter interface {
+	DeviceAuthStart(context.Context) (*api.DeviceAuthStartResp, error)
+	OAuth2DeviceStart(context.Context, string) (*api.DeviceAuthStartResp, error)
+}
+
+func startDeviceFlow(ctx context.Context, client deviceFlowStarter) (*api.DeviceAuthStartResp, bool, error) {
 	start, err := client.DeviceAuthStart(ctx)
 	if err == nil {
 		return start, false, nil
@@ -334,6 +337,44 @@ func finishOAuth2Login(ctx context.Context, apiBase string, client *api.Client, 
 	}
 	// The access token is itself the relay key; keep the refresh token + expiry
 	// so ResolveRelayKey can renew it before the 90-day key lapses.
+	if _, err := saveOAuth2LoginCredentials(apiBase, tok); err != nil {
+		return err
+	}
+	dir, _ := config.ConfigDir()
+	cliout.Printf(i18n.T("login.logged_in_saved"), style.Bold("EveryAPI"), dir)
+	cliout.Println(i18n.T("login.next_hint"))
+	return nil
+}
+
+// saveLegacyLoginCredentials owns the flow-independent completion work shared
+// by interactive and desktop machine login: enrich the account metadata when
+// possible and atomically persist the management credential.
+func saveLegacyLoginCredentials(ctx context.Context, apiBase string, res *api.DeviceAuthPollResult) (*config.Credentials, error) {
+	creds := &config.Credentials{
+		APIBase:     apiBase,
+		AccessToken: res.AccessToken,
+		UserID:      res.UserID,
+		Username:    res.Username,
+	}
+	// Role lookup is an optional enrichment. A slow/unavailable management
+	// endpoint must not turn an otherwise successful device authorization into
+	// a failed login.
+	roleCtx, roleCancel := context.WithTimeout(ctx, 10*time.Second)
+	if self, err := api.New(apiBase, res.AccessToken).
+		WithUserID(res.UserID).
+		GetSelf(roleCtx); err == nil {
+		creds.Role = self.Role
+	}
+	roleCancel()
+	if err := config.Save(creds); err != nil {
+		return nil, fmt.Errorf("save credentials: %w", err)
+	}
+	return creds, nil
+}
+
+// saveOAuth2LoginCredentials persists the OAuth fallback bundle for both
+// human and machine login. The access token is also the relay key in this flow.
+func saveOAuth2LoginCredentials(apiBase string, tok *api.OAuth2Token) (*config.Credentials, error) {
 	creds := &config.Credentials{
 		APIBase:           apiBase,
 		AccessToken:       tok.AccessToken,
@@ -343,12 +384,9 @@ func finishOAuth2Login(ctx context.Context, apiBase string, client *api.Client, 
 		OAuthClientID:     oauth2CLIClientID,
 	}
 	if err := config.Save(creds); err != nil {
-		return fmt.Errorf("save credentials: %w", err)
+		return nil, fmt.Errorf("save credentials: %w", err)
 	}
-	dir, _ := config.ConfigDir()
-	cliout.Printf(i18n.T("login.logged_in_saved"), style.Bold("EveryAPI"), dir)
-	cliout.Println(i18n.T("login.next_hint"))
-	return nil
+	return creds, nil
 }
 
 // startLoginKeyWatcher puts stdin into raw mode for the duration of

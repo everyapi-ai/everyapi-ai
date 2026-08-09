@@ -10,7 +10,9 @@ import (
 // Auth dispatches `everyapi auth <sub>`. login / logout / status used to
 // be top-level commands; they now live under `auth` so the launcher's
 // top level isn't crowded with session plumbing. The subcommands keep
-// their own flag parsing — Auth just routes args[1:] to them.
+// their own flag parsing — Auth just routes args[1:] to them. In particular,
+// `auth login --format=json-lines` is the non-interactive desktop sidecar
+// protocol; Auth must not add output or prompting around it.
 //
 // Bare `everyapi auth` on a TTY never reaches here with empty args (the
 // launcher's sub-picker handles it); off a TTY it prints usage. `help`

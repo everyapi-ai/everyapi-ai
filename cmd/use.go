@@ -35,7 +35,7 @@ USAGE
   everyapi use [<tool>] [--group <name> | --channel <name>] [--model <id>] [--sanitize] [--transparent[=false]] [-- tool args...]
 
 ARGUMENTS
-  <tool>                 claude | codex | gemini | grok | hermes
+  <tool>                 claude | codex | opencode | gemini | grok | hermes
                          qwen-code | kimi-code
                          Omit to open an interactive picker over installed tools.
 
@@ -46,8 +46,8 @@ FLAGS
                          enabled keys' routing groups.
   --model <id>           choose the model for this launch, and remember it.
                          hermes/qwen-code/kimi-code skip their picker.
-                         codex boots on it — it is written into the config
-                         codex reads. claude is OFFERED it first in the
+                         codex/opencode boot on it — it is written into their
+                         process-scoped config. claude is OFFERED it first in the
                          catalog it discovers; claude still makes the final
                          call, so a session that already has a model of its
                          own may keep it. A bare --model (no value) reopens
@@ -65,7 +65,7 @@ FLAGS
                          entry launches native agy instead.
                          Pass --transparent=false to fall back
                          to injecting the gateway Base URL + relay key.
-                         grok, qwen-code, kimi-code, and hermes always use the
+                         opencode, grok, qwen-code, kimi-code, and hermes use the
                          injected path.
   --                     End of everyapi's option parsing; remaining args are
                          forwarded verbatim to the tool's argv.
@@ -79,6 +79,7 @@ EXAMPLES
   everyapi use claude                  (transparent by default)
   everyapi use claude --transparent=false
   everyapi use codex --channel byteplus
+  everyapi use opencode --model gpt-5
   everyapi use grok
   everyapi use qwen-code              (official Qwen Code; pick a model)
   everyapi use kimi-code --model kimi-k2.5
@@ -96,6 +97,7 @@ EXAMPLES
 //
 //	everyapi use claude
 //	everyapi use codex
+//	everyapi use opencode
 //	everyapi use gemini
 //	everyapi use grok
 //	everyapi use qwen-code
@@ -751,17 +753,17 @@ func transparentTopology(connectorURL string, relayHops []string, gateway string
 // boot model for this tool.
 //
 // Limited to the clients whose boot model EveryAPI can actually steer without
-// an env var. claude reads the catalogue EveryAPI serves it and boots on the
-// first entry, so sorting the choice to position 0 delivers it. codex reads a
-// root-level `model` from the config.toml EveryAPI writes for it. gemini and
-// grok have neither hook — a selection there would be recorded and then
-// silently ignored, which is worse than not offering it.
+// a model-specific env var. claude reads the catalogue EveryAPI serves it and
+// boots on the first entry. codex reads a root-level `model` from its isolated
+// config.toml. opencode reads the selection from process-scoped
+// OPENCODE_CONFIG_CONTENT. gemini and grok have none of those hooks — a
+// selection there would be recorded and silently ignored.
 func toolRemembersModel(t *tools.Tool) bool {
 	// Keyed on Name, not ExecName, because Name is what persistToolModel uses
 	// for the settings entry — and the two differ for three tools already
 	// (gemini/agy, qwen-code/qwen, kimi-code/kimi), so mixing them invites a
 	// launch that qualifies under one field and stores under another.
-	return t.Name == "claude" || t.Name == "codex"
+	return t.Name == "claude" || t.Name == "codex" || t.Name == "opencode"
 }
 
 // resolveRememberedModel returns the model this launch should boot on, and

@@ -307,6 +307,19 @@ func TestUseUsageDocumentsOfficialQwenAndKimiCLIs(t *testing.T) {
 	}
 }
 
+func TestUseUsageAndModelSelectionIncludeOpenCode(t *testing.T) {
+	if !strings.Contains(useUsage, "everyapi use opencode") {
+		t.Fatal("use help does not include an OpenCode launch example")
+	}
+	opencode, err := tools.Lookup("opencode")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !toolRemembersModel(opencode) {
+		t.Fatal("OpenCode must remember the model written to its process-scoped config")
+	}
+}
+
 func TestToolArgsForLaunchPinsQwenToOpenAI(t *testing.T) {
 	qwen, err := tools.Lookup("qwen-code")
 	if err != nil {

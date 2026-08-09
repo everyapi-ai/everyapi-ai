@@ -17,6 +17,7 @@
 package tools
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -169,6 +170,83 @@ type Model struct {
 	DisplayName            string
 	OwnedBy                string
 	SupportedEndpointTypes []string
+}
+
+const openCodeCredentialEnv = "EVERYAPI_RELAY_KEY"
+
+type openCodeProviderOptions struct {
+	BaseURL string `json:"baseURL"`
+	APIKey  string `json:"apiKey"`
+}
+
+type openCodeModel struct {
+	Name string `json:"name"`
+}
+
+type openCodeProvider struct {
+	NPM     string                   `json:"npm"`
+	Name    string                   `json:"name"`
+	Options openCodeProviderOptions  `json:"options"`
+	Models  map[string]openCodeModel `json:"models"`
+}
+
+type openCodeConfig struct {
+	Schema   string                      `json:"$schema"`
+	Provider map[string]openCodeProvider `json:"provider"`
+	Model    string                      `json:"model,omitempty"`
+}
+
+// prepareOpenCodeWithModels uses OpenCode's documented custom-provider
+// contract through OPENCODE_CONFIG_CONTENT. The content carries only a fixed
+// environment reference; the relay key itself is supplied separately to the
+// child process and is never written to opencode.json or another config file.
+func prepareOpenCodeWithModels(apiBase, _ string, models []Model, bootModel string) (map[string]string, error) {
+	configuredModels := make(map[string]openCodeModel, len(models))
+	selected := ""
+	firstConfigured := ""
+	for _, model := range models {
+		id := strings.TrimSpace(model.ID)
+		if id == "" {
+			continue
+		}
+		name := strings.TrimSpace(model.DisplayName)
+		if name == "" {
+			name = id
+		}
+		configuredModels[id] = openCodeModel{Name: name}
+		if firstConfigured == "" {
+			firstConfigured = id
+		}
+		if id == bootModel {
+			selected = id
+		}
+	}
+	if selected == "" {
+		selected = firstConfigured
+	}
+
+	config := openCodeConfig{
+		Schema: "https://opencode.ai/config.json",
+		Provider: map[string]openCodeProvider{
+			"everyapi": {
+				NPM:  "@ai-sdk/openai-compatible",
+				Name: "EveryAPI",
+				Options: openCodeProviderOptions{
+					BaseURL: joinBase(apiBase, "/v1"),
+					APIKey:  "{env:" + openCodeCredentialEnv + "}",
+				},
+				Models: configuredModels,
+			},
+		},
+	}
+	if selected != "" {
+		config.Model = "everyapi/" + selected
+	}
+	body, err := json.Marshal(config)
+	if err != nil {
+		return nil, fmt.Errorf("encode OpenCode provider config: %w", err)
+	}
+	return map[string]string{"OPENCODE_CONFIG_CONTENT": string(body)}, nil
 }
 
 func (t *Tool) Env(apiBase, token string) map[string]string {
@@ -404,6 +482,22 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: prepareCodexWithModels,
 	},
 
+	// OpenCode supports custom OpenAI-compatible providers through its public
+	// config schema. OPENCODE_CONFIG_CONTENT keeps this configuration scoped to
+	// the launched process, while the apiKey field contains only an env
+	// reference so the relay key never enters JSON or a project opencode.json.
+	"opencode": {
+		Name:             "opencode",
+		ExecName:         "opencode",
+		InstallHint:      "Install OpenCode: https://opencode.ai/docs/",
+		InstallCmd:       "npm install -g opencode-ai",
+		RequiredEndpoint: "openai",
+		envFn: func(_, token string) map[string]string {
+			return map[string]string{openCodeCredentialEnv: token}
+		},
+		prepareCatalogFn: prepareOpenCodeWithModels,
+	},
+
 	// Antigravity CLI: keep `everyapi use gemini` as the familiar entry point,
 	// but launch the locally authenticated `agy` client. agy owns its Google
 	// OAuth credential and upstream routing, so never pass the EveryAPI relay
@@ -560,6 +654,6 @@ func Names() []string {
 	// picker UX. Hand-coded to match the ordering most likely to
 	// reflect user demand.
 	return []string{
-		"claude", "codex", "gemini", "grok", "qwen-code", "kimi-code", "hermes",
+		"claude", "codex", "opencode", "gemini", "grok", "qwen-code", "kimi-code", "hermes",
 	}
 }

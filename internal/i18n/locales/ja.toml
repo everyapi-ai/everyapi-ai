@@ -14,8 +14,8 @@
 # Lang* 定数を追加する以外はコード変更不要。
 
 [auth]
-usage = "使用法: everyapi auth <login|logout|status>"
-unknown_sub = "不明な auth サブコマンド %q（使用可能: login, logout, status）"
+usage = "使用法: everyapi auth <login|logout|status|credential>"
+unknown_sub = "不明な auth サブコマンド %q（使用可能: login, logout, status, credential）"
 not_logged_in = "ログインしていません — まず 'everyapi auth login' を実行してください"
 session_expired = "セッションの有効期限が切れました — 再度 'everyapi auth login' を実行してください"
 

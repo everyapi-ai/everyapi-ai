@@ -2,6 +2,7 @@ package tools
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,7 +16,7 @@ import (
 // change that breaks this test.
 func TestRegistry_HasExpectedTools(t *testing.T) {
 	want := []string{
-		"claude", "codex", "gemini", "grok", "qwen-code", "kimi-code", "hermes",
+		"claude", "codex", "opencode", "gemini", "grok", "qwen-code", "kimi-code", "hermes",
 	}
 	got := Names()
 	if len(got) != len(want) {
@@ -88,6 +89,96 @@ func TestEnv_Codex(t *testing.T) {
 		// and setting it created confusing "the env is set but
 		// requests still hit api.openai.com" debug sessions.
 		t.Error("codex env should not set OPENAI_BASE_URL (codex routes via config.toml model_provider, see prepareFn)")
+	}
+}
+
+func TestEnv_OpenCodeUsesOfficialCompatibleProviderWithoutPersistingTheKey(t *testing.T) {
+	project := t.TempDir()
+	projectConfig := filepath.Join(project, "opencode.json")
+	originalProjectConfig := []byte(`{"model":"user/provider"}`)
+	if err := os.WriteFile(projectConfig, originalProjectConfig, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(project)
+
+	tool, err := Lookup("opencode")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tool.ExecName != "opencode" {
+		t.Fatalf("ExecName = %q, want opencode", tool.ExecName)
+	}
+	if tool.RequiredEndpoint != "openai" {
+		t.Fatalf("RequiredEndpoint = %q, want openai", tool.RequiredEndpoint)
+	}
+
+	const relayKey = "relay-key-must-not-enter-config"
+	env := tool.Env("https://api.everyapi.ai", relayKey)
+	if got := env["EVERYAPI_RELAY_KEY"]; got != relayKey {
+		t.Fatalf("EVERYAPI_RELAY_KEY = %q", got)
+	}
+	if _, ok := env["OPENAI_API_KEY"]; ok {
+		t.Fatal("OpenCode custom provider must not rely on ambient OPENAI_API_KEY")
+	}
+
+	extra, err := tool.PrepareWithModels(
+		"https://api.everyapi.ai/",
+		relayKey,
+		[]Model{
+			{ID: "gpt-5", DisplayName: "GPT 5"},
+			{ID: "claude-sonnet", DisplayName: "Claude Sonnet"},
+		},
+		"claude-sonnet",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := extra["OPENCODE_CONFIG_CONTENT"]
+	if content == "" {
+		t.Fatal("PrepareWithModels did not provide OPENCODE_CONFIG_CONTENT")
+	}
+	if strings.Contains(content, relayKey) {
+		t.Fatal("OPENCODE_CONFIG_CONTENT contains the relay key")
+	}
+
+	var config struct {
+		Model    string `json:"model"`
+		Provider map[string]struct {
+			NPM     string `json:"npm"`
+			Options struct {
+				BaseURL string `json:"baseURL"`
+				APIKey  string `json:"apiKey"`
+			} `json:"options"`
+			Models map[string]struct {
+				Name string `json:"name"`
+			} `json:"models"`
+		} `json:"provider"`
+	}
+	if err := json.Unmarshal([]byte(content), &config); err != nil {
+		t.Fatalf("parse OPENCODE_CONFIG_CONTENT: %v", err)
+	}
+	provider := config.Provider["everyapi"]
+	if provider.NPM != "@ai-sdk/openai-compatible" {
+		t.Errorf("provider npm = %q", provider.NPM)
+	}
+	if provider.Options.BaseURL != "https://api.everyapi.ai/v1" {
+		t.Errorf("baseURL = %q", provider.Options.BaseURL)
+	}
+	if provider.Options.APIKey != "{env:EVERYAPI_RELAY_KEY}" {
+		t.Errorf("apiKey reference = %q", provider.Options.APIKey)
+	}
+	if config.Model != "everyapi/claude-sonnet" {
+		t.Errorf("model = %q", config.Model)
+	}
+	if got := provider.Models["gpt-5"].Name; got != "GPT 5" {
+		t.Errorf("model display name = %q", got)
+	}
+	gotProjectConfig, err := os.ReadFile(projectConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(gotProjectConfig, originalProjectConfig) {
+		t.Fatalf("PrepareWithModels modified project opencode.json: %s", gotProjectConfig)
 	}
 }
 

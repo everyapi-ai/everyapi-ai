@@ -16,8 +16,8 @@
 # the Lang* const + including it in SupportedLanguages.
 
 [auth]
-usage = "usage: everyapi auth <login|logout|status>"
-unknown_sub = "unknown auth subcommand %q (try: login, logout, status)"
+usage = "usage: everyapi auth <login|logout|status|credential>"
+unknown_sub = "unknown auth subcommand %q (try: login, logout, status, credential)"
 not_logged_in = "not logged in — run 'everyapi auth login' first"
 session_expired = "your session expired — run 'everyapi auth login' again"
 

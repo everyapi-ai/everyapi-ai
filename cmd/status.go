@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
@@ -37,8 +38,24 @@ func styledQuota(quotaUSD, usedUSD float64) string {
 // a one-time migration.
 func Status(args []string) error {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
+	if statusMachineRequested(args) {
+		fs.SetOutput(io.Discard)
+	}
+	format := fs.String("format", "human", "output format (human or json)")
 	if err := fs.Parse(args); err != nil {
+		if statusMachineRequested(args) {
+			return machineStatusError("invalid_request", err)
+		}
 		return err
+	}
+	if *format == "json" {
+		if fs.NArg() != 0 {
+			return machineStatusError("invalid_request", errors.New("machine status does not accept positional arguments"))
+		}
+		return statusMachine()
+	}
+	if *format != "human" {
+		return machineStatusError("invalid_request", fmt.Errorf("unsupported format %q", *format))
 	}
 	if err := rejectFlagPositionals(fs); err != nil {
 		return err

@@ -4,8 +4,8 @@
 # 兩邊都缺會回傳 key 本身（開發期肉眼可見地失敗）。
 
 [auth]
-usage = "用法：everyapi auth <login|logout|status>"
-unknown_sub = "未知 auth 子命令 %q（可用：login, logout, status）"
+usage = "用法：everyapi auth <login|logout|status|credential>"
+unknown_sub = "未知 auth 子命令 %q（可用：login、logout、status、credential）"
 not_logged_in = "尚未登入 — 先執行 'everyapi auth login'"
 session_expired = "登入已過期 — 重新執行 'everyapi auth login'"
 

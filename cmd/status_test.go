@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
@@ -17,6 +18,76 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/config"
 	"github.com/muesli/termenv"
 )
+
+func TestStatusMachineEmitsSecretFreeLocalSessionJSON(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	const (
+		accessToken  = "management-status-secret"
+		relayKey     = "sk-everyapi-status-secret"
+		refreshToken = "refresh-status-secret"
+	)
+	expiresAt := time.Now().Add(48 * time.Hour).Unix()
+	if err := config.Save(&config.Credentials{
+		APIBase:           "https://self-hosted.example",
+		AccessToken:       accessToken,
+		RelayKey:          relayKey,
+		RefreshToken:      refreshToken,
+		RelayKeyExpiresAt: expiresAt,
+		Username:          "alice",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	previous := cliout.Out
+	cliout.Out = &out
+	t.Cleanup(func() { cliout.Out = previous })
+	if err := Status([]string{"--format=json"}); err != nil {
+		t.Fatalf("Status machine: %v", err)
+	}
+
+	var got struct {
+		Version   int    `json:"version"`
+		SignedIn  bool   `json:"signed_in"`
+		Username  string `json:"username"`
+		APIBase   string `json:"api_base"`
+		ExpiresAt string `json:"expires_at"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("machine status is not JSON: %q: %v", out.String(), err)
+	}
+	if got.Version != 1 || !got.SignedIn || got.Username != "alice" ||
+		got.APIBase != "https://self-hosted.example" || got.ExpiresAt == "" {
+		t.Fatalf("machine status = %+v", got)
+	}
+	for _, secret := range []string{accessToken, relayKey, refreshToken} {
+		if strings.Contains(out.String(), secret) {
+			t.Fatalf("machine status leaked %q: %s", secret, out.String())
+		}
+	}
+}
+
+func TestStatusMachineReportsSignedOutWithoutError(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var out bytes.Buffer
+	previous := cliout.Out
+	cliout.Out = &out
+	t.Cleanup(func() { cliout.Out = previous })
+
+	if err := Status([]string{"--format", "json"}); err != nil {
+		t.Fatalf("Status signed out: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["version"] != float64(1) || got["signed_in"] != false {
+		t.Fatalf("signed-out status = %v", got)
+	}
+	if len(got) != 2 {
+		t.Fatalf("signed-out status exposed unexpected fields: %v", got)
+	}
+}
 
 // TestStatusLazyMigratesRole covers the pre-Role credentials.json
 // recovery path: a credentials file written before the Role field

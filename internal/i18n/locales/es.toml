@@ -20,8 +20,8 @@
 # SupportedLanguages.
 
 [auth]
-usage = "uso: everyapi auth <login|logout|status>"
-unknown_sub = "subcomando auth desconocido %q (prueba: login, logout, status)"
+usage = "uso: everyapi auth <login|logout|status|credential>"
+unknown_sub = "subcomando auth desconocido %q (prueba: login, logout, status, credential)"
 not_logged_in = "no has iniciado sesión — ejecuta primero 'everyapi auth login'"
 session_expired = "tu sesión expiró — ejecuta 'everyapi auth login' de nuevo"
 
