@@ -351,6 +351,30 @@ func TestToolArgsForLaunchPinsQwenToOpenAI(t *testing.T) {
 	}
 }
 
+func TestToolArgsForLaunchMakesBareCodexResumeGlobal(t *testing.T) {
+	codex, err := tools.Lookup("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"bare picker", []string{"resume"}, []string{"resume", "--all"}},
+		{"explicit all", []string{"resume", "--all"}, []string{"resume", "--all"}},
+		{"last session", []string{"resume", "--last"}, []string{"resume", "--last"}},
+		{"specific session", []string{"resume", "session-id"}, []string{"resume", "session-id"}},
+		{"ordinary launch", nil, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := toolArgsForLaunch(codex, tc.args); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("toolArgsForLaunch() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestToolAllowsAutomaticYoloRejectsKimiPromptMode(t *testing.T) {
 	kimi, err := tools.Lookup("kimi-code")
 	if err != nil {

@@ -1755,12 +1755,18 @@ func toolInvocationNeedsEndpoint(args []string) bool {
 	}
 }
 
-// toolArgsForLaunch pins routing-critical arguments that cannot be expressed
-// safely through a user-scope config file. Qwen project settings override its
-// QWEN_HOME settings, so force the OpenAI protocol at CLI precedence. Remove a
-// caller-supplied auth type first: forwarding another protocol would either
-// bypass the EveryAPI OPENAI_* overlay or make duplicate yargs values ambiguous.
+// toolArgsForLaunch pins launch arguments whose tool defaults make the
+// EveryAPI-managed experience misleading. Codex scopes its bare resume picker
+// to the current working directory, which can report 0/0 even though the
+// managed home contains resumable sessions, so make the bare picker global.
+// Qwen project settings override its QWEN_HOME settings, so force the OpenAI
+// protocol at CLI precedence. Remove a caller-supplied auth type first:
+// forwarding another protocol would either bypass the EveryAPI OPENAI_* overlay
+// or make duplicate yargs values ambiguous.
 func toolArgsForLaunch(t *tools.Tool, args []string) []string {
+	if t.Name == "codex" && len(args) == 1 && args[0] == "resume" {
+		return []string{"resume", "--all"}
+	}
 	if t.Name != "qwen-code" {
 		return args
 	}
