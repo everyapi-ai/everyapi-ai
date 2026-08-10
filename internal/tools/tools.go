@@ -131,6 +131,9 @@ type Tool struct {
 	// catalog before launch so a client cannot enter its own retry loop when
 	// every available model explicitly lacks that protocol bridge.
 	RequiredEndpoint string
+	// AlternativeEndpoint, when non-empty, is a second wire protocol the
+	// client can drive. Models supporting either endpoint are launchable.
+	AlternativeEndpoint string
 
 	// envFn builds the env vars from the resolved API base + access
 	// token. Returns a map[name]value to merge into os.Environ before
@@ -201,7 +204,8 @@ type openCodeConfig struct {
 // environment reference; the relay key itself is supplied separately to the
 // child process and is never written to opencode.json or another config file.
 func prepareOpenCodeWithModels(apiBase, _ string, models []Model, bootModel string) (map[string]string, error) {
-	configuredModels := make(map[string]openCodeModel, len(models))
+	chatModels := make(map[string]openCodeModel, len(models))
+	responseModels := make(map[string]openCodeModel, len(models))
 	selected := ""
 	firstConfigured := ""
 	for _, model := range models {
@@ -213,40 +217,60 @@ func prepareOpenCodeWithModels(apiBase, _ string, models []Model, bootModel stri
 		if name == "" {
 			name = id
 		}
+		providerID := "everyapi"
+		configuredModels := chatModels
+		if modelSupportsEndpoint(model.SupportedEndpointTypes, "openai-response") {
+			providerID = "everyapi-responses"
+			configuredModels = responseModels
+		}
 		configuredModels[id] = openCodeModel{Name: name}
 		if firstConfigured == "" {
-			firstConfigured = id
+			firstConfigured = providerID + "/" + id
 		}
 		if id == bootModel {
-			selected = id
+			selected = providerID + "/" + id
 		}
 	}
 	if selected == "" {
 		selected = firstConfigured
 	}
 
+	providers := make(map[string]openCodeProvider, 2)
+	options := openCodeProviderOptions{
+		BaseURL: joinBase(apiBase, "/v1"),
+		APIKey:  "{env:" + openCodeCredentialEnv + "}",
+	}
+	if len(chatModels) > 0 {
+		providers["everyapi"] = openCodeProvider{
+			NPM: "@ai-sdk/openai-compatible", Name: "EveryAPI", Options: options, Models: chatModels,
+		}
+	}
+	if len(responseModels) > 0 {
+		providers["everyapi-responses"] = openCodeProvider{
+			NPM: "@ai-sdk/openai", Name: "EveryAPI Responses", Options: options, Models: responseModels,
+		}
+	}
 	config := openCodeConfig{
-		Schema: "https://opencode.ai/config.json",
-		Provider: map[string]openCodeProvider{
-			"everyapi": {
-				NPM:  "@ai-sdk/openai-compatible",
-				Name: "EveryAPI",
-				Options: openCodeProviderOptions{
-					BaseURL: joinBase(apiBase, "/v1"),
-					APIKey:  "{env:" + openCodeCredentialEnv + "}",
-				},
-				Models: configuredModels,
-			},
-		},
+		Schema:   "https://opencode.ai/config.json",
+		Provider: providers,
 	}
 	if selected != "" {
-		config.Model = "everyapi/" + selected
+		config.Model = selected
 	}
 	body, err := json.Marshal(config)
 	if err != nil {
 		return nil, fmt.Errorf("encode OpenCode provider config: %w", err)
 	}
 	return map[string]string{"OPENCODE_CONFIG_CONTENT": string(body)}, nil
+}
+
+func modelSupportsEndpoint(types []string, required string) bool {
+	for _, endpoint := range types {
+		if strings.EqualFold(endpoint, required) {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *Tool) Env(apiBase, token string) map[string]string {
@@ -487,11 +511,12 @@ var Registry = map[string]*Tool{
 	// the launched process, while the apiKey field contains only an env
 	// reference so the relay key never enters JSON or a project opencode.json.
 	"opencode": {
-		Name:             "opencode",
-		ExecName:         "opencode",
-		InstallHint:      "Install OpenCode: https://opencode.ai/docs/",
-		InstallCmd:       "npm install -g opencode-ai",
-		RequiredEndpoint: "openai",
+		Name:                "opencode",
+		ExecName:            "opencode",
+		InstallHint:         "Install OpenCode: https://opencode.ai/docs/",
+		InstallCmd:          "npm install -g opencode-ai",
+		RequiredEndpoint:    "openai",
+		AlternativeEndpoint: "openai-response",
 		envFn: func(_, token string) map[string]string {
 			return map[string]string{openCodeCredentialEnv: token}
 		},

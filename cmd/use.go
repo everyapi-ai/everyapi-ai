@@ -306,7 +306,7 @@ func Use(args []string) error {
 		}
 	}
 	if catalogErr == nil && t.RequiredEndpoint != "" && toolInvocationNeedsEndpoint(extraArgs) &&
-		!catalogSupportsEndpoint(relayCatalog, t.RequiredEndpoint) {
+		!catalogSupportsToolEndpoint(relayCatalog, t) {
 		return fmt.Errorf("no models available through the %s endpoint for this relay key; choose a compatible EveryAPI client or add a channel that supports this endpoint", t.RequiredEndpoint)
 	}
 
@@ -1578,7 +1578,8 @@ func launchModelsForTool(t *tools.Tool, catalog []api.RelayModel, preferred stri
 		if !chatCapable(model.SupportedEndpointTypes) {
 			continue
 		}
-		if requiredEndpoint != "" && !supportsEndpoint(model.SupportedEndpointTypes, requiredEndpoint) {
+		if requiredEndpoint != "" && !supportsEndpoint(model.SupportedEndpointTypes, requiredEndpoint) &&
+			(t.AlternativeEndpoint == "" || !supportsEndpoint(model.SupportedEndpointTypes, t.AlternativeEndpoint)) {
 			continue
 		}
 		id := cliout.Sanitize(model.ID)
@@ -1741,6 +1742,11 @@ func catalogSupportsEndpoint(catalog []api.RelayModel, endpoint string) bool {
 		}
 	}
 	return false
+}
+
+func catalogSupportsToolEndpoint(catalog []api.RelayModel, tool *tools.Tool) bool {
+	return catalogSupportsEndpoint(catalog, tool.RequiredEndpoint) ||
+		(tool.AlternativeEndpoint != "" && catalogSupportsEndpoint(catalog, tool.AlternativeEndpoint))
 }
 
 func toolInvocationNeedsEndpoint(args []string) bool {

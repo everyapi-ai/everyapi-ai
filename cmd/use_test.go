@@ -702,6 +702,19 @@ func TestLaunchModelsForClaudeUsesAnthropicProtocol(t *testing.T) {
 	}
 }
 
+func TestLaunchModelsForOpenCodeIncludesChatAndResponsesProtocols(t *testing.T) {
+	catalog := []api.RelayModel{
+		{ID: "gpt-chat", SupportedEndpointTypes: []string{"openai"}},
+		{ID: "gpt-5.6-terra", SupportedEndpointTypes: []string{"openai-response"}},
+		{ID: "claude-only", SupportedEndpointTypes: []string{"anthropic"}},
+	}
+	opencode, _ := tools.Lookup("opencode")
+	got := launchModelsForTool(opencode, catalog, "")
+	if len(got) != 2 || got[0].ID != "gpt-5.6-terra" || got[1].ID != "gpt-chat" {
+		t.Fatalf("OpenCode launch catalog = %#v", got)
+	}
+}
+
 func TestCatalogSupportsEndpoint(t *testing.T) {
 	cases := []struct {
 		name     string

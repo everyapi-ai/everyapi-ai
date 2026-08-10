@@ -125,10 +125,11 @@ func TestEnv_OpenCodeUsesOfficialCompatibleProviderWithoutPersistingTheKey(t *te
 		"https://api.everyapi.ai/",
 		relayKey,
 		[]Model{
-			{ID: "gpt-5", DisplayName: "GPT 5"},
+			{ID: "gpt-5", DisplayName: "GPT 5", SupportedEndpointTypes: []string{"openai"}},
+			{ID: "gpt-5.6-terra", DisplayName: "GPT 5.6 Terra", SupportedEndpointTypes: []string{"openai", "openai-response"}},
 			{ID: "claude-sonnet", DisplayName: "Claude Sonnet"},
 		},
-		"claude-sonnet",
+		"gpt-5.6-terra",
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -167,11 +168,24 @@ func TestEnv_OpenCodeUsesOfficialCompatibleProviderWithoutPersistingTheKey(t *te
 	if provider.Options.APIKey != "{env:EVERYAPI_RELAY_KEY}" {
 		t.Errorf("apiKey reference = %q", provider.Options.APIKey)
 	}
-	if config.Model != "everyapi/claude-sonnet" {
+	responsesProvider := config.Provider["everyapi-responses"]
+	if responsesProvider.NPM != "@ai-sdk/openai" {
+		t.Errorf("responses provider npm = %q", responsesProvider.NPM)
+	}
+	if responsesProvider.Options.BaseURL != "https://api.everyapi.ai/v1" {
+		t.Errorf("responses baseURL = %q", responsesProvider.Options.BaseURL)
+	}
+	if responsesProvider.Options.APIKey != "{env:EVERYAPI_RELAY_KEY}" {
+		t.Errorf("responses apiKey reference = %q", responsesProvider.Options.APIKey)
+	}
+	if config.Model != "everyapi-responses/gpt-5.6-terra" {
 		t.Errorf("model = %q", config.Model)
 	}
 	if got := provider.Models["gpt-5"].Name; got != "GPT 5" {
 		t.Errorf("model display name = %q", got)
+	}
+	if got := responsesProvider.Models["gpt-5.6-terra"].Name; got != "GPT 5.6 Terra" {
+		t.Errorf("responses model display name = %q", got)
 	}
 	gotProjectConfig, err := os.ReadFile(projectConfig)
 	if err != nil {
