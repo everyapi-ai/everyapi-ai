@@ -31,6 +31,8 @@ func Auth(args []string) error {
 		return Status(args[1:])
 	case "credential":
 		return Credential(args[1:])
+	case "avatar":
+		return AvatarMachine(args[1:])
 	default:
 		cliout.Println(i18n.T("auth.usage"))
 		return fmt.Errorf(i18n.T("auth.unknown_sub"), args[0])

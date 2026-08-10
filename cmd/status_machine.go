@@ -15,9 +15,14 @@ import (
 const statusMachineProtocolVersion = 1
 
 type statusMachineOutput struct {
-	Version    int      `json:"version"`
-	SignedIn   bool     `json:"signed_in"`
-	Username   string   `json:"username,omitempty"`
+	Version  int    `json:"version"`
+	SignedIn bool   `json:"signed_in"`
+	Username string `json:"username,omitempty"`
+	// AvatarURL is the account's profile picture on the backend's own
+	// /api/avatar/:id proxy — same origin as APIBase, never a third-party host.
+	// Read from the credential cache so the default (network-free) status call
+	// still reports it; refreshed by the --include-balance path below.
+	AvatarURL  string   `json:"avatar_url,omitempty"`
 	APIBase    string   `json:"api_base,omitempty"`
 	ExpiresAt  string   `json:"expires_at,omitempty"`
 	BalanceUSD *float64 `json:"balance_usd,omitempty"`
@@ -70,6 +75,7 @@ func statusMachine(includeBalance bool) error {
 	}
 	out.SignedIn = true
 	out.Username = strings.TrimSpace(cliout.Sanitize(creds.Username))
+	out.AvatarURL = strings.TrimSpace(cliout.Sanitize(creds.AvatarURL))
 	out.APIBase = config.ResolveAPIBaseForBase(creds.APIBase)
 	if creds.RelayKeyExpiresAt > 0 {
 		out.ExpiresAt = time.Unix(creds.RelayKeyExpiresAt, 0).UTC().Format(time.RFC3339)
@@ -98,6 +104,14 @@ func statusMachine(includeBalance bool) error {
 				return machineStatusError("invalid_credentials", fmt.Errorf("fetch user: %w", err))
 			}
 			quota = self.Quota
+			// This request already carries the current picture, so refresh the
+			// cache here rather than making the desktop wait for the next login.
+			// A save failure is non-fatal: reporting status is the primary job.
+			if self.AvatarURL != creds.AvatarURL {
+				creds.AvatarURL = self.AvatarURL
+				_ = config.Save(creds)
+			}
+			out.AvatarURL = strings.TrimSpace(cliout.Sanitize(self.AvatarURL))
 		}
 		perUnit := status.QuotaPerUnit
 		if perUnit <= 0 {

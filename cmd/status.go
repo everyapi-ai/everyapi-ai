@@ -117,8 +117,9 @@ func Status(args []string) error {
 	// first `everyapi auth status` from an admin user repopulates it
 	// without needing them to re-login. Save errors are non-fatal —
 	// status display is the primary job here.
-	if self.Role != creds.Role {
+	if self.Role != creds.Role || self.AvatarURL != creds.AvatarURL {
 		creds.Role = self.Role
+		creds.AvatarURL = self.AvatarURL
 		_ = config.Save(creds)
 	}
 

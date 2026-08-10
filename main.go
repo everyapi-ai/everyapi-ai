@@ -27,6 +27,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/cmd/events"
 	logcmd "github.com/everyapi-ai/everyapi-ai/cmd/log"
 	mcpcmd "github.com/everyapi-ai/everyapi-ai/cmd/mcp"
+	modelroutingcmd "github.com/everyapi-ai/everyapi-ai/cmd/modelrouting"
 	"github.com/everyapi-ai/everyapi-ai/cmd/models"
 	"github.com/everyapi-ai/everyapi-ai/cmd/notify"
 	"github.com/everyapi-ai/everyapi-ai/cmd/perf"
@@ -260,6 +261,8 @@ func accountRun(args []string) error {
 		return subscription.Run(args[1:])
 	case "info", "2fa", "passkey", "oauth", "update", "passwd", "setting", "aff":
 		return usercmd.Run(args)
+	case "routing":
+		return modelroutingcmd.Run(args[1:])
 	case "plans", "self", "preference":
 		return subscription.Run(args)
 	default:

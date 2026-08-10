@@ -364,6 +364,7 @@ func saveLegacyLoginCredentials(ctx context.Context, apiBase string, res *api.De
 		WithUserID(res.UserID).
 		GetSelf(roleCtx); err == nil {
 		creds.Role = self.Role
+		creds.AvatarURL = self.AvatarURL
 	}
 	roleCancel()
 	if err := config.Save(creds); err != nil {

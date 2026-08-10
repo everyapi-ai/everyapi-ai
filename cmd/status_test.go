@@ -412,3 +412,105 @@ func TestStatusBoldsValues(t *testing.T) {
 		}
 	})
 }
+
+// The desktop reads the picture from the network-free status call, so it has to
+// come out of the credential cache — and the balance path, which already
+// fetches /self, has to refresh that cache rather than leave it stale.
+func TestStatusMachineReportsAndRefreshesAvatarURL(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	const cached = "https://app.example/api/avatar/4?v=old"
+	const fresh = "https://app.example/api/avatar/4?v=new"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/status":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"data":    map[string]any{"quota_per_unit": 100.0},
+			})
+		case "/api/user/self":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"data": map[string]any{
+					"username":   "alice",
+					"quota":      100,
+					"avatar_url": fresh,
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	if err := config.Save(&config.Credentials{
+		APIBase:     server.URL,
+		AccessToken: "management-avatar-secret",
+		Username:    "alice",
+		AvatarURL:   cached,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	read := func(args []string) string {
+		var out bytes.Buffer
+		previous := cliout.Out
+		cliout.Out = &out
+		defer func() { cliout.Out = previous }()
+		if err := Status(args); err != nil {
+			t.Fatalf("Status %v: %v", args, err)
+		}
+		var got struct {
+			AvatarURL string `json:"avatar_url"`
+		}
+		if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		return got.AvatarURL
+	}
+
+	// Network-free call reports whatever is cached.
+	if got := read([]string{"--format=json"}); got != cached {
+		t.Fatalf("cached avatar_url = %q, want %q", got, cached)
+	}
+	// The balance call already has /self in hand, so it reports and stores fresh.
+	if got := read([]string{"--format=json", "--include-balance"}); got != fresh {
+		t.Fatalf("refreshed avatar_url = %q, want %q", got, fresh)
+	}
+	creds, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if creds.AvatarURL != fresh {
+		t.Fatalf("cached credentials avatar_url = %q, want %q", creds.AvatarURL, fresh)
+	}
+	// A later network-free call now serves the refreshed value.
+	if got := read([]string{"--format=json"}); got != fresh {
+		t.Fatalf("post-refresh avatar_url = %q, want %q", got, fresh)
+	}
+}
+
+// An account with no picture must omit the field rather than emit an empty
+// string, so the desktop's strict protocol check treats absence as absence.
+func TestStatusMachineOmitsAvatarURLWhenUnset(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := config.Save(&config.Credentials{
+		APIBase:     "https://self-hosted.example",
+		AccessToken: "management-no-avatar",
+		Username:    "alice",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	previous := cliout.Out
+	cliout.Out = &out
+	t.Cleanup(func() { cliout.Out = previous })
+	if err := Status([]string{"--format=json"}); err != nil {
+		t.Fatalf("Status machine: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if _, present := got["avatar_url"]; present {
+		t.Fatalf("avatar_url present for an account without a picture: %v", got)
+	}
+}
