@@ -847,12 +847,14 @@ session = "工作階段已驗證"
 token = "可簽發 relay token"
 backend = "後端可達"
 sanitizer = "脫敏代理"
+relay = "中繼金鑰可用"
 
 [doctor.hint]
 login = "先執行 'everyapi auth login'"
 relogin = "重新執行 'everyapi auth login'"
 mint = "用 'everyapi token create --name prod --unlimited' 簽發一個"
 proxy_start = "用 'everyapi proxy start' 啟動"
+relay_rejected = "在主控台檢查該金鑰，或重新執行 'everyapi auth login'"
 prefix = "提示："
 
 [doctor.detail]
@@ -862,6 +864,10 @@ tokens_none = "%d 個 token，0 個啟用"
 proxy_down = "未執行（脫敏代理為 opt-in，僅 --sanitize 時需要）"
 proxy_unhealthy = "在監聽但不健康（%s）"
 proxy_ok = "監聽於 %s"
+relay_absent = "尚未快取中繼金鑰"
+relay_ok = "已通過 /v1/models 驗證"
+relay_rejected = "遭拒絕 —— 無效、已過期、已停用或額度用盡"
+relay_unknown = "無法連線中繼，未能驗證"
 
 [doctor.section]
 account = "帳戶"
@@ -880,7 +886,10 @@ usage = '''
 everyapi doctor — 自我檢查（憑證、閘道、淨化器、工具）
 
 用法
-  everyapi doctor
+  everyapi doctor [工具] [--format=json]
+
+  工具            只檢查該用戶端
+  --format=json   以 JSON 輸出檢查結果
 '''
 
 [events]

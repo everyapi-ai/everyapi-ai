@@ -866,12 +866,14 @@ session = "Sitzung authentifiziert"
 token = "relay-Token erzeugbar"
 backend = "Backend erreichbar"
 sanitizer = "Sanitizer-Proxy"
+relay = "Relay-Schlüssel nutzbar"
 
 [doctor.hint]
 login = "zuerst 'everyapi auth login' ausführen"
 relogin = "'everyapi auth login' erneut ausführen"
 mint = "mit 'everyapi token create --name prod --unlimited' erzeugen"
 proxy_start = "mit 'everyapi proxy start' starten"
+relay_rejected = "Schlüssel im Dashboard prüfen oder 'everyapi auth login' erneut ausführen"
 prefix = "Tipp: "
 
 [doctor.detail]
@@ -881,6 +883,10 @@ tokens_none = "%d Token, 0 aktiv"
 proxy_down = "läuft nicht (der Sanitizer ist optional, nur mit --sanitize nötig)"
 proxy_unhealthy = "lauscht, aber ungesund (%s)"
 proxy_ok = "lauscht auf %s"
+relay_absent = "noch kein Relay-Schlüssel zwischengespeichert"
+relay_ok = "von /v1/models akzeptiert"
+relay_rejected = "abgelehnt — ungültig, abgelaufen, deaktiviert oder Kontingent erschöpft"
+relay_unknown = "Relay für die Prüfung nicht erreichbar"
 
 [doctor.section]
 account = "Konto"
@@ -899,7 +905,10 @@ usage = '''
 everyapi doctor — Selbsttest (Anmeldedaten, Gateway, Sanitizer, Tools)
 
 VERWENDUNG
-  everyapi doctor
+  everyapi doctor [Tool] [--format=json]
+
+  Tool            nur diesen Client prüfen
+  --format=json   Prüfungen als JSON ausgeben
 '''
 
 [events]

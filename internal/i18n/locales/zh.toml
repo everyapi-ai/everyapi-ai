@@ -848,12 +848,14 @@ session = "会话已认证"
 token = "可签发 relay token"
 backend = "网关可达"
 sanitizer = "脱敏代理"
+relay = "中继密钥可用"
 
 [doctor.hint]
 login = "先运行 'everyapi auth login'"
 relogin = "重新运行 'everyapi auth login'"
 mint = "用 'everyapi token create --name prod --unlimited' 签发一个"
 proxy_start = "用 'everyapi proxy start' 启动"
+relay_rejected = "在控制台检查该密钥，或重新运行 'everyapi auth login'"
 prefix = "提示："
 
 [doctor.detail]
@@ -863,6 +865,10 @@ tokens_none = "%d 个 token，0 个启用"
 proxy_down = "未运行（脱敏代理为 opt-in，仅 --sanitize 时需要）"
 proxy_unhealthy = "在监听但不健康（%s）"
 proxy_ok = "监听于 %s"
+relay_absent = "尚未缓存中继密钥"
+relay_ok = "已通过 /v1/models 验证"
+relay_rejected = "被拒绝 —— 无效、已过期、已禁用或额度耗尽"
+relay_unknown = "无法连接中继，未能验证"
 
 [doctor.section]
 account = "账户"
@@ -881,7 +887,10 @@ usage = '''
 everyapi doctor — 自检（凭证、网关、净化器、工具）
 
 用法
-  everyapi doctor
+  everyapi doctor [工具] [--format=json]
+
+  工具            只检查该客户端
+  --format=json   以 JSON 输出检查结果
 '''
 
 [events]

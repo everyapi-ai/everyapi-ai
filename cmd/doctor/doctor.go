@@ -4,12 +4,22 @@
 // status` + manual `which claude/codex/gemini`. Output is one row
 // per check with a clear [OK|WARN|FAIL] prefix so it can be pasted
 // into a support ticket without further annotation.
+//
+// `--format=json` emits the same checks as data instead of prose, and an
+// optional tool name narrows the tool section to one client. Both exist for
+// EveryAPI Connect, which renders the report in its own window: the desktop
+// app knows nothing about how any client is wired — that knowledge lives here,
+// in the same package that does the wiring — so it asks this command rather
+// than reimplementing the checks against a second copy of the rules.
 package doctor
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -17,7 +27,6 @@ import (
 	"golang.org/x/term"
 
 	"github.com/everyapi-ai/everyapi-ai/cmd/proxy"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
 	"github.com/everyapi-ai/everyapi-ai/internal/style"
@@ -26,22 +35,61 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// Run runs every check in order, prints them as they complete (not
-// all-at-once at the end — so a hanging network probe is obvious),
-// and returns a non-nil error if any FAIL row landed. WARN rows do
-// not fail the command — they're advisory.
+// machineProtocolVersion is the shape contract for --format=json. Bump it when
+// a consumer that pinned the old shape would misread the new one.
+const machineProtocolVersion = 1
+
+// Run runs every check in order and returns a non-nil error if any FAIL row
+// landed. WARN rows do not fail the command — they're advisory.
+//
+// In human mode checks print as they complete (not all-at-once at the end — so
+// a hanging network probe is obvious). In machine mode they are collected and
+// emitted as one JSON document, because a partial document is not parseable.
 func Run(args []string) error {
 	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
 		cliout.Println(i18n.T("doctor.usage"))
 		return nil
 	}
-	if err := cliargs.RequireExact(args, 0); err != nil {
+
+	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	if machineRequested(args) {
+		fs.SetOutput(io.Discard)
+	}
+	format := fs.String("format", "human", "output format (human or json)")
+	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	machine := *format == "json"
+	if !machine && *format != "human" {
+		return fmt.Errorf("unsupported format %q", *format)
+	}
+
+	// One optional positional: the tool to narrow the tool section to. flag
+	// stops at the first non-flag argument, so parse again past it — otherwise
+	// `doctor claude --format=json`, the order everyone types, would read the
+	// flag as a second tool name.
+	var only string
+	if rest := fs.Args(); len(rest) > 0 {
+		only = rest[0]
+		if err := fs.Parse(rest[1:]); err != nil {
+			return err
+		}
+		machine = *format == "json"
+		if !machine && *format != "human" {
+			return fmt.Errorf("unsupported format %q", *format)
+		}
+		if fs.NArg() != 0 {
+			return errors.New("doctor accepts at most one tool name")
+		}
+		if _, err := tools.Lookup(only); err != nil {
+			return err
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	report := newReport()
+	report := newReport(machine)
 
 	report.section(i18n.T("doctor.section.account"))
 	report.run(i18n.T("doctor.check.creds"), func() (string, string, error) {
@@ -60,7 +108,7 @@ func Run(args []string) error {
 	creds, _ := config.Load()
 	if creds == nil {
 		report.summarize()
-		return report.err()
+		return report.finish()
 	}
 	client := api.ForCredentials(creds)
 
@@ -98,6 +146,29 @@ func Run(args []string) error {
 		return fmt.Sprintf(i18n.T("doctor.detail.tokens"), enabled, len(toks)), "", nil
 	})
 
+	// A healthy session does NOT imply a working relay: /api/user/self runs
+	// UserAuth and skips the quota/expiry gates that /v1/* enforces, so an
+	// exhausted or disabled key passes every check above and still 401s the
+	// moment a tool sends a request. This is the check that catches it.
+	report.run(i18n.T("doctor.check.relay"), func() (string, string, error) {
+		if creds.RelayKey == "" {
+			// Resolving one would rewrite credentials.json, and a self-check
+			// must not have side effects. Say so instead.
+			return i18n.T("doctor.detail.relay_absent"), i18n.T("doctor.hint.relogin"), errSoft("no relay key cached")
+		}
+		gateway := config.ResolveAPIBaseForBase(creds.APIBase)
+		err := api.New(gateway, creds.RelayKey).ProbeRelayToken(ctx)
+		switch {
+		case err == nil:
+			return i18n.T("doctor.detail.relay_ok"), "", nil
+		case api.IsUnauthorized(err):
+			return i18n.T("doctor.detail.relay_rejected"), i18n.T("doctor.hint.relay_rejected"), err
+		default:
+			// Non-401 (5xx, network): no verdict on the key itself.
+			return i18n.T("doctor.detail.relay_unknown"), "", errSoft(err.Error())
+		}
+	})
+
 	report.section(i18n.T("doctor.section.gateway"))
 	report.run(i18n.T("doctor.check.backend"), func() (string, string, error) {
 		st, err := client.GetStatus(ctx)
@@ -131,7 +202,11 @@ func Run(args []string) error {
 	})
 
 	report.section(i18n.T("doctor.section.tools"))
-	for _, name := range tools.Names() {
+	names := tools.Names()
+	if only != "" {
+		names = []string{only}
+	}
+	for _, name := range names {
 		name := name
 		report.run(name, func() (string, string, error) {
 			t, err := tools.Lookup(name)
@@ -147,7 +222,21 @@ func Run(args []string) error {
 	}
 
 	report.summarize()
-	return report.err()
+	return report.finish()
+}
+
+// machineRequested mirrors the check `everyapi auth status` uses, so a parse
+// error under --format=json cannot leak flag-usage prose into the JSON stream.
+func machineRequested(args []string) bool {
+	for i, arg := range args {
+		if arg == "--format=json" || arg == "-format=json" {
+			return true
+		}
+		if (arg == "--format" || arg == "-format") && i+1 < len(args) && args[i+1] == "json" {
+			return true
+		}
+	}
+	return false
 }
 
 // --- report plumbing ---------------------------------------------
@@ -158,16 +247,44 @@ func Run(args []string) error {
 // truncating something the user is trying to copy into a ticket.
 const nameCol = 28
 
+const (
+	statusOK   = "ok"
+	statusWarn = "warn"
+	statusFail = "fail"
+)
+
+// Check is one row of the report. Section and Name are localized display
+// strings; Status is a stable identifier a consumer can branch on.
+type Check struct {
+	Section string `json:"section"`
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Detail  string `json:"detail,omitempty"`
+	Hint    string `json:"hint,omitempty"`
+}
+
+// MachineReport is the --format=json document.
+type MachineReport struct {
+	Version int     `json:"version"`
+	Status  string  `json:"status"`
+	Checks  []Check `json:"checks"`
+}
+
 type report struct {
 	failed     bool
 	warned     bool
 	totals     map[string]int
 	sectionLed bool // suppresses the leading blank-line before the very first section
 	badgeW     int  // display width of the widest localized status word
+
+	// machine collects instead of printing: a JSON document has to be whole.
+	machine        bool
+	currentSection string
+	checks         []Check
 }
 
-func newReport() *report {
-	r := &report{totals: map[string]int{}}
+func newReport(machine bool) *report {
+	r := &report{totals: map[string]int{}, machine: machine}
 	for _, w := range []string{
 		i18n.T("doctor.badge.ok"),
 		i18n.T("doctor.badge.warn"),
@@ -181,6 +298,10 @@ func newReport() *report {
 }
 
 func (r *report) section(title string) {
+	r.currentSection = title
+	if r.machine {
+		return
+	}
 	if r.sectionLed {
 		cliout.Println("")
 	}
@@ -192,27 +313,40 @@ func (r *report) section(title string) {
 
 func (r *report) run(name string, fn func() (detail, hint string, err error)) {
 	detail, hint, err := fn()
-	var word, color string
+	var status, word, color string
 	switch {
 	case err == nil:
-		word, color = i18n.T("doctor.badge.ok"), ansiGreen
-		r.totals["ok"]++
+		status, word, color = statusOK, i18n.T("doctor.badge.ok"), ansiGreen
+		r.totals[statusOK]++
 	case isSoft(err):
-		word, color = i18n.T("doctor.badge.warn"), ansiYellow
+		status, word, color = statusWarn, i18n.T("doctor.badge.warn"), ansiYellow
 		r.warned = true
-		r.totals["warn"]++
+		r.totals[statusWarn]++
 	default:
-		word, color = i18n.T("doctor.badge.fail"), ansiRed
+		status, word, color = statusFail, i18n.T("doctor.badge.fail"), ansiRed
 		r.failed = true
-		r.totals["fail"]++
+		r.totals[statusFail]++
 		detail = err.Error()
+	}
+	if err == nil {
+		hint = ""
+	}
+	if r.machine {
+		r.checks = append(r.checks, Check{
+			Section: r.currentSection,
+			Name:    name,
+			Status:  status,
+			Detail:  detail,
+			Hint:    hint,
+		})
+		return
 	}
 	// Reverse-video chip: the status word padded to badgeW with a
 	// 1-space margin each side. The name column pads by DISPLAY width so
 	// CJK labels keep the detail column aligned with ASCII rows.
 	chip := paint(" "+word+repeat(" ", r.badgeW-style.Width(word))+" ", color, ansiInverse)
 	cliout.Printf("  %s  %s  %s\n", chip, padTo(name, nameCol), detail)
-	if err != nil && hint != "" {
+	if hint != "" {
 		cliout.Printf("  %s  %s  %s%s\n",
 			repeat(" ", r.badgeW+2), repeat(" ", nameCol),
 			paint(i18n.T("doctor.hint.prefix"), ansiDim), hint)
@@ -228,6 +362,9 @@ func padTo(s string, w int) string {
 }
 
 func (r *report) summarize() {
+	if r.machine {
+		return
+	}
 	cliout.Println("")
 	var summary string
 	switch {
@@ -239,7 +376,32 @@ func (r *report) summarize() {
 		summary = paint(i18n.T("doctor.result.green"), ansiGreen, ansiBold)
 	}
 	cliout.Printf("%s  "+i18n.T("doctor.tally")+"\n", summary,
-		r.totals["ok"], r.totals["warn"], r.totals["fail"])
+		r.totals[statusOK], r.totals[statusWarn], r.totals[statusFail])
+}
+
+// finish emits the machine document when asked, then reports the verdict.
+func (r *report) finish() error {
+	if r.machine {
+		if err := json.NewEncoder(cliout.Out).Encode(r.machineReport()); err != nil {
+			return err
+		}
+	}
+	return r.err()
+}
+
+func (r *report) machineReport() MachineReport {
+	checks := r.checks
+	if checks == nil {
+		checks = []Check{}
+	}
+	status := statusOK
+	switch {
+	case r.failed:
+		status = statusFail
+	case r.warned:
+		status = statusWarn
+	}
+	return MachineReport{Version: machineProtocolVersion, Status: status, Checks: checks}
 }
 
 func (r *report) err() error {

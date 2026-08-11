@@ -858,12 +858,14 @@ session = "세션 인증됨"
 token = "relay token 발급 가능"
 backend = "백엔드 연결 가능"
 sanitizer = "새니타이저 프록시"
+relay = "릴레이 키 사용 가능"
 
 [doctor.hint]
 login = "먼저 'everyapi auth login' 실행"
 relogin = "'everyapi auth login' 다시 실행"
 mint = "'everyapi token create --name prod --unlimited' 로 발급"
 proxy_start = "'everyapi proxy start' 로 시작"
+relay_rejected = "대시보드에서 키를 확인하거나 'everyapi auth login' 을 다시 실행하세요"
 prefix = "힌트: "
 
 [doctor.detail]
@@ -873,6 +875,10 @@ tokens_none = "token %d 개, 활성 0"
 proxy_down = "실행 중 아님 (새니타이저는 옵트인, --sanitize 사용 시에만 필요)"
 proxy_unhealthy = "수신 중이나 비정상 (%s)"
 proxy_ok = "%s 에서 수신 중"
+relay_absent = "캐시된 릴레이 키 없음"
+relay_ok = "/v1/models 에서 승인됨"
+relay_rejected = "거부됨 — 유효하지 않거나 만료/비활성화되었거나 할당량 소진"
+relay_unknown = "릴레이에 연결할 수 없어 확인 불가"
 
 [doctor.section]
 account = "계정"
@@ -891,7 +897,10 @@ usage = '''
 everyapi doctor — 자가 진단 (인증 정보, 게이트웨이, 새너타이저, 도구)
 
 사용법
-  everyapi doctor
+  everyapi doctor [도구] [--format=json]
+
+  도구            해당 클라이언트만 점검
+  --format=json   점검 결과를 JSON 으로 출력
 '''
 
 [events]

@@ -859,12 +859,14 @@ session = "セッション認証済み"
 token = "relay token 発行可能"
 backend = "バックエンド到達可能"
 sanitizer = "サニタイザープロキシ"
+relay = "リレーキーが使用可能"
 
 [doctor.hint]
 login = "まず 'everyapi auth login' を実行"
 relogin = "'everyapi auth login' を再実行"
 mint = "'everyapi token create --name prod --unlimited' で発行"
 proxy_start = "'everyapi proxy start' で起動"
+relay_rejected = "ダッシュボードでキーを確認するか、'everyapi auth login' を再実行してください"
 prefix = "ヒント: "
 
 [doctor.detail]
@@ -874,6 +876,10 @@ tokens_none = "%d 個の token、有効 0"
 proxy_down = "未起動（サニタイザーはオプトイン、--sanitize 使用時のみ必要）"
 proxy_unhealthy = "待ち受け中だが異常 (%s)"
 proxy_ok = "%s で待ち受け中"
+relay_absent = "リレーキーが未キャッシュ"
+relay_ok = "/v1/models に受理された"
+relay_rejected = "拒否されました — 無効、期限切れ、無効化、またはクォータ超過"
+relay_unknown = "リレーに到達できず確認できません"
 
 [doctor.section]
 account = "アカウント"
@@ -892,7 +898,10 @@ usage = '''
 everyapi doctor — セルフチェック (認証情報、ゲートウェイ、サニタイザ、ツール)
 
 使用法
-  everyapi doctor
+  everyapi doctor [ツール] [--format=json]
+
+  ツール          そのクライアントのみを確認
+  --format=json   チェック結果を JSON で出力
 '''
 
 [events]

@@ -868,12 +868,14 @@ session = "session authentifiée"
 token = "relay token émissible"
 backend = "backend accessible"
 sanitizer = "proxy d'assainissement"
+relay = "clé relais utilisable"
 
 [doctor.hint]
 login = "exécutez d'abord 'everyapi auth login'"
 relogin = "relancez 'everyapi auth login'"
 mint = "émettez-en un avec 'everyapi token create --name prod --unlimited'"
 proxy_start = "démarrez-le avec 'everyapi proxy start'"
+relay_rejected = "vérifiez la clé dans le tableau de bord, ou relancez 'everyapi auth login'"
 prefix = "astuce : "
 
 [doctor.detail]
@@ -883,6 +885,10 @@ tokens_none = "%d token(s), 0 activé"
 proxy_down = "non démarré (l'assainisseur est optionnel, requis uniquement avec --sanitize)"
 proxy_unhealthy = "à l'écoute mais non sain (%s)"
 proxy_ok = "à l'écoute sur %s"
+relay_absent = "aucune clé relais en cache"
+relay_ok = "acceptée par /v1/models"
+relay_rejected = "rejetée — invalide, expirée, désactivée ou quota épuisé"
+relay_unknown = "relais injoignable pour la vérification"
 
 [doctor.section]
 account = "Compte"
@@ -901,7 +907,10 @@ usage = '''
 everyapi doctor — auto-vérification (identifiants, gateway, sanitizer, outils)
 
 UTILISATION
-  everyapi doctor
+  everyapi doctor [outil] [--format=json]
+
+  outil           ne vérifier que ce client
+  --format=json   émettre les vérifications en JSON
 '''
 
 [events]

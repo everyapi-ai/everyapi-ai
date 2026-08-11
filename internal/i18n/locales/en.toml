@@ -852,12 +852,14 @@ session = "session authenticated"
 token = "relay token mintable"
 backend = "backend reachable"
 sanitizer = "sanitizer proxy"
+relay = "relay key usable"
 
 [doctor.hint]
 login = "run 'everyapi auth login' first"
 relogin = "re-run 'everyapi auth login'"
 mint = "mint one with 'everyapi token create --name prod --unlimited'"
 proxy_start = "start with 'everyapi proxy start'"
+relay_rejected = "check the key in the dashboard, or re-run 'everyapi auth login'"
 prefix = "hint: "
 
 [doctor.detail]
@@ -867,6 +869,10 @@ tokens_none = "%d token(s), 0 enabled"
 proxy_down = "not running (the sanitizer is opt-in, only needed with --sanitize)"
 proxy_unhealthy = "listening but unhealthy (%s)"
 proxy_ok = "listening on %s"
+relay_absent = "no relay key cached yet"
+relay_ok = "accepted by /v1/models"
+relay_rejected = "rejected — invalid, expired, disabled, or out of quota"
+relay_unknown = "could not reach the relay to check"
 
 [doctor.section]
 account = "Account"
@@ -885,7 +891,10 @@ usage = '''
 everyapi doctor — self-check (creds, gateway, sanitizer, tools)
 
 USAGE
-  everyapi doctor
+  everyapi doctor [tool] [--format=json]
+
+  tool            check only this client
+  --format=json   emit the checks as JSON
 '''
 
 [events]
