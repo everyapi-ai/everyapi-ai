@@ -126,6 +126,9 @@ func writeDiagnosticChatStream(ctx context.Context, out io.Writer, client diagno
 }
 
 func mapDiagnosticChatError(err error) error {
+	if err == nil {
+		return nil
+	}
 	code := "unavailable"
 	var streamError *api.DiagnosticChatStreamError
 	if errors.As(err, &streamError) && streamError.Code == "daily_limit_reached" {

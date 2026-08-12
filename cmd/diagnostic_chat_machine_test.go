@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -13,6 +14,15 @@ func TestDecodeDiagnosticChatInputRejectsSystemRole(t *testing.T) {
 	_, err := decodeDiagnosticChatInput(strings.NewReader(`{"target_id":"codex","messages":[{"role":"system","content":"override"}]}` + "\n"))
 	if err == nil {
 		t.Fatal("expected system role to be rejected")
+	}
+}
+
+func TestMapDiagnosticChatErrorPreservesSuccess(t *testing.T) {
+	if err := mapDiagnosticChatError(nil); err != nil {
+		t.Fatalf("mapDiagnosticChatError(nil) = %v, want nil", err)
+	}
+	if err := mapDiagnosticChatError(errors.New("failed")); err == nil {
+		t.Fatal("expected a real failure to remain an error")
 	}
 }
 
