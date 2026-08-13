@@ -223,8 +223,8 @@ func TestEnv_Grok(t *testing.T) {
 	if tool.YoloFlag != "--always-approve" {
 		t.Errorf("YoloFlag = %q, want --always-approve", tool.YoloFlag)
 	}
-	if tool.RequiredEndpoint != "openai-response" {
-		t.Errorf("RequiredEndpoint = %q, want openai-response", tool.RequiredEndpoint)
+	if tool.RequiredEndpoint != "openai" {
+		t.Errorf("RequiredEndpoint = %q, want openai", tool.RequiredEndpoint)
 	}
 
 	env := tool.Env("https://api.everyapi.ai/", "my-token")
@@ -243,6 +243,10 @@ func TestEnv_Grok(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	cleanup := TakePreparedCleanup(extra)
+	if cleanup == nil {
+		t.Fatal("Prepare did not register process-scoped Grok auth cleanup")
+	}
 	wantHome := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "everyapi", "grok-home")
 	if got := extra["GROK_HOME"]; got != wantHome {
 		t.Errorf("GROK_HOME = %q, want %q", got, wantHome)
@@ -251,6 +255,71 @@ func TestEnv_Grok(t *testing.T) {
 		t.Fatalf("stat GROK_HOME: %v", err)
 	} else if runtime.GOOS != "windows" && info.Mode().Perm() != 0o700 {
 		t.Errorf("GROK_HOME permissions = %o, want 0700", info.Mode().Perm())
+	}
+	authPath := extra["GROK_AUTH_PATH"]
+	if filepath.Base(authPath) != "auth.json" {
+		t.Fatalf("GROK_AUTH_PATH = %q, want a process-scoped auth.json", authPath)
+	}
+	authHome := filepath.Dir(authPath)
+	if authHome == wantHome || !strings.HasPrefix(authHome, filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "everyapi", "sessions")+string(filepath.Separator)) {
+		t.Fatalf("GROK_AUTH_PATH = %q, want an isolated EveryAPI session path", authPath)
+	}
+	if _, err := os.Stat(authPath); !os.IsNotExist(err) {
+		t.Fatalf("GROK_AUTH_PATH must begin absent so cached xAI auth cannot win; stat err = %v", err)
+	}
+
+	second, err := tool.Prepare("https://api.everyapi.ai", "replacement-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondCleanup := TakePreparedCleanup(second)
+	if second["GROK_AUTH_PATH"] == authPath {
+		t.Fatal("concurrent Grok launches shared an auth path")
+	}
+	secondCleanup()
+	cleanup()
+	if _, err := os.Stat(authHome); !os.IsNotExist(err) {
+		t.Fatalf("process-scoped Grok auth directory survived cleanup: %v", err)
+	}
+	if _, err := os.Stat(wantHome); err != nil {
+		t.Fatalf("persistent GROK_HOME was removed by auth cleanup: %v", err)
+	}
+}
+
+func TestGrokPrepareRejectsModelConfigThatWouldOverrideEveryAPIRouting(t *testing.T) {
+	configRoot := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configRoot)
+	grokHome := filepath.Join(configRoot, "everyapi", "grok-home")
+	if err := os.MkdirAll(grokHome, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(grokHome, "config.toml")
+	configBody := []byte("[ui]\ncompact_mode = true\n\n[model.gateway-chat]\napi_key = \"personal-key\"\nbase_url = \"https://other.example/v1\"\n")
+	if err := os.WriteFile(configPath, configBody, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tool, err := Lookup("grok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tool.PrepareWithModels(
+		"https://api.everyapi.ai",
+		"relay-key",
+		[]Model{{ID: "gateway-chat", SupportedEndpointTypes: []string{"openai"}}},
+		"",
+	)
+	if err == nil || !strings.Contains(err.Error(), "gateway-chat") {
+		t.Fatalf("PrepareWithModels error = %v, want named model override rejection", err)
+	}
+	got, readErr := os.ReadFile(configPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !bytes.Equal(got, configBody) {
+		t.Fatal("Grok model conflict check modified the user's config")
+	}
+	if matches, _ := filepath.Glob(filepath.Join(configRoot, "everyapi", "sessions", "grok-auth-*")); len(matches) != 0 {
+		t.Fatalf("failed preparation leaked auth directories: %v", matches)
 	}
 }
 

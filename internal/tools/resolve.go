@@ -85,7 +85,7 @@ func resolveExecDirs(t *Tool) (path string, searched []string, err error) {
 	if t == nil {
 		return "", nil, os.ErrNotExist
 	}
-	if p, e := exec.LookPath(t.ExecName); e == nil {
+	if p, ok := findToolOnPath(t); ok {
 		return p, nil, nil
 	}
 	// Installer-specific directories come first: they're free to compute
@@ -119,6 +119,35 @@ func resolveExecDirs(t *Tool) (path string, searched []string, err error) {
 		}
 	}
 	return "", searched, os.ErrNotExist
+}
+
+// findToolOnPath mirrors exec.LookPath while allowing us to reject forwarding
+// wrappers that are not installations of the requested tool. cmux bundles a
+// `grok` shim in its own Resources/bin; that shim exits 127 unless a real Grok
+// exists later on PATH. Treating the shim itself as Grok makes `everyapi use`
+// skip the installer and fail at launch. Continue scanning so a real Grok
+// later on PATH still wins.
+func findToolOnPath(t *Tool) (string, bool) {
+	if t == nil || t.ExecName == "" {
+		return "", false
+	}
+	if t.ExecName != "grok" {
+		path, err := exec.LookPath(t.ExecName)
+		return path, err == nil
+	}
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		if p, ok := findExecutable(dir, t.ExecName); ok && !isCmuxGrokWrapper(t, p) {
+			return p, true
+		}
+	}
+	return "", false
+}
+
+func isCmuxGrokWrapper(t *Tool, path string) bool {
+	if t == nil || t.ExecName != "grok" || filepath.Base(path) != "grok" {
+		return false
+	}
+	return filepath.Base(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(path))))) == "cmux.app"
 }
 
 // installUsesNpm reports whether the tool's auto-installer is a global

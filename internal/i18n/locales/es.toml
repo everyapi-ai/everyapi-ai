@@ -80,7 +80,7 @@ __ADMIN_BLOCK__
   mcp [sub]       Servidor MCP para CLIs de IA (Claude Code / Codex / Gemini)
   doctor          Auto-chequeo (credenciales, gateway, sanitizador, herramientas)
   events          Suscribirse al stream de eventos en vivo (SSE)
-  settings        Ver / cambiar preferencias del CLI (idioma, …)
+  settings        Ver / cambiar preferencias del CLI (idioma, gateway, interruptores de seguridad)
   update          Buscar una versión más nueva y ejecutar la actualización correspondiente
   version         Imprimir la versión del build
   help            Mostrar este mensaje
@@ -130,7 +130,7 @@ proxy = "Proxy sanitizador local (filtro de privacidad para peticiones SDK)"
 mcp = "Servidor MCP para CLIs de IA (Claude Code / Codex / Gemini)"
 doctor = "Auto-chequeo (credenciales, gateway, sanitizador, herramientas)"
 events = "Suscribirse al stream de eventos en vivo (SSE)"
-settings = "Ver / cambiar preferencias del CLI (idioma, …)"
+settings = "Ver / cambiar preferencias del CLI (idioma, gateway, interruptores de seguridad)"
 update = "Buscar una versión más nueva y ejecutar la actualización correspondiente"
 uninstall = "Eliminar el estado y el binario de everyapi de esta máquina"
 version = "Versión · update · uninstall"
@@ -267,11 +267,19 @@ unknown_key = "clave de configuración desconocida %q"
 usage_get = "uso: everyapi settings get <clave>"
 usage_set = "uso: everyapi settings set <clave> <valor>"
 default_label = "(predeterminado: %s)"
+region_label = "Región del gateway"
+region_global = "global — %s"
+region_cn = "cn — %s"
+dangerous_label = "dangerous_mode — omitir todas las confirmaciones de la herramienta lanzada"
+hook_trust_label = "codex_hook_trust_bypass — añadir --dangerously-bypass-hook-trust"
+tristate_unset = "unset — preguntar una vez en el próximo lanzamiento"
+tristate_true = "true — siempre activo"
+tristate_false = "false — siempre desactivado"
 usage = '''
 everyapi settings — ver / cambiar preferencias del CLI
 
 USO
-  everyapi settings                        Mostrar configuración actual (alias de list)
+  everyapi settings                        Editar cada opción (flechas); en una tubería, igual que list
   everyapi settings list                   Mostrar configuración actual
   everyapi settings get <clave>            Imprimir una sola opción
   everyapi settings set <clave> <valor>    Actualizar una opción
@@ -279,6 +287,15 @@ USO
 
 CLAVES
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
+  menu_layout                              grouped | nested
+  gateway_region                           global | cn
+  dangerous_mode                           true | false | unset — omitir todas las confirmaciones de la herramienta lanzada
+  codex_hook_trust_bypass                  true | false | unset — añadir --dangerously-bypass-hook-trust a 'everyapi use codex'
+
+Los dos booleanos empiezan sin valor (unset): 'everyapi use' pregunta una
+vez al lanzar y recuerda la respuesta. Vuelve a ponerlos en unset desde el
+editor o con 'everyapi settings set <clave> unset' para que se pregunte de
+nuevo.
 
 El archivo de configuración es un JSON plano en la ruta que muestra
 'everyapi settings list'. Editar a mano está bien; el CLI vuelve a

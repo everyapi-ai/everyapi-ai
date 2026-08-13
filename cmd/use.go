@@ -1745,8 +1745,16 @@ func catalogSupportsEndpoint(catalog []api.RelayModel, endpoint string) bool {
 }
 
 func catalogSupportsToolEndpoint(catalog []api.RelayModel, tool *tools.Tool) bool {
-	return catalogSupportsEndpoint(catalog, tool.RequiredEndpoint) ||
-		(tool.AlternativeEndpoint != "" && catalogSupportsEndpoint(catalog, tool.AlternativeEndpoint))
+	for _, model := range catalog {
+		if !chatCapable(model.SupportedEndpointTypes) {
+			continue
+		}
+		if supportsEndpoint(model.SupportedEndpointTypes, tool.RequiredEndpoint) ||
+			(tool.AlternativeEndpoint != "" && supportsEndpoint(model.SupportedEndpointTypes, tool.AlternativeEndpoint)) {
+			return true
+		}
+	}
+	return false
 }
 
 func toolInvocationNeedsEndpoint(args []string) bool {

@@ -558,10 +558,9 @@ var Registry = map[string]*Tool{
 		},
 	},
 
-	// xAI Grok Build: GROK_MODELS_BASE_URL controls both inference and model
-	// discovery on an OpenAI-compatible surface; XAI_API_KEY supplies its
-	// bearer credential. prepareGrok isolates EveryAPI-routed configuration and
-	// session history from the user's normal Grok profile.
+	// xAI Grok Build: GROK_MODELS_BASE_URL discovers the live catalogue and
+	// XAI_API_KEY supplies its bearer credential. prepareGrok uses a fresh auth
+	// path per launch so a cached xAI browser session cannot override that key.
 	"grok": {
 		Name:             "grok",
 		ExecName:         "grok",
@@ -569,7 +568,7 @@ var Registry = map[string]*Tool{
 		InstallCmd:       "npm install -g @xai-official/grok",
 		YoloFlag:         "--always-approve",
 		YoloLabel:        "always approve tool executions (--always-approve)",
-		RequiredEndpoint: "openai-response",
+		RequiredEndpoint: "openai",
 		envFn: func(apiBase, token string) map[string]string {
 			base := joinBase(apiBase, "/v1")
 			return map[string]string{
@@ -577,7 +576,8 @@ var Registry = map[string]*Tool{
 				"GROK_MODELS_BASE_URL": base,
 			}
 		},
-		prepareFn: prepareGrok,
+		prepareFn:        prepareGrok,
+		prepareCatalogFn: ignoreBootModel(prepareGrokWithModels),
 	},
 
 	// Alibaba Qwen Code supports OpenAI-compatible providers through the

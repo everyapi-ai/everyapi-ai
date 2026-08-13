@@ -738,6 +738,20 @@ func TestCatalogSupportsEndpoint(t *testing.T) {
 	}
 }
 
+func TestCatalogSupportsToolEndpointRejectsMediaOnlyModels(t *testing.T) {
+	grok, err := tools.Lookup("grok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog := []api.RelayModel{{
+		ID:                     "image-only",
+		SupportedEndpointTypes: []string{"openai", "image-generation"},
+	}}
+	if catalogSupportsToolEndpoint(catalog, grok) {
+		t.Fatal("media-only OpenAI model must not satisfy a routed text client")
+	}
+}
+
 func TestChatCapabilityDistinguishesMissingFromExplicitEmptyMetadata(t *testing.T) {
 	if !chatCapable(nil) {
 		t.Fatal("missing metadata from an older gateway must remain compatible")

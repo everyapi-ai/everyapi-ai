@@ -74,7 +74,7 @@ __ADMIN_BLOCK__
   mcp [sub]       AI CLI 向け MCP サーバー (Claude Code / Codex / Gemini)
   doctor          セルフチェック（認証情報、ゲートウェイ、サニタイザ、ツール）
   events          ライブイベントストリームを購読 (SSE)
-  settings        CLI 設定を表示 / 変更（言語など）
+  settings        CLI 設定を表示 / 変更（言語・ゲートウェイ・安全スイッチ）
   update          新しいリリースを確認し、対応するアップグレードを実行
   version         ビルドバージョンを表示
   help            このメッセージを表示
@@ -124,7 +124,7 @@ proxy = "ローカルサニタイザプロキシ (SDK リクエストのプラ�
 mcp = "AI CLI 向け MCP サーバー (Claude Code / Codex / Gemini)"
 doctor = "セルフチェック（認証情報、ゲートウェイ、サニタイザ、ツール）"
 events = "ライブイベントストリームを購読 (SSE)"
-settings = "CLI 設定を表示 / 変更（言語など）"
+settings = "CLI 設定を表示 / 変更（言語・ゲートウェイ・安全スイッチ）"
 update = "新しいリリースを確認し、対応するアップグレードを実行"
 uninstall = "このマシンから everyapi の状態とバイナリを削除"
 version = "ビルドバージョン · update · uninstall"
@@ -261,11 +261,19 @@ unknown_key = "不明な設定キー %q"
 usage_get = "使用法: everyapi settings get <key>"
 usage_set = "使用法: everyapi settings set <key> <値>"
 default_label = "(デフォルト: %s)"
+region_label = "ゲートウェイのリージョン"
+region_global = "global — %s"
+region_cn = "cn — %s"
+dangerous_label = "dangerous_mode — 起動するツールの確認をすべてスキップ"
+hook_trust_label = "codex_hook_trust_bypass — --dangerously-bypass-hook-trust を付与"
+tristate_unset = "unset — 次回の起動時に一度だけ確認"
+tristate_true = "true — 常に有効"
+tristate_false = "false — 常に無効"
 usage = '''
 everyapi settings — CLI 設定の表示 / 変更
 
 使用法
-  everyapi settings                        現在の設定を表示（list のエイリアス）
+  everyapi settings                        各項目を編集（矢印キー）。パイプでは list と同じ
   everyapi settings list                   現在の設定を表示
   everyapi settings get <key>              単一の設定を表示
   everyapi settings set <key> <value>      設定を更新
@@ -273,6 +281,14 @@ everyapi settings — CLI 設定の表示 / 変更
 
 キー
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
+  menu_layout                              grouped | nested
+  gateway_region                           global | cn
+  dangerous_mode                           true | false | unset — 起動するツールの確認をすべてスキップ
+  codex_hook_trust_bypass                  true | false | unset — 'everyapi use codex' に --dangerously-bypass-hook-trust を付与
+
+2 つの真偽値は最初 unset です。'everyapi use' が起動時に一度だけ確認し、
+その答えを記憶します。エディタ、または 'everyapi settings set <key> unset'
+で unset に戻すと再び確認されます。
 
 設定ファイルは 'everyapi settings list' が表示するパスのプレーン JSON
 です。手動編集も可能で、CLI は次回起動時に読み直します。

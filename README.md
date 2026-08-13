@@ -338,7 +338,7 @@ Flags:
 The CLI ships i18n in 7 languages: English, Simplified Chinese, Japanese, Korean, Spanish, German, French — CLI strings render in the user's chosen language. Backend API errors auto-negotiate via the `Accept-Language` header and cover 8 — the same 7 plus Traditional Chinese.
 
 ```bash
-$ everyapi settings                          # interactive picker: choose a language
+$ everyapi settings                          # interactive editor: walks every key (language, menu_layout, gateway_region, dangerous_mode, codex_hook_trust_bypass)
 $ everyapi settings list                     # show current settings
 $ everyapi settings set language zh          # set directly
 $ everyapi settings set language fr          # French likewise

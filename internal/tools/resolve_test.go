@@ -85,6 +85,77 @@ func TestResolveExec_OnPath(t *testing.T) {
 	}
 }
 
+func TestResolveExec_GrokSkipsCmuxForwardingWrapper(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("cmux wrapper is macOS-only")
+	}
+	root := t.TempDir()
+	cmuxBin := filepath.Join(root, "cmux.app", "Contents", "Resources", "bin")
+	if err := os.MkdirAll(cmuxBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(cmuxBin, "grok"),
+		[]byte("#!/usr/bin/env bash\n# cmux grok wrapper - installs cmux hooks and captures launch metadata.\nexit 127\n"),
+		0o755,
+	); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", cmuxBin)
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	t.Setenv("NVM_BIN", "")
+	t.Setenv("VOLTA_HOME", "")
+	t.Setenv("FNM_MULTISHELL_PATH", "")
+	t.Setenv("npm_config_prefix", "")
+	t.Setenv("NPM_CONFIG_PREFIX", "")
+	t.Setenv("PREFIX", "")
+
+	tool, err := Lookup("grok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := ResolveExec(tool); err == nil {
+		t.Fatalf("ResolveExec(grok) = %q, want not installed for a cmux-only wrapper", got)
+	}
+}
+
+func TestResolveExec_GrokFindsRealBinaryAfterCmuxWrapper(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("cmux wrapper is macOS-only")
+	}
+	root := t.TempDir()
+	cmuxBin := filepath.Join(root, "cmux.app", "Contents", "Resources", "bin")
+	realBin := filepath.Join(root, "npm", "bin")
+	if err := os.MkdirAll(cmuxBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(realBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(cmuxBin, "grok"),
+		[]byte("#!/usr/bin/env bash\n# cmux grok wrapper - installs cmux hooks and captures launch metadata.\nexit 127\n"),
+		0o755,
+	); err != nil {
+		t.Fatal(err)
+	}
+	realGrok := writeFakeExec(t, realBin, "grok")
+	t.Setenv("PATH", strings.Join([]string{cmuxBin, realBin}, string(os.PathListSeparator)))
+	t.Setenv("HOME", filepath.Join(root, "home"))
+
+	tool, err := Lookup("grok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveExec(tool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != realGrok {
+		t.Fatalf("ResolveExec(grok) = %q, want real binary %q", got, realGrok)
+	}
+}
+
 // TestResolveExec_NpmFallbackViaEnvBinDir is the core regression guard:
 // a tool that ISN'T on $PATH but WAS globally npm-installed must still
 // resolve, via the version-manager bin dir exported in NVM_BIN. This is

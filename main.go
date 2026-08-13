@@ -445,7 +445,7 @@ var commands = []command{
 	{name: "mcp", desc: "MCP server for AI CLIs (Claude Code / Codex / Gemini)", run: runMCP, headerFn: mcpHeader, subs: mcpSubs},
 	{name: "doctor", desc: "Self-check (creds, gateway, sanitizer, tools)", run: doctor.Run},
 	{name: "events", desc: "Subscribe to the live event stream (SSE)", requireLogin: true, run: events.Run},
-	{name: "settings", desc: "View / change CLI preferences (language, …)", run: settings.Run},
+	{name: "settings", desc: "View / change CLI preferences (language, gateway, safety switches)", run: settings.Run},
 	// `version` shows the build version as a header, then offers the
 	// CLI-lifecycle actions (update / uninstall) as the menu. The bare
 	// `everyapi version` (and the --version/-v flags, special-cased in
@@ -1102,6 +1102,17 @@ func main() {
 	}
 	name := os.Args[1]
 	args := os.Args[2:]
+	// Private sidecar surface for EveryAPI Connect. It intentionally bypasses
+	// the public command registry, help, launcher, login gate, and update prompt:
+	// the desktop opens it in a terminal solely to run a registry-pinned tool
+	// installer. InstallTool never continues into `use` or launches the client.
+	if name == "desktop-install-tool" {
+		if err := cmd.InstallTool(args); err != nil {
+			fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), cliout.Sanitize(err.Error()))
+			os.Exit(1)
+		}
+		return
+	}
 
 	if name == "help" || name == "--help" || name == "-h" {
 		fmt.Print(renderUsage())

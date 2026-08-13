@@ -64,7 +64,7 @@ __ADMIN_BLOCK__
   mcp [子]        AI CLI 的 MCP 服务器（Claude Code / Codex / Gemini）
   doctor          本机自检（凭证、网关、代理、工具）
   events          订阅实时事件流（SSE）
-  settings        查看 / 修改 CLI 偏好（语言等）
+  settings        查看 / 修改 CLI 偏好（语言、网关、安全开关）
   update          检查并安装新版本
   version         打印构建版本
   help            显示本说明
@@ -114,7 +114,7 @@ proxy = "本地脱敏代理（SDK 请求隐私过滤）"
 mcp = "AI CLI 的 MCP 服务器（Claude Code / Codex / Gemini）"
 doctor = "本机自检（凭证、网关、代理、工具）"
 events = "订阅实时事件流（SSE）"
-settings = "查看 / 修改 CLI 偏好（语言等）"
+settings = "查看 / 修改 CLI 偏好（语言、网关、安全开关）"
 update = "检查新版本并执行匹配的升级"
 uninstall = "从此机器移除 everyapi 状态和二进制"
 version = "版本 · 升级 · 卸载"
@@ -251,11 +251,19 @@ unknown_key = "未知设置项 %q"
 usage_get = "用法：everyapi settings get <key>"
 usage_set = "用法：everyapi settings set <key> <值>"
 default_label = "（默认：%s）"
+region_label = "网关区域"
+region_global = "global — %s"
+region_cn = "cn — %s"
+dangerous_label = "dangerous_mode — 跳过所启动工具的全部确认"
+hook_trust_label = "codex_hook_trust_bypass — 附加 --dangerously-bypass-hook-trust"
+tristate_unset = "unset — 下次启动时询问一次"
+tristate_true = "true — 始终开启"
+tristate_false = "false — 始终关闭"
 usage = '''
 everyapi settings — 查看 / 修改 CLI 偏好
 
 用法
-  everyapi settings                        显示当前设置（list 的别名）
+  everyapi settings                        逐项编辑（方向键）；管道中则等同 list
   everyapi settings list                   显示当前设置
   everyapi settings get <key>              打印单项设置
   everyapi settings set <key> <value>      更新设置
@@ -263,6 +271,13 @@ everyapi settings — 查看 / 修改 CLI 偏好
 
 KEY
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
+  menu_layout                              grouped | nested
+  gateway_region                           global | cn
+  dangerous_mode                           true | false | unset — 跳过所启动工具的全部确认
+  codex_hook_trust_bypass                  true | false | unset — 给 'everyapi use codex' 附加 --dangerously-bypass-hook-trust
+
+两个布尔项初始为 unset：'everyapi use' 会在启动时询问一次并记住答案。
+在编辑器里、或用 'everyapi settings set <key> unset' 改回 unset，就会重新询问。
 
 设置文件是 'everyapi settings list' 打印的路径上的纯 JSON。可手动编辑；
 CLI 下次启动时会重新读取。

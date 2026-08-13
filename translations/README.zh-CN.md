@@ -280,7 +280,7 @@ Flag：
 CLI 自带 7 国 i18n：英语、简体中文、日本語、한국어、Español、Deutsch、Français — CLI 自身字符串按用户语言渲染。后端 API 错误经 `Accept-Language` 头自动协商，覆盖 8 种——上述 7 种 + 繁体中文。
 
 ```bash
-$ everyapi settings                          # 交互 picker：选语言
+$ everyapi settings                          # 交互编辑器：逐项走完全部设置（language、menu_layout、gateway_region、dangerous_mode、codex_hook_trust_bypass）
 $ everyapi settings list                     # 看当前设置
 $ everyapi settings set language zh          # 直接设
 $ everyapi settings set language fr          # 法语等同
