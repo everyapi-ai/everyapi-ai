@@ -256,6 +256,11 @@ done = "完成"
 unset = "未设置"
 default_key_label = "默认 API 密钥"
 default_key_none = "未设置"
+gateway_region_label = "网关区域"
+codex_bypass_label = "Codex hook 信任绕过"
+dangerous_mode_label = "危险模式"
+bool_on = "开"
+bool_off = "关"
 usage = '''
 everyapi settings — 查看 / 修改 CLI 偏好
 

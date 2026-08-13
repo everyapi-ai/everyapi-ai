@@ -270,6 +270,11 @@ done = "Fertig"
 unset = "nicht gesetzt"
 default_key_label = "Standard-API-Schlüssel"
 default_key_none = "nicht gesetzt"
+gateway_region_label = "Gateway-Region"
+codex_bypass_label = "Codex-Hook-Vertrauen umgehen"
+dangerous_mode_label = "Gefährlicher Modus"
+bool_on = "an"
+bool_off = "aus"
 usage = '''
 everyapi settings — CLI-Einstellungen anzeigen / ändern
 

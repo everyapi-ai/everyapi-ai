@@ -266,6 +266,11 @@ done = "완료"
 unset = "설정 안 함"
 default_key_label = "기본 API 키"
 default_key_none = "설정 안 함"
+gateway_region_label = "게이트웨이 지역"
+codex_bypass_label = "Codex 훅 신뢰 건너뛰기"
+dangerous_mode_label = "위험 모드"
+bool_on = "켬"
+bool_off = "끔"
 usage = '''
 everyapi settings — CLI 환경설정 조회 / 변경
 

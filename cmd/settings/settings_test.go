@@ -266,14 +266,55 @@ func TestEditorMenuRendersEveryRow(t *testing.T) {
 	}
 	// The value column has to show what is in effect, not the raw field: an
 	// unset tri-state reads "unset", not "false".
-	if got := lines[3]; got != "codex_hook_trust_bypass: unset" {
+	if got := lines[2]; got != "Gateway region: cn" {
+		t.Errorf("gateway region rendered as %q", got)
+	}
+	if got := lines[3]; got != "Codex hook trust bypass: unset" {
 		t.Errorf("unset tri-state rendered as %q", got)
 	}
-	if got := lines[4]; got != "dangerous_mode: true" {
+	if got := lines[4]; got != "Dangerous mode: on" {
 		t.Errorf("set tri-state rendered as %q", got)
 	}
 	if got := lines[5]; got != "Default API key: not set" {
 		t.Errorf("relay key row rendered as %q", got)
 	}
 	t.Log("interactive editor:\n  " + strings.Join(lines, "\n  "))
+}
+
+// Every row a person reads has to be a translated string. Three keys used to
+// render their raw identifier as the label — and their value as a bare Go
+// bool — so a zh session showed "dangerous_mode: true" in the middle of an
+// otherwise translated screen.
+func TestSettingRowLabelsAreTranslated(t *testing.T) {
+	previous := i18n.Language()
+	t.Cleanup(func() { i18n.SetLanguage(previous) })
+	for _, lang := range []string{"en", "zh"} {
+		i18n.SetLanguage(lang)
+		for _, row := range settingRows() {
+			if row.key != "" && row.label == row.key {
+				t.Errorf("%s: row %q renders its raw settings key as the label", lang, row.key)
+			}
+			if strings.HasPrefix(row.label, "settings.") {
+				t.Errorf("%s: row %q has an untranslated key as its label: %q", lang, row.key, row.label)
+			}
+		}
+	}
+}
+
+// `settings get` / `set` are a scripting interface: those words are the ones
+// the CLI accepts back, so they must NOT follow the display language.
+func TestMachineBoolStaysEnglish(t *testing.T) {
+	previous := i18n.Language()
+	t.Cleanup(func() { i18n.SetLanguage(previous) })
+	i18n.SetLanguage("zh")
+	enabled := true
+	cases := map[*bool]string{nil: "unset", &enabled: "true"}
+	for value, want := range cases {
+		if got := labelOptionalBool(value); got != want {
+			t.Errorf("labelOptionalBool = %q, want %q even under a non-English locale", got, want)
+		}
+	}
+	if got := displayOptionalBool(&enabled); got == "true" {
+		t.Error("display form should be localized, got the machine word")
+	}
 }

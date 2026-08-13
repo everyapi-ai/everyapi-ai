@@ -69,9 +69,9 @@ func runList(args []string) error {
 	cliout.Printf("%s\n", i18n.T("settings.current"))
 	cliout.Printf("  %s: %s\n", i18n.T("settings.lang_label"), labelLanguage(s.Language))
 	cliout.Printf("  %s: %s\n", i18n.T("settings.menu_label"), labelMenuLayout(s.MenuLayout))
-	cliout.Printf("  %s: %s\n", "gateway_region", labelGatewayRegion(s.GatewayRegion))
-	cliout.Printf("  %s: %s\n", "codex_hook_trust_bypass", labelOptionalBool(s.CodexHookTrustBypass))
-	cliout.Printf("  %s: %s\n", "dangerous_mode", labelOptionalBool(s.DangerousMode))
+	cliout.Printf("  %s: %s\n", i18n.T("settings.gateway_region_label"), labelGatewayRegion(s.GatewayRegion))
+	cliout.Printf("  %s: %s\n", i18n.T("settings.codex_bypass_label"), displayOptionalBool(s.CodexHookTrustBypass))
+	cliout.Printf("  %s: %s\n", i18n.T("settings.dangerous_mode_label"), displayOptionalBool(s.DangerousMode))
 	path, _ := config.SettingsPath()
 	if path != "" {
 		cliout.Printf("\n%s %s\n", i18n.T("settings.file_at"), path)
@@ -183,9 +183,9 @@ func settingRows() []settingRow {
 	return []settingRow{
 		{"language", i18n.T("settings.lang_label"), func(s *config.Settings) string { return labelLanguage(s.Language) }, editLanguage},
 		{"menu_layout", i18n.T("settings.menu_label"), func(s *config.Settings) string { return labelMenuLayout(s.MenuLayout) }, editMenuLayout},
-		{"gateway_region", "gateway_region", func(s *config.Settings) string { return labelGatewayRegion(s.GatewayRegion) }, editGatewayRegion},
-		{"codex_hook_trust_bypass", "codex_hook_trust_bypass", func(s *config.Settings) string { return labelOptionalBool(s.CodexHookTrustBypass) }, editCodexHookTrustBypass},
-		{"dangerous_mode", "dangerous_mode", func(s *config.Settings) string { return labelOptionalBool(s.DangerousMode) }, editDangerousMode},
+		{"gateway_region", i18n.T("settings.gateway_region_label"), func(s *config.Settings) string { return labelGatewayRegion(s.GatewayRegion) }, editGatewayRegion},
+		{"codex_hook_trust_bypass", i18n.T("settings.codex_bypass_label"), func(s *config.Settings) string { return displayOptionalBool(s.CodexHookTrustBypass) }, editCodexHookTrustBypass},
+		{"dangerous_mode", i18n.T("settings.dangerous_mode_label"), func(s *config.Settings) string { return displayOptionalBool(s.DangerousMode) }, editDangerousMode},
 		{"", i18n.T("settings.default_key_label"), func(*config.Settings) string { return labelDefaultRelayKey() }, editDefaultRelayKey},
 	}
 }
@@ -292,7 +292,7 @@ func editGatewayRegion(s *config.Settings) error {
 	if config.EffectiveGatewayRegion(s.GatewayRegion) == "cn" {
 		cur = 1
 	}
-	idx, err := cliprompt.PickWithSelected("gateway_region", regions, cur)
+	idx, err := cliprompt.PickWithSelected(i18n.T("settings.gateway_region_label"), regions, cur)
 	if err != nil {
 		return err
 	}
@@ -301,18 +301,18 @@ func editGatewayRegion(s *config.Settings) error {
 }
 
 func editCodexHookTrustBypass(s *config.Settings) error {
-	return editOptionalBool(s, "codex_hook_trust_bypass", s.CodexHookTrustBypass, func(v *bool) { s.CodexHookTrustBypass = v })
+	return editOptionalBool(s, i18n.T("settings.codex_bypass_label"), s.CodexHookTrustBypass, func(v *bool) { s.CodexHookTrustBypass = v })
 }
 
 func editDangerousMode(s *config.Settings) error {
-	return editOptionalBool(s, "dangerous_mode", s.DangerousMode, func(v *bool) { s.DangerousMode = v })
+	return editOptionalBool(s, i18n.T("settings.dangerous_mode_label"), s.DangerousMode, func(v *bool) { s.DangerousMode = v })
 }
 
 // editOptionalBool keeps the third state. These preferences distinguish "not
 // set" (ask on first interactive use) from an explicit false, so the editor
 // has to offer unset as a choice rather than collapsing it into off.
 func editOptionalBool(s *config.Settings, label string, current *bool, apply func(*bool)) error {
-	opts := []string{"true", "false", i18n.T("settings.unset")}
+	opts := []string{i18n.T("settings.bool_on"), i18n.T("settings.bool_off"), i18n.T("settings.unset")}
 	cur := 2
 	if current != nil {
 		cur = 1
@@ -437,11 +437,27 @@ func writeKey(s *config.Settings, key, value string) error {
 	return fmt.Errorf(i18n.T("settings.unknown_key"), key)
 }
 
+// labelOptionalBool is the MACHINE form, and stays in English on purpose:
+// `settings get` is a scripting interface, and `settings set` accepts exactly
+// these words back. Display surfaces use displayOptionalBool instead.
 func labelOptionalBool(value *bool) string {
 	if value == nil {
 		return "unset"
 	}
 	return strconv.FormatBool(*value)
+}
+
+// displayOptionalBool is the HUMAN form for the list and the editor, where
+// "true" next to a translated label was the only English left on the screen.
+func displayOptionalBool(value *bool) string {
+	switch {
+	case value == nil:
+		return i18n.T("settings.unset")
+	case *value:
+		return i18n.T("settings.bool_on")
+	default:
+		return i18n.T("settings.bool_off")
+	}
 }
 
 // effectiveMenuLayout maps the stored value (possibly empty) to the

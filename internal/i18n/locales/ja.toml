@@ -266,6 +266,11 @@ done = "完了"
 unset = "未設定"
 default_key_label = "デフォルト API キー"
 default_key_none = "未設定"
+gateway_region_label = "ゲートウェイ地域"
+codex_bypass_label = "Codex フック信頼のスキップ"
+dangerous_mode_label = "危険モード"
+bool_on = "オン"
+bool_off = "オフ"
 usage = '''
 everyapi settings — CLI 設定の表示 / 変更
 
