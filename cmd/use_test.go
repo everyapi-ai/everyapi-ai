@@ -605,7 +605,7 @@ func TestCreateDefaultRelayKeyCreatesThenCaches(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"success": true,
 				"data": map[string]any{"items": []map[string]any{
-					{"id": 7, "name": gotCreate.Name, "status": api.TokenStatusEnabled, "group": ""},
+					{"id": 7, "name": gotCreate.Name, "status": api.TokenStatusEnabled, "group": "auto"},
 				}},
 			})
 		case r.Method == http.MethodPost && r.URL.Path == "/api/token/7/key":
@@ -640,8 +640,11 @@ func TestCreateDefaultRelayKeyCreatesThenCaches(t *testing.T) {
 	if gotCreate.Name == "" {
 		t.Fatal("created token name is empty")
 	}
-	if gotCreate.Group != "" {
-		t.Fatalf("created token group = %q, want default group", gotCreate.Group)
+	if gotCreate.Group != "auto" {
+		t.Fatalf("created token group = %q, want the auto group", gotCreate.Group)
+	}
+	if !gotCreate.CrossGroupRetry {
+		t.Fatal("created auto token should retry across groups")
 	}
 	if !gotCreate.UnlimitedQuota {
 		t.Fatal("created token should be unlimited")
@@ -651,6 +654,74 @@ func TestCreateDefaultRelayKeyCreatesThenCaches(t *testing.T) {
 	}
 	if gotCreate.ModelLimitsEnabled || gotCreate.ModelLimits != "" {
 		t.Fatalf("created token should not have model limits: %#v", gotCreate)
+	}
+}
+
+// The gateway rejects a create that names the auto group without the tier
+// grant, so an account that cannot use it must still get its first key — the
+// rejected create retries once without a group.
+func TestCreateDefaultRelayKeyRetriesWithoutGroupWhenAutoRejected(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	var creates []api.TokenCreate
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/token/":
+			var req api.TokenCreate
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Errorf("decode create body: %v", err)
+			}
+			creates = append(creates, req)
+			if req.Group == api.GroupAuto {
+				// What validateTokenGroup answers without the tier grant.
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"success": false,
+					"message": "no access to group auto",
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": true})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/token/":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"data": map[string]any{"items": []map[string]any{
+					{"id": 9, "name": "first", "status": api.TokenStatusEnabled, "group": ""},
+				}},
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/token/9/key":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"data":    map[string]any{"key": "sk-everyapi-default-pool"},
+			})
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	creds := &config.Credentials{APIBase: srv.URL, AccessToken: "mgmt-token", UserID: 42}
+	if err := config.Save(creds); err != nil {
+		t.Fatal(err)
+	}
+	key, err := createDefaultRelayKey(creds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if key != "sk-everyapi-default-pool" {
+		t.Fatalf("key = %q, want the created default-pool key", key)
+	}
+	if len(creates) != 2 {
+		t.Fatalf("create attempts = %d, want the auto try plus one groupless retry", len(creates))
+	}
+	if creates[0].Group != api.GroupAuto || !creates[0].CrossGroupRetry {
+		t.Fatalf("first attempt = %+v, want the auto group with cross-group retry", creates[0])
+	}
+	if creates[1].Group != "" {
+		t.Fatalf("retry group = %q, want the default pool", creates[1].Group)
+	}
+	if creates[1].CrossGroupRetry {
+		t.Fatal("a default-pool key must not ask for cross-group retry")
 	}
 }
 

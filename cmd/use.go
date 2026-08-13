@@ -105,7 +105,7 @@ EXAMPLES
 //	everyapi use            (no arg → interactive picker over installed tools)
 //	everyapi use claude --group byteplus   (relay through the key bound to
 //	                              the "byteplus" group instead of the
-//	                              newest enabled key; --channel is an
+//	                              default key; --channel is an
 //	                              alias for --group)
 //	everyapi use claude --channel  (bare --group/--channel, no value →
 //	                              interactive picker over the routing
@@ -909,15 +909,35 @@ func createDefaultRelayKeyInteractive(creds *config.Credentials) (string, error)
 	return createDefaultRelayKey(creds)
 }
 
+// The first key an account gets is created in the auto group with cross-group
+// retry, matching the canonical "Auto" key `everyapi token switch` offers: it
+// reaches every model the account can route instead of the single group a plain
+// token is pinned to, and the default resolver prefers it from then on.
+//
+// The gateway gates that group on the account's tier (validateTokenGroup →
+// CanUserUseAutoGroup) and rejects a create that names it without the grant, so
+// a rejection retries once WITHOUT a group: an account that may not use auto
+// must still come out of first run with a working key. Retrying beats probing
+// the grant first — a probe can go stale between the read and the create, and
+// this spends the extra round-trip only on the accounts that need it. A 401 is
+// not retried; that is a dead session, and the second call would only repeat it.
 func createDefaultRelayKey(creds *config.Credentials) (string, error) {
 	name := "everyapi-cli-" + time.Now().Format("20060102-150405")
 	client := api.ForCredentials(creds)
 	req := api.TokenCreate{
-		Name:           name,
-		ExpiredTime:    api.TokenExpiresNever,
-		UnlimitedQuota: true,
+		Name:            name,
+		ExpiredTime:     api.TokenExpiresNever,
+		UnlimitedQuota:  true,
+		Group:           api.GroupAuto,
+		CrossGroupRetry: true,
 	}
-	if err := client.CreateToken(cliout.WithCtx(), req); err != nil {
+	err := client.CreateToken(cliout.WithCtx(), req)
+	if err != nil && !api.IsUnauthorized(err) {
+		req.Group = ""
+		req.CrossGroupRetry = false
+		err = client.CreateToken(cliout.WithCtx(), req)
+	}
+	if err != nil {
 		if api.IsUnauthorized(err) {
 			return "", errors.New(i18n.T("auth.session_expired"))
 		}
@@ -1828,8 +1848,12 @@ func pickModelInteractive(t *tools.Tool, creds *config.Credentials, relayKey str
 // buyer CLI has no channel-listing endpoint (that's admin-only), so
 // "available channels" is necessarily expressed as the groups the user
 // already holds a key for. The empty group (default tokens) shows as
-// "(default — newest enabled key)" and selecting it returns "" — the
-// normal newest-enabled-key path.
+// "(default — resolve automatically)" and selecting it returns "" — the
+// normal default path, which prefers the account's auto key. It is NOT a
+// way to pin the group=="" token: pinning one specific key is what
+// `everyapi token switch` is for, and the label says "resolve
+// automatically" rather than naming a key so the two do not read as the
+// same thing.
 func pickGroupInteractive(creds *config.Credentials) (string, error) {
 	client := api.ForCredentials(creds)
 	tokens, err := client.ListTokens(cliout.WithCtx())
@@ -1853,7 +1877,7 @@ func pickGroupInteractive(creds *config.Credentials) (string, error) {
 	labels := make([]string, len(groups))
 	for i, g := range groups {
 		if g == "" {
-			labels[i] = "(default — newest enabled key)"
+			labels[i] = "(default — resolve automatically)"
 		} else {
 			labels[i] = cliout.Sanitize(g)
 		}

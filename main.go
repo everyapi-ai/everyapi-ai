@@ -445,7 +445,7 @@ var commands = []command{
 	{name: "mcp", desc: "MCP server for AI CLIs (Claude Code / Codex / Gemini)", run: runMCP, headerFn: mcpHeader, subs: mcpSubs},
 	{name: "doctor", desc: "Self-check (creds, gateway, sanitizer, tools)", run: doctor.Run},
 	{name: "events", desc: "Subscribe to the live event stream (SSE)", requireLogin: true, run: events.Run},
-	{name: "settings", desc: "View / change CLI preferences (language, gateway, safety switches)", run: settings.Run},
+	{name: "settings", desc: "View / change CLI preferences (language, …)", run: settings.Run},
 	// `version` shows the build version as a header, then offers the
 	// CLI-lifecycle actions (update / uninstall) as the menu. The bare
 	// `everyapi version` (and the --version/-v flags, special-cased in

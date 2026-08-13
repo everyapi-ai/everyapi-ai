@@ -64,7 +64,7 @@ __ADMIN_BLOCK__
   mcp [子]        AI CLI 的 MCP 伺服器（Claude Code / Codex / Gemini）
   doctor          本機自我檢查（憑證、閘道、代理、工具）
   events          訂閱即時事件串流（SSE）
-  settings        查看 / 修改 CLI 偏好（語言、閘道、安全開關）
+  settings        查看 / 修改 CLI 偏好（語言等）
   update          檢查並安裝新版本
   version         印出建置版本
   help            顯示本說明
@@ -114,7 +114,7 @@ proxy = "本機去敏代理（SDK 請求隱私過濾）"
 mcp = "AI CLI 的 MCP 伺服器（Claude Code / Codex / Gemini）"
 doctor = "本機自我檢查（憑證、閘道、代理、工具）"
 events = "訂閱即時事件串流（SSE）"
-settings = "查看 / 修改 CLI 偏好（語言、閘道、安全開關）"
+settings = "查看 / 修改 CLI 偏好（語言等）"
 update = "檢查新版本並執行對應的升級"
 uninstall = "從此機器移除 everyapi 狀態和二進位"
 version = "版本 · 升級 · 解除安裝"
@@ -251,19 +251,11 @@ unknown_key = "未知設定項 %q"
 usage_get = "用法：everyapi settings get <key>"
 usage_set = "用法：everyapi settings set <key> <值>"
 default_label = "（預設：%s）"
-region_label = "閘道區域"
-region_global = "global — %s"
-region_cn = "cn — %s"
-dangerous_label = "dangerous_mode — 跳過所啟動工具的全部確認"
-hook_trust_label = "codex_hook_trust_bypass — 附加 --dangerously-bypass-hook-trust"
-tristate_unset = "unset — 下次啟動時詢問一次"
-tristate_true = "true — 始終開啟"
-tristate_false = "false — 始終關閉"
 usage = '''
 everyapi settings — 查看 / 修改 CLI 偏好
 
 用法
-  everyapi settings                        逐項編輯（方向鍵）；管道中則等同 list
+  everyapi settings                        顯示目前設定（list 的別名）
   everyapi settings list                   顯示目前設定
   everyapi settings get <key>              印出單項設定
   everyapi settings set <key> <value>      更新設定
@@ -271,13 +263,6 @@ everyapi settings — 查看 / 修改 CLI 偏好
 
 KEY
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
-  menu_layout                              grouped | nested
-  gateway_region                           global | cn
-  dangerous_mode                           true | false | unset — 跳過所啟動工具的全部確認
-  codex_hook_trust_bypass                  true | false | unset — 給 'everyapi use codex' 附加 --dangerously-bypass-hook-trust
-
-兩個布林項初始為 unset：'everyapi use' 會在啟動時詢問一次並記住答案。
-在編輯器裡、或用 'everyapi settings set <key> unset' 改回 unset，就會重新詢問。
 
 設定檔是 'everyapi settings list' 印出的路徑上的純 JSON。可手動編輯；
 CLI 下次啟動時會重新讀取。

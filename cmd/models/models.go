@@ -168,6 +168,13 @@ func runGroups(args []string) error {
 	if err != nil {
 		return err
 	}
+	// UserGroups is the anonymous mount, so the usable column below describes
+	// the anonymous tier rather than this account — a real bug, but not one to
+	// fix by switching to SelfGroups here: that mount is behind UserAuth, and
+	// an OAuth2 relay-key login carries no user id, so every such install would
+	// get a 401 rendered as "session expired, log in again" — which re-login
+	// cannot clear. Fixing it properly means falling back to this mount for
+	// credentials that cannot reach the authenticated one.
 	groups, err := client.UserGroups(cliout.WithCtx())
 	if err != nil {
 		return classifyErr(err)

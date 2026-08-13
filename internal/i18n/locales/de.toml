@@ -78,7 +78,7 @@ __ADMIN_BLOCK__
   mcp [Sub]       MCP-Server für KI-CLIs (Claude Code / Codex / Gemini)
   doctor          Selbsttest (Anmeldedaten, Gateway, Sanitizer, Tools)
   events          Live-Event-Stream abonnieren (SSE)
-  settings        CLI-Einstellungen anzeigen / ändern (Sprache, Gateway, Sicherheitsschalter)
+  settings        CLI-Einstellungen anzeigen / ändern (Sprache, …)
   update          Auf neuere Version prüfen und das passende Upgrade ausführen
   version         Build-Version ausgeben
   help            Diese Meldung anzeigen
@@ -128,7 +128,7 @@ proxy = "Lokaler Sanitizer-Proxy (Privatsphäre-Filter für SDK-Anfragen)"
 mcp = "MCP-Server für KI-CLIs (Claude Code / Codex / Gemini)"
 doctor = "Selbsttest (Anmeldedaten, Gateway, Sanitizer, Tools)"
 events = "Live-Event-Stream abonnieren (SSE)"
-settings = "CLI-Einstellungen anzeigen / ändern (Sprache, Gateway, Sicherheitsschalter)"
+settings = "CLI-Einstellungen anzeigen / ändern (Sprache, …)"
 update = "Auf neuere Version prüfen und das passende Upgrade ausführen"
 uninstall = "everyapi state and binary entfernen"
 version = "Version · update · uninstall"
@@ -265,19 +265,11 @@ unknown_key = "unbekannter Einstellungsschlüssel %q"
 usage_get = "Verwendung: everyapi settings get <Schlüssel>"
 usage_set = "Verwendung: everyapi settings set <Schlüssel> <Wert>"
 default_label = "(Standard: %s)"
-region_label = "Gateway-Region"
-region_global = "global — %s"
-region_cn = "cn — %s"
-dangerous_label = "dangerous_mode — alle Rückfragen des gestarteten Tools überspringen"
-hook_trust_label = "codex_hook_trust_bypass — --dangerously-bypass-hook-trust ergänzen"
-tristate_unset = "unset — beim nächsten Start einmal fragen"
-tristate_true = "true — immer an"
-tristate_false = "false — immer aus"
 usage = '''
 everyapi settings — CLI-Einstellungen anzeigen / ändern
 
 VERWENDUNG
-  everyapi settings                        Jede Einstellung bearbeiten (Pfeiltasten); in einer Pipe wie list
+  everyapi settings                        Aktuelle Einstellungen anzeigen (Alias für list)
   everyapi settings list                   Aktuelle Einstellungen anzeigen
   everyapi settings get <Schlüssel>        Einzelne Einstellung ausgeben
   everyapi settings set <Schlüssel> <Wert> Einstellung aktualisieren
@@ -285,15 +277,6 @@ VERWENDUNG
 
 SCHLÜSSEL
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
-  menu_layout                              grouped | nested
-  gateway_region                           global | cn
-  dangerous_mode                           true | false | unset — alle Rückfragen des gestarteten Tools überspringen
-  codex_hook_trust_bypass                  true | false | unset — 'everyapi use codex' um --dangerously-bypass-hook-trust ergänzen
-
-Beide Booleans starten als unset: 'everyapi use' fragt einmal beim Start
-und merkt sich die Antwort. Im Editor oder mit
-'everyapi settings set <Schlüssel> unset' wieder auf unset setzen, um erneut
-gefragt zu werden.
 
 Die Einstellungsdatei ist einfaches JSON unter dem Pfad, den
 'everyapi settings list' anzeigt. Manuelles Bearbeiten ist in Ordnung;

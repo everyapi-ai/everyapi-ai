@@ -66,7 +66,7 @@ __ADMIN_BLOCK__
   **mcp** [sub]       **MCP server** for AI CLIs (Claude Code / Codex / Gemini)
   **doctor**          **Self-check** (creds, gateway, sanitizer, tools)
   **events**          Subscribe to the **live event stream** (SSE)
-  **settings**        View / change **CLI preferences** (language, gateway, safety switches)
+  **settings**        View / change **CLI preferences** (language, …)
   **version** <sub>   Build version · update · uninstall
   **help**            Show this message
 
@@ -115,7 +115,7 @@ proxy = "Local **sanitizer proxy** (privacy filter for SDK requests)"
 mcp = "**MCP server** for AI CLIs (Claude Code / Codex / Gemini)"
 doctor = "**Self-check** (creds, gateway, sanitizer, tools)"
 events = "Subscribe to the **live event stream** (SSE)"
-settings = "View / change **CLI preferences** (language, gateway, safety switches)"
+settings = "View / change **CLI preferences** (language, …)"
 update = "Check for a **newer release** and run the matching upgrade"
 uninstall = "Remove everyapi **state and binary** from this machine"
 version = "Build version · update · uninstall"
@@ -252,19 +252,11 @@ unknown_key = "unknown setting key %q"
 usage_get = "usage: everyapi settings get <key>"
 usage_set = "usage: everyapi settings set <key> <value>"
 default_label = "(default: %s)"
-region_label = "Gateway region"
-region_global = "global — %s"
-region_cn = "cn — %s"
-dangerous_label = "dangerous_mode — skip every confirmation in the launched tool"
-hook_trust_label = "codex_hook_trust_bypass — pass --dangerously-bypass-hook-trust"
-tristate_unset = "unset — ask once on the next launch"
-tristate_true = "true — always on"
-tristate_false = "false — always off"
 usage = '''
 everyapi settings — view / change CLI preferences
 
 USAGE
-  everyapi settings                        Edit every setting (arrow keys), or list on a pipe
+  everyapi settings                        Show current settings (alias for list)
   everyapi settings list                   Show current settings
   everyapi settings get <key>              Print a single setting
   everyapi settings set <key> <value>      Update a setting
@@ -272,14 +264,6 @@ USAGE
 
 KEYS
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
-  menu_layout                              grouped | nested
-  gateway_region                           global | cn
-  dangerous_mode                           true | false | unset — skip every confirmation in the launched tool
-  codex_hook_trust_bypass                  true | false | unset — add --dangerously-bypass-hook-trust to 'everyapi use codex'
-
-The two booleans start out unset: 'everyapi use' asks once at launch and
-remembers the answer. Set one back to unset — in the editor, or with
-'everyapi settings set <key> unset' — to be asked again.
 
 The settings file is plain JSON at the path 'everyapi settings list'
 prints. Hand-editing is fine; the CLI re-reads on next invocation.

@@ -107,6 +107,10 @@ Each tool uses different conventions; the CLI remembers them:
 
 No more looking up which variable name each tool reads, whether you need to append `/v1`, or which auth-header style applies.
 
+**relay key selection**: With no `--group`, a launch resolves the account's auto-group key — the one key that routes across every group you can reach — and caches it in `credentials.json`. An account without an auto key (or one whose tier may no longer use that group) falls back to its newest enabled key. Run `everyapi token switch` to pin a different key as the default, or pass `--group <id>` for a one-off launch through another pool; a group override is never written to that cache. Which key you are on decides the catalog below: a key pinned to one group only ever sees that group's models.
+
+A key already cached from an earlier launch keeps being used — that lookup is deliberately offline, so it never re-picks on its own. If `/model` shows one group's models, run `everyapi token switch` and choose `Auto` once.
+
 **model selection**: At launch, EveryAPI fetches the live catalog available to the selected relay key/group, removes incompatible media/embedding protocols, and injects the resulting snapshot into every routed client's native selector. Use `/model` in Claude Code, Codex, Qwen Code, or Kimi Code; use Grok's `/model`/`models` entry or `hermes model` for Hermes. Non-Claude model IDs are represented internally with Claude-compatible aliases but are displayed and sent upstream under their real IDs.
 
 Hermes, Qwen Code, and Kimi Code also need a boot model, so a TTY first opens EveryAPI's picker; pass `--model <id>` to skip it. In a non-interactive run EveryAPI deterministically uses the first compatible model. Hermes remembers its previous choice and accepts `EVERYAPI_HERMES_MODEL=<id>`. Plain claude/codex/grok still own their boot-model flags, which you can pass after `--`. The `gemini` entry is deliberately different: it launches native Antigravity (`agy`) with Google authentication, routing, and model catalog, so no EveryAPI models are injected there.
@@ -338,7 +342,7 @@ Flags:
 The CLI ships i18n in 7 languages: English, Simplified Chinese, Japanese, Korean, Spanish, German, French — CLI strings render in the user's chosen language. Backend API errors auto-negotiate via the `Accept-Language` header and cover 8 — the same 7 plus Traditional Chinese.
 
 ```bash
-$ everyapi settings                          # interactive editor: walks every key (language, menu_layout, gateway_region, dangerous_mode, codex_hook_trust_bypass)
+$ everyapi settings                          # interactive picker: choose a language
 $ everyapi settings list                     # show current settings
 $ everyapi settings set language zh          # set directly
 $ everyapi settings set language fr          # French likewise
