@@ -267,6 +267,11 @@ unknown_key = "clave de configuración desconocida %q"
 usage_get = "uso: everyapi settings get <clave>"
 usage_set = "uso: everyapi settings set <clave> <valor>"
 default_label = "(predeterminado: %s)"
+menu_pick = "Elige un ajuste para cambiar"
+done = "Listo"
+unset = "sin definir"
+default_key_label = "Clave API predeterminada"
+default_key_none = "sin definir"
 usage = '''
 everyapi settings — ver / cambiar preferencias del CLI
 

@@ -68,6 +68,13 @@ func Run(args []string) error {
 	}
 }
 
+// SwitchDefaultKey opens the same picker `everyapi token switch` uses and
+// persists the chosen key as the default. Exported for the settings editor,
+// which lists the default relay key alongside the CLI preferences: the key
+// lives in credentials.json rather than settings.json, so the editor has to
+// delegate here instead of writing it itself.
+func SwitchDefaultKey() error { return runSwitch(nil) }
+
 // runSwitch renders the API-key picker used by the token TUI menu and saves
 // the chosen enabled key as the default for subsequent relay commands.
 func runSwitch(args []string) error {

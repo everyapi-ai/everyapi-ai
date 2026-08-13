@@ -266,6 +266,11 @@ unknown_key = "clé de paramètre inconnue %q"
 usage_get = "utilisation : everyapi settings get <clé>"
 usage_set = "utilisation : everyapi settings set <clé> <valeur>"
 default_label = "(par défaut : %s)"
+menu_pick = "Choisir un paramètre à modifier"
+done = "Terminé"
+unset = "non défini"
+default_key_label = "Clé API par défaut"
+default_key_none = "non défini"
 usage = '''
 everyapi settings — voir / modifier les préférences du CLI
 

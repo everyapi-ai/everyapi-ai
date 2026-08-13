@@ -261,6 +261,11 @@ unknown_key = "不明な設定キー %q"
 usage_get = "使用法: everyapi settings get <key>"
 usage_set = "使用法: everyapi settings set <key> <値>"
 default_label = "(デフォルト: %s)"
+menu_pick = "変更する設定を選択"
+done = "完了"
+unset = "未設定"
+default_key_label = "デフォルト API キー"
+default_key_none = "未設定"
 usage = '''
 everyapi settings — CLI 設定の表示 / 変更
 

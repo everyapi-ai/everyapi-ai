@@ -252,6 +252,11 @@ unknown_key = "unknown setting key %q"
 usage_get = "usage: everyapi settings get <key>"
 usage_set = "usage: everyapi settings set <key> <value>"
 default_label = "(default: %s)"
+menu_pick = "Select a setting to change"
+done = "Done"
+unset = "unset"
+default_key_label = "Default API key"
+default_key_none = "not set"
 usage = '''
 everyapi settings — view / change CLI preferences
 

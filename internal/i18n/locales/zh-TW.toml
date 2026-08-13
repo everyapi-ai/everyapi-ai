@@ -251,6 +251,11 @@ unknown_key = "未知設定項 %q"
 usage_get = "用法：everyapi settings get <key>"
 usage_set = "用法：everyapi settings set <key> <值>"
 default_label = "（預設：%s）"
+menu_pick = "選擇要修改的設定"
+done = "完成"
+unset = "未設定"
+default_key_label = "預設 API 金鑰"
+default_key_none = "未設定"
 usage = '''
 everyapi settings — 查看 / 修改 CLI 偏好
 

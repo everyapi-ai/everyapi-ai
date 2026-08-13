@@ -265,6 +265,11 @@ unknown_key = "unbekannter Einstellungsschlüssel %q"
 usage_get = "Verwendung: everyapi settings get <Schlüssel>"
 usage_set = "Verwendung: everyapi settings set <Schlüssel> <Wert>"
 default_label = "(Standard: %s)"
+menu_pick = "Einstellung zum Ändern auswählen"
+done = "Fertig"
+unset = "nicht gesetzt"
+default_key_label = "Standard-API-Schlüssel"
+default_key_none = "nicht gesetzt"
 usage = '''
 everyapi settings — CLI-Einstellungen anzeigen / ändern
 

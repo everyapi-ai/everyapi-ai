@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
@@ -159,4 +160,120 @@ func TestSafetyPreferencesWriteReadRoundTrip(t *testing.T) {
 			t.Fatalf("writeKey(%s) accepted invalid boolean", key)
 		}
 	}
+}
+
+// The editor is the only surface most people ever see, and it used to ask two
+// hard-coded questions — so gateway_region, codex_hook_trust_bypass and
+// dangerous_mode existed in the file, in `settings set`, and in `settings
+// list`, but were invisible and unreachable there. Tie the two together: every
+// key writeKey accepts has to have a row.
+func TestSettingRowsCoverEverySettingsKey(t *testing.T) {
+	keys := []string{"language", "menu_layout", "gateway_region", "codex_hook_trust_bypass", "dangerous_mode"}
+	rows := settingRows()
+	rowKeys := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		if row.key != "" {
+			rowKeys[row.key] = true
+		}
+		if row.label == "" {
+			t.Errorf("row %q has no label", row.key)
+		}
+		if row.value == nil || row.edit == nil {
+			t.Errorf("row %q is missing a value renderer or editor", row.key)
+		}
+	}
+	for _, key := range keys {
+		if _, ok := readKey(&config.Settings{}, key); !ok {
+			t.Fatalf("test is stale: %q is no longer a settings key", key)
+		}
+		if !rowKeys[key] {
+			t.Errorf("settings key %q is missing from the interactive editor", key)
+		}
+	}
+	if len(rowKeys) != len(keys) {
+		t.Errorf("editor rows cover %d settings keys, want %d", len(rowKeys), len(keys))
+	}
+}
+
+// The relay key is not a settings.json key, so it carries no key field — but
+// it must still be offered, since it decides which models a launch can reach.
+func TestSettingRowsOfferTheDefaultRelayKey(t *testing.T) {
+	var found int
+	for _, row := range settingRows() {
+		if row.key == "" {
+			found++
+			if row.label != i18n.T("settings.default_key_label") {
+				t.Errorf("non-settings row label = %q, want the default-key label", row.label)
+			}
+		}
+	}
+	if found != 1 {
+		t.Fatalf("rows backed by something other than settings.json = %d, want exactly the relay key", found)
+	}
+}
+
+func TestLabelDefaultRelayKey(t *testing.T) {
+	t.Run("no credentials", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		if got := labelDefaultRelayKey(); got != i18n.T("settings.default_key_none") {
+			t.Errorf("label = %q, want the not-set label", got)
+		}
+	})
+	t.Run("cached key", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		creds := &config.Credentials{
+			APIBase:         "https://api.example.test",
+			AccessToken:     "tok",
+			UserID:          1,
+			RelayKey:        "sk-everyapi-x",
+			RelayKeyTokenID: 812,
+		}
+		if err := config.Save(creds); err != nil {
+			t.Fatal(err)
+		}
+		if got := labelDefaultRelayKey(); got != "#812" {
+			t.Errorf("label = %q, want #812", got)
+		}
+	})
+}
+
+// Renders every row the way the menu does, so a row whose value function
+// panics or returns an empty string fails here rather than on a user's screen.
+func TestEditorMenuRendersEveryRow(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	previous := i18n.Language()
+	i18n.SetLanguage("en")
+	t.Cleanup(func() { i18n.SetLanguage(previous) })
+
+	enabled := true
+	s := &config.Settings{
+		Language:      "zh",
+		MenuLayout:    "nested",
+		GatewayRegion: "cn",
+		DangerousMode: &enabled,
+	}
+	var lines []string
+	for _, row := range settingRows() {
+		line := row.label + ": " + row.value(s)
+		if row.value(s) == "" {
+			t.Errorf("row %q rendered an empty value", row.label)
+		}
+		lines = append(lines, line)
+	}
+	lines = append(lines, i18n.T("settings.done"))
+	if len(lines) != 7 {
+		t.Fatalf("menu has %d lines, want 6 settings plus Done", len(lines))
+	}
+	// The value column has to show what is in effect, not the raw field: an
+	// unset tri-state reads "unset", not "false".
+	if got := lines[3]; got != "codex_hook_trust_bypass: unset" {
+		t.Errorf("unset tri-state rendered as %q", got)
+	}
+	if got := lines[4]; got != "dangerous_mode: true" {
+		t.Errorf("set tri-state rendered as %q", got)
+	}
+	if got := lines[5]; got != "Default API key: not set" {
+		t.Errorf("relay key row rendered as %q", got)
+	}
+	t.Log("interactive editor:\n  " + strings.Join(lines, "\n  "))
 }

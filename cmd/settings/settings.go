@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/everyapi-ai/everyapi-ai/cmd/token"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
@@ -160,17 +161,82 @@ func runReset(args []string) error {
 
 // --- interactive ----------------------------------------------------
 
-func runInteractive() error {
-	s, err := config.LoadSettings()
-	if err != nil {
-		return err
+// settingRow is one line of the editor: its name, how to render the value in
+// effect, and how to change it. Rendering and dispatch read the same list, so
+// a preference cannot show up in one and not the other. The editor used to ask
+// two hard-coded questions in a fixed order, which left gateway_region,
+// codex_hook_trust_bypass and dangerous_mode reachable only through
+// `settings set`, and gave no way at all to see or change the default relay
+// key — the one setting that decides which models every launch can reach.
+type settingRow struct {
+	// key is the settings.json key this row edits, and is empty for a row
+	// backed by something else (the relay key lives in credentials.json).
+	// TestSettingRowsCoverEverySettingsKey reads it to prove a new key cannot
+	// be added to the file without also appearing here.
+	key   string
+	label string
+	value func(*config.Settings) string
+	edit  func(*config.Settings) error
+}
+
+func settingRows() []settingRow {
+	return []settingRow{
+		{"language", i18n.T("settings.lang_label"), func(s *config.Settings) string { return labelLanguage(s.Language) }, editLanguage},
+		{"menu_layout", i18n.T("settings.menu_label"), func(s *config.Settings) string { return labelMenuLayout(s.MenuLayout) }, editMenuLayout},
+		{"gateway_region", "gateway_region", func(s *config.Settings) string { return labelGatewayRegion(s.GatewayRegion) }, editGatewayRegion},
+		{"codex_hook_trust_bypass", "codex_hook_trust_bypass", func(s *config.Settings) string { return labelOptionalBool(s.CodexHookTrustBypass) }, editCodexHookTrustBypass},
+		{"dangerous_mode", "dangerous_mode", func(s *config.Settings) string { return labelOptionalBool(s.DangerousMode) }, editDangerousMode},
+		{"", i18n.T("settings.default_key_label"), func(*config.Settings) string { return labelDefaultRelayKey() }, editDefaultRelayKey},
 	}
-	// Build options from the live SupportedLanguages list (sorted en
-	// first by the loader) so a dropped-in {lang}.toml shows up
-	// automatically. Each row is "<code> — <native name>" — the
-	// native name comes from a small lookup table because we'd
-	// otherwise need a "language.native_name" key in every locale
-	// just for self-labelling.
+}
+
+func runInteractive() error {
+	selected := 0
+	for {
+		// Reload every pass: an editor may have written the file (and the
+		// key editor writes credentials.json out from under us), so the menu
+		// must re-read rather than render a stale copy of what it just saved.
+		s, err := config.LoadSettings()
+		if err != nil {
+			return err
+		}
+		rows := settingRows()
+		labels := make([]string, 0, len(rows)+1)
+		for _, row := range rows {
+			labels = append(labels, fmt.Sprintf("%s: %s", row.label, row.value(s)))
+		}
+		labels = append(labels, i18n.T("settings.done"))
+
+		idx, err := cliprompt.PickWithSelected(i18n.T("settings.menu_pick"), labels, selected)
+		if err != nil {
+			// Esc / Ctrl-C at the menu leaves everything as it stands; each
+			// editor persists its own change, so there is nothing pending.
+			if errors.Is(err, cliprompt.ErrPickCancelled) {
+				return nil
+			}
+			return err
+		}
+		if idx == len(rows) {
+			return nil
+		}
+		selected = idx
+		if err := rows[idx].edit(s); err != nil {
+			// Esc inside an editor means "changed my mind about this one",
+			// not "quit" — go back to the menu with nothing written.
+			if errors.Is(err, cliprompt.ErrPickCancelled) {
+				continue
+			}
+			return err
+		}
+	}
+}
+
+// Build options from the live SupportedLanguages list (sorted en first by the
+// loader) so a dropped-in {lang}.toml shows up automatically. Each row is
+// "<code> — <native name>" — the native name comes from a small lookup table
+// because we'd otherwise need a "language.native_name" key in every locale
+// just for self-labelling.
+func editLanguage(s *config.Settings) error {
 	langs := i18n.SupportedLanguages()
 	nativeName := map[string]string{
 		"en": "English",
@@ -195,41 +261,99 @@ func runInteractive() error {
 	}
 	idx, err := cliprompt.PickWithSelected(i18n.T("settings.lang_label"), options, cur)
 	if err != nil {
-		// Esc / Ctrl-C from the picker — treat as "no change" so
-		// the user can bail without writing the file.
-		if errors.Is(err, cliprompt.ErrPickCancelled) {
-			cliout.Println(i18n.T("common.canceled"))
-			return nil
-		}
 		return err
 	}
-	picked := langs[idx]
-	s.Language = picked
-	// Apply the language immediately so the menu-layout picker below
-	// renders its labels in the just-chosen language.
-	i18n.SetLanguage(picked)
+	s.Language = langs[idx]
+	// Apply immediately so the menu redraws in the just-chosen language.
+	i18n.SetLanguage(s.Language)
 	// Export the resolved canonical tag (normalized), not the raw pick.
 	_ = os.Setenv("EVERYAPI_LANG", i18n.Language())
+	return saveAndReport(s)
+}
 
-	// Second question: launcher menu layout (grouped single screen vs.
-	// nested category picker). Esc here keeps the language choice and
-	// leaves the layout unchanged.
+func editMenuLayout(s *config.Settings) error {
 	layouts := []string{"grouped", "nested"}
-	layoutOpts := []string{i18n.T("settings.menu_grouped"), i18n.T("settings.menu_nested")}
-	curLayout := 0
+	opts := []string{i18n.T("settings.menu_grouped"), i18n.T("settings.menu_nested")}
+	cur := 0
 	if effectiveMenuLayout(s.MenuLayout) == "nested" {
-		curLayout = 1
+		cur = 1
 	}
-	lidx, lerr := cliprompt.PickWithSelected(i18n.T("settings.menu_label"), layoutOpts, curLayout)
-	if lerr != nil {
-		if !errors.Is(lerr, cliprompt.ErrPickCancelled) {
-			return lerr
-		}
-		// Esc: skip the layout change, still persist the language.
-	} else {
-		s.MenuLayout = layouts[lidx]
+	idx, err := cliprompt.PickWithSelected(i18n.T("settings.menu_label"), opts, cur)
+	if err != nil {
+		return err
 	}
+	s.MenuLayout = layouts[idx]
+	return saveAndReport(s)
+}
 
+func editGatewayRegion(s *config.Settings) error {
+	regions := []string{"global", "cn"}
+	cur := 0
+	if config.EffectiveGatewayRegion(s.GatewayRegion) == "cn" {
+		cur = 1
+	}
+	idx, err := cliprompt.PickWithSelected("gateway_region", regions, cur)
+	if err != nil {
+		return err
+	}
+	s.GatewayRegion = regions[idx]
+	return saveAndReport(s)
+}
+
+func editCodexHookTrustBypass(s *config.Settings) error {
+	return editOptionalBool(s, "codex_hook_trust_bypass", s.CodexHookTrustBypass, func(v *bool) { s.CodexHookTrustBypass = v })
+}
+
+func editDangerousMode(s *config.Settings) error {
+	return editOptionalBool(s, "dangerous_mode", s.DangerousMode, func(v *bool) { s.DangerousMode = v })
+}
+
+// editOptionalBool keeps the third state. These preferences distinguish "not
+// set" (ask on first interactive use) from an explicit false, so the editor
+// has to offer unset as a choice rather than collapsing it into off.
+func editOptionalBool(s *config.Settings, label string, current *bool, apply func(*bool)) error {
+	opts := []string{"true", "false", i18n.T("settings.unset")}
+	cur := 2
+	if current != nil {
+		cur = 1
+		if *current {
+			cur = 0
+		}
+	}
+	idx, err := cliprompt.PickWithSelected(label, opts, cur)
+	if err != nil {
+		return err
+	}
+	switch idx {
+	case 0:
+		apply(boolPtr(true))
+	case 1:
+		apply(boolPtr(false))
+	default:
+		apply(nil)
+	}
+	return saveAndReport(s)
+}
+
+func boolPtr(v bool) *bool { return &v }
+
+// The default relay key lives in credentials.json, not settings.json — it is a
+// credential, and this file is world-readable preference state. The editor
+// shows which key is in effect and hands the change to the token picker, which
+// owns fetching the key material and persisting it.
+func labelDefaultRelayKey() string {
+	creds, err := config.Load()
+	if err != nil || creds == nil || creds.RelayKeyTokenID == 0 {
+		return i18n.T("settings.default_key_none")
+	}
+	return fmt.Sprintf("#%d", creds.RelayKeyTokenID)
+}
+
+func editDefaultRelayKey(*config.Settings) error {
+	return token.SwitchDefaultKey()
+}
+
+func saveAndReport(s *config.Settings) error {
 	if err := config.SaveSettings(s); err != nil {
 		return err
 	}
