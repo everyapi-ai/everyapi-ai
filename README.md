@@ -2,7 +2,7 @@
 
 # `everyapi` CLI
 
-Buyer-onboarding CLI for the [EveryAPI](https://everyapi.ai) AI API gateway. Launch Claude Code, Codex, Antigravity, Grok Build, Qwen Code, or Kimi Code **in under a minute**.
+Buyer-onboarding CLI for the [EveryAPI](https://everyapi.ai) AI API gateway. Launch supported coding agents through one audited registry **in under a minute**.
 
 Status: **core flows shipped** — buyer onboarding, seller commands (plain-key + OAuth across three providers), sanitizer proxy, QR sign-in main path, and anti-phishing layers are all in place. The only unimplemented items are OS-level code signing and a platform keychain backend (see "What this binary does NOT include yet" at the end).
 
@@ -75,20 +75,37 @@ Same flow as the shell script — resolves the latest tag, downloads `everyapi_w
 
 ### `everyapi use <tool>` — exec into a third-party CLI (pointed at the EveryAPI gateway)
 
-The main reason to install this CLI. It configures and launches supported coding clients through EveryAPI; the `gemini` entry is the exception and launches your already-authenticated native Antigravity CLI with its own routing.
+The main reason to install this CLI. It configures and launches supported coding clients through EveryAPI. Native integrations (`antigravity`, `librefang`) keep their own authentication path and never receive a copied relay key.
 
 ```bash
 everyapi use claude         # Claude Code → EveryAPI
 everyapi use codex          # OpenAI Codex CLI → EveryAPI
-everyapi use gemini         # Antigravity (native auth and routing)
+everyapi use opencode       # OpenCode → process-scoped EveryAPI provider
+everyapi use gemini         # Google Gemini CLI → EveryAPI
+everyapi use antigravity    # Antigravity (native Google auth and routing)
+everyapi use aider          # Aider → EveryAPI (pick a model)
+everyapi use goose          # Goose CLI → EveryAPI (pick a model)
+everyapi use crush          # Crush CLI → isolated EveryAPI catalog
+everyapi use cline          # Cline CLI → lifecycle-bound provider settings
+everyapi use openclaw       # OpenClaw local TUI → isolated EveryAPI catalog
+everyapi use continue       # Continue CLI → isolated assistant config
+everyapi use kilo           # Kilo Code CLI → process-scoped provider config
+everyapi use pi             # Pi coding agent → isolated models catalog
+everyapi use vibe           # Mistral Vibe → isolated generic provider
+everyapi use copilot        # GitHub Copilot CLI → official process-scoped BYOK
+everyapi use droid          # Factory Droid → isolated runtime settings
+everyapi use openhands      # OpenHands CLI → explicit process-only env override
+everyapi use forge          # ForgeCode → isolated OpenAI-compatible session
+everyapi use llxprt         # LLxprt Code → isolated homes + pinned runtime flags
 everyapi use grok           # xAI Grok Build → EveryAPI
 everyapi use qwen-code      # Alibaba Qwen Code → EveryAPI (pick a model)
 everyapi use kimi-code      # Moonshot Kimi Code → EveryAPI (pick a model)
 everyapi use hermes         # Nous Research Hermes Agent → EveryAPI (pick a model)
+everyapi use librefang      # LibreFang start (native EveryAPI credential process)
 everyapi use hermes --model gpt-5.1   # pin the model, skip the picker
 everyapi use claude                    # transparent by default: stays on api.anthropic.com
 everyapi use codex                     # stays on api.openai.com
-everyapi use gemini                    # stays on Google's official origin
+everyapi use antigravity               # stays on Google's official origin
 everyapi use claude --transparent=false  # opt out: inject the gateway Base URL + relay key
 everyapi use                # no arg → interactive picker over installed tools
 ```
@@ -99,11 +116,27 @@ Each tool uses different conventions; the CLI remembers them:
 |---|---|
 | claude | env: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`; live compatible models through gateway discovery |
 | codex | env: `OPENAI_API_KEY` + generated `CODEX_HOME/config.toml` and key-scoped model catalog (codex routes via config, not `OPENAI_BASE_URL`) |
-| gemini | native Antigravity launcher (`agy`) |
+| gemini | env: `GEMINI_API_KEY`, `GOOGLE_GEMINI_BASE_URL`, `GEMINI_MODEL`; isolated auth-mode settings overlay |
+| antigravity | native Antigravity launcher (`agy`) |
+| aider | OpenAI-compatible env plus `openai/<model>` LiteLLM model namespace |
+| goose | `GOOSE_PROVIDER=openai`, `GOOSE_MODEL`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` |
+| crush | process-scoped `CRUSH_GLOBAL_CONFIG`; key referenced from env, live model catalog generated |
+| cline | lifecycle-bound `CLINE_PROVIDER_SETTINGS_PATH` removed after exit |
+| openclaw | local embedded TUI with process-scoped config and env-backed SecretRef |
+| continue | lifecycle-bound `CONTINUE_GLOBAL_DIR/config.yaml`; env-backed Continue secret reference |
+| kilo | process-scoped `KILO_CONFIG_CONTENT`; OpenCode-compatible provider with env-backed key |
+| pi | isolated `PI_CODING_AGENT_DIR` containing `models.json` and selected-model settings |
+| vibe | isolated `VIBE_HOME/config.toml`; generic provider with `api_key_env_var` |
+| copilot | official `COPILOT_PROVIDER_*` BYOK environment; wire API follows the selected model capability |
+| droid | official `--settings` runtime-only file with one `custom:EveryAPI-0` model and env-backed key |
+| openhands | `--override-with-envs` plus process-only `LLM_API_KEY`, `LLM_BASE_URL`, and `LLM_MODEL` |
+| forge | isolated `FORGE_CONFIG`; OpenAI-compatible provider/model pinned in config and process env |
+| llxprt | isolated application homes plus reserved `--provider openai`, `--baseurl`, and `--model` runtime flags |
 | grok | env: `XAI_API_KEY`, `GROK_MODELS_BASE_URL`; isolated `GROK_HOME`; filtered live model discovery |
 | qwen-code | env: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`; process-scoped `QWEN_HOME` user settings and pinned `--auth-type=openai` |
 | kimi-code | env: `KIMI_MODEL_API_KEY`, `KIMI_MODEL_BASE_URL`, `KIMI_MODEL_PROVIDER_TYPE`, `KIMI_MODEL_NAME`; isolated `KIMI_CODE_HOME` with generated model aliases |
 | hermes | generated `HERMES_HOME/config.yaml` (named custom provider, `base_url`, inline `api_key`); filtered live model discovery |
+| librefang | native `librefang start`; LibreFang resolves the current EveryAPI credential per request |
 
 No more looking up which variable name each tool reads, whether you need to append `/v1`, or which auth-header style applies.
 
@@ -113,7 +146,7 @@ A key already cached from an earlier launch keeps being used — that lookup is 
 
 **model selection**: At launch, EveryAPI fetches the live catalog available to the selected relay key/group, removes incompatible media/embedding protocols, and injects the resulting snapshot into every routed client's native selector. Use `/model` in Claude Code, Codex, Qwen Code, or Kimi Code; use Grok's `/model`/`models` entry or `hermes model` for Hermes. Non-Claude model IDs are represented internally with Claude-compatible aliases but are displayed and sent upstream under their real IDs.
 
-Hermes, Qwen Code, and Kimi Code also need a boot model, so a TTY first opens EveryAPI's picker; pass `--model <id>` to skip it. In a non-interactive run EveryAPI deterministically uses the first compatible model. Hermes remembers its previous choice and accepts `EVERYAPI_HERMES_MODEL=<id>`. Plain claude/codex/grok still own their boot-model flags, which you can pass after `--`. The `gemini` entry is deliberately different: it launches native Antigravity (`agy`) with Google authentication, routing, and model catalog, so no EveryAPI models are injected there.
+Tools with a `ModelEnv` contract (Gemini, Aider, Goose, Crush, Cline, OpenClaw, Continue, Kilo, Pi, Vibe, GitHub Copilot CLI, Factory Droid, OpenHands, ForgeCode, LLxprt, Hermes, Qwen Code, and Kimi Code) open EveryAPI's picker; pass `--model <id>` to skip it. In a non-interactive run EveryAPI deterministically uses the first compatible model. Plain claude/codex/grok still own their boot-model behavior. `antigravity` launches native `agy` with Google authentication and `librefang` uses its first-party EveryAPI credential process.
 
 Provider names are not CLI names: use `qwen-code` or `kimi-code` for those vendors' official clients, and select provider models from a supported client's live model catalog.
 
@@ -129,7 +162,7 @@ Provider names are not CLI names: use `qwen-code` or `kimi-code` for those vendo
 
 Transparent mode keeps supported clients on their vendor's official API origin instead of setting a third-party Base URL. It is the default for every tool that supports it; pass `--transparent=false` to opt out. The CLI starts an ephemeral HTTP CONNECT proxy on a random loopback port, creates a per-run CA whose private key stays in memory, and gives the child only the proxy URL, public CA bundle, and a non-secret placeholder credential. Registered model routes are decrypted locally and relayed to EveryAPI with the real relay key; other HTTPS hosts use raw CONNECT passthrough. An unknown path beneath a protected model prefix is blocked, and a relay failure never falls back to the vendor.
 
-Verified against Claude Code and Codex CLI, which are the tools it defaults on for. The `gemini` entry launches native Antigravity outside the connector. Grok, Qwen Code, Kimi Code, and Hermes always use the injected path, so transparent mode does not apply to them — passing `--transparent` there is an error rather than a silent no-op.
+Verified against Claude Code and Codex CLI, which are the tools it defaults on for. Native Antigravity and LibreFang bypass the connector; the other registered tools use their documented injected/configured path, so an explicit unsupported `--transparent` fails loudly.
 
 `--sanitize` composes with transparent mode rather than conflicting with it: the connector relays through the sanitizer (child → connector → sanitizer → gateway), so masking and the Claude recovery response guard apply on either launch path.
 

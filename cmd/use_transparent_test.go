@@ -258,8 +258,8 @@ func TestTransparentConnectorChainsThroughRecoveryGuard(t *testing.T) {
 // the contract the whole flip rests on:
 //
 //   - a tool with an adapter defaults to transparent;
-//   - a tool without one (hermes is EveryAPI-native; the gemini entry launches
-//     the natively authenticated agy client) silently keeps its direct path;
+//   - tools without one (Hermes is EveryAPI-native; Antigravity and LibreFang
+//     keep their native authentication/router paths) stay direct;
 //   - an explicit --transparent on such a tool still fails loudly, because the
 //     user asked for something that cannot be delivered.
 //
@@ -275,7 +275,7 @@ func TestTransparentDefaultResolution(t *testing.T) {
 			t.Errorf("%s must support transparent — it is in the default-on set", name)
 		}
 	}
-	for _, name := range []string{"gemini", "hermes"} {
+	for _, name := range []string{"gemini", "openhands", "forge", "llxprt", "hermes"} {
 		tool, err := tools.Lookup(name)
 		if err != nil {
 			t.Fatal(err)

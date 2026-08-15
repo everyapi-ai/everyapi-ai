@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/BurntSushi/toml"
 )
 
 // TestRegistry_HasExpectedTools pins the V1 supported set. New tools
@@ -16,7 +19,7 @@ import (
 // change that breaks this test.
 func TestRegistry_HasExpectedTools(t *testing.T) {
 	want := []string{
-		"claude", "codex", "opencode", "gemini", "grok", "qwen-code", "kimi-code", "hermes",
+		"claude", "codex", "opencode", "gemini", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang", "open-webui",
 	}
 	got := Names()
 	if len(got) != len(want) {
@@ -26,6 +29,16 @@ func TestRegistry_HasExpectedTools(t *testing.T) {
 		if got[i] != n {
 			t.Fatalf("Names()[%d] = %q, want %q", i, got[i], n)
 		}
+	}
+}
+
+func TestClineUsesOfficialCLiteExecutable(t *testing.T) {
+	tool, err := Lookup("cline")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tool.ExecName != "clite" {
+		t.Fatalf("Cline ExecName = %q, want official @cline/cli binary clite", tool.ExecName)
 	}
 }
 
@@ -196,13 +209,110 @@ func TestEnv_OpenCodeUsesOfficialCompatibleProviderWithoutPersistingTheKey(t *te
 	}
 }
 
-// TestEnv_Gemini verifies that the native Antigravity child never receives
-// EveryAPI's relay credential or gateway routing variables.
+// TestEnv_Gemini verifies Google's documented Gemini CLI environment contract.
 func TestEnv_Gemini(t *testing.T) {
 	tool, _ := Lookup("gemini")
 	env := tool.Env("https://api.everyapi.ai", "my-token")
+	if got := tool.ExecName; got != "gemini" {
+		t.Fatalf("ExecName = %q, want gemini", got)
+	}
+	if got := env["GEMINI_API_KEY"]; got != "my-token" {
+		t.Errorf("GEMINI_API_KEY = %q", got)
+	}
+	if got := env["GOOGLE_GEMINI_BASE_URL"]; got != "https://api.everyapi.ai" {
+		t.Errorf("GOOGLE_GEMINI_BASE_URL = %q", got)
+	}
+	if tool.Native {
+		t.Fatal("Gemini CLI must resolve an EveryAPI relay credential")
+	}
+}
+
+func TestEnv_AntigravityStaysNative(t *testing.T) {
+	tool, _ := Lookup("antigravity")
+	env := tool.Env("https://api.everyapi.ai", "my-token")
+	if got := tool.ExecName; got != "agy" {
+		t.Fatalf("ExecName = %q, want agy", got)
+	}
 	if len(env) != 0 {
 		t.Errorf("native agy Env should be empty, got %v", env)
+	}
+	if !tool.Native {
+		t.Fatal("Antigravity must keep its own Google authentication")
+	}
+}
+
+func TestEnv_AiderUsesOpenAICompatibleEndpoint(t *testing.T) {
+	tool, _ := Lookup("aider")
+	env := tool.Env("https://api.everyapi.ai/", "my-token")
+	for _, key := range []string{"OPENAI_API_KEY", "AIDER_OPENAI_API_KEY"} {
+		if got := env[key]; got != "my-token" {
+			t.Errorf("%s = %q", key, got)
+		}
+	}
+	for _, key := range []string{"OPENAI_API_BASE", "AIDER_OPENAI_API_BASE"} {
+		if got := env[key]; got != "https://api.everyapi.ai/v1" {
+			t.Errorf("%s = %q", key, got)
+		}
+	}
+	if tool.ModelEnv != aiderModelEnv || tool.RequiredEndpoint != "openai" {
+		t.Fatalf("Aider model/endpoint wiring = %q/%q", tool.ModelEnv, tool.RequiredEndpoint)
+	}
+}
+
+func TestPrepareAiderPrefixesCatalogModelForLiteLLM(t *testing.T) {
+	t.Setenv(aiderModelEnv, "claude-sonnet-4")
+	extra, err := prepareAider("https://api.everyapi.ai", "unused")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := extra["AIDER_MODEL"]; got != "openai/claude-sonnet-4" {
+		t.Fatalf("AIDER_MODEL = %q", got)
+	}
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal("test checkout requires git")
+	}
+	if got := extra["GIT_PYTHON_GIT_EXECUTABLE"]; got != gitPath {
+		t.Fatalf("GIT_PYTHON_GIT_EXECUTABLE = %q, want %q", got, gitPath)
+	}
+	if got := extra["PYTHON_DOTENV_DISABLED"]; got != "1" {
+		t.Fatalf("PYTHON_DOTENV_DISABLED = %q, want 1", got)
+	}
+}
+
+func TestPrepareAiderFailsBeforeLaunchWhenGitIsMissing(t *testing.T) {
+	t.Setenv(aiderModelEnv, "claude-sonnet-4")
+	t.Setenv("PATH", t.TempDir())
+	if _, err := prepareAider("https://api.everyapi.ai", "unused"); err == nil {
+		t.Fatal("prepareAider succeeded without git")
+	}
+}
+
+func TestEnv_GoosePinsOpenAIProviderAndEndpoint(t *testing.T) {
+	tool, _ := Lookup("goose")
+	env := tool.Env("https://api.everyapi.ai/", "my-token")
+	want := map[string]string{
+		"GOOSE_PROVIDER":  "openai",
+		"OPENAI_API_KEY":  "my-token",
+		"OPENAI_BASE_URL": "https://api.everyapi.ai/v1",
+	}
+	for key, value := range want {
+		if got := env[key]; got != value {
+			t.Errorf("%s = %q, want %q", key, got, value)
+		}
+	}
+}
+
+func TestLibreFangUsesItsOfficialCredentialProcessIntegration(t *testing.T) {
+	tool, _ := Lookup("librefang")
+	if !tool.Native {
+		t.Fatal("LibreFang must resolve EveryAPI through its own credential process")
+	}
+	if got := tool.DefaultArgs; !reflect.DeepEqual(got, []string{"start", "--foreground"}) {
+		t.Fatalf("DefaultArgs = %v, want [start --foreground]", got)
+	}
+	if env := tool.Env("https://api.everyapi.ai", "must-not-leak"); len(env) != 0 {
+		t.Fatalf("LibreFang native launch received gateway material: %v", env)
 	}
 }
 
@@ -239,15 +349,26 @@ func TestEnv_Grok(t *testing.T) {
 		t.Errorf("XAI_API_KEY = %q, want my-token", got)
 	}
 
+	wantHome := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "everyapi", "grok-home")
+	if err := os.MkdirAll(wantHome, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(wantHome, "config.toml")
+	if err := os.WriteFile(configPath, []byte("[auth]\npreferred_method = \"browser\"\n\n[models]\ndefault = \"gateway-chat\"\n\n[ui]\ncompact_mode = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wantHome, "auth.json"), []byte(`{"cached":"xai-oauth"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Grok 1.0.3 no longer honors GROK_AUTH_PATH. Its cached OAuth session
+	// outranks XAI_API_KEY, so EveryAPI's dedicated home must begin without it.
 	extra, err := tool.Prepare("https://api.everyapi.ai", "my-token")
 	if err != nil {
 		t.Fatal(err)
 	}
-	cleanup := TakePreparedCleanup(extra)
-	if cleanup == nil {
-		t.Fatal("Prepare did not register process-scoped Grok auth cleanup")
+	if cleanup := TakePreparedCleanup(extra); cleanup != nil {
+		t.Fatal("Grok should not create a temporary auth home")
 	}
-	wantHome := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "everyapi", "grok-home")
 	if got := extra["GROK_HOME"]; got != wantHome {
 		t.Errorf("GROK_HOME = %q, want %q", got, wantHome)
 	}
@@ -256,30 +377,39 @@ func TestEnv_Grok(t *testing.T) {
 	} else if runtime.GOOS != "windows" && info.Mode().Perm() != 0o700 {
 		t.Errorf("GROK_HOME permissions = %o, want 0700", info.Mode().Perm())
 	}
-	authPath := extra["GROK_AUTH_PATH"]
-	if filepath.Base(authPath) != "auth.json" {
-		t.Fatalf("GROK_AUTH_PATH = %q, want a process-scoped auth.json", authPath)
+	if _, exists := extra["GROK_AUTH_PATH"]; exists {
+		t.Fatal("GROK_AUTH_PATH is ignored by Grok 1.0.3 and must not be injected")
 	}
-	authHome := filepath.Dir(authPath)
-	if authHome == wantHome || !strings.HasPrefix(authHome, filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "everyapi", "sessions")+string(filepath.Separator)) {
-		t.Fatalf("GROK_AUTH_PATH = %q, want an isolated EveryAPI session path", authPath)
+	if _, err := os.Stat(filepath.Join(wantHome, "auth.json")); !os.IsNotExist(err) {
+		t.Fatalf("EveryAPI Grok OAuth cache survived preparation: %v", err)
 	}
-	if _, err := os.Stat(authPath); !os.IsNotExist(err) {
-		t.Fatalf("GROK_AUTH_PATH must begin absent so cached xAI auth cannot win; stat err = %v", err)
+	var preparedConfig struct {
+		Auth struct {
+			PreferredMethod string `toml:"preferred_method"`
+		} `toml:"auth"`
+		Models struct {
+			Default string `toml:"default"`
+		} `toml:"models"`
+		UI struct {
+			CompactMode bool `toml:"compact_mode"`
+		} `toml:"ui"`
+	}
+	if _, err := toml.DecodeFile(configPath, &preparedConfig); err != nil {
+		t.Fatalf("decode prepared Grok config: %v", err)
+	}
+	if got := preparedConfig.Auth.PreferredMethod; got != "api_key" {
+		t.Fatalf("auth.preferred_method = %q, want api_key", got)
+	}
+	if preparedConfig.Models.Default != "gateway-chat" || !preparedConfig.UI.CompactMode {
+		t.Fatalf("preparation lost Grok preferences: %+v", preparedConfig)
 	}
 
 	second, err := tool.Prepare("https://api.everyapi.ai", "replacement-token")
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondCleanup := TakePreparedCleanup(second)
-	if second["GROK_AUTH_PATH"] == authPath {
-		t.Fatal("concurrent Grok launches shared an auth path")
-	}
-	secondCleanup()
-	cleanup()
-	if _, err := os.Stat(authHome); !os.IsNotExist(err) {
-		t.Fatalf("process-scoped Grok auth directory survived cleanup: %v", err)
+	if cleanup := TakePreparedCleanup(second); cleanup != nil {
+		t.Fatal("concurrent Grok preparation should not create a temporary auth home")
 	}
 	if _, err := os.Stat(wantHome); err != nil {
 		t.Fatalf("persistent GROK_HOME was removed by auth cleanup: %v", err)
@@ -503,7 +633,7 @@ func TestSupportsTransparentMatchesVerifiedTools(t *testing.T) {
 			t.Errorf("%s should support transparent mode", name)
 		}
 	}
-	for _, name := range []string{"gemini", "grok", "qwen-code", "kimi-code", "hermes"} {
+	for _, name := range []string{"gemini", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang"} {
 		tool, _ := Lookup(name)
 		if tool.SupportsTransparent() {
 			t.Errorf("%s should not advertise transparent mode", name)

@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/BurntSushi/toml"
 )
 
 var testLaunchCatalog = []Model{
@@ -73,6 +76,620 @@ func TestQwenPrepareWithModelsWritesNativePickerCatalog(t *testing.T) {
 	if string(systemBody) != `{"security":{"disableYoloMode":true},"modelProviders":{"anthropic":[{"id":"managed"}]}}` {
 		t.Fatalf("Qwen system policy was modified: %s", systemBody)
 	}
+}
+
+func TestCrushPrepareUsesIsolatedCatalogAndEnvironmentKeyReference(t *testing.T) {
+	t.Setenv(crushModelEnv, "gpt-5.6-terra")
+	tool, _ := Lookup("crush")
+	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", testLaunchCatalog[:1], "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer TakePreparedCleanup(extra)()
+	body, err := os.ReadFile(filepath.Join(extra["CRUSH_GLOBAL_CONFIG"], "crush.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "secret-relay-key") {
+		t.Fatal("Crush config persisted the relay credential")
+	}
+	if !strings.Contains(string(body), `"api_key":"$EVERYAPI_RELAY_KEY"`) ||
+		!strings.Contains(string(body), `"model":"gpt-5.6-terra"`) {
+		t.Fatalf("unexpected Crush config: %s", body)
+	}
+	var config struct {
+		Providers map[string]struct {
+			Models []struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			} `json:"models"`
+		} `json:"providers"`
+	}
+	if err := json.Unmarshal(body, &config); err != nil {
+		t.Fatal(err)
+	}
+	models := config.Providers["everyapi"].Models
+	if len(models) != 1 || models[0].ID != "gpt-5.6-terra" || models[0].Name != "gpt-5.6-terra" {
+		t.Fatalf("Crush model picker catalog = %#v, want a non-empty model name", models)
+	}
+}
+
+func TestClinePrepareUsesLifecycleBoundProviderSettings(t *testing.T) {
+	t.Setenv(clineModelEnv, "gpt-5.6-terra")
+	tool, _ := Lookup("cline")
+	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", testLaunchCatalog[:1], "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanup := TakePreparedCleanup(extra)
+	path := extra["CLINE_PROVIDER_SETTINGS_PATH"]
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var settings struct {
+		LastUsedProvider string `json:"lastUsedProvider"`
+		Providers        map[string]struct {
+			Settings map[string]any `json:"settings"`
+		} `json:"providers"`
+	}
+	if err := json.Unmarshal(body, &settings); err != nil {
+		t.Fatal(err)
+	}
+	if settings.LastUsedProvider != "lmstudio" {
+		t.Fatalf("Cline lastUsedProvider = %q, want Chat provider for a dual-protocol model", settings.LastUsedProvider)
+	}
+	provider, ok := settings.Providers["lmstudio"]
+	if !ok {
+		t.Fatalf("Cline providers = %#v, want lmstudio", settings.Providers)
+	}
+	if provider.Settings["provider"] != "lmstudio" ||
+		provider.Settings["apiKey"] != "secret-relay-key" ||
+		provider.Settings["model"] != "gpt-5.6-terra" ||
+		provider.Settings["baseUrl"] != "https://api.everyapi.ai/v1" {
+		t.Fatalf("unexpected Cline provider settings: %#v", provider.Settings)
+	}
+	if _, ok := provider.Settings["protocol"]; ok {
+		t.Fatalf("Cline settings include unsupported protocol field: %#v", provider.Settings)
+	}
+	if _, ok := provider.Settings["client"]; ok {
+		t.Fatalf("Cline settings include unsupported client field: %#v", provider.Settings)
+	}
+	modelCatalogPath := filepath.Join(extra["CLINE_DATA_DIR"], "settings", "models.json")
+	if _, err := os.Stat(modelCatalogPath); err != nil {
+		t.Fatalf("Cline lifecycle model catalog missing: %v", err)
+	}
+	cleanup()
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("Cline lifecycle settings survived cleanup: %v", err)
+	}
+}
+
+func TestOpenClawPrepareUsesLocalTUIWithEnvBackedSecretRef(t *testing.T) {
+	t.Setenv(openClawModelEnv, "gpt-5.6-terra")
+	tool, _ := Lookup("openclaw")
+	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", testLaunchCatalog[:1], "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer TakePreparedCleanup(extra)()
+	body, err := os.ReadFile(extra["OPENCLAW_CONFIG_PATH"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "secret-relay-key") {
+		t.Fatal("OpenClaw config persisted the relay credential")
+	}
+	for _, fragment := range []string{
+		`"api":"openai-completions"`,
+		`"id":"EVERYAPI_RELAY_KEY"`,
+		`"primary":"everyapi/gpt-5.6-terra"`,
+	} {
+		if !strings.Contains(string(body), fragment) {
+			t.Fatalf("OpenClaw config missing %s: %s", fragment, body)
+		}
+	}
+	if got := tool.DefaultArgs; !reflect.DeepEqual(got, []string{"tui", "--local"}) {
+		t.Fatalf("OpenClaw DefaultArgs = %v", got)
+	}
+}
+
+func TestContinuePrepareUsesLifecycleBoundConfigAndEnvironmentSecret(t *testing.T) {
+	const selected = "vendor/model:latest #1"
+	t.Setenv(continueModelEnv, selected)
+	tool, _ := Lookup("continue")
+	models := []Model{
+		{ID: "qwen-max", OwnedBy: "alibaba", SupportedEndpointTypes: []string{"openai"}},
+		{ID: selected, OwnedBy: "vendor", SupportedEndpointTypes: []string{"openai"}},
+		{ID: `${{ secrets.UNRELATED_SECRET }}`, OwnedBy: "untrusted", SupportedEndpointTypes: []string{"openai"}},
+		{ID: "kimi-k2", OwnedBy: "moonshot", SupportedEndpointTypes: []string{"openai"}},
+	}
+	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", models, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanup := TakePreparedCleanup(extra)
+	if _, exists := extra["CONTINUE_CONFIG_PATH"]; exists {
+		t.Fatal("Continue received an undocumented CONTINUE_CONFIG_PATH override")
+	}
+	path := filepath.Join(extra["CONTINUE_GLOBAL_DIR"], "config.yaml")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := TakePreparedArgs(extra); !reflect.DeepEqual(got, []string{"--config", path}) {
+		t.Fatalf("Continue prepared args = %v, want explicit lifecycle config", got)
+	}
+	if _, exists := extra[preparedArgvMarker]; exists {
+		t.Fatal("internal Continue argv marker would leak into the child environment")
+	}
+	if strings.Contains(string(body), "secret-relay-key") {
+		t.Fatal("Continue config persisted the relay credential")
+	}
+	for _, fragment := range []string{
+		`name: "EveryAPI vendor/model:latest #1"`,
+		`model: "vendor/model:latest #1"`,
+		`name: "EveryAPI qwen-max"`,
+		`model: "qwen-max"`,
+		`name: "EveryAPI kimi-k2"`,
+		`model: "kimi-k2"`,
+		"provider: openai",
+		`apiBase: "https://api.everyapi.ai/v1"`,
+		`apiKey: ${{ secrets.EVERYAPI_RELAY_KEY }}`,
+	} {
+		if !strings.Contains(string(body), fragment) {
+			t.Fatalf("Continue config missing %q:\n%s", fragment, body)
+		}
+	}
+	if strings.Contains(string(body), "UNRELATED_SECRET") {
+		t.Fatalf("Continue config retained a template expression from a model ID:\n%s", body)
+	}
+	if got := strings.Count(string(body), "    provider: openai"); got != len(models)-1 {
+		t.Fatalf("Continue config model count = %d, want %d:\n%s", got, len(models)-1, body)
+	}
+	selectedIndex := strings.Index(string(body), `model: "`+selected+`"`)
+	qwenIndex := strings.Index(string(body), `model: "qwen-max"`)
+	if selectedIndex < 0 || qwenIndex < 0 || selectedIndex > qwenIndex {
+		t.Fatalf("Continue selected model was not first:\n%s", body)
+	}
+	cleanup()
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("Continue lifecycle config survived cleanup: %v", err)
+	}
+}
+
+func TestContinuePrepareRejectsSelectedTemplateExpression(t *testing.T) {
+	t.Setenv(continueModelEnv, `${{ secrets.EVERYAPI_RELAY_KEY }}`)
+	tool, _ := Lookup("continue")
+	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", []Model{
+		{ID: `${{ secrets.EVERYAPI_RELAY_KEY }}`, SupportedEndpointTypes: []string{"openai"}},
+	}, "")
+	if extra != nil {
+		TakePreparedCleanup(extra)()
+	}
+	if err == nil || !strings.Contains(err.Error(), "template expression") {
+		t.Fatalf("Continue selected template model error = %v, want fail-closed rejection", err)
+	}
+}
+
+func TestKiloPrepareRoutesResponsesModelsThroughCompatibleChatBridge(t *testing.T) {
+	t.Setenv(kiloModelEnv, "gpt-5.6-terra")
+	tool, _ := Lookup("kilo")
+	if tool.RequiredEndpoint != "openai" || tool.AlternativeEndpoint != "openai-response" {
+		t.Fatalf("Kilo endpoint contract = %q/%q", tool.RequiredEndpoint, tool.AlternativeEndpoint)
+	}
+	models := []Model{
+		{ID: "chat-only", DisplayName: "Chat Only", SupportedEndpointTypes: []string{"openai"}},
+		{ID: "gpt-5.6-terra", DisplayName: "GPT 5.6 Terra", SupportedEndpointTypes: []string{"openai-response"}},
+		{ID: "gpt-5.5-response", DisplayName: "GPT 5.5 Response", SupportedEndpointTypes: []string{"openai-response"}},
+	}
+	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", models, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer TakePreparedCleanup(extra)()
+	body := extra["KILO_CONFIG_CONTENT"]
+	if strings.Contains(body, "secret-relay-key") {
+		t.Fatal("Kilo config persisted the relay credential")
+	}
+	var config openCodeConfig
+	if err := json.Unmarshal([]byte(body), &config); err != nil {
+		t.Fatalf("decode Kilo config: %v", err)
+	}
+	chatProvider := config.Provider["everyapi"]
+	if chatProvider.NPM != "@ai-sdk/openai-compatible" {
+		t.Fatalf("Kilo chat provider npm = %q", chatProvider.NPM)
+	}
+	if got := chatProvider.Models["chat-only"].Name; got != "Chat Only" {
+		t.Fatalf("Kilo chat model name = %q", got)
+	}
+	if got := chatProvider.Models["gpt-5.6-terra"].Name; got != "GPT 5.6 Terra" {
+		t.Fatalf("Kilo bridged Responses model name = %q", got)
+	}
+	responsesProvider := config.Provider["everyapi-responses"]
+	if responsesProvider.NPM != "@ai-sdk/openai" {
+		t.Fatalf("Kilo unaffected Responses provider npm = %q", responsesProvider.NPM)
+	}
+	if got := responsesProvider.Models["gpt-5.5-response"].Name; got != "GPT 5.5 Response" {
+		t.Fatalf("Kilo unaffected Responses model name = %q", got)
+	}
+	if _, ok := responsesProvider.Models["gpt-5.6-terra"]; ok {
+		t.Fatal("Kilo GPT-5.6 model remained on the prompt-cache-breakpoint provider")
+	}
+	if chatProvider.Options.BaseURL != "https://api.everyapi.ai/v1" {
+		t.Fatalf("Kilo chat bridge baseURL = %q", chatProvider.Options.BaseURL)
+	}
+	if chatProvider.Options.APIKey != "{env:EVERYAPI_RELAY_KEY}" {
+		t.Fatalf("Kilo chat bridge API key reference = %q", chatProvider.Options.APIKey)
+	}
+	if config.Model != "everyapi/gpt-5.6-terra" {
+		t.Fatalf("Kilo selected model = %q", config.Model)
+	}
+	for index := 1; index < len(models); index++ {
+		if !reflect.DeepEqual(models[index].SupportedEndpointTypes, []string{"openai-response"}) {
+			t.Fatalf("Kilo mutated input model %q endpoints = %#v", models[index].ID, models[index].SupportedEndpointTypes)
+		}
+	}
+}
+
+func TestKiloPromptCacheBreakpointCohort(t *testing.T) {
+	tests := []struct {
+		modelID string
+		want    bool
+	}{
+		{modelID: "gpt-5.5-response", want: false},
+		{modelID: "gpt-5.6-luna", want: true},
+		{modelID: "gpt-5.10", want: true},
+		{modelID: "gpt-6", want: true},
+		{modelID: "vendor/gpt-6-preview", want: true},
+		{modelID: "other-response", want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.modelID, func(t *testing.T) {
+			if got := kiloInjectsPromptCacheBreakpoint(test.modelID); got != test.want {
+				t.Fatalf("kiloInjectsPromptCacheBreakpoint(%q) = %t, want %t", test.modelID, got, test.want)
+			}
+		})
+	}
+}
+
+func TestPiPrepareUsesIsolatedModelsCatalogAndEnvironmentKey(t *testing.T) {
+	t.Setenv(piModelEnv, "gpt-5.6-terra")
+	tool, _ := Lookup("pi")
+	if tool.RequiredEndpoint != "openai" || tool.AlternativeEndpoint != "openai-response" {
+		t.Fatalf("Pi endpoint contract = %q/%q", tool.RequiredEndpoint, tool.AlternativeEndpoint)
+	}
+	models := []Model{
+		{ID: "gpt-5.6-terra", SupportedEndpointTypes: []string{"openai-response"}},
+		{ID: "chat-only", SupportedEndpointTypes: []string{"openai"}},
+		{ID: "dual-protocol", SupportedEndpointTypes: []string{"openai", "openai-response"}},
+	}
+	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", models, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer TakePreparedCleanup(extra)()
+	body, err := os.ReadFile(filepath.Join(extra[piAgentDirEnv], "models.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "secret-relay-key") {
+		t.Fatal("Pi config persisted the relay credential")
+	}
+	for _, fragment := range []string{
+		`"apiKey":"$EVERYAPI_RELAY_KEY"`,
+		`"api":"openai-responses","id":"gpt-5.6-terra"`,
+		`"api":"openai-completions","id":"chat-only"`,
+		`"api":"openai-completions","id":"dual-protocol"`,
+	} {
+		if !strings.Contains(string(body), fragment) {
+			t.Fatalf("Pi config missing %s: %s", fragment, body)
+		}
+	}
+	settings, err := os.ReadFile(filepath.Join(extra[piAgentDirEnv], "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fragment := range []string{`"defaultProvider":"everyapi"`, `"defaultModel":"gpt-5.6-terra"`} {
+		if !strings.Contains(string(settings), fragment) {
+			t.Fatalf("Pi settings missing %s: %s", fragment, settings)
+		}
+	}
+}
+
+func TestVibePrepareUsesIsolatedOpenAICompatibleProfile(t *testing.T) {
+	t.Setenv(vibeModelEnv, "gpt-5.6-terra")
+	tool, _ := Lookup("vibe")
+	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", testLaunchCatalog[:1], "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer TakePreparedCleanup(extra)()
+	body, err := os.ReadFile(filepath.Join(extra["VIBE_HOME"], "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "secret-relay-key") {
+		t.Fatal("Vibe config persisted the relay credential")
+	}
+	for _, fragment := range []string{`active_model = "gpt-5.6-terra"`, `api_key_env_var = "EVERYAPI_RELAY_KEY"`, `name = "gpt-5.6-terra"`} {
+		if !strings.Contains(string(body), fragment) {
+			t.Fatalf("Vibe config missing %q:\n%s", fragment, body)
+		}
+	}
+}
+
+func TestCopilotUsesOfficialProcessScopedBYOKContract(t *testing.T) {
+	tool, err := Lookup("copilot")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tool.ModelEnv != "COPILOT_MODEL" {
+		t.Fatalf("Copilot ModelEnv = %q, want COPILOT_MODEL", tool.ModelEnv)
+	}
+	if tool.RequiredEndpoint != "openai" || tool.AlternativeEndpoint != "openai-response" {
+		t.Fatalf("Copilot endpoint contract = %q/%q", tool.RequiredEndpoint, tool.AlternativeEndpoint)
+	}
+	env := tool.Env("https://api.everyapi.ai/", "secret-relay-key")
+	for key, want := range map[string]string{
+		"COPILOT_PROVIDER_BASE_URL": "https://api.everyapi.ai/v1",
+		"COPILOT_PROVIDER_TYPE":     "openai",
+		"COPILOT_PROVIDER_API_KEY":  "secret-relay-key",
+		// Copilot gives both of these higher precedence than API_KEY. Empty
+		// process-scoped values prevent ambient provider credentials or header
+		// overrides from bypassing EveryAPI.
+		"COPILOT_PROVIDER_BEARER_TOKEN": "",
+		"COPILOT_PROVIDER_HEADERS":      "",
+	} {
+		got, exists := env[key]
+		if !exists {
+			t.Errorf("%s is missing from the process-scoped override", key)
+			continue
+		}
+		if got != want {
+			t.Errorf("%s = %q, want %q", key, got, want)
+		}
+	}
+
+	t.Setenv("COPILOT_MODEL", "gpt-5.6-terra")
+	responsesModels := []Model{{
+		ID:                     "gpt-5.6-terra",
+		SupportedEndpointTypes: []string{"openai-response"},
+		ContextWindow:          262144,
+		MaxOutput:              32768,
+	}}
+	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", responsesModels, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := extra["COPILOT_PROVIDER_WIRE_API"]; got != "responses" {
+		t.Fatalf("Responses-capable model wire API = %q, want responses", got)
+	}
+	if got := extra["COPILOT_PROVIDER_MAX_PROMPT_TOKENS"]; got != "262144" {
+		t.Fatalf("Responses-capable prompt limit = %q, want catalogue context window", got)
+	}
+	if got := extra["COPILOT_PROVIDER_MAX_OUTPUT_TOKENS"]; got != "32768" {
+		t.Fatalf("Responses-capable output limit = %q, want catalogue max output", got)
+	}
+	if strings.Contains(strings.Join(mapValues(extra), "\n"), "secret-relay-key") {
+		t.Fatal("Copilot preparation copied the relay credential outside its documented env contract")
+	}
+
+	t.Setenv("COPILOT_MODEL", "chat-only")
+	chatOnly := []Model{{ID: "chat-only", SupportedEndpointTypes: []string{"openai"}}}
+	extra, err = tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", chatOnly, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := extra["COPILOT_PROVIDER_WIRE_API"]; got != "completions" {
+		t.Fatalf("Chat-only model wire API = %q, want completions", got)
+	}
+	if got := extra["COPILOT_PROVIDER_MAX_PROMPT_TOKENS"]; got != "128000" {
+		t.Fatalf("Unknown chat model prompt fallback = %q, want Copilot default", got)
+	}
+	if got := extra["COPILOT_PROVIDER_MAX_OUTPUT_TOKENS"]; got != "8192" {
+		t.Fatalf("Unknown chat model output fallback = %q, want conservative default", got)
+	}
+}
+
+func TestDroidPrepareUsesOfficialRuntimeSettingsWithoutPersistingCredential(t *testing.T) {
+	t.Setenv("EVERYAPI_DROID_MODEL", "gpt-5.6-terra")
+	tool, err := Lookup("droid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", testLaunchCatalog[:1], "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer TakePreparedCleanup(extra)()
+	settingsPath := extra[preparedArgsMarker]
+	if settingsPath == "" {
+		t.Fatal("Droid prepare did not expose its runtime settings path")
+	}
+	body, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	if strings.Contains(text, "secret-relay-key") {
+		t.Fatal("Droid runtime settings persisted the relay credential")
+	}
+	for _, fragment := range []string{
+		`"model":"custom:EveryAPI-0"`,
+		`"model":"gpt-5.6-terra"`,
+		`"displayName":"EveryAPI"`,
+		`"baseUrl":"https://api.everyapi.ai/v1"`,
+		`"apiKey":"${EVERYAPI_RELAY_KEY}"`,
+		`"provider":"openai"`,
+	} {
+		if !strings.Contains(text, fragment) {
+			t.Fatalf("Droid settings missing %s: %s", fragment, text)
+		}
+	}
+	args := TakePreparedArgs(extra)
+	if !reflect.DeepEqual(args, []string{"--settings", settingsPath}) {
+		t.Fatalf("Droid prepared args = %v", args)
+	}
+	if _, exists := extra[preparedArgsMarker]; exists {
+		t.Fatal("internal Droid argv marker would leak into the child environment")
+	}
+
+	t.Setenv("EVERYAPI_DROID_MODEL", "chat-only")
+	chatOnly := []Model{{ID: "chat-only", SupportedEndpointTypes: []string{"openai"}}}
+	extra, err = tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", chatOnly, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer TakePreparedCleanup(extra)()
+	body, err = os.ReadFile(extra[preparedArgsMarker])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `"provider":"generic-chat-completion-api"`) {
+		t.Fatalf("chat-only Droid settings chose the wrong provider: %s", body)
+	}
+}
+
+func TestOpenHandsUsesOfficialProcessOnlyEnvironmentOverrides(t *testing.T) {
+	t.Setenv(openHandsModelEnv, "gpt-5.6-terra")
+	tool, err := Lookup("openhands")
+	if err != nil {
+		t.Fatal(err)
+	}
+	extra, err := tool.PrepareWithModels(
+		"https://api.everyapi.ai", "secret-relay-key", testLaunchCatalog[:1], "",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := extra["LLM_MODEL"]; got != "openai/gpt-5.6-terra" {
+		t.Fatalf("LLM_MODEL = %q", got)
+	}
+	env := tool.Env("https://api.everyapi.ai", "secret-relay-key")
+	if env["LLM_API_KEY"] != "secret-relay-key" || env["LLM_BASE_URL"] != "https://api.everyapi.ai/v1" {
+		t.Fatalf("unexpected OpenHands env: %#v", env)
+	}
+	if !reflect.DeepEqual(tool.DefaultArgs, []string{"--override-with-envs"}) {
+		t.Fatalf("OpenHands DefaultArgs = %v", tool.DefaultArgs)
+	}
+}
+
+func TestForgePrepareIsolatesCredentialMigrationAndPinsEveryAPIModel(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(forgeModelEnv, "gpt-5.6-terra")
+	tool, err := Lookup("forge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tool.RequiredEndpoint != "openai" || tool.AlternativeEndpoint != "openai-response" {
+		t.Fatalf("Forge endpoint contract = %q/%q", tool.RequiredEndpoint, tool.AlternativeEndpoint)
+	}
+	extra, err := tool.PrepareWithModels(
+		"https://api.everyapi.ai", "secret-relay-key",
+		[]Model{{
+			ID:                     "gpt-5.6-terra",
+			OwnedBy:                "openai",
+			SupportedEndpointTypes: []string{"openai-response"},
+		}}, "",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanup := TakePreparedCleanup(extra)
+	home := extra["FORGE_CONFIG"]
+	if home == "" {
+		t.Fatal("FORGE_CONFIG was not isolated")
+	}
+	body, err := os.ReadFile(filepath.Join(home, ".forge.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "secret-relay-key") {
+		t.Fatal("Forge config persisted the relay credential")
+	}
+	for _, fragment := range []string{`provider_id = "openai_responses_compatible"`, `model_id = "gpt-5.6-terra"`} {
+		if !strings.Contains(string(body), fragment) {
+			t.Fatalf("Forge config missing %q: %s", fragment, body)
+		}
+	}
+	if extra["FORGE_SESSION__PROVIDER_ID"] != "openai_responses_compatible" || extra["FORGE_SESSION__MODEL_ID"] != "gpt-5.6-terra" {
+		t.Fatalf("Forge environment did not pin the session: %#v", extra)
+	}
+	env := tool.Env("https://api.everyapi.ai", "secret-relay-key")
+	if env["OPENAI_URL"] != "https://api.everyapi.ai/v1" || env["OPENAI_API_KEY"] != "secret-relay-key" {
+		t.Fatalf("unexpected Forge env: %#v", env)
+	}
+	cleanup()
+	if _, err := os.Stat(home); !os.IsNotExist(err) {
+		t.Fatalf("Forge prepared home survived cleanup: %v", err)
+	}
+}
+
+func TestForgePrepareEncodesArbitraryCatalogModelAsValidTOML(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	const modelID = "vendor/model\a"
+	t.Setenv(forgeModelEnv, modelID)
+	tool, _ := Lookup("forge")
+	extra, err := tool.PrepareWithModels(
+		"https://api.everyapi.ai", "secret-relay-key",
+		[]Model{{ID: modelID, SupportedEndpointTypes: []string{"openai", "openai-response"}}}, "",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer TakePreparedCleanup(extra)()
+	var decoded struct {
+		Session struct {
+			ProviderID string `toml:"provider_id"`
+			ModelID    string `toml:"model_id"`
+		} `toml:"session"`
+	}
+	if _, err := toml.DecodeFile(filepath.Join(extra["FORGE_CONFIG"], ".forge.toml"), &decoded); err != nil {
+		t.Fatalf("decode generated Forge TOML: %v", err)
+	}
+	if decoded.Session.ProviderID != "openai_compatible" || decoded.Session.ModelID != modelID {
+		t.Fatalf("decoded Forge session = %#v", decoded.Session)
+	}
+}
+
+func TestLLxprtPrepareUsesOfficialEphemeralFlagsAndIsolatedApplicationHomes(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(llxprtModelEnv, "gpt-5.6-terra")
+	tool, err := Lookup("llxprt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	extra, err := tool.PrepareWithModels(
+		"https://api.everyapi.ai", "secret-relay-key", testLaunchCatalog[:1], "",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanup := TakePreparedCleanup(extra)
+	home := extra["LLXPRT_CONFIG_HOME"]
+	if home == "" || extra["LLXPRT_DATA_HOME"] != home || extra["LLXPRT_CACHE_HOME"] != home || extra["LLXPRT_LOG_HOME"] != home {
+		t.Fatalf("LLxprt homes were not isolated: %#v", extra)
+	}
+	wantArgs := []string{"--provider", "openai", "--baseurl", "https://api.everyapi.ai/v1", "--model", "gpt-5.6-terra"}
+	if got := TakePreparedArgs(extra); !reflect.DeepEqual(got, wantArgs) {
+		t.Fatalf("LLxprt prepared args = %v, want %v", got, wantArgs)
+	}
+	if env := tool.Env("https://api.everyapi.ai", "secret-relay-key"); env["OPENAI_API_KEY"] != "secret-relay-key" {
+		t.Fatalf("unexpected LLxprt env: %#v", env)
+	}
+	cleanup()
+	if _, err := os.Stat(home); !os.IsNotExist(err) {
+		t.Fatalf("LLxprt prepared home survived cleanup: %v", err)
+	}
+}
+
+func mapValues(values map[string]string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		result = append(result, value)
+	}
+	return result
 }
 
 func TestQwenPrepareRejectsHigherPrecedenceCatalogOverrides(t *testing.T) {

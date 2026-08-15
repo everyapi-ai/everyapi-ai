@@ -35,8 +35,13 @@ USAGE
   everyapi use [<tool>] [--group <name> | --channel <name>] [--model <id>] [--sanitize] [--transparent[=false]] [-- tool args...]
 
 ARGUMENTS
-  <tool>                 claude | codex | opencode | gemini | grok | hermes
-                         qwen-code | kimi-code
+	<tool>                 claude | codex | opencode | gemini | antigravity
+	                       aider | goose | crush | cline | openclaw | continue
+	                       kilo | pi | vibe | copilot | droid | openhands
+	                       forge | llxprt | grok
+	                       qwen-code | kimi-code
+	                       hermes | librefang
+	                       open-webui
                          Omit to open an interactive picker over installed tools.
 
 FLAGS
@@ -45,28 +50,27 @@ FLAGS
   (bare --group/--channel, no value) → interactive picker over your
                          enabled keys' routing groups.
   --model <id>           choose the model for this launch, and remember it.
-                         hermes/qwen-code/kimi-code skip their picker.
+						 Model-selected tools skip their native picker.
                          codex/opencode boot on it — it is written into their
                          process-scoped config. claude is OFFERED it first in the
                          catalog it discovers; claude still makes the final
                          call, so a session that already has a model of its
-                         own may keep it. A bare --model (no value) reopens
-                         the picker, which is how a remembered choice gets
-                         replaced. gemini/grok set their boot model in their
-                         own CLI: pass model flags to them after -- instead.
-                         Native gemini/agy keeps Google's own catalog and
+                         own may keep it. Third-party interactive launches without an explicit model show
+                         EveryAPI's picker; unavailable Claude models stay visible but disabled.
+                         A bare --model (no value) also reopens Claude Code's
+                         picker. grok receives the validated selection through its own
+                         CLI. Native antigravity/agy keeps Google's own catalog and
                          routing.
   --sanitize             Opt in to the local sanitizer proxy (masks detected secrets before they reach the gateway). Off by default — the mask/restore step corrupts coding-agent sessions; for non-agentic SDK traffic use the standalone 'everyapi proxy' instead.
   --transparent[=false]  Transparent mode keeps the tool on its vendor's
                          official API origin and relays registered model routes
                          through a process-scoped local TLS connector, so the
                          EveryAPI relay key never reaches the child's env or
-                         config. ON BY DEFAULT for claude/codex. The gemini
-                         entry launches native agy instead.
+						 config. ON BY DEFAULT for claude/codex. Antigravity
+						 and LibreFang use their native integrations instead.
                          Pass --transparent=false to fall back
                          to injecting the gateway Base URL + relay key.
-                         opencode, grok, qwen-code, kimi-code, and hermes use the
-                         injected path.
+						 Other routed tools use their documented injected path.
   --                     End of everyapi's option parsing; remaining args are
                          forwarded verbatim to the tool's argv.
 
@@ -80,6 +84,15 @@ EXAMPLES
   everyapi use claude --transparent=false
   everyapi use codex --channel byteplus
   everyapi use opencode --model gpt-5
+	 everyapi use continue --model gpt-5
+	 everyapi use kilo --model gpt-5
+	 everyapi use pi --model gpt-5
+	 everyapi use vibe --model gpt-5
+	 everyapi use copilot --model gpt-5
+	 everyapi use droid --model gpt-5
+	 everyapi use openhands --model gpt-5
+	 everyapi use forge --model gpt-5
+	 everyapi use llxprt --model gpt-5
   everyapi use grok
   everyapi use qwen-code              (official Qwen Code; pick a model)
   everyapi use kimi-code --model kimi-k2.5
@@ -88,6 +101,8 @@ EXAMPLES
   everyapi use claude --model claude-opus-4-8
   everyapi use hermes                  (pick a model interactively)
   everyapi use hermes --model gpt-5.1  (skip the picker)
+	 everyapi use librefang               (native credential process)
+	 everyapi use open-webui               (start a configured local server)
 `
 
 // Use is the buyer onboarding bridge: verify credentials, configure
@@ -99,9 +114,26 @@ EXAMPLES
 //	everyapi use codex
 //	everyapi use opencode
 //	everyapi use gemini
+//	everyapi use antigravity
+//	everyapi use aider
+//	everyapi use goose
+//	everyapi use crush
+//	everyapi use cline
+//	everyapi use openclaw
+//	everyapi use continue
+//	everyapi use kilo
+//	everyapi use pi
+//	everyapi use vibe
+//	everyapi use copilot
+//	everyapi use droid
+//	everyapi use openhands
+//	everyapi use forge
+//	everyapi use llxprt
 //	everyapi use grok
 //	everyapi use qwen-code
 //	everyapi use kimi-code
+//	everyapi use hermes
+//	everyapi use librefang
 //	everyapi use            (no arg → interactive picker over installed tools)
 //	everyapi use claude --group byteplus   (relay through the key bound to
 //	                              the "byteplus" group instead of the
@@ -125,8 +157,8 @@ EXAMPLES
 // (`--channel team-a`) consumes the next token as the value unless
 // it's another flag or a known tool name — so `everyapi use claude
 // --channel` opens the picker while `--channel team-a claude` is
-// explicit. A group literally named like a tool (claude/codex/gemini/grok/
-// qwen-code/kimi-code/hermes) needs the `=` form when it appears before the
+// explicit. A group literally named like a registered tool needs the `=` form
+// when it appears before the
 // tool positional. A bare `--` ends
 // everyapi's option parsing; everything after is
 // forwarded raw to the tool — use it for tool flags like claude's
@@ -186,6 +218,12 @@ func Use(args []string) error {
 	if err != nil {
 		return err
 	}
+	if unavailable := nativeUnavailableModelArgument(t, extraArgs); unavailable != "" {
+		return fmt.Errorf(
+			"model %q cannot be selected through %s's native flags; choose an available model with `everyapi use %s --model <id>` before `--`",
+			unavailable, t.ExecName, t.ExecName,
+		)
+	}
 	extraArgs = toolArgsForLaunch(t, extraArgs)
 	// Transparent mode is the default wherever a tool has an adapter for it:
 	// the tool keeps talking to its vendor's official origin and the relay key
@@ -227,9 +265,8 @@ func Use(args []string) error {
 
 	// --model applies to tools EveryAPI picks a model for: hermes and the
 	// official qwen-code/kimi-code clients (ModelEnv), plus the clients whose
-	// boot model EveryAPI can steer without an env var (claude, codex — see
-	// toolRemembersModel). gemini/grok still default the model in their own
-	// CLI; pass tool model flags after `--` for those.
+	// boot model EveryAPI can steer without an env var (claude, codex, opencode,
+	// and grok — see toolRemembersModel).
 	if model != "" && t.ModelEnv == "" && !toolRemembersModel(t) {
 		return fmt.Errorf(i18n.T("use.model_unsupported"), t.ExecName, t.ExecName)
 	}
@@ -317,7 +354,7 @@ func Use(args []string) error {
 	// don't prompt for a model only to bail on a dead key, and uses the
 	// relay key (not the management token) so the catalog is scoped to
 	// what this key/group can actually reach. No-op for
-	// claude/codex/gemini/grok (ModelEnv == "").
+	// claude/codex/grok (ModelEnv == "").
 	if err := resolveToolModelFromCatalog(t, relayCatalog, catalogErr, model); err != nil {
 		return err
 	}
@@ -405,12 +442,13 @@ func Use(args []string) error {
 	}
 	interactive := cliprompt.IsInteractive()
 	bootModel := ""
-	if toolRemembersModel(t) {
+	if managedBootPickerNeeded(t, extraArgs) {
 		bootModel, err = resolveRememberedModel(t, settings, relayCatalog, model, pickModel, interactive)
 		if err != nil {
 			return err
 		}
 	}
+	extraArgs = managedBootModelArgs(t, extraArgs, bootModel)
 
 	// Build the transforms first; hosting them is a separate decision below.
 	var (
@@ -642,6 +680,7 @@ func Use(args []string) error {
 	if err != nil {
 		return fmt.Errorf("prepare %s: %w", t.ExecName, err)
 	}
+	extraArgs = append(tools.TakePreparedArgs(extraEnv), extraArgs...)
 	preparedCleanup := tools.TakePreparedCleanup(extraEnv)
 	if preparedCleanup != nil {
 		defer preparedCleanup()
@@ -679,18 +718,13 @@ func Use(args []string) error {
 		catalogLog.Printf("launch: %s via %s → %s", t.ExecName, apiBaseForEnv, gw)
 	}
 	// One line, same shape whichever path ran: the tool, and the gateway its
-	// traffic ends up at. Transparent mode is flagged because it is the one
-	// difference a user can observe from outside — the tool keeps the vendor's
-	// origin and never sees the gateway address or the relay key.
-	//
-	// A separate key rather than appending a marker to use.launching: the CLI
-	// ships eight locales, and concatenating an English fragment onto a
-	// translated string leaves seven of them emitting a mixed-language line.
-	launchKey := "use.launching"
-	if transparent {
-		launchKey = "use.launching_transparent"
-	}
-	cliout.Printf(i18n.T(launchKey)+"\n", t.ExecName, gw)
+	// traffic ends up at. Transparent mode used to be flagged here, but the
+	// marker named an internal transport choice the reader has no way to act
+	// on — "transparent" relative to what was never on screen — so a launch
+	// that worked read as one that had done something unexplained. Which path
+	// carried the traffic is a transport detail, and it is already recorded in
+	// connector.log for whoever is actually debugging the hop chain.
+	cliout.Printf(i18n.T("use.launching")+"\n", t.ExecName, gw)
 	// Discard any terminal control-sequence reply (e.g. the OSC 11
 	// background-color report a huh picker triggered) still buffered on
 	// stdin, so it doesn't leak into the launched tool as phantom input.
@@ -756,29 +790,42 @@ func transparentTopology(connectorURL string, relayHops []string, gateway string
 // a model-specific env var. claude reads the catalogue EveryAPI serves it and
 // boots on the first entry. codex reads a root-level `model` from its isolated
 // config.toml. opencode reads the selection from process-scoped
-// OPENCODE_CONFIG_CONTENT. gemini and grok have none of those hooks — a
-// selection there would be recorded and silently ignored.
+// OPENCODE_CONFIG_CONTENT. grok accepts the selected id through its documented
+// --model argument, which managedBootModelArgs adds after selection.
 func toolRemembersModel(t *tools.Tool) bool {
 	// Keyed on Name, not ExecName, because Name is what persistToolModel uses
 	// for the settings entry — and the two differ for three tools already
-	// (gemini/agy, qwen-code/qwen, kimi-code/kimi), so mixing them invites a
+	// (antigravity/agy, qwen-code/qwen, kimi-code/kimi), so mixing them invites a
 	// launch that qualifies under one field and stores under another.
-	return t.Name == "claude" || t.Name == "codex" || t.Name == "opencode"
+	return t.Name == "claude" || t.Name == "codex" || t.Name == "opencode" || t.Name == "grok"
+}
+
+// managedBootPickerNeeded keeps metadata-only invocations of third-party
+// clients independent of model availability. Official Claude Code retains its
+// prior behavior because its picker is not subject to the third-party policy.
+func managedBootPickerNeeded(t *tools.Tool, args []string) bool {
+	if !toolRemembersModel(t) {
+		return false
+	}
+	return t.Name == "claude" || toolInvocationNeedsEndpoint(args)
 }
 
 // resolveRememberedModel returns the model this launch should boot on, and
 // persists it when the user makes a choice.
 //
-// Precedence: an explicit --model wins, then --pick-model forces the picker,
-// then a remembered choice is reused, and only a tool with no record prompts.
-// That is what makes the first launch ask and later ones not.
+// Precedence: an explicit --model wins, then a non-interactive launch reuses a
+// remembered choice. Interactive third-party launches without an explicit
+// model always show the managed picker so unavailable models remain visible
+// rather than disappearing inside clients whose native model schema cannot
+// represent disabled entries. Official Claude Code may reuse its remembered
+// model because the restriction does not apply there. A bare --model forces
+// that official picker to reopen too.
 //
-// Every failure degrades to "" (the catalogue's own first entry) rather than
-// aborting. These clients ship a built-in default and launched fine before any
-// of this existed, so a catalogue blip, a non-interactive shell, or a
-// remembered model that has since left the account must not turn a working
-// launch into an error — unlike ModelEnv tools, which have nothing to fall back
-// to and so treat the same conditions as fatal.
+// Official Claude Code keeps its historical fail-soft behavior because its own
+// catalogue remains authoritative. Third-party clients treat the picker as a
+// launch policy boundary: cancellation, an all-disabled catalogue, or a stale
+// explicit/remembered model stops the launch instead of falling through to a
+// native default that may select Claude.
 func resolveRememberedModel(
 	t *tools.Tool,
 	settings *config.Settings,
@@ -793,9 +840,12 @@ func resolveRememberedModel(
 	}
 
 	if modelFlag != "" {
-		if len(offered) > 0 && !slices.Contains(offered, modelFlag) {
+		if modelUnavailableForTool(t, modelFlag) {
+			return "", fmt.Errorf("model %q is unavailable to %s", modelFlag, t.ExecName)
+		}
+		if len(catalog) > 0 && !slices.Contains(offered, modelFlag) {
 			return "", fmt.Errorf(
-				"model %q is not available to %s with this relay key/group — run `everyapi use %s --pick-model` to choose from the live list",
+				"model %q is not available to %s with this relay key/group — run `everyapi use %s --model` to choose from the live list",
 				modelFlag, t.ExecName, t.ExecName)
 		}
 		persistToolModel(settings, t.Name, modelFlag)
@@ -803,36 +853,81 @@ func resolveRememberedModel(
 	}
 
 	remembered := settings.ToolModel(t.Name)
+	if modelUnavailableForTool(t, remembered) {
+		remembered = ""
+		persistToolModel(settings, t.Name, "")
+	}
 	// A remembered model that the account can no longer route is dropped rather
 	// than pinned: the key may have moved group, or the model may be gone.
-	if remembered != "" && len(offered) > 0 && !slices.Contains(offered, remembered) {
+	if remembered != "" && len(catalog) > 0 && !slices.Contains(offered, remembered) {
 		remembered = ""
+		if t.Name != "claude" {
+			persistToolModel(settings, t.Name, "")
+		}
 	}
-	if remembered != "" && !pickModel {
+	if remembered != "" && !pickModel && (!interactive || t.Name == "claude") {
 		return remembered, nil
 	}
-	if len(offered) == 0 || !interactive {
-		// Nothing to choose from, or nobody to ask. Either way the tool's own
-		// default stands; a scripted or CI launch must never block on a prompt.
+	if !interactive {
+		if t.Name != "claude" && len(catalog) > 0 && len(offered) == 0 {
+			return "", fmt.Errorf(i18n.T("use.no_selectable_models"), t.ExecName)
+		}
+		// Nobody to ask. A scripted or CI launch must never block on a prompt;
+		// reuse the remembered model or let the client's filtered catalogue pick.
 		return remembered, nil
 	}
-
-	initial := 0
-	if remembered != "" {
-		initial = slices.Index(offered, remembered)
+	if t.Name == "claude" && len(offered) == 0 {
+		return remembered, nil
 	}
-	idx, err := cliprompt.PickWithSelected(
-		fmt.Sprintf(i18n.T("use.model_picker"), t.ExecName), offered, initial)
+	selected, err := pickManagedModelForTool(t, catalog, remembered)
 	if err != nil {
-		// Escape/EOF at the picker is not a launch failure; fall through on
-		// whatever was remembered before.
-		return remembered, nil
+		if t.Name == "claude" {
+			// The official client is allowed to retain its own remembered/default
+			// selection when its optional picker is cancelled.
+			return remembered, nil
+		}
+		return "", err
 	}
-	persistToolModel(settings, t.Name, offered[idx])
-	return offered[idx], nil
+	persistToolModel(settings, t.Name, selected)
+	return selected, nil
 }
 
-// persistToolModel saves the selection so the next launch skips the picker.
+func pickManagedModelForTool(t *tools.Tool, catalog []api.RelayModel, preferred string) (string, error) {
+	choices := modelPickerChoicesForTool(catalog, t)
+	if len(choices) == 0 {
+		return "", fmt.Errorf(i18n.T("use.no_selectable_models"), t.ExecName)
+	}
+	labels := make([]string, len(choices))
+	disabled := make([]bool, len(choices))
+	initial := 0
+	for index, choice := range choices {
+		labels[index] = choice.id
+		disabled[index] = choice.unavailable
+		if choice.id == preferred {
+			initial = index
+		}
+	}
+	idx, err := cliprompt.PickWithDisabled(
+		fmt.Sprintf(i18n.T("use.model_picker"), t.ExecName), labels, disabled, initial)
+	if err != nil {
+		return "", err
+	}
+	return choices[idx].id, nil
+}
+
+// managedBootModelArgs applies a picker selection to clients whose model is
+// steered through argv rather than an environment variable or generated
+// process-scoped config. Raw Grok model flags are rejected before this point,
+// so this is the only model argument that can reach the child.
+func managedBootModelArgs(t *tools.Tool, args []string, bootModel string) []string {
+	if t == nil || t.Name != "grok" || bootModel == "" {
+		return args
+	}
+	return append([]string{"--model", bootModel}, args...)
+}
+
+// persistToolModel saves the selection so it can be reused as the next
+// launch's default (or silently in a non-interactive launch).
 //
 // A failed save warns instead of returning an error. Not being able to write
 // settings.json is a reason the NEXT launch will ask again, not a reason to
@@ -854,6 +949,10 @@ func toolNeedsFilteredCatalogProxy(t *tools.Tool) bool {
 }
 
 func launchNativeTool(t *tools.Tool, args []string) error {
+	env, err := nativeLaunchEnv(t)
+	if err != nil {
+		return err
+	}
 	if t.YoloFlag != "" && !containsFlag(args, t.YoloFlag) {
 		settings, err := config.LoadSettings()
 		if err != nil {
@@ -882,9 +981,34 @@ func launchNativeTool(t *tools.Tool, args []string) error {
 			args = append([]string{t.YoloFlag}, args...)
 		}
 	}
-	cliout.Printf("Launching native %s (Antigravity authentication)\n", t.ExecName)
+	cliout.Printf("%s\n", nativeLaunchNotice(t))
 	cliprompt.DrainStdin()
-	return tools.Exec(t, map[string]string{}, args)
+	return tools.Exec(t, env, args)
+}
+
+// nativeLaunchEnv preserves each native client's credential boundary. In
+// particular, LibreFang resolves EveryAPI credentials through the documented
+// EVERYAPI_CLI_PATH credential-process hook. Pointing it at this executable is
+// what makes the integration work when Connect's bundled `everyapi-sidecar`
+// is the only EveryAPI binary installed on the machine.
+func nativeLaunchEnv(t *tools.Tool) (map[string]string, error) {
+	env := map[string]string{}
+	if t.Name != "librefang" {
+		return env, nil
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("resolve EveryAPI credential-process executable for LibreFang: %w", err)
+	}
+	env["EVERYAPI_CLI_PATH"] = executable
+	return env, nil
+}
+
+func nativeLaunchNotice(t *tools.Tool) string {
+	if t.Name == "librefang" {
+		return fmt.Sprintf("Launching native %s (LibreFang-owned authentication)", t.ExecName)
+	}
+	return fmt.Sprintf("Launching native %s (Antigravity authentication)", t.ExecName)
 }
 
 // createDefaultRelayKeyInteractive is the first-run repair path for
@@ -1309,8 +1433,8 @@ func parseUseArgs(args []string) (toolName, group string, pickGroup, sanitize bo
 			}
 			sanitize = true
 		case "model":
-			// Pin the upstream model for model-selectable tools
-			// (hermes), skipping the interactive picker. Validated
+			// Pin the upstream model for model-selectable tools, skipping the
+			// interactive picker. Validated
 			// against the tool's capability after Lookup. `=value`
 			// or space form; a bare/empty --model is an error since
 			// "no value" already has a meaning (the picker) reached
@@ -1334,8 +1458,9 @@ func parseUseArgs(args []string) (toolName, group string, pickGroup, sanitize bo
 			}
 			// Bare --model: open the picker. For a ModelEnv tool that is what
 			// omitting the flag already does, so this is redundant but harmless;
-			// for claude/codex it is the way to override a remembered choice,
-			// which is otherwise reused silently. An explicit --model= is still
+			// for Claude Code it reopens the picker after a remembered choice;
+			// third-party interactive launches open it by default. An explicit
+			// --model= is still
 			// an error — an empty value is a typo, not a request to choose.
 			pickModel = true
 		case "group", "channel":
@@ -1433,7 +1558,7 @@ func parseUseArgsWithTransparent(args []string) (toolName, group string, pickGro
 //  4. non-interactive with nothing set → deterministically select the
 //     first chat-capable model in that same live catalog.
 //
-// A no-op for claude/codex/gemini/grok, whose CLIs default the model
+// A no-op for claude/codex/grok, whose CLIs default the model
 // themselves and route it by name through the gateway.
 func resolveToolModel(t *tools.Tool, creds *config.Credentials, relayKey, modelFlag string) error {
 	if t.ModelEnv == "" {
@@ -1460,7 +1585,7 @@ func resolveToolModelFromCatalog(t *tools.Tool, catalog []api.RelayModel, catalo
 		if catalogErr != nil {
 			return fmt.Errorf("validate model %s for %s: %w", modelFlag, t.ExecName, catalogErr)
 		}
-		if !slices.Contains(chatModels(catalog, t.RequiredEndpoint), modelFlag) {
+		if !slices.Contains(chatModelsForTool(catalog, t), modelFlag) {
 			return fmt.Errorf("model %q is not available through the %s endpoint for this relay key/group", modelFlag, t.RequiredEndpoint)
 		}
 		return os.Setenv(t.ModelEnv, modelFlag)
@@ -1469,7 +1594,7 @@ func resolveToolModelFromCatalog(t *tools.Tool, catalog []api.RelayModel, catalo
 		if catalogErr != nil {
 			return fmt.Errorf("validate %s=%s for %s: %w", t.ModelEnv, current, t.ExecName, catalogErr)
 		}
-		if !slices.Contains(chatModels(catalog, t.RequiredEndpoint), current) {
+		if !slices.Contains(chatModelsForTool(catalog, t), current) {
 			return fmt.Errorf("%s=%q is not available for this relay key/group", t.ModelEnv, current)
 		}
 		return nil // explicit env override; respect it
@@ -1478,7 +1603,7 @@ func resolveToolModelFromCatalog(t *tools.Tool, catalog []api.RelayModel, catalo
 		if catalogErr != nil {
 			return fmt.Errorf("could not resolve a model for %s from the live catalog (%w); pass --model <id> to select one explicitly", t.ExecName, catalogErr)
 		}
-		models := chatModels(catalog, t.RequiredEndpoint)
+		models := chatModelsForTool(catalog, t)
 		if len(models) == 0 {
 			return fmt.Errorf("no chat-capable models are reachable for %s with this key/group; add a compatible channel or pass --model <id>", t.ExecName)
 		}
@@ -1487,15 +1612,16 @@ func resolveToolModelFromCatalog(t *tools.Tool, catalog []api.RelayModel, catalo
 	if catalogErr != nil {
 		return fmt.Errorf("could not resolve a model for %s from the live catalog (%w); pass --model <id> to select one explicitly", t.ExecName, catalogErr)
 	}
-	models := chatModels(catalog, t.RequiredEndpoint)
-	if len(models) == 0 {
-		return fmt.Errorf("no chat-capable models are reachable for %s with this key/group; add a compatible channel or pass --model <id>", t.ExecName)
+	models := chatModelsForTool(catalog, t)
+	preferred := ""
+	if len(models) > 0 {
+		preferred = preferredToolModel(t, models)
 	}
-	idx, err := cliprompt.PickWithSelected(fmt.Sprintf(i18n.T("use.model_picker"), t.Name), models, preferredToolModelIndex(t, models))
+	selected, err := pickManagedModelForTool(t, catalog, preferred)
 	if err != nil {
 		return err
 	}
-	return os.Setenv(t.ModelEnv, models[idx])
+	return os.Setenv(t.ModelEnv, selected)
 }
 
 // toolChatModels returns the chat-capable model ids the relay key can
@@ -1508,7 +1634,7 @@ func toolChatModels(t *tools.Tool, creds *config.Credentials, relayKey string) (
 	if err != nil {
 		return nil, fmt.Errorf("could not resolve a model for %s from the live catalog (%w); pass --model <id> to select one explicitly", t.ExecName, err)
 	}
-	models := chatModels(catalog, t.RequiredEndpoint)
+	models := chatModelsForTool(catalog, t)
 	if len(models) == 0 {
 		return nil, fmt.Errorf("no chat-capable models are reachable for %s with this key/group; add a compatible channel or pass --model <id>", t.ExecName)
 	}
@@ -1603,11 +1729,17 @@ func launchModelsForTool(t *tools.Tool, catalog []api.RelayModel, preferred stri
 			continue
 		}
 		id := cliout.Sanitize(model.ID)
-		if id == "" || seen[id] {
+		if id == "" || modelUnavailableForTool(t, id) || seen[id] {
 			continue
 		}
 		seen[id] = true
-		models = append(models, tools.Model{ID: id, OwnedBy: model.OwnedBy, SupportedEndpointTypes: model.SupportedEndpointTypes})
+		models = append(models, tools.Model{
+			ID:                     id,
+			OwnedBy:                model.OwnedBy,
+			SupportedEndpointTypes: model.SupportedEndpointTypes,
+			ContextWindow:          model.ContextWindow,
+			MaxOutput:              model.MaxOutput,
+		})
 	}
 	sortLaunchModels(t, models, preferred)
 	return models
@@ -1713,6 +1845,171 @@ func chatModels(catalog []api.RelayModel, requiredEndpoint string) []string {
 	return ids
 }
 
+func chatModelsForTool(catalog []api.RelayModel, tool *tools.Tool) []string {
+	if tool == nil || tool.AlternativeEndpoint == "" {
+		if tool == nil {
+			return chatModels(catalog, "")
+		}
+		models := chatModels(catalog, tool.RequiredEndpoint)
+		return slices.DeleteFunc(models, func(id string) bool {
+			return modelUnavailableForTool(tool, id)
+		})
+	}
+	primary := chatModels(catalog, tool.RequiredEndpoint)
+	alternative := chatModels(catalog, tool.AlternativeEndpoint)
+	seen := make(map[string]struct{}, len(primary)+len(alternative))
+	models := make([]string, 0, len(primary)+len(alternative))
+	for _, id := range append(primary, alternative...) {
+		if modelUnavailableForTool(tool, id) {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		models = append(models, id)
+	}
+	sort.Strings(models)
+	return models
+}
+
+type toolModelChoice struct {
+	id          string
+	unavailable bool
+}
+
+func modelPickerChoicesForTool(catalog []api.RelayModel, tool *tools.Tool) []toolModelChoice {
+	selectable := chatModelsForTool(catalog, tool)
+	choices := make([]toolModelChoice, 0, len(selectable))
+	seen := make(map[string]struct{}, len(selectable))
+	for _, id := range selectable {
+		seen[id] = struct{}{}
+		choices = append(choices, toolModelChoice{id: id})
+	}
+	for _, id := range chatModels(catalog, "") {
+		if !modelUnavailableForTool(tool, id) {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		choices = append(choices, toolModelChoice{id: id, unavailable: true})
+	}
+	sort.Slice(choices, func(left, right int) bool { return choices[left].id < choices[right].id })
+	return choices
+}
+
+func modelUnavailableForTool(tool *tools.Tool, modelID string) bool {
+	if tool == nil || strings.EqualFold(tool.Name, "claude") {
+		return false
+	}
+	normalized := strings.ToLower(strings.TrimSpace(modelID))
+	for _, segment := range strings.FieldsFunc(normalized, func(character rune) bool {
+		return character == '/' || character == ':'
+	}) {
+		for _, component := range strings.Split(segment, ".") {
+			if component == "claude" || strings.HasPrefix(component, "claude-") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// nativeUnavailableModelArgument finds a Claude model selected through the
+// launched client's own argv. Arguments after EveryAPI's `--` are normally
+// forwarded verbatim, but allowing a third-party client's --model/-m flag to
+// override the validated picker choice would make the disabled row cosmetic.
+func nativeUnavailableModelArgument(tool *tools.Tool, args []string) string {
+	if tool == nil || strings.EqualFold(tool.Name, "claude") {
+		return ""
+	}
+	for index := 0; index < len(args); index++ {
+		argument := args[index]
+		flag, inlineValue, hasInlineValue := strings.Cut(argument, "=")
+		if tool.Name == "pi" && flag == "--provider" {
+			provider := inlineValue
+			if !hasInlineValue && index+1 < len(args) {
+				provider = args[index+1]
+			}
+			if strings.EqualFold(strings.TrimSpace(provider), "anthropic") {
+				return "anthropic/*"
+			}
+		}
+		longModelFlag := nativeLongModelFlag(tool, flag)
+		shortModelFlag := nativeShortModelFlag(tool) && flag == "-m"
+		var modelID string
+		switch {
+		case (longModelFlag || shortModelFlag) && hasInlineValue:
+			modelID = inlineValue
+		case longModelFlag || shortModelFlag:
+			if index+1 < len(args) {
+				modelID = args[index+1]
+			}
+		case nativeShortModelFlag(tool) && strings.HasPrefix(argument, "-m") && len(argument) > 2:
+			modelID = strings.TrimPrefix(argument, "-m")
+		}
+		if tool.Name == "pi" && modelID != "" && (flag == "--model" || flag == "--models") {
+			return modelID
+		}
+		if tool.Name == "grok" && modelID != "" {
+			return modelID
+		}
+		if nativeModelUnavailable(tool, modelID) {
+			return modelID
+		}
+	}
+	return ""
+}
+
+func nativeLongModelFlag(tool *tools.Tool, flag string) bool {
+	if flag == "--model" || flag == "--model-id" || flag == "--model-name" {
+		return true
+	}
+	switch tool.Name {
+	case "aider":
+		return flag == "--weak-model" || flag == "--editor-model"
+	case "pi":
+		return flag == "--models"
+	case "qwen-code":
+		return flag == "--fallback-model"
+	default:
+		return false
+	}
+}
+
+func nativeShortModelFlag(tool *tools.Tool) bool {
+	switch tool.Name {
+	case "codex", "grok", "opencode", "qwen-code":
+		return true
+	default:
+		return false
+	}
+}
+
+func nativeModelUnavailable(tool *tools.Tool, value string) bool {
+	for candidate := range strings.SplitSeq(value, ",") {
+		candidate = strings.TrimSpace(candidate)
+		if modelUnavailableForTool(tool, candidate) || nativeClaudeAlias(candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+func nativeClaudeAlias(value string) bool {
+	for _, segment := range strings.FieldsFunc(strings.ToLower(value), func(character rune) bool {
+		return character == '/' || character == ':'
+	}) {
+		switch strings.TrimSpace(segment) {
+		case "sonnet", "opus", "haiku":
+			return true
+		}
+	}
+	return false
+}
+
 func supportsEndpoint(types []string, required string) bool {
 	if types == nil {
 		return true
@@ -1794,12 +2091,131 @@ func toolInvocationNeedsEndpoint(args []string) bool {
 // to the current working directory, which can report 0/0 even though the
 // managed home contains resumable sessions, so make the bare picker global.
 // Qwen project settings override its QWEN_HOME settings, so force the OpenAI
-// protocol at CLI precedence. Remove a caller-supplied auth type first:
-// forwarding another protocol would either bypass the EveryAPI OPENAI_* overlay
-// or make duplicate yargs values ambiguous.
+// protocol at CLI precedence. Continue and Cline receive lifecycle config
+// through managed paths, so remove caller-supplied overrides that would escape
+// those isolated directories. Remove Qwen's caller-supplied
+// auth type too: forwarding another protocol would either bypass the EveryAPI
+// OPENAI_* overlay or make duplicate yargs values ambiguous.
 func toolArgsForLaunch(t *tools.Tool, args []string) []string {
+	if t.Name == "openhands" {
+		filtered := make([]string, 0, len(args)+1)
+		filtered = append(filtered, "--override-with-envs")
+		for _, arg := range args {
+			if arg != "--override-with-envs" {
+				filtered = append(filtered, arg)
+			}
+		}
+		return filtered
+	}
+	if len(args) == 0 && len(t.DefaultArgs) > 0 {
+		return append([]string(nil), t.DefaultArgs...)
+	}
 	if t.Name == "codex" && len(args) == 1 && args[0] == "resume" {
 		return []string{"resume", "--all"}
+	}
+	if t.Name == "continue" {
+		filtered := make([]string, 0, len(args))
+		for i := 0; i < len(args); i++ {
+			switch {
+			case args[i] == "--config":
+				if i+1 < len(args) {
+					i++
+				}
+			case strings.HasPrefix(args[i], "--config="):
+			default:
+				filtered = append(filtered, args[i])
+			}
+		}
+		return filtered
+	}
+	if t.Name == "cline" {
+		filtered := make([]string, 0, len(args))
+		for i := 0; i < len(args); i++ {
+			argument := args[i]
+			switch {
+			case argument == "--data-dir" || argument == "--config" ||
+				argument == "--provider" || argument == "-P" ||
+				argument == "--model" || argument == "-m" ||
+				argument == "--key" || argument == "-k":
+				if i+1 < len(args) {
+					i++
+				}
+			case strings.HasPrefix(argument, "--data-dir=") || strings.HasPrefix(argument, "--config=") ||
+				strings.HasPrefix(argument, "--provider=") || strings.HasPrefix(argument, "--model=") ||
+				strings.HasPrefix(argument, "--key=") ||
+				(strings.HasPrefix(argument, "-P") && len(argument) > 2) ||
+				(strings.HasPrefix(argument, "-m") && len(argument) > 2) ||
+				(strings.HasPrefix(argument, "-k") && len(argument) > 2):
+			default:
+				filtered = append(filtered, argument)
+			}
+		}
+		return filtered
+	}
+	if t.Name == "droid" {
+		filtered := make([]string, 0, len(args))
+		for i := 0; i < len(args); i++ {
+			switch {
+			case args[i] == "--settings":
+				if i+1 < len(args) {
+					i++
+				}
+			case strings.HasPrefix(args[i], "--settings="):
+			default:
+				filtered = append(filtered, args[i])
+			}
+		}
+		return filtered
+	}
+	if t.Name == "llxprt" {
+		filtered := make([]string, 0, len(args))
+		isReservedSet := func(value string) bool {
+			key, _, ok := strings.Cut(value, "=")
+			if !ok {
+				return false
+			}
+			switch strings.ToLower(strings.TrimSpace(key)) {
+			case "provider", "model", "base-url", "api-key", "auth-key", "auth-keyfile", "auth-key-name":
+				return true
+			default:
+				return false
+			}
+		}
+		for i := 0; i < len(args); i++ {
+			switch {
+			case args[i] == "--provider" || args[i] == "--baseurl" || args[i] == "--base-url" ||
+				args[i] == "--model" || args[i] == "-m" || args[i] == "--key" ||
+				args[i] == "--keyfile" || args[i] == "--key-name" ||
+				args[i] == "--profile-load" || args[i] == "--profile":
+				if i+1 < len(args) {
+					i++
+				}
+			case strings.HasPrefix(args[i], "--provider=") || strings.HasPrefix(args[i], "--baseurl=") ||
+				strings.HasPrefix(args[i], "--base-url=") ||
+				strings.HasPrefix(args[i], "--model=") || strings.HasPrefix(args[i], "-m=") ||
+				strings.HasPrefix(args[i], "--key=") ||
+				strings.HasPrefix(args[i], "--keyfile=") || strings.HasPrefix(args[i], "--key-name=") ||
+				strings.HasPrefix(args[i], "--profile-load=") || strings.HasPrefix(args[i], "--profile="):
+			case args[i] == "--set":
+				start := i
+				for i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+					i++
+					if !isReservedSet(args[i]) {
+						filtered = append(filtered, "--set="+args[i])
+					}
+				}
+				if i == start {
+					filtered = append(filtered, args[i])
+				}
+			case strings.HasPrefix(args[i], "--set="):
+				if !isReservedSet(strings.TrimPrefix(args[i], "--set=")) {
+					filtered = append(filtered, args[i])
+				}
+			default:
+				filtered = append(filtered, args[i])
+			}
+		}
+		return filtered
 	}
 	if t.Name != "qwen-code" {
 		return args

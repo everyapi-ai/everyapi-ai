@@ -5,39 +5,182 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 )
 
-// TestRegistry_HasInstallCmds pins that every shipped tool has an
-// auto-installable command wired up — losing one silently degrades
-// the `everyapi use <tool>` UX back to "print a URL, leave the user
-// to install manually." Reviewable change, not silent.
-func TestRegistry_HasInstallCmds(t *testing.T) {
-	cases := map[string]string{
-		"claude": "curl -fsSL https://claude.ai/install.sh | bash",
-		"codex":  "npm install -g @openai/codex",
-		"gemini": "curl -fsSL https://antigravity.google/cli/install.sh | bash",
-	}
-	for name, want := range cases {
+var desktopCLITools = []string{
+	"claude", "codex", "opencode", "aider", "goose", "crush", "cline",
+	"openclaw", "continue", "kilo", "pi", "vibe", "copilot", "droid",
+	"openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code",
+	"hermes", "librefang", "open-webui",
+}
+
+// TestEveryDesktopCLIHasAReviewedInstallerOnEveryPlatform is the contract for
+// the Connect catalogue: a visible CLI target must never pretend that opening
+// documentation installed it. Gemini and Antigravity are intentionally absent
+// because they are not desktop catalogue targets.
+func TestEveryDesktopCLIHasAReviewedInstallerOnEveryPlatform(t *testing.T) {
+	for _, name := range desktopCLITools {
 		tool, err := Lookup(name)
 		if err != nil {
 			t.Fatalf("Lookup(%q): %v", name, err)
 		}
-		if tool.InstallCmd != want {
-			t.Errorf("%s.InstallCmd = %q, want %q", name, tool.InstallCmd, want)
+		for _, goos := range []string{"darwin", "linux", "windows"} {
+			if installCommandForOS(tool, goos).empty() {
+				t.Errorf("%s has no reviewed %s installer; Connect would open a webpage", name, goos)
+			}
 		}
 	}
+}
 
-	// The pinned cases above only cover the tools someone thought to
-	// list. Sweep the whole registry too — gemini shipped without an
-	// InstallCmd for exactly as long as this test hardcoded two names,
-	// which is the silent degradation the doc comment warns about.
-	for key, tool := range Registry {
-		if tool.InstallCmd == "" {
-			t.Errorf("%s has no InstallCmd; `everyapi use %s` cannot offer to install it", key, key)
+func TestNewDesktopInstallersUseOfficialCommandsAndDeterministicOutputs(t *testing.T) {
+	cases := map[string]struct {
+		unix        string
+		windows     []string
+		extraBinDir string
+	}{
+		"goose": {
+			unix:        "curl -fsSL https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash",
+			windows:     []string{"powershell", "-ExecutionPolicy", "ByPass", "-Command", "$env:CONFIGURE='false'; irm https://raw.githubusercontent.com/aaif-goose/goose/705f30df47fc819677b973c69efeff153c8fcdaa/download_cli.ps1 | iex"},
+			extraBinDir: ".local/bin",
+		},
+		"vibe": {
+			unix:        "curl -LsSf https://mistral.ai/vibe/install.sh | bash",
+			windows:     []string{"powershell", "-ExecutionPolicy", "ByPass", "-Command", "irm https://astral.sh/uv/install.ps1 | iex; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install mistral-vibe"},
+			extraBinDir: ".local/bin",
+		},
+		"librefang": {
+			unix:        "curl -fsSL https://librefang.ai/install.sh | LIBREFANG_AUTO_START=0 sh",
+			windows:     []string{"powershell", "-ExecutionPolicy", "ByPass", "-Command", "$env:LIBREFANG_AUTO_START='0'; irm https://librefang.ai/install.ps1 | iex"},
+			extraBinDir: ".librefang/bin",
+		},
+		"open-webui": {
+			unix:        "curl -LsSf https://astral.sh/uv/install.sh | sh && \"$HOME/.local/bin/uv\" tool install --python 3.11 open-webui",
+			windows:     []string{"powershell", "-ExecutionPolicy", "ByPass", "-Command", "irm https://astral.sh/uv/install.ps1 | iex; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install --python 3.11 open-webui"},
+			extraBinDir: ".local/bin",
+		},
+	}
+	for name, want := range cases {
+		tool, _ := Lookup(name)
+		if tool.InstallCmd != want.unix {
+			t.Errorf("%s.InstallCmd = %q, want %q", name, tool.InstallCmd, want.unix)
 		}
+		if !reflect.DeepEqual(tool.InstallCmdWindows, want.windows) {
+			t.Errorf("%s.InstallCmdWindows = %q, want %q", name, tool.InstallCmdWindows, want.windows)
+		}
+		if !containsString(tool.ExtraBinDirs, want.extraBinDir) {
+			t.Errorf("%s.ExtraBinDirs = %v, missing %q", name, tool.ExtraBinDirs, want.extraBinDir)
+		}
+		if tool.InstallPromptDefault() {
+			t.Errorf("%s remote installer must default to No", name)
+		}
+	}
+}
+
+func TestExistingUnixInstallersHaveReviewedWindowsCommands(t *testing.T) {
+	cases := map[string][]string{
+		"claude": {
+			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
+			"irm https://claude.ai/install.ps1 | iex",
+		},
+		"openhands": {
+			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
+			"irm https://astral.sh/uv/install.ps1 | iex; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install openhands --python 3.12",
+		},
+		"forge": {
+			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
+			"$bash = @(\"$env:ProgramFiles\\Git\\bin\\bash.exe\", \"${env:ProgramFiles(x86)}\\Git\\bin\\bash.exe\", \"$env:LOCALAPPDATA\\Programs\\Git\\bin\\bash.exe\") | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | Select-Object -First 1; if (-not $bash) { throw 'ForgeCode installer requires Git for Windows (Git Bash).' }; & $bash -lc 'curl -fsSL https://forgecode.dev/cli | sh'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+		},
+		"hermes": {
+			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
+			"$installer = [scriptblock]::Create((irm https://hermes-agent.nousresearch.com/install.ps1)); & $installer -NonInteractive",
+		},
+	}
+	for name, want := range cases {
+		tool, _ := Lookup(name)
+		if !reflect.DeepEqual(tool.InstallCmdWindows, want) {
+			t.Errorf("%s.InstallCmdWindows = %q, want %q", name, tool.InstallCmdWindows, want)
+		}
+	}
+}
+
+func TestHermesInstallerSkipsPersistentSetup(t *testing.T) {
+	tool, _ := Lookup("hermes")
+	if !strings.Contains(tool.InstallCmd, "bash -s -- --non-interactive --skip-setup") {
+		t.Fatalf("Hermes Unix installer is interactive: %q", tool.InstallCmd)
+	}
+	if got := strings.Join(tool.InstallCmdWindows, " "); !strings.Contains(got, "-NonInteractive") {
+		t.Fatalf("Hermes Windows installer is interactive: %q", tool.InstallCmdWindows)
+	}
+}
+
+func TestAiderAutoInstall(t *testing.T) {
+	tool, err := Lookup("aider")
+	if err != nil {
+		t.Fatalf("Lookup(aider): %v", err)
+	}
+	if !CanAutoInstall(tool) {
+		t.Fatalf("CanAutoInstall(aider) = false on %s, want true", runtime.GOOS)
+	}
+	wantWindows := []string{
+		"powershell", "-ExecutionPolicy", "ByPass", "-Command",
+		"irm https://aider.chat/install.ps1 | iex",
+	}
+	if !reflect.DeepEqual(tool.InstallCmdWindows, wantWindows) {
+		t.Errorf("InstallCmdWindows = %q", tool.InstallCmdWindows)
+	}
+	if tool.InstallPromptDefault() {
+		t.Error("Aider's remote installer must default to No")
+	}
+	if !containsString(tool.ExtraBinDirs, ".local/bin") {
+		t.Errorf("ExtraBinDirs = %v, missing .local/bin", tool.ExtraBinDirs)
+	}
+}
+
+func TestInstallCommandSelectsThePlatformInstaller(t *testing.T) {
+	tool := &Tool{
+		InstallCmd:         "unix-installer",
+		InstallCmdUnixOnly: true,
+		InstallCmdWindows:  []string{"windows-installer", "--flag", "value with spaces"},
+	}
+	if got := installCommandForOS(tool, "darwin"); got.shell != "unix-installer" || got.executable != "" {
+		t.Errorf("darwin command = %#v", got)
+	}
+	if got := installCommandForOS(tool, "linux"); got.shell != "unix-installer" || got.executable != "" {
+		t.Errorf("linux command = %#v", got)
+	}
+	windows := installCommandForOS(tool, "windows")
+	if windows.executable != "windows-installer" || !reflect.DeepEqual(windows.args, []string{"--flag", "value with spaces"}) || windows.shell != "" {
+		t.Errorf("windows command = %#v", windows)
+	}
+	if got := windows.display(); got != `windows-installer --flag "value with spaces"` {
+		t.Errorf("windows display = %q", got)
+	}
+	tool.InstallCmdWindows = nil
+	if got := installCommandForOS(tool, "windows"); !got.empty() {
+		t.Errorf("Windows command without an override = %#v, want empty", got)
+	}
+	tool.InstallCmdUnixOnly = false
+	if got := installCommandForOS(tool, "windows"); got.shell != "unix-installer" {
+		t.Errorf("cross-platform Windows command = %#v", got)
+	}
+}
+
+func TestBuildInstallCommandKeepsWindowsArgvStructured(t *testing.T) {
+	tool, _ := Lookup("aider")
+	command := buildInstallCommand(installCommandForOS(tool, "windows"), "windows")
+	want := []string{
+		"powershell", "-ExecutionPolicy", "ByPass", "-Command",
+		"irm https://aider.chat/install.ps1 | iex",
+	}
+	if !reflect.DeepEqual(command.Args, want) {
+		t.Fatalf("Windows installer argv = %q, want %q", command.Args, want)
+	}
+	if command.Args[0] == "cmd" {
+		t.Fatal("PowerShell installer must not be reparsed through cmd.exe")
 	}
 }
 
@@ -84,7 +227,7 @@ func TestCanAutoInstall_ClaudeWindows(t *testing.T) {
 // gating these would needlessly send Windows users back to the
 // install-hint URL when `npm install -g @openai/codex` would work.
 func TestCanAutoInstall_NpmCrossPlatform(t *testing.T) {
-	for _, name := range []string{"codex"} {
+	for _, name := range []string{"codex", "gemini", "openclaw", "continue", "kilo", "pi", "copilot", "droid"} {
 		tool, _ := Lookup(name)
 		if tool.InstallCmdUnixOnly {
 			t.Errorf("%s.InstallCmdUnixOnly = true, but npm is cross-platform", name)
@@ -130,10 +273,14 @@ func TestIsInstalled(t *testing.T) {
 // default to Yes so the common case stays one keystroke.
 func TestInstallPromptDefault(t *testing.T) {
 	cases := map[string]bool{
-		"claude": false, // curl|bash → default No
-		"gemini": false, // curl|bash (Antigravity install.sh) → default No
-		"codex":  true,  // npm → default Yes
-		"grok":   true,  // npm → default Yes
+		"claude":      false, // curl|bash → default No
+		"antigravity": false, // curl|bash → default No
+		"gemini":      true,  // npm → default Yes
+		"codex":       true,  // npm → default Yes
+		"grok":        true,  // npm → default Yes
+		"openclaw":    true,  // npm → default Yes
+		"copilot":     true,  // npm → default Yes
+		"droid":       true,  // npm → default Yes
 	}
 	for name, want := range cases {
 		tool, _ := Lookup(name)

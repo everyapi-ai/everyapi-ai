@@ -1313,13 +1313,13 @@ choice_later = "Remind me later"
 choice_skip = "Skip this version"
 
 [use]
+no_selectable_models = "No selectable models are available to %s with this relay key/group."
 sanitize_bad_value = "--sanitize=%q is not a valid true/false value — use --sanitize or --sanitize=false"
 tool_picker = "Pick a tool:"
 group_picker = "Pick a routing group:"
 yolo_prompt = "Enable %s? (skips every safety prompt)"
 hook_trust_prompt = "Allow Codex to run repository hooks without reviewing them first?"
 launching = "Launching %s against %s"
-launching_transparent = "Launching %s against %s (transparent)"
 launching_via = "Launching %s against %s → %s"
 claude_inflated_resume = "Warning: this Claude session was created with an inflated %d-token tool-schema prefix. The EveryAPI fix applies to new sessions, but --resume restores the old transcript unchanged. Start a new Claude session to remove it."
 claude_polluted_resume_recovered = "Detected known Claude output corruption in session %s at %s (%d affected assistant messages). Started clean recovery session %s; the original transcript was preserved."
@@ -1433,6 +1433,9 @@ unknown_sub = "unknown inbox subcommand %q"
 [cliprompt]
 pick_toggle_hint = "space to toggle · enter to confirm · esc to go back"
 pick_enter_name_number = "Enter name or number: "
+pick_unavailable_label = "unavailable for this client"
+pick_unavailable_selection = "%s is unavailable for this client"
+pick_nothing_available = "No available choices."
 pick_toggle_csv = "Enter comma-separated names or numbers to TOGGLE (blank = no change): "
 
 [proxy.detector]

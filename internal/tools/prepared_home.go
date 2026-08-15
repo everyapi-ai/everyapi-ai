@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,8 @@ import (
 const (
 	preparedHomeMarker              = "__EVERYAPI_PREPARED_HOME"
 	preparedCodexSessionIndexMarker = "__EVERYAPI_CODEX_SESSION_INDEX"
+	preparedArgsMarker              = "__EVERYAPI_PREPARED_SETTINGS_ARG"
+	preparedArgvMarker              = "__EVERYAPI_PREPARED_ARGV_JSON"
 )
 
 // newPreparedHome creates a process-scoped client home. Live catalog and
@@ -33,6 +36,27 @@ func newPreparedHome(prefix string) (string, error) {
 		return "", fmt.Errorf("create prepared %s home: %w", prefix, err)
 	}
 	return home, nil
+}
+
+// TakePreparedArgs removes the internal settings-path marker before the child
+// receives its environment and returns the fixed argv prefix for tools whose
+// official runtime-config surface is a command-line option.
+func TakePreparedArgs(env map[string]string) []string {
+	encoded := env[preparedArgvMarker]
+	delete(env, preparedArgvMarker)
+	if encoded != "" {
+		var args []string
+		if err := json.Unmarshal([]byte(encoded), &args); err == nil {
+			return args
+		}
+		return nil
+	}
+	path := env[preparedArgsMarker]
+	delete(env, preparedArgsMarker)
+	if path == "" {
+		return nil
+	}
+	return []string{"--settings", path}
 }
 
 func preparedHomeEnv(key, home string) map[string]string {

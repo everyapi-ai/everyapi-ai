@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/internal/tools"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
@@ -294,6 +295,12 @@ func TestUseUsageDocumentsGrok(t *testing.T) {
 	if !strings.Contains(useUsage, "everyapi use grok") {
 		t.Fatal("use help does not include a Grok launch example")
 	}
+	if strings.Contains(useUsage, "pass model flags to it after --") {
+		t.Fatal("use help still tells Grok users to bypass EveryAPI's managed picker")
+	}
+	if !strings.Contains(useUsage, "Third-party interactive launches without an explicit model show") {
+		t.Fatal("use help does not explain the disabled-model picker")
+	}
 }
 
 func TestUseUsageDocumentsOfficialQwenAndKimiCLIs(t *testing.T) {
@@ -302,8 +309,8 @@ func TestUseUsageDocumentsOfficialQwenAndKimiCLIs(t *testing.T) {
 			t.Errorf("use help does not list %s", name)
 		}
 	}
-	if !strings.Contains(useUsage, "hermes/qwen-code/kimi-code") {
-		t.Error("use help does not document model selection for the new CLIs")
+	if !strings.Contains(useUsage, "Model-selected tools skip their native picker") {
+		t.Error("use help does not document model selection for routed CLIs")
 	}
 }
 
@@ -317,6 +324,40 @@ func TestUseUsageAndModelSelectionIncludeOpenCode(t *testing.T) {
 	}
 	if !toolRemembersModel(opencode) {
 		t.Fatal("OpenCode must remember the model written to its process-scoped config")
+	}
+}
+
+func TestEveryThirdPartyCLIHasManagedModelSelection(t *testing.T) {
+	for _, name := range []string{
+		"aider", "cline", "codex", "continue", "copilot", "crush", "droid",
+		"forge", "goose", "grok", "hermes", "kimi-code", "kilo", "llxprt",
+		"openclaw", "opencode", "openhands", "pi", "qwen-code", "vibe",
+	} {
+		tool, err := tools.Lookup(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tool.ModelEnv == "" && !toolRemembersModel(tool) {
+			t.Errorf("%s has neither a ModelEnv picker nor a managed boot-model picker", name)
+		}
+	}
+}
+
+func TestManagedBootPickerSkipsThirdPartyMetadataCommands(t *testing.T) {
+	for _, name := range []string{"codex", "grok", "opencode"} {
+		tool := tools.Registry[name]
+		if managedBootPickerNeeded(tool, []string{"--help"}) {
+			t.Errorf("%s --help unexpectedly needs a model picker", name)
+		}
+		if managedBootPickerNeeded(tool, []string{"--version"}) {
+			t.Errorf("%s --version unexpectedly needs a model picker", name)
+		}
+		if !managedBootPickerNeeded(tool, nil) {
+			t.Errorf("normal %s launch skipped the managed model picker", name)
+		}
+	}
+	if !managedBootPickerNeeded(tools.Registry["claude"], []string{"--help"}) {
+		t.Fatal("official Claude Code metadata behavior changed unexpectedly")
 	}
 }
 
@@ -372,6 +413,149 @@ func TestToolArgsForLaunchMakesBareCodexResumeGlobal(t *testing.T) {
 				t.Errorf("toolArgsForLaunch() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestToolArgsForLaunchUsesLibreFangStartByDefault(t *testing.T) {
+	librefang, err := tools.Lookup("librefang")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := toolArgsForLaunch(librefang, nil); !reflect.DeepEqual(got, []string{"start", "--foreground"}) {
+		t.Fatalf("toolArgsForLaunch(librefang, nil) = %v", got)
+	}
+	explicit := []string{"doctor"}
+	if got := toolArgsForLaunch(librefang, explicit); !reflect.DeepEqual(got, explicit) {
+		t.Fatalf("explicit LibreFang args changed: %v", got)
+	}
+}
+
+func TestToolArgsForLaunchReservesDroidRuntimeSettings(t *testing.T) {
+	droid := &tools.Tool{Name: "droid"}
+	got := toolArgsForLaunch(droid, []string{
+		"--settings", "/tmp/bypass.json", "--auto", "high", "--settings=other.json", "hello",
+	})
+	want := []string{"--auto", "high", "hello"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("toolArgsForLaunch(droid) = %v, want %v", got, want)
+	}
+}
+
+func TestToolArgsForLaunchReservesContinueLifecycleConfig(t *testing.T) {
+	t.Setenv("EVERYAPI_CONTINUE_MODEL", "chat-model")
+	continueTool, err := tools.Lookup("continue")
+	if err != nil {
+		t.Fatal(err)
+	}
+	extra, err := continueTool.PrepareWithModels(
+		"https://api.everyapi.ai", "secret-relay-key",
+		[]tools.Model{{ID: "chat-model", SupportedEndpointTypes: []string{"openai"}}}, "",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tools.TakePreparedCleanup(extra)()
+	configPath := filepath.Join(extra["CONTINUE_GLOBAL_DIR"], "config.yaml")
+	nativeArgs := toolArgsForLaunch(continueTool, []string{
+		"--config", "/tmp/bypass.yaml", "--verbose", "--config=/tmp/second.yaml", "prompt",
+	})
+	got := append(tools.TakePreparedArgs(extra), nativeArgs...)
+	want := []string{"--config", configPath, "--verbose", "prompt"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Continue final args = %v, want lifecycle config only %v", got, want)
+	}
+}
+
+func TestToolArgsForLaunchReservesClineLifecycleConfig(t *testing.T) {
+	cline, err := tools.Lookup("cline")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := toolArgsForLaunch(cline, []string{
+		"--data-dir", "/tmp/bypass-data", "--verbose",
+		"--config=/tmp/bypass-config",
+		"--provider", "openai-native", "-P", "anthropic",
+		"--model=gpt-5.6-luna", "-m", "claude-sonnet-5",
+		"--key", "bypass-key", "-kinline-key", "prompt",
+	})
+	want := []string{"--verbose", "prompt"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("toolArgsForLaunch(cline) = %v, want lifecycle directories reserved as %v", got, want)
+	}
+}
+
+func TestToolArgsForLaunchPinsOpenHandsEnvironmentOverride(t *testing.T) {
+	openhands := &tools.Tool{Name: "openhands", DefaultArgs: []string{"--override-with-envs"}}
+	for _, tc := range []struct {
+		args []string
+		want []string
+	}{
+		{nil, []string{"--override-with-envs"}},
+		{[]string{"--resume", "last"}, []string{"--override-with-envs", "--resume", "last"}},
+		{[]string{"--override-with-envs", "--help"}, []string{"--override-with-envs", "--help"}},
+	} {
+		if got := toolArgsForLaunch(openhands, tc.args); !reflect.DeepEqual(got, tc.want) {
+			t.Fatalf("toolArgsForLaunch(openhands, %v) = %v, want %v", tc.args, got, tc.want)
+		}
+	}
+}
+
+func TestToolArgsForLaunchReservesLLxprtProviderFlags(t *testing.T) {
+	llxprt := &tools.Tool{Name: "llxprt"}
+	got := toolArgsForLaunch(llxprt, []string{
+		"--provider", "anthropic", "--baseurl=https://bypass.example/v1", "--model", "bypass",
+		"-m", "short-bypass", "--key", "leak", "--keyfile=/tmp/leak", "--key-name", "ambient",
+		"--profile-load", "bypass", "--profile={\"provider\":\"anthropic\"}",
+		"--set=auth-key=leak", "--set", "base-url=https://bypass.example/v1",
+		"--set=modelparam.temperature=0.2", "hello",
+	})
+	want := []string{"--set=modelparam.temperature=0.2", "hello"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("toolArgsForLaunch(llxprt) = %v, want %v", got, want)
+	}
+}
+
+func TestNativeLaunchNoticeDoesNotMislabelLibreFangAsAntigravity(t *testing.T) {
+	librefang, err := tools.Lookup("librefang")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := nativeLaunchNotice(librefang)
+	if !strings.Contains(got, "LibreFang-owned authentication") {
+		t.Fatalf("LibreFang notice = %q", got)
+	}
+	if strings.Contains(got, "Antigravity authentication") {
+		t.Fatalf("LibreFang notice names another client: %q", got)
+	}
+}
+
+func TestNativeLaunchEnvPointsLibreFangAtTheCurrentEveryAPIExecutable(t *testing.T) {
+	librefang, err := tools.Lookup("librefang")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := nativeLaunchEnv(librefang)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := env["EVERYAPI_CLI_PATH"]; got != want {
+		t.Fatalf("EVERYAPI_CLI_PATH = %q, want current executable %q", got, want)
+	}
+
+	antigravity, err := tools.Lookup("antigravity")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err = nativeLaunchEnv(antigravity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := env["EVERYAPI_CLI_PATH"]; ok {
+		t.Fatalf("Antigravity inherited LibreFang credential-process override: %v", env)
 	}
 }
 
@@ -565,6 +749,27 @@ func TestResolveToolModelFromCatalogRejectsFailureAndStaleExplicitSelection(t *t
 	}
 }
 
+func TestResolveToolModelFromCatalogAcceptsAlternativeEndpoint(t *testing.T) {
+	tool := &tools.Tool{
+		Name:                "dual-wire",
+		ExecName:            "dual-wire",
+		ModelEnv:            "EVERYAPI_DUAL_WIRE_MODEL",
+		RequiredEndpoint:    "openai",
+		AlternativeEndpoint: "openai-response",
+	}
+	t.Setenv(tool.ModelEnv, "")
+	catalog := []api.RelayModel{{
+		ID:                     "responses-only",
+		SupportedEndpointTypes: []string{"openai-response"},
+	}}
+	if err := resolveToolModelFromCatalog(tool, catalog, nil, "responses-only"); err != nil {
+		t.Fatalf("alternative endpoint model was rejected: %v", err)
+	}
+	if got := os.Getenv(tool.ModelEnv); got != "responses-only" {
+		t.Fatalf("%s = %q, want responses-only", tool.ModelEnv, got)
+	}
+}
+
 func TestPreferredToolModelIndexUsesHermesHistoryOnlyForHermes(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("EVERYAPI_HERMES_MODEL", "z-hermes-history")
@@ -579,12 +784,254 @@ func TestPreferredToolModelIndexUsesHermesHistoryOnlyForHermes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	models := []string{"a-first-model", "z-hermes-history"}
+	models := []string{"a-first-model", "claude-sonnet-5", "z-hermes-history"}
 	if got := preferredToolModelIndex(qwen, models); got != 0 {
-		t.Errorf("Qwen initial index = %d, want first model", got)
+		t.Errorf("Qwen initial index = %d, want first available non-Claude model", got)
 	}
-	if got := preferredToolModelIndex(hermes, models); got != 1 {
+	if got := preferredToolModelIndex(hermes, models); got != 2 {
 		t.Errorf("Hermes initial index = %d, want saved model", got)
+	}
+	if got := preferredToolModel(qwen, []string{"a-first-model", "b-second-model"}); got != "a-first-model" {
+		t.Errorf("Qwen fallback = %q, want first live-catalog model", got)
+	}
+}
+
+func TestPreferredToolModelDoesNotDefaultThirdPartyClientsToClaude(t *testing.T) {
+	aider, err := tools.Lookup("aider")
+	if err != nil {
+		t.Fatal(err)
+	}
+	models := []string{"MiniMax-M3", "claude-sonnet-5", "kimi-k2.7-code"}
+	if got := preferredToolModel(aider, models); got != "MiniMax-M3" {
+		t.Errorf("Aider default = %q, want first available non-Claude route", got)
+	}
+	if got := preferredToolModel(aider, []string{"MiniMax-M3", "kimi-k2.7-code"}); got != "MiniMax-M3" {
+		t.Errorf("Aider fallback = %q, want first live-catalog model", got)
+	}
+}
+
+func TestThirdPartyClientsKeepClaudeVisibleButUnavailable(t *testing.T) {
+	tool, _ := tools.Lookup("pi")
+	catalog := []api.RelayModel{
+		{ID: "claude-sonnet-5", SupportedEndpointTypes: []string{"anthropic", "openai-response"}},
+		{ID: "gpt-5.6-terra", SupportedEndpointTypes: []string{"openai-response"}},
+	}
+	if got := chatModelsForTool(catalog, tool); !reflect.DeepEqual(got, []string{"gpt-5.6-terra"}) {
+		t.Fatalf("Pi selectable models = %v, want only the non-Claude route", got)
+	}
+	choices := modelPickerChoicesForTool(catalog, tool)
+	wantChoices := []toolModelChoice{
+		{id: "claude-sonnet-5", unavailable: true},
+		{id: "gpt-5.6-terra"},
+	}
+	if !reflect.DeepEqual(choices, wantChoices) {
+		t.Fatalf("Pi picker choices = %#v, want %#v", choices, wantChoices)
+	}
+	if _, err := pickManagedModelForTool(tool, catalog[:1], ""); !errors.Is(err, cliprompt.ErrPickUnavailable) {
+		t.Fatalf("Pi all-Claude picker error = %v, want ErrPickUnavailable", err)
+	}
+	t.Setenv(tool.ModelEnv, "")
+	if err := resolveToolModelFromCatalog(tool, catalog, nil, "claude-sonnet-5"); err == nil {
+		t.Fatal("explicit Claude selection bypassed third-party unavailability")
+	}
+	if got := launchModelsForTool(tool, catalog, ""); len(got) != 1 || got[0].ID != "gpt-5.6-terra" {
+		t.Fatalf("Pi launch catalog = %#v, want Claude excluded", got)
+	}
+}
+
+func TestForgeResponseOnlyModelReachesResponsesProvider(t *testing.T) {
+	t.Setenv("EVERYAPI_FORGE_MODEL", "gpt-5.6-luna")
+	tool, err := tools.Lookup("forge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog := []api.RelayModel{
+		{ID: "chat-only", SupportedEndpointTypes: []string{"openai"}},
+		{ID: "gpt-5.6-luna", SupportedEndpointTypes: []string{"openai-response"}},
+	}
+	models := launchModelsForTool(tool, catalog, "")
+	if len(models) != 2 {
+		t.Fatalf("Forge launch catalog = %#v, want chat and Responses models", models)
+	}
+	extra, err := tool.PrepareWithModels(
+		"https://api.everyapi.ai", "secret-relay-key", models, "",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tools.TakePreparedCleanup(extra)()
+	body, err := os.ReadFile(filepath.Join(extra["FORGE_CONFIG"], ".forge.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `provider_id = "openai_responses_compatible"`) ||
+		!strings.Contains(string(body), `model_id = "gpt-5.6-luna"`) {
+		t.Fatalf("Forge Responses session config = %s", body)
+	}
+	if strings.Contains(string(body), "secret-relay-key") {
+		t.Fatal("Forge config persisted the relay credential")
+	}
+}
+
+func TestClineChatAndResponsesModelsReachMatchingProviders(t *testing.T) {
+	tool, err := tools.Lookup("cline")
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog := []api.RelayModel{
+		{ID: "MiniMax-M3", SupportedEndpointTypes: []string{"openai"}},
+		{ID: "gpt-5.6-luna", SupportedEndpointTypes: []string{"openai-response"}},
+	}
+	models := launchModelsForTool(tool, catalog, "")
+	if len(models) != 2 {
+		t.Fatalf("Cline launch catalog = %#v, want Chat and Responses models", models)
+	}
+	for _, tc := range []struct {
+		name             string
+		selected         string
+		selectedProvider string
+	}{
+		{name: "chat", selected: "MiniMax-M3", selectedProvider: "lmstudio"},
+		{name: "responses", selected: "gpt-5.6-luna", selectedProvider: "openai-native"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("EVERYAPI_CLINE_MODEL", tc.selected)
+			extra, err := tool.PrepareWithModels(
+				"https://api.everyapi.ai", "secret-relay-key", models, "",
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tools.TakePreparedCleanup(extra)()
+			dataDir := extra["CLINE_DATA_DIR"]
+			providerPath := extra["CLINE_PROVIDER_SETTINGS_PATH"]
+			if providerPath != filepath.Join(dataDir, "settings", "providers.json") {
+				t.Fatalf("Cline provider path = %q, want isolated data directory %q", providerPath, dataDir)
+			}
+			body, err := os.ReadFile(providerPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var settings struct {
+				LastUsedProvider string `json:"lastUsedProvider"`
+				Providers        map[string]struct {
+					Settings struct {
+						Provider string `json:"provider"`
+						Model    string `json:"model"`
+					} `json:"settings"`
+				} `json:"providers"`
+			}
+			if err := json.Unmarshal(body, &settings); err != nil {
+				t.Fatal(err)
+			}
+			if settings.LastUsedProvider != tc.selectedProvider {
+				t.Fatalf("Cline last provider = %q, want %q", settings.LastUsedProvider, tc.selectedProvider)
+			}
+			provider := settings.Providers[tc.selectedProvider].Settings
+			if provider.Provider != tc.selectedProvider || provider.Model != tc.selected {
+				t.Fatalf("Cline selected provider settings = %#v", provider)
+			}
+			catalogBody, err := os.ReadFile(filepath.Join(dataDir, "settings", "models.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(catalogBody), "secret-relay-key") ||
+				!strings.Contains(string(catalogBody), `"name":"EveryAPI Chat"`) ||
+				!strings.Contains(string(catalogBody), `"name":"EveryAPI Responses"`) ||
+				!strings.Contains(string(catalogBody), `"MiniMax-M3"`) ||
+				!strings.Contains(string(catalogBody), `"gpt-5.6-luna"`) {
+				t.Fatalf("Cline model catalog = %s", catalogBody)
+			}
+		})
+	}
+}
+
+func TestClaudeModelClassifierCoversProviderQualifiedIDs(t *testing.T) {
+	thirdParty, _ := tools.Lookup("opencode")
+	official, _ := tools.Lookup("claude")
+	for _, modelID := range []string{
+		"claude",
+		"claude-sonnet-5",
+		"anthropic/claude",
+		"openai/claude-sonnet-5",
+		"bedrock/anthropic.claude-3-7-sonnet",
+		"bedrock/us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+		"eu.anthropic.claude-3-7-sonnet-20250219-v1:0",
+		"vertex:claude-opus-4-8",
+	} {
+		if !modelUnavailableForTool(thirdParty, modelID) {
+			t.Errorf("%q should be unavailable to a third-party client", modelID)
+		}
+		if modelUnavailableForTool(official, modelID) {
+			t.Errorf("%q should remain available to official Claude Code", modelID)
+		}
+	}
+	for _, modelID := range []string{"claudel", "my-claude-model", "anthropic/other", "gpt-5.6-terra"} {
+		if modelUnavailableForTool(thirdParty, modelID) {
+			t.Errorf("near-match %q was incorrectly classified as Claude", modelID)
+		}
+	}
+}
+
+func TestNativeClaudeModelArgumentsCannotBypassThirdPartyPolicy(t *testing.T) {
+	aider, _ := tools.Lookup("aider")
+	for _, args := range [][]string{
+		{"--model", "openai/claude-sonnet-5"},
+		{"--model", "sonnet"},
+		{"--model=anthropic/claude"},
+		{"--weak-model", "bedrock/anthropic.claude-3-7-sonnet"},
+		{"--editor-model=opus"},
+	} {
+		if got := nativeUnavailableModelArgument(aider, args); got == "" {
+			t.Errorf("native args %v bypassed the Claude policy", args)
+		}
+	}
+	for _, toolName := range []string{"codex", "opencode", "qwen-code"} {
+		tool, _ := tools.Lookup(toolName)
+		for _, args := range [][]string{
+			{"-m", "bedrock/anthropic.claude-3-7-sonnet"},
+			{"-m=claude"},
+			{"-mopenai/claude-sonnet-5"},
+		} {
+			if got := nativeUnavailableModelArgument(tool, args); got == "" {
+				t.Errorf("%s native args %v bypassed the Claude policy", toolName, args)
+			}
+		}
+	}
+	if got := nativeUnavailableModelArgument(aider, []string{"-m", "claude"}); got != "" {
+		t.Errorf("Aider's -m message flag was misread as a model: %q", got)
+	}
+	pi, _ := tools.Lookup("pi")
+	for _, args := range [][]string{
+		{"--model", "sonnet:high"},
+		{"--model", "gpt-5.6-terra"},
+		{"--provider", "anthropic", "--model", "sonn"},
+		{"--provider=anthropic"},
+		{"--models", "gpt-5.6-terra,anthropic/*"},
+		{"--models", "*claude*"},
+		{"--models", "*"},
+	} {
+		if got := nativeUnavailableModelArgument(pi, args); got == "" {
+			t.Errorf("Pi native args %v bypassed EveryAPI's exact model validation", args)
+		}
+	}
+	if got := nativeUnavailableModelArgument(aider, []string{"--model", "gpt-5.6-terra"}); got != "" {
+		t.Errorf("non-Claude native model was rejected: %q", got)
+	}
+	grok, _ := tools.Lookup("grok")
+	for _, args := range [][]string{
+		{"--model", "gpt-5.6-terra"},
+		{"--model=gpt-5.6-terra"},
+		{"-m", "gpt-5.6-terra"},
+		{"-mgpt-5.6-terra"},
+	} {
+		if got := nativeUnavailableModelArgument(grok, args); got == "" {
+			t.Errorf("Grok native args %v bypassed EveryAPI's exact model validation", args)
+		}
+	}
+	claude, _ := tools.Lookup("claude")
+	if got := nativeUnavailableModelArgument(claude, []string{"--model", "opus"}); got != "" {
+		t.Errorf("official Claude Code argument was rejected: %q", got)
 	}
 }
 
@@ -775,7 +1222,7 @@ func TestLaunchModelsForClaudeUsesAnthropicProtocol(t *testing.T) {
 
 func TestLaunchModelsForOpenCodeIncludesChatAndResponsesProtocols(t *testing.T) {
 	catalog := []api.RelayModel{
-		{ID: "gpt-chat", SupportedEndpointTypes: []string{"openai"}},
+		{ID: "gpt-chat", SupportedEndpointTypes: []string{"openai"}, ContextWindow: 131072, MaxOutput: 16384},
 		{ID: "gpt-5.6-terra", SupportedEndpointTypes: []string{"openai-response"}},
 		{ID: "claude-only", SupportedEndpointTypes: []string{"anthropic"}},
 	}
@@ -783,6 +1230,9 @@ func TestLaunchModelsForOpenCodeIncludesChatAndResponsesProtocols(t *testing.T) 
 	got := launchModelsForTool(opencode, catalog, "")
 	if len(got) != 2 || got[0].ID != "gpt-5.6-terra" || got[1].ID != "gpt-chat" {
 		t.Fatalf("OpenCode launch catalog = %#v", got)
+	}
+	if got[1].ContextWindow != 131072 || got[1].MaxOutput != 16384 {
+		t.Fatalf("OpenCode launch token limits = %d/%d", got[1].ContextWindow, got[1].MaxOutput)
 	}
 }
 
@@ -1040,6 +1490,9 @@ func TestResolveRememberedModel(t *testing.T) {
 		if err != nil || got != "" {
 			t.Fatalf("got (%q, %v), want the catalogue default", got, err)
 		}
+		if remembered := s.ToolModel("claude"); remembered != "gone-from-the-account" {
+			t.Fatalf("official Claude memory = %q, want fail-soft setting preserved", remembered)
+		}
 	})
 
 	t.Run("non-interactive never prompts", func(t *testing.T) {
@@ -1095,4 +1548,174 @@ func TestResolveRememberedModel(t *testing.T) {
 			t.Fatalf("got (%q, %v), want no error", got, err)
 		}
 	})
+
+	t.Run("third-party explicit Claude is rejected even when it is the only route", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		opencode := tools.Registry["opencode"]
+		claudeOnly := []api.RelayModel{{
+			ID:                     "anthropic/claude",
+			SupportedEndpointTypes: []string{"openai"},
+		}}
+		if _, err := resolveRememberedModel(
+			opencode, &config.Settings{}, claudeOnly, "anthropic/claude", false, false,
+		); err == nil {
+			t.Fatal("explicit Claude selection was accepted after filtering emptied the catalog")
+		}
+	})
+
+	t.Run("third-party explicit absent model is rejected when only Claude is routed", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		opencode := tools.Registry["opencode"]
+		claudeOnly := []api.RelayModel{{
+			ID:                     "claude-sonnet-5",
+			SupportedEndpointTypes: []string{"openai"},
+		}}
+		if _, err := resolveRememberedModel(
+			opencode, &config.Settings{}, claudeOnly, "gpt-5.6-terra", false, false,
+		); err == nil {
+			t.Fatal("model absent from an all-Claude catalog was accepted")
+		}
+	})
+
+	t.Run("third-party remembered Claude is cleared even when it is the only route", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		opencode := tools.Registry["opencode"]
+		s := &config.Settings{ToolModels: map[string]string{"opencode": "claude-sonnet-5"}}
+		claudeOnly := []api.RelayModel{{
+			ID:                     "claude-sonnet-5",
+			SupportedEndpointTypes: []string{"openai"},
+		}}
+		got, err := resolveRememberedModel(opencode, s, claudeOnly, "", false, false)
+		if err == nil || got != "" {
+			t.Fatalf("got (%q, %v), want the disabled remembered model cleared and launch rejected", got, err)
+		}
+		if got := s.ToolModel("opencode"); got != "" {
+			t.Fatalf("remembered Claude model still persisted in memory: %q", got)
+		}
+		reloaded, err := config.LoadSettings()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := reloaded.ToolModel("opencode"); got != "" {
+			t.Fatalf("remembered Claude model still persisted on disk: %q", got)
+		}
+	})
+
+	t.Run("third-party stale non-Claude memory cannot bypass an all-Claude catalog", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		opencode := tools.Registry["opencode"]
+		s := &config.Settings{ToolModels: map[string]string{"opencode": "gpt-5.6-terra"}}
+		claudeOnly := []api.RelayModel{{
+			ID:                     "claude-sonnet-5",
+			SupportedEndpointTypes: []string{"openai"},
+		}}
+		if got, err := resolveRememberedModel(opencode, s, claudeOnly, "", false, false); err == nil || got != "" {
+			t.Fatalf("got (%q, %v), want stale remembered model cleared and launch rejected", got, err)
+		}
+		if got := s.ToolModel("opencode"); got != "" {
+			t.Fatalf("stale remembered model still persisted: %q", got)
+		}
+	})
+
+	t.Run("OpenCode picker choices include Claude as unavailable", func(t *testing.T) {
+		opencode := tools.Registry["opencode"]
+		choices := modelPickerChoicesForTool([]api.RelayModel{
+			{ID: "claude-sonnet-5", SupportedEndpointTypes: []string{"openai"}},
+			{ID: "gpt-5.6-terra", SupportedEndpointTypes: []string{"openai-response"}},
+		}, opencode)
+		want := []toolModelChoice{
+			{id: "claude-sonnet-5", unavailable: true},
+			{id: "gpt-5.6-terra"},
+		}
+		if !reflect.DeepEqual(choices, want) {
+			t.Fatalf("OpenCode choices = %#v, want %#v", choices, want)
+		}
+	})
+
+	t.Run("third-party remembered model still opens the disabled picker", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		opencode := tools.Registry["opencode"]
+		s := &config.Settings{ToolModels: map[string]string{"opencode": "gpt-5.6-terra"}}
+		catalog := []api.RelayModel{
+			{ID: "claude-sonnet-5", SupportedEndpointTypes: []string{"openai"}},
+			{ID: "gpt-5.6-luna", SupportedEndpointTypes: []string{"openai-response"}},
+			{ID: "gpt-5.6-terra", SupportedEndpointTypes: []string{"openai-response"}},
+		}
+
+		originalStdin := os.Stdin
+		reader, writer, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		os.Stdin = reader
+		t.Cleanup(func() {
+			os.Stdin = originalStdin
+			_ = reader.Close()
+		})
+		if _, err := writer.WriteString("gpt-5.6-luna\n"); err != nil {
+			t.Fatal(err)
+		}
+		if err := writer.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := resolveRememberedModel(opencode, s, catalog, "", false, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != "gpt-5.6-luna" {
+			t.Fatalf("selected model = %q, want the new picker choice", got)
+		}
+	})
+
+	t.Run("third-party picker cancellation stops launch", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		opencode := tools.Registry["opencode"]
+		s := &config.Settings{ToolModels: map[string]string{"opencode": "gpt-5.6-terra"}}
+		catalog := []api.RelayModel{{
+			ID:                     "gpt-5.6-terra",
+			SupportedEndpointTypes: []string{"openai-response"},
+		}}
+
+		originalStdin := os.Stdin
+		reader, writer, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		os.Stdin = reader
+		t.Cleanup(func() {
+			os.Stdin = originalStdin
+			_ = reader.Close()
+		})
+		if err := writer.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := resolveRememberedModel(opencode, s, catalog, "", false, true); err == nil {
+			t.Fatal("cancelled mandatory picker still allowed OpenCode to launch")
+		}
+	})
+
+	t.Run("third-party all-Claude catalog is shown then rejected", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		opencode := tools.Registry["opencode"]
+		catalog := []api.RelayModel{
+			{ID: "claude-opus-5", SupportedEndpointTypes: []string{"openai"}},
+			{ID: "claude-sonnet-5", SupportedEndpointTypes: []string{"openai-response"}},
+		}
+		if _, err := resolveRememberedModel(opencode, &config.Settings{}, catalog, "", false, true); !errors.Is(err, cliprompt.ErrPickUnavailable) {
+			t.Fatalf("all-Claude OpenCode catalog error = %v, want ErrPickUnavailable", err)
+		}
+	})
+}
+
+func TestManagedBootModelArgs(t *testing.T) {
+	grok := tools.Registry["grok"]
+	if got, want := managedBootModelArgs(grok, []string{"chat"}, "gpt-5.6-terra"), []string{"--model", "gpt-5.6-terra", "chat"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("managedBootModelArgs(grok) = %v, want %v", got, want)
+	}
+	opencode := tools.Registry["opencode"]
+	if got, want := managedBootModelArgs(opencode, []string{"run"}, "gpt-5.6-terra"), []string{"run"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("managedBootModelArgs(opencode) = %v, want %v", got, want)
+	}
 }

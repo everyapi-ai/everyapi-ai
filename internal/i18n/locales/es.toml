@@ -1333,13 +1333,13 @@ choice_later = "Recordar más tarde"
 choice_skip = "Omitir esta versión"
 
 [use]
+no_selectable_models = "No hay modelos seleccionables para %s con esta clave/grupo de relay."
 sanitize_bad_value = "--sanitize=%q no es un valor true/false válido — usa --sanitize o --sanitize=false"
 tool_picker = "Elige una herramienta:"
 group_picker = "Elige un grupo de enrutado:"
 yolo_prompt = "¿Habilitar %s? (omite todas las confirmaciones de seguridad)"
 hook_trust_prompt = "¿Permitir que Codex ejecute hooks del repositorio sin revisarlos antes?"
 launching = "Iniciando %s contra %s"
-launching_transparent = "Iniciando %s contra %s (modo transparente)"
 launching_via = "Iniciando %s contra %s → %s"
 claude_inflated_resume = "Advertencia: esta sesión de Claude se creó con un prefijo de esquemas de herramientas inflado de %d tokens. La corrección de EveryAPI se aplica a sesiones nuevas, pero --resume restaura el historial anterior sin cambios. Inicia una sesión nueva de Claude para eliminarlo."
 claude_polluted_resume_recovered = "Se detectó una corrupción conocida de la salida de Claude en la sesión %s a las %s (%d mensajes del asistente afectados). Se inició la sesión de recuperación limpia %s; el historial original se conservó sin cambios."
@@ -1453,6 +1453,9 @@ unknown_sub = "subcomando inbox desconocido %q"
 [cliprompt]
 pick_toggle_hint = "espacio para alternar · enter para confirmar · esc para volver"
 pick_enter_name_number = "Introduce nombre o número: "
+pick_unavailable_label = "no disponible para este cliente"
+pick_unavailable_selection = "%s no está disponible para este cliente"
+pick_nothing_available = "No hay opciones disponibles."
 pick_toggle_csv = "Introduce nombres o números separados por comas para ALTERNAR (vacío = sin cambios): "
 
 [proxy.detector]

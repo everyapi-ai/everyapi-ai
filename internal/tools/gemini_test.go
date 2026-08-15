@@ -55,8 +55,8 @@ func TestPrepareGemini_PreservesSystemSettingsAndPinsAPIKeyAuth(t *testing.T) {
 	}
 }
 
-func TestGeminiEntryLaunchesNativeAntigravityCLI(t *testing.T) {
-	tool, err := Lookup("gemini")
+func TestAntigravityEntryLaunchesNativeCLI(t *testing.T) {
+	tool, err := Lookup("antigravity")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -38,30 +38,49 @@ brew update && brew upgrade everyapi
 
 ### `everyapi use <tool>` — exec 进第三方 CLI（指向 EveryAPI 网关）
 
-它会通过 EveryAPI 配置并启动支持的编码客户端；`gemini` 入口启动已登录的 Antigravity CLI。
+它会通过 EveryAPI 配置并启动支持的编码客户端。原生接入 `antigravity` 和 `librefang` 保留各自的认证流程，不会收到复制的 relay key。
 
 ```bash
 everyapi use claude         # Claude Code → EveryAPI
 everyapi use codex          # OpenAI Codex CLI → EveryAPI
-everyapi use gemini         # 启动 Antigravity
+everyapi use opencode       # OpenCode → EveryAPI
+everyapi use gemini         # Google Gemini CLI → EveryAPI
+everyapi use antigravity    # Antigravity（原生 Google 认证）
+everyapi use aider          # Aider → EveryAPI
+everyapi use goose          # Goose CLI → EveryAPI
+everyapi use crush          # Crush CLI → EveryAPI
+everyapi use cline          # Cline CLI → EveryAPI
+everyapi use openclaw       # OpenClaw → EveryAPI
+everyapi use continue       # Continue CLI → EveryAPI
+everyapi use kilo           # Kilo Code CLI → EveryAPI
+everyapi use pi             # Pi coding agent → EveryAPI
+everyapi use vibe           # Mistral Vibe → EveryAPI
+everyapi use copilot        # GitHub Copilot CLI → EveryAPI
+everyapi use droid          # Factory Droid → EveryAPI
+everyapi use openhands      # OpenHands CLI → EveryAPI
+everyapi use forge          # ForgeCode → EveryAPI
+everyapi use llxprt         # LLxprt Code → EveryAPI
 everyapi use grok           # xAI Grok Build → EveryAPI
 everyapi use qwen-code      # 阿里巴巴 Qwen Code → EveryAPI
 everyapi use kimi-code      # Moonshot Kimi Code → EveryAPI
-everyapi use claude --transparent   # 实验模式：仍请求 api.anthropic.com
-everyapi use codex --transparent    # 实验模式：仍请求 api.openai.com
+everyapi use hermes         # Hermes Agent → EveryAPI
+everyapi use librefang      # LibreFang（原生 EveryAPI 凭证流程）
+everyapi use claude         # 默认透明模式：仍请求 api.anthropic.com
+everyapi use codex          # 默认透明模式：仍请求 api.openai.com
 everyapi use                # 无参 → 交互式选择已安装的工具
 ```
 
 每个工具的 env 惯例各不相同，CLI 帮你记住：
 
-| 工具 | 设置的环境变量 |
+| 工具 | EveryAPI 接入方式 |
 |---|---|
-| claude | `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN` |
-| codex | `OPENAI_BASE_URL`、`OPENAI_API_KEY` |
-| gemini | Antigravity 原生启动器 (`agy`) |
-| grok | `XAI_API_KEY`、`GROK_MODELS_BASE_URL`；隔离的 `GROK_HOME` |
-| qwen-code | `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`；隔离的 `QWEN_HOME` |
-| kimi-code | `KIMI_MODEL_API_KEY`、`KIMI_MODEL_BASE_URL`、`KIMI_MODEL_NAME`；隔离的 `KIMI_CODE_HOME` |
+| claude、codex | 默认透明 connector；也支持隔离的注入模式 |
+| opencode、gemini、aider、goose | 官方环境变量或进程级配置 |
+| crush、cline、openclaw、continue、kilo、pi、vibe | 隔离配置目录/运行时配置，退出后清理 |
+| copilot、droid | 官方进程级 BYOK / `--settings` 运行时配置 |
+| openhands、forge、llxprt | 官方进程覆盖或会话级隔离配置与启动参数 |
+| grok、qwen-code、kimi-code、hermes | 隔离配置与实时兼容模型目录 |
+| antigravity、librefang | 原生认证与路由，不注入 EveryAPI relay key |
 
 不必再去查每个工具读哪个变量名、要不要拼 `/v1` 后缀、走哪种 auth header。
 

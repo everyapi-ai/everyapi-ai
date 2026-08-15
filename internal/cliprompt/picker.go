@@ -8,16 +8,23 @@ import (
 	"strconv"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 
 	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/internal/style"
 )
 
 // ErrPickCancelled is returned by Pick when the user hits Ctrl-C
 // during the arrow-key picker. Callers can errors.Is-match on it to
 // suppress a generic "selection failed" wrapper and exit cleanly.
 var ErrPickCancelled = errors.New("pick cancelled")
+
+// ErrPickUnavailable identifies an attempted selection of a visible but
+// disabled row. Callers can keep unavailable choices discoverable without
+// allowing scripted or interactive selection to bypass the availability rule.
+var ErrPickUnavailable = errors.New("pick unavailable")
 
 // Pick renders an arrow-navigable list and returns the chosen index
 // (zero-based). Falls back to a number-entry prompt automatically
@@ -54,6 +61,217 @@ func PickWithSelected(prompt string, items []string, initial int) (int, error) {
 		initial = 0
 	}
 	return pickViaHuh(prompt, items, initial)
+}
+
+// PickWithDisabled renders all items but grays and rejects rows whose matching
+// disabled entry is true. The parallel slices must have the same length.
+func PickWithDisabled(prompt string, items []string, disabled []bool, initial int) (int, error) {
+	if len(items) != len(disabled) {
+		return -1, fmt.Errorf("PickWithDisabled: items (%d) and disabled (%d) must have equal length", len(items), len(disabled))
+	}
+	if len(items) == 0 {
+		return -1, errors.New("nothing to pick from")
+	}
+	firstAvailable := -1
+	for index, unavailable := range disabled {
+		if !unavailable {
+			firstAvailable = index
+			break
+		}
+	}
+	labels := disabledPickerLabels(items, disabled)
+	if firstAvailable < 0 {
+		// There is no valid cursor position, but hiding the rows would make an
+		// account with only unavailable models look like an empty catalogue.
+		// Render the same explicit gray labels, then fail without waiting for
+		// input so the caller can stop the launch.
+		cliout.Println(prompt)
+		for index, label := range labels {
+			cliout.Printf("  %d) %s\n", index+1, label)
+		}
+		return -1, unavailablePickerError{message: i18n.T("cliprompt.pick_nothing_available")}
+	}
+	if initial < 0 || initial >= len(items) || disabled[initial] {
+		initial = firstAvailable
+	}
+	if !isInteractive() {
+		return pickByNumberWithDisabled(prompt, items, labels, disabled)
+	}
+	return pickViaHuhWithDisabled(prompt, items, labels, disabled, initial)
+}
+
+func disabledPickerLabels(items []string, disabled []bool) []string {
+	labels := append([]string(nil), items...)
+	for index, unavailable := range disabled {
+		if unavailable {
+			labels[index] = style.Color(
+				fmt.Sprintf("%s (%s)", items[index], i18n.T("cliprompt.pick_unavailable_label")),
+				style.ToneGray,
+			)
+		}
+	}
+	return labels
+}
+
+func unavailableSelectionError(item string) error {
+	return unavailablePickerError{message: fmt.Sprintf(i18n.T("cliprompt.pick_unavailable_selection"), item)}
+}
+
+// unavailablePickerError keeps ErrPickUnavailable machine-detectable without
+// appending its internal sentinel text to the localized user-facing message.
+type unavailablePickerError struct {
+	message string
+}
+
+func (e unavailablePickerError) Error() string { return e.message }
+func (e unavailablePickerError) Unwrap() error { return ErrPickUnavailable }
+
+func pickByNumberWithDisabled(prompt string, items, labels []string, disabled []bool) (int, error) {
+	cliout.Println(prompt)
+	for index, label := range labels {
+		cliout.Printf("  %d) %s\n", index+1, label)
+	}
+	cliout.Printf("%s", i18n.T("cliprompt.pick_enter_name_number"))
+	choice, err := readStdinLine()
+	if err != nil && (err != io.EOF || choice == "") {
+		return -1, fmt.Errorf("read selection: %w", err)
+	}
+	choice = strings.TrimSpace(choice)
+	for index, item := range items {
+		if choice != item && choice != strconv.Itoa(index+1) {
+			continue
+		}
+		if disabled[index] {
+			return -1, unavailableSelectionError(item)
+		}
+		return index, nil
+	}
+	return -1, fmt.Errorf("unknown selection %q", choice)
+}
+
+func pickViaHuhWithDisabled(prompt string, items, labels []string, disabled []bool, initial int) (int, error) {
+	opts := make([]huh.Option[int], len(labels))
+	for index, label := range labels {
+		opts[index] = huh.NewOption(label, index)
+	}
+	selected := initial
+	selectField := huh.NewSelect[int]().
+		Title(prompt).
+		Options(opts...).
+		Value(&selected).
+		Validate(func(index int) error {
+			if disabled[index] {
+				return unavailableSelectionError(items[index])
+			}
+			return nil
+		})
+	err := runHuhField(newDisabledSelectField(selectField, disabled))
+	if err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return -1, ErrPickCancelled
+		}
+		return -1, fmt.Errorf("picker: %w", err)
+	}
+	return selected, nil
+}
+
+// disabledSelectField keeps unavailable rows visible in huh's Select while
+// removing them from keyboard navigation. Huh does not expose disabled
+// options, so a validator alone would let the cursor stop on an unavailable
+// row and reject it only after Enter. This adapter forwards navigation until
+// the cursor reaches the next available row; the validator above remains the
+// final guard for non-navigation input and accessible mode.
+type disabledSelectField struct {
+	*huh.Select[int]
+	disabled []bool
+}
+
+func newDisabledSelectField(selectField *huh.Select[int], disabled []bool) *disabledSelectField {
+	// Forms install their keymap before running. Installing it here as well
+	// keeps the adapter independently driveable and makes its navigation
+	// contract straightforward to unit test.
+	selectField.WithKeyMap(huh.NewDefaultKeyMap())
+	return &disabledSelectField{
+		Select:   selectField,
+		disabled: disabled,
+	}
+}
+
+func (f *disabledSelectField) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	model, cmd := f.Select.Update(msg)
+	f.Select = model.(*huh.Select[int])
+	if !f.selectionDisabled() {
+		return f, cmd
+	}
+
+	cmds := []tea.Cmd{cmd}
+	skip := disabledNavigationStep(msg, f.GetFiltering())
+	if skip.Type == tea.KeyNull {
+		// Filtering can rebuild the visible rows around a disabled match even
+		// though the triggering key was text rather than navigation. Search
+		// forward for an available match without treating j/k/g as movement.
+		skip = tea.KeyMsg{Type: tea.KeyDown}
+	}
+	f.skipDisabledRows(skip, &cmds)
+	if f.selectionDisabled() {
+		// A filter that matches only unavailable rows has no legal cursor
+		// position in huh. Clear that filter before rendering instead of
+		// leaving a gray row highlighted; the unfiltered catalogue still
+		// shows the unavailable entries for discoverability.
+		f.clearSelectFilter(&cmds)
+		f.skipDisabledRows(skip, &cmds)
+	}
+	return f, tea.Batch(cmds...)
+}
+
+func (f *disabledSelectField) skipDisabledRows(step tea.KeyMsg, cmds *[]tea.Cmd) {
+	for attempts := 0; attempts < len(f.disabled) && f.selectionDisabled(); attempts++ {
+		model, cmd := f.Select.Update(step)
+		f.Select = model.(*huh.Select[int])
+		*cmds = append(*cmds, cmd)
+	}
+}
+
+func (f *disabledSelectField) clearSelectFilter(cmds *[]tea.Cmd) {
+	// In filtering mode the first Esc accepts the query; the second clears
+	// it. Outside filtering mode one Esc is enough. These messages go only to
+	// the Select field, so they do not trigger the form-level cancel binding.
+	escapes := 1
+	if f.GetFiltering() {
+		escapes = 2
+	}
+	for range escapes {
+		model, cmd := f.Select.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		f.Select = model.(*huh.Select[int])
+		*cmds = append(*cmds, cmd)
+	}
+}
+
+func (f *disabledSelectField) selectionDisabled() bool {
+	index, ok := f.Hovered()
+	return ok && index >= 0 && index < len(f.disabled) && f.disabled[index]
+}
+
+func disabledNavigationStep(msg tea.Msg, filtering bool) tea.KeyMsg {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return tea.KeyMsg{Type: tea.KeyNull}
+	}
+	switch keyMsg.String() {
+	case "up", "ctrl+k", "ctrl+p", "ctrl+u", "end":
+		return tea.KeyMsg{Type: tea.KeyUp}
+	case "down", "ctrl+j", "ctrl+n", "ctrl+d", "home":
+		return tea.KeyMsg{Type: tea.KeyDown}
+	}
+	if !filtering {
+		switch keyMsg.String() {
+		case "k", "G":
+			return tea.KeyMsg{Type: tea.KeyUp}
+		case "j", "g":
+			return tea.KeyMsg{Type: tea.KeyDown}
+		}
+	}
+	return tea.KeyMsg{Type: tea.KeyNull}
 }
 
 // readStdinLine reads one line from os.Stdin WITHOUT reading past the

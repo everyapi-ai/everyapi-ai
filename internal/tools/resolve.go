@@ -46,11 +46,9 @@ func ResolveExec(t *Tool) (string, error) {
 // callers should keep the bare name so exec.Command's own not-found
 // error still surfaces.
 //
-// The argument is an executable name, not a registry key: callers pass
-// the binary they intend to run. `use gemini` launches Antigravity's
-// `agy`, so LookupExecName("gemini") deliberately finds no registry
-// entry — that name belongs to Google's separate gemini CLI, which must
-// not inherit agy's install directories.
+// The argument is an executable name, not a registry key: callers pass the
+// binary they intend to run. This matters for entries whose names differ from
+// their executable, such as Antigravity (`antigravity` -> `agy`).
 //
 // Exported for the mcp subcommands, which launch client CLIs outside the
 // *Tool plumbing — without this they'd fail for exactly the off-PATH
@@ -162,10 +160,9 @@ func installUsesNpm(t *Tool) bool {
 // ExtraBinDirs. Returns nil when nothing matches — extraBinDirs treats
 // that as "no extra candidates".
 //
-// Matching is on ExecName, not the registry key: `use gemini` launches
-// Antigravity's `agy`, so a caller passing the literal "gemini" (the mcp
-// subcommands name Google's separate gemini CLI that way) correctly does
-// NOT pick up agy's install dirs.
+// Matching is on ExecName, not the registry key: Antigravity is registered as
+// `antigravity` but launches `agy`, while Google's Gemini CLI launches the
+// distinct `gemini` executable.
 //
 // Covers the whole Registry, not just Names() — the latter orders the
 // interactive picker and would silently skip a registered tool that
@@ -203,25 +200,34 @@ func toolByExecName(execName string) *Tool {
 // without ever starting with "..". Comparing the joined path back
 // against home is what actually enforces containment.
 func extraBinDirs(t *Tool) []string {
-	if t == nil || len(t.ExtraBinDirs) == 0 {
-		return nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
+	if t == nil {
 		return nil
 	}
 	var dirs []string
-	for _, rel := range t.ExtraBinDirs {
+	if home, err := os.UserHomeDir(); err == nil {
+		dirs = append(dirs, safeRelativeDirs(home, t.ExtraBinDirs)...)
+	}
+	if runtime.GOOS == "windows" {
+		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+			dirs = append(dirs, safeRelativeDirs(localAppData, t.WindowsLocalAppDataBinDirs)...)
+		}
+	}
+	return dedupeStrings(dirs)
+}
+
+func safeRelativeDirs(base string, relativeDirs []string) []string {
+	var dirs []string
+	for _, rel := range relativeDirs {
 		if rel == "" || filepath.IsAbs(rel) {
 			continue
 		}
-		dir := filepath.Join(home, rel)
-		if !isSubpath(home, dir) {
+		dir := filepath.Join(base, rel)
+		if !isSubpath(base, dir) {
 			continue
 		}
 		dirs = append(dirs, dir)
 	}
-	return dedupeStrings(dirs)
+	return dirs
 }
 
 // isSubpath reports whether dir lies strictly inside base. Both are
@@ -274,6 +280,11 @@ func npmEnvBinDirs() []string {
 	if home, err := os.UserHomeDir(); err == nil {
 		add(binSubdir(filepath.Join(home, ".npm-global")))
 		add(binSubdir(filepath.Join(home, ".npm-packages")))
+		add(filepath.Join(home, ".bun", "bin"))
+		add(filepath.Join(home, ".local", "share", "pnpm"))
+		add(filepath.Join(home, "Library", "pnpm"))
+		add(filepath.Join(home, ".volta", "bin"))
+		add(filepath.Join(home, ".nodenv", "shims"))
 	}
 	// Platform defaults.
 	if runtime.GOOS == "windows" {

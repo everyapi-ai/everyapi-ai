@@ -38,28 +38,47 @@ brew update && brew upgrade everyapi
 
 ### `everyapi use <tool>` — 서드파티 CLI 로 exec (EveryAPI 게이트웨이를 가리킴)
 
-이 CLI 는 지원하는 코딩 클라이언트를 EveryAPI를 통해 설정하고 실행합니다. `gemini` 항목은 이미 인증된 Antigravity CLI를 실행합니다.
+이 CLI 는 지원하는 코딩 클라이언트를 EveryAPI를 통해 설정하고 실행합니다. 네이티브 통합 `antigravity`와 `librefang`은 자체 인증을 유지하며 relay key 사본을 받지 않습니다.
 
 ```bash
 everyapi use claude         # Claude Code → EveryAPI
 everyapi use codex          # OpenAI Codex CLI → EveryAPI
-everyapi use gemini         # Antigravity 실행
+everyapi use opencode       # OpenCode → EveryAPI
+everyapi use gemini         # Google Gemini CLI → EveryAPI
+everyapi use antigravity    # Antigravity (네이티브 Google 인증)
+everyapi use aider          # Aider → EveryAPI
+everyapi use goose          # Goose CLI → EveryAPI
+everyapi use crush          # Crush CLI → EveryAPI
+everyapi use cline          # Cline CLI → EveryAPI
+everyapi use openclaw       # OpenClaw → EveryAPI
+everyapi use continue       # Continue CLI → EveryAPI
+everyapi use kilo           # Kilo Code CLI → EveryAPI
+everyapi use pi             # Pi coding agent → EveryAPI
+everyapi use vibe           # Mistral Vibe → EveryAPI
+everyapi use copilot        # GitHub Copilot CLI → EveryAPI
+everyapi use droid          # Factory Droid → EveryAPI
+everyapi use openhands      # OpenHands CLI → EveryAPI
+everyapi use forge          # ForgeCode → EveryAPI
+everyapi use llxprt         # LLxprt Code → EveryAPI
 everyapi use grok           # xAI Grok Build → EveryAPI
 everyapi use qwen-code      # Alibaba Qwen Code → EveryAPI
 everyapi use kimi-code      # Moonshot Kimi Code → EveryAPI
+everyapi use hermes         # Hermes Agent → EveryAPI
+everyapi use librefang      # LibreFang (네이티브 EveryAPI 인증)
 everyapi use                # 인자 없음 → 설치된 도구 중 대화형 선택
 ```
 
 도구마다 env 관례가 다르며, CLI 가 대신 기억해 줍니다:
 
-| 도구 | 설정되는 환경 변수 |
+| 도구 | EveryAPI 통합 방식 |
 |---|---|
-| claude | `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` |
-| codex | `OPENAI_BASE_URL`, `OPENAI_API_KEY` |
-| gemini | Antigravity 네이티브 런처 (`agy`) |
-| grok | `XAI_API_KEY`, `GROK_MODELS_BASE_URL` |
-| qwen-code | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`; 격리된 `QWEN_HOME` |
-| kimi-code | `KIMI_MODEL_API_KEY`, `KIMI_MODEL_BASE_URL`, `KIMI_MODEL_NAME`; 격리된 `KIMI_CODE_HOME` |
+| claude, codex | 기본 transparent connector 또는 격리된 주입 방식 |
+| opencode, gemini, aider, goose | 공식 env / 프로세스 범위 설정 |
+| crush, cline, openclaw, continue, kilo, pi, vibe | 종료 시 삭제되는 격리 설정 |
+| copilot, droid | 공식 BYOK env / `--settings` 런타임 설정 |
+| openhands, forge, llxprt | 공식 프로세스 오버라이드 또는 격리된 세션 설정 |
+| grok, qwen-code, kimi-code, hermes | 격리 설정과 실시간 호환 모델 카탈로그 |
+| antigravity, librefang | 네이티브 인증 및 라우팅 (relay key 미주입) |
 
 어떤 변수 이름을 읽는지, `/v1` 접미사가 필요한지, 어떤 auth header 방식인지 매번 찾아볼 필요가 없습니다.
 

@@ -171,12 +171,16 @@ func assertLaunchLineReportsOnlyDestination(t *testing.T, output, gatewayURL str
 		t.Fatalf("launch line still exposes a loopback hop: %q", line)
 	}
 	// Compared against the rendered i18n string rather than a literal marker, so
-	// the assertion holds in whichever locale the CLI resolved — and so that
-	// going back to concatenating an English fragment onto the translated
-	// use.launching would fail here in every non-English locale.
-	want := fmt.Sprintf(i18n.T("use.launching_transparent"), "claude", gatewayURL)
-	if !strings.Contains(line, want) {
-		t.Fatalf("launch line = %q, want it to contain %q", line, want)
+	// the assertion holds in whichever locale the CLI resolved. It is the same
+	// key the non-transparent launch prints: which transport carried the
+	// traffic is a detail of how this process reaches the gateway, not
+	// something the launch line reports.
+	//
+	// Exact match, not a substring: a mode marker appended to the line would
+	// still contain the base string, so only equality catches one coming back.
+	want := fmt.Sprintf(i18n.T("use.launching"), "claude", gatewayURL)
+	if strings.TrimSpace(line) != want {
+		t.Fatalf("launch line = %q, want %q", line, want)
 	}
 }
 

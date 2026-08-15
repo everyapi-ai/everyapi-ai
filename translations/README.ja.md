@@ -38,28 +38,47 @@ brew update && brew upgrade everyapi
 
 ### `everyapi use <tool>` —— サードパーティ CLI に exec（EveryAPI ゲートウェイを指す）
 
-この CLI は、対応するコーディングクライアントを EveryAPI 経由で設定・起動します。`gemini` エントリは認証済みの Antigravity CLI を起動します。
+この CLI は、対応するコーディングクライアントを EveryAPI 経由で設定・起動します。ネイティブ統合の `antigravity` と `librefang` は独自の認証を保持し、relay key のコピーを受け取りません。
 
 ```bash
 everyapi use claude         # Claude Code → EveryAPI
 everyapi use codex          # OpenAI Codex CLI → EveryAPI
-everyapi use gemini         # Antigravity を起動
+everyapi use opencode       # OpenCode → EveryAPI
+everyapi use gemini         # Google Gemini CLI → EveryAPI
+everyapi use antigravity    # Antigravity（ネイティブ Google 認証）
+everyapi use aider          # Aider → EveryAPI
+everyapi use goose          # Goose CLI → EveryAPI
+everyapi use crush          # Crush CLI → EveryAPI
+everyapi use cline          # Cline CLI → EveryAPI
+everyapi use openclaw       # OpenClaw → EveryAPI
+everyapi use continue       # Continue CLI → EveryAPI
+everyapi use kilo           # Kilo Code CLI → EveryAPI
+everyapi use pi             # Pi coding agent → EveryAPI
+everyapi use vibe           # Mistral Vibe → EveryAPI
+everyapi use copilot        # GitHub Copilot CLI → EveryAPI
+everyapi use droid          # Factory Droid → EveryAPI
+everyapi use openhands      # OpenHands CLI → EveryAPI
+everyapi use forge          # ForgeCode → EveryAPI
+everyapi use llxprt         # LLxprt Code → EveryAPI
 everyapi use grok           # xAI Grok Build → EveryAPI
 everyapi use qwen-code      # Alibaba Qwen Code → EveryAPI
 everyapi use kimi-code      # Moonshot Kimi Code → EveryAPI
+everyapi use hermes         # Hermes Agent → EveryAPI
+everyapi use librefang      # LibreFang（ネイティブ EveryAPI 認証）
 everyapi use                # 引数なし → インストール済みツールから対話的に選択
 ```
 
 各ツールの env 規約は異なり、CLI が代わりに覚えてくれます：
 
-| ツール | 設定する環境変数 |
+| ツール | EveryAPI 統合方式 |
 |---|---|
-| claude | `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN` |
-| codex | `OPENAI_BASE_URL`、`OPENAI_API_KEY` |
-| gemini | Antigravity ネイティブランチャー (`agy`) |
-| grok | `XAI_API_KEY`、`GROK_MODELS_BASE_URL` |
-| qwen-code | `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`；分離された `QWEN_HOME` |
-| kimi-code | `KIMI_MODEL_API_KEY`、`KIMI_MODEL_BASE_URL`、`KIMI_MODEL_NAME`；分離された `KIMI_CODE_HOME` |
+| claude、codex | デフォルトの transparent connector、または分離された注入方式 |
+| opencode、gemini、aider、goose | 公式 env / プロセス単位設定 |
+| crush、cline、openclaw、continue、kilo、pi、vibe | 終了時に削除される分離設定 |
+| copilot、droid | 公式 BYOK env / `--settings` ランタイム設定 |
+| openhands、forge、llxprt | 公式のプロセス単位オーバーライド、または分離セッション設定 |
+| grok、qwen-code、kimi-code、hermes | 分離設定とライブ互換モデルカタログ |
+| antigravity、librefang | ネイティブ認証・ルーティング（relay key を注入しない） |
 
 どの変数名を読むのか、`/v1` を付けるべきか、どの auth ヘッダー形式かを毎回調べる必要はもうありません。
 

@@ -38,28 +38,47 @@ Ohne `brew update` verwendet `brew upgrade everyapi` das gecachte Formula und me
 
 ### `everyapi use <tool>` — exec in ein Drittanbieter-CLI (auf das EveryAPI-Gateway gerichtet)
 
-Der Hauptgrund, dieses CLI zu installieren. Es konfiguriert und startet die unterstützten Coding-Clients über EveryAPI; der Eintrag `gemini` startet das bereits authentifizierte Antigravity-CLI.
+Es konfiguriert und startet unterstützte Coding-Clients über EveryAPI. Die nativen Integrationen `antigravity` und `librefang` behalten ihre eigene Authentifizierung und erhalten nie eine Kopie des Relay-Keys.
 
 ```bash
 everyapi use claude         # Claude Code → EveryAPI
 everyapi use codex          # OpenAI Codex CLI → EveryAPI
-everyapi use gemini         # Antigravity starten
+everyapi use opencode       # OpenCode → EveryAPI
+everyapi use gemini         # Google Gemini CLI → EveryAPI
+everyapi use antigravity    # Antigravity (native Google-Auth)
+everyapi use aider          # Aider → EveryAPI
+everyapi use goose          # Goose CLI → EveryAPI
+everyapi use crush          # Crush CLI → EveryAPI
+everyapi use cline          # Cline CLI → EveryAPI
+everyapi use openclaw       # OpenClaw → EveryAPI
+everyapi use continue       # Continue CLI → EveryAPI
+everyapi use kilo           # Kilo Code CLI → EveryAPI
+everyapi use pi             # Pi coding agent → EveryAPI
+everyapi use vibe           # Mistral Vibe → EveryAPI
+everyapi use copilot        # GitHub Copilot CLI → EveryAPI
+everyapi use droid          # Factory Droid → EveryAPI
+everyapi use openhands      # OpenHands CLI → EveryAPI
+everyapi use forge          # ForgeCode → EveryAPI
+everyapi use llxprt         # LLxprt Code → EveryAPI
 everyapi use grok           # xAI Grok Build → EveryAPI
 everyapi use qwen-code      # Alibaba Qwen Code → EveryAPI
 everyapi use kimi-code      # Moonshot Kimi Code → EveryAPI
+everyapi use hermes         # Hermes Agent → EveryAPI
+everyapi use librefang      # LibreFang (native EveryAPI-Auth)
 everyapi use                # ohne Argument → interaktive Auswahl über installierte Tools
 ```
 
 Jedes Tool verwendet andere Env-Konventionen; das CLI merkt sie sich für dich:
 
-| Tool | Gesetzte Umgebungsvariablen |
+| Tool | EveryAPI-Integration |
 |---|---|
-| claude | `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` |
-| codex | `OPENAI_BASE_URL`, `OPENAI_API_KEY` |
-| gemini | nativer Antigravity-Launcher (`agy`) |
-| grok | `XAI_API_KEY`, `GROK_MODELS_BASE_URL` |
-| qwen-code | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`; isoliertes `QWEN_HOME` |
-| kimi-code | `KIMI_MODEL_API_KEY`, `KIMI_MODEL_BASE_URL`, `KIMI_MODEL_NAME`; isoliertes `KIMI_CODE_HOME` |
+| claude, codex | Standardmäßig transparenter Connector oder isolierte Injection |
+| opencode, gemini, aider, goose | Offizielle Env-/Prozesskonfiguration |
+| crush, cline, openclaw, continue, kilo, pi, vibe | Isolierte Konfiguration, beim Beenden gelöscht |
+| copilot, droid | Offizielles BYOK / `--settings`-Runtime-Konfiguration |
+| openhands, forge, llxprt | Offizielle Prozess-Overrides oder isolierte Sitzungs-Konfiguration |
+| grok, qwen-code, kimi-code, hermes | Isolierte Konfiguration und Live-Modellkatalog |
+| antigravity, librefang | Native Auth und Routing, kein injizierter Relay-Key |
 
 Kein Nachschlagen mehr, welchen Variablennamen jedes Tool liest, ob du `/v1` anhängen musst oder welche Auth-Header-Form gilt.
 

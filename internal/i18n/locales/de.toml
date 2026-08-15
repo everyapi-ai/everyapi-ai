@@ -1331,13 +1331,13 @@ choice_later = "Später erinnern"
 choice_skip = "Diese Version überspringen"
 
 [use]
+no_selectable_models = "Für %s sind mit diesem Relay-Schlüssel/dieser Gruppe keine auswählbaren Modelle verfügbar."
 sanitize_bad_value = "--sanitize=%q ist kein gültiger true/false-Wert — verwende --sanitize oder --sanitize=false"
 tool_picker = "Tool auswählen:"
 group_picker = "Routing-Gruppe auswählen:"
 yolo_prompt = "%s aktivieren? (überspringt jede Sicherheitsabfrage)"
 hook_trust_prompt = "Codex erlauben, Repository-Hooks ohne vorherige Prüfung auszuführen?"
 launching = "Starte %s gegen %s"
-launching_transparent = "Starte %s gegen %s (transparenter Modus)"
 launching_via = "Starte %s gegen %s → %s"
 claude_inflated_resume = "Warnung: Diese Claude-Sitzung wurde mit einem aufgeblähten Tool-Schema-Präfix von %d Token erstellt. Die EveryAPI-Korrektur gilt für neue Sitzungen, aber --resume stellt das alte Protokoll unverändert wieder her. Starten Sie eine neue Claude-Sitzung, um es zu entfernen."
 claude_polluted_resume_recovered = "Bekannte Claude-Ausgabebeschädigung in Sitzung %s um %s erkannt (%d betroffene Assistant-Nachrichten). Die bereinigte Wiederherstellungssitzung %s wurde gestartet; das ursprüngliche Protokoll blieb unverändert."
@@ -1451,6 +1451,9 @@ unknown_sub = "unbekannter inbox-Unterbefehl %q"
 [cliprompt]
 pick_toggle_hint = "Leertaste zum Umschalten · Enter zum Bestätigen · Esc für Zurück"
 pick_enter_name_number = "Name oder Nummer eingeben: "
+pick_unavailable_label = "für diesen Client nicht verfügbar"
+pick_unavailable_selection = "%s ist für diesen Client nicht verfügbar"
+pick_nothing_available = "Keine verfügbaren Optionen."
 pick_toggle_csv = "Namen oder Nummern zum UMSCHALTEN durch Kommas getrennt eingeben (leer = keine Änderung): "
 
 [proxy.detector]

@@ -27,6 +27,10 @@ type Tool struct {
 	Name        string
 	ExecName    string
 	InstallHint string
+	// DefaultArgs are used only when the caller supplied no tool arguments.
+	// Keep these compile-time literals: they reach exec directly, without a
+	// shell. An explicit argument list always wins.
+	DefaultArgs []string
 
 	// Native launches a client that owns its own authentication and upstream
 	// routing. Use must not resolve or expose an EveryAPI relay key for it.
@@ -49,6 +53,12 @@ type Tool struct {
 	// If you find yourself wanting to make this dynamic, design a
 	// per-tool installer function instead.
 	InstallCmd string
+	// InstallCmdWindows overrides InstallCmd on Windows when the vendor
+	// publishes a separate native installer command. The first element is the
+	// executable and the rest are passed as argv directly, never through cmd.exe.
+	// It has the same security invariant as InstallCmd and every element must
+	// remain a compile-time literal.
+	InstallCmdWindows []string
 	// InstallCmdUnixOnly gates InstallCmd off on Windows when the
 	// command relies on a POSIX-only pipeline (curl | bash, etc.).
 	// Doubles as the "this installer is less reversible than `npm
@@ -71,6 +81,10 @@ type Tool struct {
 	// executed as shell text, but keeping them static preserves the
 	// "no user input reaches tool resolution" property.
 	ExtraBinDirs []string
+	// WindowsLocalAppDataBinDirs lists installer-owned directories beneath
+	// %LOCALAPPDATA%. It closes the same install-then-resolve loop as
+	// ExtraBinDirs for Windows installers that use the platform convention.
+	WindowsLocalAppDataBinDirs []string
 
 	// YoloFlag is the tool-specific "skip every confirmation"
 	// argument the user might want to pass — claude's
@@ -119,10 +133,11 @@ type Tool struct {
 	// upstream model. Set only for tools that don't carry their own
 	// vendor-default model and therefore need EveryAPI to choose one —
 	// Hermes reads EVERYAPI_HERMES_MODEL, Qwen Code reads OPENAI_MODEL,
-	// and Kimi Code reads KIMI_MODEL_NAME. When
+	// Gemini, Aider, Goose, Crush, Cline, and OpenClaw use the same
+	// contract through their preparation hooks. When
 	// non-empty, 'everyapi use' offers a model picker (populated from
 	// the gateway's model catalog) before launch and honors a
-	// `--model <id>` flag. Empty for claude/codex/gemini/grok, whose own
+	// `--model <id>` flag. Empty for claude/codex/grok, whose own
 	// CLIs default the model and route it by name through the gateway.
 	ModelEnv string
 
@@ -173,6 +188,8 @@ type Model struct {
 	DisplayName            string
 	OwnedBy                string
 	SupportedEndpointTypes []string
+	ContextWindow          int
+	MaxOutput              int
 }
 
 const openCodeCredentialEnv = "EVERYAPI_RELAY_KEY"
@@ -282,10 +299,10 @@ func (t *Tool) Env(apiBase, token string) map[string]string {
 // package-manager installs (npm install -g …) and No for installers
 // that pipe a remote shell script into bash — a single Enter
 // shouldn't ever run untrusted code fetched at install time.
-// InstallCmdUnixOnly happens to be exactly that signal today
-// (claude's curl|bash is the only Unix-only installer in the
-// Registry), so we reuse it. If that coupling breaks in the future,
-// promote this to its own field.
+// InstallCmdUnixOnly marks the reviewed remote-script installers that need a
+// platform-specific Windows override, so it also gives this cohort the safer
+// default. If those concerns diverge, promote the prompt choice to its own
+// field.
 func (t *Tool) InstallPromptDefault() bool {
 	return !t.InstallCmdUnixOnly
 }
@@ -439,10 +456,14 @@ var Registry = map[string]*Tool{
 	// /v1 suffix — because Anthropic's official client appends its
 	// own version path. Verified in Anthropic SDK source.
 	"claude": {
-		Name:               "claude",
-		ExecName:           "claude",
-		InstallHint:        "Install Claude Code: https://docs.claude.com/en/docs/claude-code/setup",
-		InstallCmd:         "curl -fsSL https://claude.ai/install.sh | bash",
+		Name:        "claude",
+		ExecName:    "claude",
+		InstallHint: "Install Claude Code: https://docs.claude.com/en/docs/claude-code/setup",
+		InstallCmd:  "curl -fsSL https://claude.ai/install.sh | bash",
+		InstallCmdWindows: []string{
+			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
+			"irm https://claude.ai/install.ps1 | iex",
+		},
 		InstallCmdUnixOnly: true,
 		// claude.ai/install.sh hands off to `<binary> install`, which links the
 		// launcher into ~/.local/bin — the same off-PATH cohort gemini hits.
@@ -523,12 +544,32 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: prepareOpenCodeWithModels,
 	},
 
-	// Antigravity CLI: keep `everyapi use gemini` as the familiar entry point,
-	// but launch the locally authenticated `agy` client. agy owns its Google
+	// Google's Gemini CLI supports API-key auth and a custom Gemini API origin
+	// through documented environment variables. prepareGemini overlays system
+	// settings so cached OAuth state cannot override the process-scoped key.
+	"gemini": {
+		Name:             "gemini",
+		ExecName:         "gemini",
+		InstallHint:      "Install Gemini CLI: https://github.com/google-gemini/gemini-cli#installation",
+		InstallCmd:       "npm install -g @google/gemini-cli",
+		YoloFlag:         "--yolo",
+		YoloLabel:        "yolo mode — auto-approve every tool call (--yolo)",
+		ModelEnv:         "GEMINI_MODEL",
+		RequiredEndpoint: "gemini",
+		envFn: func(apiBase, token string) map[string]string {
+			return map[string]string{
+				"GEMINI_API_KEY":         token,
+				"GOOGLE_GEMINI_BASE_URL": joinBase(apiBase, ""),
+			}
+		},
+		prepareFn: prepareGemini,
+	},
+
+	// Antigravity CLI launches the locally authenticated `agy` client. agy owns its Google
 	// OAuth credential and upstream routing, so never pass the EveryAPI relay
 	// key or transparent-connector environment into the child.
-	"gemini": {
-		Name:     "gemini",
+	"antigravity": {
+		Name:     "antigravity",
 		ExecName: "agy",
 		// Deliberately platform-neutral: this string is what Windows users
 		// see (CanAutoInstall is false for them), and the docs page carries
@@ -536,7 +577,7 @@ var Registry = map[string]*Tool{
 		// would hand PowerShell users a `curl` that resolves to
 		// Invoke-WebRequest and fails.
 		InstallHint: "Install the Antigravity CLI (`agy`): https://antigravity.google/docs/cli/install " +
-			"— then sign in once before running `everyapi use gemini`.",
+			"— then sign in once before running `everyapi use antigravity`.",
 		// Antigravity's own installer, per the install docs above. It
 		// writes the binary to ~/.local/bin/agy — hence ExtraBinDirs, so
 		// the post-install re-check finds it even when the user's shell
@@ -556,6 +597,315 @@ var Registry = map[string]*Tool{
 		envFn: func(_, _ string) map[string]string {
 			return map[string]string{}
 		},
+	},
+
+	// Aider routes OpenAI-compatible models through LiteLLM. Aider expects the
+	// model namespace `openai/<id>` while EveryAPI's catalogue returns bare ids;
+	// prepareAider performs that process-scoped translation.
+	"aider": {
+		Name:        "aider",
+		ExecName:    "aider",
+		InstallHint: "Install Aider: https://aider.chat/docs/install.html",
+		InstallCmd:  "curl -LsSf https://aider.chat/install.sh | sh",
+		InstallCmdWindows: []string{
+			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
+			"irm https://aider.chat/install.ps1 | iex",
+		},
+		InstallCmdUnixOnly: true,
+		ExtraBinDirs:       []string{".local/bin"},
+		ModelEnv:           aiderModelEnv,
+		RequiredEndpoint:   "openai",
+		envFn: func(apiBase, token string) map[string]string {
+			base := joinBase(apiBase, "/v1")
+			return map[string]string{
+				"OPENAI_API_KEY":        token,
+				"OPENAI_API_BASE":       base,
+				"AIDER_OPENAI_API_KEY":  token,
+				"AIDER_OPENAI_API_BASE": base,
+			}
+		},
+		prepareFn: prepareAider,
+	},
+
+	// Goose's OpenAI provider accepts a custom endpoint entirely through
+	// environment variables, keeping the user's persistent Goose config intact.
+	"goose": {
+		Name:        "goose",
+		ExecName:    "goose",
+		InstallHint: "Install Goose CLI: https://block.github.io/goose/docs/getting-started/installation/",
+		InstallCmd:  "curl -fsSL https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash",
+		InstallCmdWindows: []string{
+			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
+			"$env:CONFIGURE='false'; irm https://raw.githubusercontent.com/aaif-goose/goose/705f30df47fc819677b973c69efeff153c8fcdaa/download_cli.ps1 | iex",
+		},
+		InstallCmdUnixOnly: true,
+		ExtraBinDirs:       []string{".local/bin"},
+		ModelEnv:           "GOOSE_MODEL",
+		RequiredEndpoint:   "openai",
+		envFn: func(apiBase, token string) map[string]string {
+			return map[string]string{
+				"GOOSE_PROVIDER":  "openai",
+				"OPENAI_API_KEY":  token,
+				"OPENAI_BASE_URL": joinBase(apiBase, "/v1"),
+			}
+		},
+	},
+
+	// Crush resolves `$ENV` references in its config. Generate a complete,
+	// process-scoped model catalogue and keep the relay credential only in the
+	// child environment.
+	"crush": {
+		Name:             "crush",
+		ExecName:         "crush",
+		InstallHint:      "Install Crush: https://github.com/charmbracelet/crush#installation",
+		InstallCmd:       "npm install -g @charmland/crush",
+		ModelEnv:         crushModelEnv,
+		RequiredEndpoint: "openai",
+		envFn: func(_, token string) map[string]string {
+			return map[string]string{crushCredentialEnv: token}
+		},
+		prepareCatalogFn: ignoreBootModel(prepareCrushWithModels),
+	},
+
+	// Cline CLI supports an explicit provider-settings path. Redirect it to a
+	// lifecycle-bound data directory so EveryAPI never mutates ~/.cline. Use its
+	// overridable LM Studio provider for OpenAI-compatible Chat Completions and
+	// its official openai-native provider for the Responses API.
+	"cline": {
+		Name:                "cline",
+		ExecName:            "clite",
+		InstallHint:         "Install Cline CLI: https://github.com/cline/cline/tree/main/apps/cli",
+		InstallCmd:          "npm install -g @cline/cli",
+		ModelEnv:            clineModelEnv,
+		RequiredEndpoint:    "openai",
+		AlternativeEndpoint: "openai-response",
+		envFn: func(_, _ string) map[string]string {
+			return map[string]string{}
+		},
+		prepareCatalogFn: ignoreBootModel(prepareClineWithModels),
+	},
+
+	// OpenClaw's local TUI embeds the agent runtime, so it does not need a
+	// separately managed gateway process. A generated config registers the live
+	// EveryAPI model catalogue and refers to the relay key through SecretRef.
+	"openclaw": {
+		Name:             "openclaw",
+		ExecName:         "openclaw",
+		InstallHint:      "Install OpenClaw: https://docs.openclaw.ai/install",
+		InstallCmd:       "npm install -g openclaw@latest",
+		DefaultArgs:      []string{"tui", "--local"},
+		ModelEnv:         openClawModelEnv,
+		RequiredEndpoint: "openai",
+		envFn: func(_, token string) map[string]string {
+			return map[string]string{openClawCredentialEnv: token}
+		},
+		prepareCatalogFn: ignoreBootModel(prepareOpenClawWithModels),
+	},
+
+	// Continue accepts an explicit local assistant YAML and resolves local
+	// secrets from process.env. Keep both its config and session state in the
+	// lifecycle-bound CONTINUE_GLOBAL_DIR.
+	"continue": {
+		Name:             "continue",
+		ExecName:         "cn",
+		InstallHint:      "Install Continue CLI: https://docs.continue.dev/guides/cli",
+		InstallCmd:       "npm install -g @continuedev/cli",
+		ModelEnv:         continueModelEnv,
+		RequiredEndpoint: "openai",
+		envFn: func(_, token string) map[string]string {
+			return map[string]string{openClawCredentialEnv: token}
+		},
+		prepareCatalogFn: ignoreBootModel(prepareContinueWithModels),
+	},
+
+	// Open WebUI documents both the `open-webui serve` launcher and these
+	// semicolon-delimited OpenAI connection environment variables. Keep the
+	// gateway credential process-scoped and let the sidecar supervise the server.
+	"open-webui": {
+		Name:        "open-webui",
+		ExecName:    "open-webui",
+		InstallHint: "Install Open WebUI: https://docs.openwebui.com/getting-started/quick-start/",
+		InstallCmd:  "curl -LsSf https://astral.sh/uv/install.sh | sh && \"$HOME/.local/bin/uv\" tool install --python 3.11 open-webui",
+		InstallCmdWindows: []string{
+			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
+			"irm https://astral.sh/uv/install.ps1 | iex; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install --python 3.11 open-webui",
+		},
+		InstallCmdUnixOnly: true,
+		ExtraBinDirs:       []string{".local/bin"},
+		DefaultArgs:        []string{"serve"},
+		RequiredEndpoint:   "openai",
+		envFn: func(apiBase, token string) map[string]string {
+			return map[string]string{
+				"OPENAI_API_BASE_URLS":     joinBase(apiBase, "/v1"),
+				"OPENAI_API_KEYS":          token,
+				"ENABLE_PERSISTENT_CONFIG": "false",
+			}
+		},
+		prepareFn: prepareOpenWebUI,
+	},
+
+	// Kilo CLI is an OpenCode fork with its own trusted
+	// KILO_CONFIG_CONTENT surface. Reuse the reviewed OpenCode provider shape
+	// while preventing project configuration from overriding the launch.
+	"kilo": {
+		Name:                "kilo",
+		ExecName:            "kilo",
+		InstallHint:         "Install Kilo Code CLI: https://kilo.ai/docs/code-with-ai/platforms/cli",
+		InstallCmd:          "npm install -g @kilocode/cli",
+		ModelEnv:            kiloModelEnv,
+		RequiredEndpoint:    "openai",
+		AlternativeEndpoint: "openai-response",
+		envFn: func(_, token string) map[string]string {
+			return map[string]string{openClawCredentialEnv: token}
+		},
+		prepareCatalogFn: ignoreBootModel(prepareKiloWithModels),
+	},
+
+	// Pi documents an overrideable agent directory and environment-backed
+	// credentials in models.json. Its isolated settings pin the selected model.
+	"pi": {
+		Name:                "pi",
+		ExecName:            "pi",
+		InstallHint:         "Install Pi: https://pi.dev/docs/quickstart",
+		InstallCmd:          "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
+		ModelEnv:            piModelEnv,
+		RequiredEndpoint:    "openai",
+		AlternativeEndpoint: "openai-response",
+		envFn: func(_, token string) map[string]string {
+			return map[string]string{openClawCredentialEnv: token}
+		},
+		prepareCatalogFn: ignoreBootModel(preparePiWithModels),
+	},
+
+	// Vibe's VIBE_HOME is an official profile boundary. A generated TOML file
+	// registers EveryAPI as a generic OpenAI-compatible provider and references
+	// the process environment for its credential.
+	"vibe": {
+		Name:        "vibe",
+		ExecName:    "vibe",
+		InstallHint: "Install Mistral Vibe: https://github.com/mistralai/mistral-vibe#installation",
+		InstallCmd:  "curl -LsSf https://mistral.ai/vibe/install.sh | bash",
+		InstallCmdWindows: []string{
+			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
+			"irm https://astral.sh/uv/install.ps1 | iex; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install mistral-vibe",
+		},
+		InstallCmdUnixOnly: true,
+		ExtraBinDirs:       []string{".local/bin"},
+		ModelEnv:           vibeModelEnv,
+		RequiredEndpoint:   "openai",
+		envFn: func(_, token string) map[string]string {
+			return map[string]string{openClawCredentialEnv: token}
+		},
+		prepareCatalogFn: ignoreBootModel(prepareVibeWithModels),
+	},
+
+	// GitHub Copilot CLI exposes an official BYOK environment contract. Keep
+	// provider selection process-scoped and choose chat/completions versus
+	// Responses from the selected model's live EveryAPI capabilities.
+	"copilot": {
+		Name:                "copilot",
+		ExecName:            "copilot",
+		InstallHint:         "Install GitHub Copilot CLI: https://docs.github.com/copilot/how-tos/set-up/install-copilot-cli",
+		InstallCmd:          "npm install -g @github/copilot",
+		ModelEnv:            copilotModelEnv,
+		RequiredEndpoint:    "openai",
+		AlternativeEndpoint: "openai-response",
+		envFn: func(apiBase, token string) map[string]string {
+			return map[string]string{
+				"COPILOT_PROVIDER_BASE_URL":     joinBase(apiBase, "/v1"),
+				"COPILOT_PROVIDER_TYPE":         "openai",
+				"COPILOT_PROVIDER_API_KEY":      token,
+				"COPILOT_PROVIDER_BEARER_TOKEN": "",
+				"COPILOT_PROVIDER_HEADERS":      "",
+			}
+		},
+		prepareCatalogFn: ignoreBootModel(prepareCopilotWithModels),
+	},
+
+	// Factory Droid merges an explicit --settings file only for the current
+	// process. Generate one isolated custom model and refer to the credential
+	// through Droid's documented ${ENV_VAR} expansion.
+	"droid": {
+		Name:                "droid",
+		ExecName:            "droid",
+		InstallHint:         "Install Factory Droid: https://docs.factory.ai/cli/getting-started/quickstart",
+		InstallCmd:          "npm install -g droid",
+		ModelEnv:            droidModelEnv,
+		RequiredEndpoint:    "openai",
+		AlternativeEndpoint: "openai-response",
+		envFn: func(_, token string) map[string]string {
+			return map[string]string{openClawCredentialEnv: token}
+		},
+		prepareCatalogFn: ignoreBootModel(prepareDroidWithModels),
+	},
+
+	// OpenHands CLI supports process-only LLM_* overrides when the explicit
+	// --override-with-envs switch is present. No persistent user settings are
+	// read or mutated for this launch.
+	"openhands": {
+		Name:        "openhands",
+		ExecName:    "openhands",
+		InstallHint: "Install OpenHands CLI: https://github.com/OpenHands/OpenHands-CLI#installation",
+		InstallCmd:  "curl -fsSL https://install.openhands.dev/install.sh | sh",
+		InstallCmdWindows: []string{
+			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
+			"irm https://astral.sh/uv/install.ps1 | iex; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install openhands --python 3.12",
+		},
+		InstallCmdUnixOnly: true,
+		ExtraBinDirs:       []string{".local/bin"},
+		DefaultArgs:        []string{"--override-with-envs"},
+		ModelEnv:           openHandsModelEnv,
+		RequiredEndpoint:   "openai",
+		envFn: func(apiBase, token string) map[string]string {
+			return map[string]string{
+				"LLM_API_KEY":  token,
+				"LLM_BASE_URL": joinBase(apiBase, "/v1"),
+			}
+		},
+		prepareCatalogFn: ignoreBootModel(prepareOpenHandsWithModels),
+	},
+
+	// ForgeCode's Chat Completions and Responses-compatible providers read their
+	// endpoint and credential from the process environment. A temporary
+	// FORGE_CONFIG prevents its credential migration from writing the relay key
+	// into the user's profile.
+	"forge": {
+		Name:        "forge",
+		ExecName:    "forge",
+		InstallHint: "Install ForgeCode: https://github.com/antinomyhq/forge#installation",
+		InstallCmd:  "curl -fsSL https://forgecode.dev/cli | sh",
+		InstallCmdWindows: []string{
+			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
+			"$bash = @(\"$env:ProgramFiles\\Git\\bin\\bash.exe\", \"${env:ProgramFiles(x86)}\\Git\\bin\\bash.exe\", \"$env:LOCALAPPDATA\\Programs\\Git\\bin\\bash.exe\") | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | Select-Object -First 1; if (-not $bash) { throw 'ForgeCode installer requires Git for Windows (Git Bash).' }; & $bash -lc 'curl -fsSL https://forgecode.dev/cli | sh'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+		},
+		InstallCmdUnixOnly:         true,
+		ExtraBinDirs:               []string{".local/bin"},
+		WindowsLocalAppDataBinDirs: []string{"Programs/Forge"},
+		ModelEnv:                   forgeModelEnv,
+		RequiredEndpoint:           "openai",
+		AlternativeEndpoint:        "openai-response",
+		envFn: func(apiBase, token string) map[string]string {
+			return map[string]string{
+				"OPENAI_API_KEY": token,
+				"OPENAI_URL":     joinBase(apiBase, "/v1"),
+			}
+		},
+		prepareCatalogFn: ignoreBootModel(prepareForgeWithModels),
+	},
+
+	// LLxprt accepts an explicit provider, Base URL, and model at CLI
+	// precedence. Its application roots are isolated by the preparation hook.
+	"llxprt": {
+		Name:             "llxprt",
+		ExecName:         "llxprt",
+		InstallHint:      "Install LLxprt Code: https://github.com/vybestack/llxprt-code#installation",
+		InstallCmd:       "npm install -g @vybestack/llxprt-code",
+		ModelEnv:         llxprtModelEnv,
+		RequiredEndpoint: "openai",
+		envFn: func(_, token string) map[string]string {
+			return map[string]string{"OPENAI_API_KEY": token}
+		},
+		prepareCatalogFn: ignoreBootModel(prepareLLxprtWithModels),
 	},
 
 	// xAI Grok Build: GROK_MODELS_BASE_URL discovers the live catalogue and
@@ -642,22 +992,51 @@ var Registry = map[string]*Tool{
 		// Pin the third-party script to an immutable commit. Updating Hermes
 		// requires reviewing the new script and deliberately changing this SHA;
 		// never point an auto-executed installer at main/master/HEAD.
-		InstallCmd:         "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/e444d165807f489b5c1ab8e4a612c8d09c2e67a2/scripts/install.sh | bash",
+		InstallCmd: "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/e444d165807f489b5c1ab8e4a612c8d09c2e67a2/scripts/install.sh | bash -s -- --non-interactive --skip-setup",
+		InstallCmdWindows: []string{
+			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
+			"$installer = [scriptblock]::Create((irm https://hermes-agent.nousresearch.com/install.ps1)); & $installer -NonInteractive",
+		},
 		InstallCmdUnixOnly: true,
 		// That script's get_command_link_dir() links the command into
 		// $HOME/.local/bin for the default non-root install (/usr/local/bin
 		// when run as root, which is already a conventional PATH entry).
-		ExtraBinDirs:     []string{".local/bin"},
-		YoloEnv:          "HERMES_YOLO_MODE",
-		YoloLabel:        "yolo mode — disable all approval prompts (HERMES_YOLO_MODE)",
-		ModelEnv:         hermesModelEnv,
-		RequiredEndpoint: "openai",
+		ExtraBinDirs:               []string{".local/bin"},
+		WindowsLocalAppDataBinDirs: []string{"hermes/hermes-agent/bin"},
+		YoloEnv:                    "HERMES_YOLO_MODE",
+		YoloLabel:                  "yolo mode — disable all approval prompts (HERMES_YOLO_MODE)",
+		ModelEnv:                   hermesModelEnv,
+		RequiredEndpoint:           "openai",
 		envFn: func(_, _ string) map[string]string {
 			// Routing is config-file driven; see prepareHermes.
 			return map[string]string{}
 		},
 		prepareFn:        prepareHermes,
 		prepareCatalogFn: ignoreBootModel(prepareHermesWithModels),
+	},
+
+	// LibreFang ships a first-party EveryAPI credential-process integration.
+	// It resolves the current relay key per request and owns its provider state,
+	// so launch it natively without copying a credential into the environment.
+	"librefang": {
+		Name:        "librefang",
+		ExecName:    "librefang",
+		InstallHint: "Install LibreFang: https://github.com/librefang/librefang#quick-start",
+		InstallCmd:  "curl -fsSL https://librefang.ai/install.sh | LIBREFANG_AUTO_START=0 sh",
+		InstallCmdWindows: []string{
+			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
+			"$env:LIBREFANG_AUTO_START='0'; irm https://librefang.ai/install.ps1 | iex",
+		},
+		InstallCmdUnixOnly: true,
+		ExtraBinDirs:       []string{".librefang/bin"},
+		// Keep the daemon attached to the EveryAPI supervisor. Plain `start`
+		// detaches a second process and exits, which makes Connect immediately
+		// lose the only trustworthy session signal and report zero connections.
+		DefaultArgs: []string{"start", "--foreground"},
+		Native:      true,
+		envFn: func(_, _ string) map[string]string {
+			return map[string]string{}
+		},
 	},
 }
 
@@ -679,6 +1058,6 @@ func Names() []string {
 	// picker UX. Hand-coded to match the ordering most likely to
 	// reflect user demand.
 	return []string{
-		"claude", "codex", "opencode", "gemini", "grok", "qwen-code", "kimi-code", "hermes",
+		"claude", "codex", "opencode", "gemini", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang", "open-webui",
 	}
 }

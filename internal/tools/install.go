@@ -28,18 +28,64 @@ func IsInstalled(t *Tool) bool {
 // (cmd/use) to decide between "offer the install prompt" and
 // "fall back to the ErrToolNotFound hint".
 func CanAutoInstall(t *Tool) bool {
-	if t == nil || t.InstallCmd == "" {
-		return false
-	}
-	if t.InstallCmdUnixOnly && runtime.GOOS == "windows" {
-		return false
-	}
-	return true
+	return !installCommandForOS(t, runtime.GOOS).empty()
 }
 
-// InstallerMissing reports the command the tool's InstallCmd needs in
-// order to run (the leading word of InstallCmd — "npm" for `npm install
-// -g …`, "curl" for `curl … | bash`) when that command is NOT resolvable
+type installCommandSpec struct {
+	shell      string
+	executable string
+	args       []string
+}
+
+func (command installCommandSpec) empty() bool {
+	return command.shell == "" && command.executable == ""
+}
+
+func (command installCommandSpec) display() string {
+	if command.executable == "" {
+		return command.shell
+	}
+	parts := make([]string, 0, len(command.args)+1)
+	parts = append(parts, command.executable)
+	for _, arg := range command.args {
+		if strings.ContainsAny(arg, " \t\r\n|&<>") {
+			parts = append(parts, fmt.Sprintf("%q", arg))
+		} else {
+			parts = append(parts, arg)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+func installCommandForOS(t *Tool, goos string) installCommandSpec {
+	if t == nil {
+		return installCommandSpec{}
+	}
+	if goos == "windows" {
+		if len(t.InstallCmdWindows) > 0 && t.InstallCmdWindows[0] != "" {
+			return installCommandSpec{
+				executable: t.InstallCmdWindows[0],
+				args:       append([]string(nil), t.InstallCmdWindows[1:]...),
+			}
+		}
+		if t.InstallCmdUnixOnly {
+			return installCommandSpec{}
+		}
+	}
+	return installCommandSpec{shell: t.InstallCmd}
+}
+
+// InstallCommand returns the exact platform-selected installer in a
+// human-readable form for terminal audit output. RunInstall consumes the same
+// selection, but executes native Windows argv without reparsing this string.
+func InstallCommand(t *Tool) string {
+	return installCommandForOS(t, runtime.GOOS).display()
+}
+
+// InstallerMissing reports the executable the platform-selected installer
+// needs in order to run ("npm" for `npm install -g …`, "curl" for
+// `curl … | bash`, or the first structured Windows argv element) when it is
+// NOT resolvable
 // on $PATH; it returns "" when the command is present, or when the tool
 // has no auto-installer to gate.
 //
@@ -62,53 +108,59 @@ func InstallerMissing(t *Tool) string {
 	return req
 }
 
-// installRequires returns the leading command word of the tool's
-// InstallCmd (the binary that must be on $PATH for the installer to
-// run), or "" when there's no InstallCmd. InstallCmd is a compile-time
-// literal (see the SECURITY INVARIANT on Tool.InstallCmd), so its first
-// field is a stable, trustworthy command name.
+// installRequires returns the executable selected for the current platform,
+// or "" when no installer is available. Installer commands are compile-time
+// literals (see the SECURITY INVARIANT on Tool.InstallCmd), so this is a
+// stable, trustworthy command name.
 func installRequires(t *Tool) string {
-	if t == nil || t.InstallCmd == "" {
+	command := installCommandForOS(t, runtime.GOOS)
+	if command.executable != "" {
+		return command.executable
+	}
+	if command.shell == "" {
 		return ""
 	}
-	fields := strings.Fields(t.InstallCmd)
+	fields := strings.Fields(command.shell)
 	if len(fields) == 0 {
 		return ""
 	}
 	return fields[0]
 }
 
-// RunInstall executes the tool's InstallCmd through the platform
-// shell, streaming stdout/stderr/stdin so npm/curl/bash progress
-// reaches the user's terminal live. After the shell returns, it
+func buildInstallCommand(command installCommandSpec, goos string) *exec.Cmd {
+	if goos == "windows" && command.executable != "" {
+		return exec.Command(command.executable, command.args...)
+	}
+	if goos == "windows" {
+		return exec.Command("cmd", "/C", command.shell)
+	}
+	if bash, err := exec.LookPath("bash"); err == nil {
+		return exec.Command(bash, "-c", "set -o pipefail; "+command.shell)
+	}
+	return exec.Command("sh", "-c", command.shell)
+}
+
+// RunInstall executes the tool's platform-selected installer, streaming
+// stdout/stderr/stdin so npm/curl/PowerShell progress reaches the user's
+// terminal live. After the process returns, it
 // re-checks via ResolveExec; an exit-0 install that still leaves the
 // binary unfindable — on $PATH, in the tool's ExtraBinDirs, or in npm's
 // global bin dir — surfaces as an actionable error (naming the dirs
 // searched) instead of letting the caller re-exec into a still-missing
 // tool.
 //
-// On Windows the command is passed to `cmd /C`. Pipelines like
-// `curl … | bash` won't work there, so callers should gate this
-// with CanAutoInstall first.
+// On Windows, structured InstallCmdWindows argv executes directly; simple
+// cross-platform InstallCmd values such as npm still use `cmd /C`. POSIX-only
+// pipelines are gated by CanAutoInstall.
 func RunInstall(t *Tool) error {
-	if !CanAutoInstall(t) {
+	command := installCommandForOS(t, runtime.GOOS)
+	if command.empty() {
 		return fmt.Errorf("no auto-install available for %s", t.Name)
 	}
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("cmd", "/C", t.InstallCmd)
-	} else if bash, err := exec.LookPath("bash"); err == nil {
-		// Prefer bash with pipefail so a failing pipeline stage is
-		// reported. The curl|bash installers exit with bash's status,
-		// not curl's — a failed `curl -fsSL … | bash` (network error,
-		// HTTP 4xx/5xx) writes nothing and bash exits 0, which without
-		// pipefail masquerades as a successful install and misleads the
-		// user into chasing a nonexistent $PATH problem. bash is present
-		// whenever these curl|bash installers could run at all.
-		cmd = exec.Command(bash, "-c", "set -o pipefail; "+t.InstallCmd)
-	} else {
-		cmd = exec.Command("sh", "-c", t.InstallCmd)
-	}
+	// Unix shell installers prefer bash with pipefail so a failed download
+	// cannot masquerade as success. Native Windows installers retain their
+	// structured argv and never pass nested quoting through cmd.exe.
+	cmd := buildInstallCommand(command, runtime.GOOS)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

@@ -188,6 +188,44 @@ func TestResolveExec_NpmFallbackViaEnvBinDir(t *testing.T) {
 	}
 }
 
+func TestResolveExec_NpmFallbackViaStableUserBinDirs(t *testing.T) {
+	for _, relativeDir := range []string{
+		".bun/bin",
+		".local/share/pnpm",
+		"Library/pnpm",
+		".volta/bin",
+		".nodenv/shims",
+	} {
+		t.Run(relativeDir, func(t *testing.T) {
+			home := t.TempDir()
+			binDir := filepath.Join(home, filepath.FromSlash(relativeDir))
+			if err := os.MkdirAll(binDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			const exe = "everyapi-fake-user-bin-zzz"
+			writeFakeExec(t, binDir, exe)
+			t.Setenv("HOME", home)
+			if runtime.GOOS == "windows" {
+				t.Setenv("USERPROFILE", home)
+			}
+			t.Setenv("PATH", "")
+			t.Setenv("NVM_BIN", "")
+			t.Setenv("VOLTA_HOME", "")
+			t.Setenv("FNM_MULTISHELL_PATH", "")
+			t.Setenv("npm_config_prefix", "")
+			t.Setenv("NPM_CONFIG_PREFIX", "")
+			t.Setenv("PREFIX", "")
+
+			tool := &Tool{Name: "npmish", ExecName: exe, InstallCmd: "npm install -g npmish"}
+			got, err := ResolveExec(tool)
+			if err != nil {
+				t.Fatalf("ResolveExec via %s errored: %v", relativeDir, err)
+			}
+			assertResolvesInto(t, got, binDir)
+		})
+	}
+}
+
 // TestResolveExec_NonNpmToolSkipsNpmDirs pins that the npm-global search
 // is gated to npm installers: a curl|bash tool that isn't on $PATH must
 // NOT be "found" just because a same-named binary happens to sit in an
@@ -254,19 +292,77 @@ func TestResolveExec_ExtraBinDirs(t *testing.T) {
 	}
 }
 
+func TestResolveExec_WindowsLocalAppDataBinDirs(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows installer output")
+	}
+	localAppData := t.TempDir()
+	binDir := filepath.Join(localAppData, "Programs", "Forge")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const exe = "everyapi-fake-forge-zzz"
+	writeFakeExec(t, binDir, exe)
+	t.Setenv("LOCALAPPDATA", localAppData)
+	t.Setenv("PATH", "")
+	t.Setenv("HOME", t.TempDir())
+
+	tool := &Tool{
+		Name:                       "forgeish",
+		ExecName:                   exe,
+		WindowsLocalAppDataBinDirs: []string{"Programs/Forge"},
+	}
+	got, err := ResolveExec(tool)
+	if err != nil {
+		t.Fatalf("ResolveExec via LOCALAPPDATA errored: %v", err)
+	}
+	assertResolvesInto(t, got, binDir)
+}
+
+func TestResolveExec_IgnoresWindowsLocalAppDataBinDirsOnUnix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-only platform boundary")
+	}
+	localAppData := t.TempDir()
+	binDir := filepath.Join(localAppData, "Programs", "Forge")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const exe = "everyapi-fake-windows-only-zzz"
+	writeFakeExec(t, binDir, exe)
+	t.Setenv("LOCALAPPDATA", localAppData)
+	t.Setenv("PATH", "")
+	t.Setenv("HOME", t.TempDir())
+
+	tool := &Tool{
+		Name:                       "forgeish",
+		ExecName:                   exe,
+		WindowsLocalAppDataBinDirs: []string{"Programs/Forge"},
+	}
+	if got, err := ResolveExec(tool); err == nil {
+		t.Fatalf("ResolveExec = %q, want Windows-only candidate ignored", got)
+	}
+}
+
+func TestWindowsLocalAppDataBinDirsRejectEscape(t *testing.T) {
+	localAppData := t.TempDir()
+	outside := t.TempDir()
+	if got := safeRelativeDirs(localAppData, []string{outside, "../outside"}); len(got) != 0 {
+		t.Fatalf("safeRelativeDirs = %v, want escaping candidates rejected", got)
+	}
+}
+
 // TestLookupExecName_MatchesExecNameNotRegistryKey pins the lookup key.
-// `use gemini` launches Antigravity's `agy`, while the mcp subcommands
-// pass the literal "gemini" for Google's separate gemini CLI. Matching on
-// the registry key instead of ExecName would hand that unrelated binary
-// agy's install directories.
+// Gemini CLI and Antigravity are distinct registry entries and executable
+// names; the MCP helper must resolve the real `gemini` entry.
 func TestLookupExecName_MatchesExecNameNotRegistryKey(t *testing.T) {
 	if got := toolByExecName("agy"); got == nil {
-		t.Error(`toolByExecName("agy") = nil, want the gemini entry`)
-	} else if got.Name != "gemini" {
-		t.Errorf(`toolByExecName("agy").Name = %q, want gemini`, got.Name)
+		t.Error(`toolByExecName("agy") = nil, want the antigravity entry`)
+	} else if got.Name != "antigravity" {
+		t.Errorf(`toolByExecName("agy").Name = %q, want antigravity`, got.Name)
 	}
-	if got := toolByExecName("gemini"); got != nil {
-		t.Errorf(`toolByExecName("gemini") = %q, want nil (that is a registry key, not an ExecName)`, got.Name)
+	if got := toolByExecName("gemini"); got == nil || got.Name != "gemini" {
+		t.Errorf(`toolByExecName("gemini") = %#v, want the real Gemini CLI entry`, got)
 	}
 	if got := toolByExecName(""); got != nil {
 		t.Errorf(`toolByExecName("") = %q, want nil`, got.Name)
@@ -457,27 +553,17 @@ func TestGeminiAutoInstall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Lookup(gemini): %v", err)
 	}
-	if tool.ExecName != "agy" {
-		t.Errorf("ExecName = %q, want agy", tool.ExecName)
+	if tool.ExecName != "gemini" {
+		t.Errorf("ExecName = %q, want gemini", tool.ExecName)
 	}
 	if runtime.GOOS != "windows" && !CanAutoInstall(tool) {
 		t.Error("CanAutoInstall(gemini) = false, want true so `use` can offer the install")
 	}
-	// The installer is a remote shell pipeline, so a bare Enter must not
-	// run it (InstallPromptDefault is derived from InstallCmdUnixOnly).
-	if !tool.InstallCmdUnixOnly {
-		t.Error("InstallCmdUnixOnly = false; curl|bash must stay Unix-gated and default the prompt to N")
+	if tool.InstallCmd != "npm install -g @google/gemini-cli" {
+		t.Errorf("InstallCmd = %q", tool.InstallCmd)
 	}
-	if tool.InstallPromptDefault() {
-		t.Error("InstallPromptDefault = true; a remote install script must not run on a bare Enter")
-	}
-	// ~/.local/bin is where Antigravity's install.sh writes the binary;
-	// dropping it would reintroduce the reinstall loop.
-	if len(tool.ExtraBinDirs) == 0 {
-		t.Fatal("ExtraBinDirs is empty, want the installer's output dir")
-	}
-	if tool.ExtraBinDirs[0] != ".local/bin" {
-		t.Errorf("ExtraBinDirs[0] = %q, want .local/bin", tool.ExtraBinDirs[0])
+	if !tool.InstallPromptDefault() {
+		t.Error("npm install should default its reversible prompt to yes")
 	}
 }
 

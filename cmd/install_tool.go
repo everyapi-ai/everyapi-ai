@@ -33,7 +33,7 @@ func InstallTool(args []string) error {
 		return fmt.Errorf(i18n.T("use.installer_missing"), tool.ExecName, missing, tool.InstallHint)
 	}
 	cliout.Printf(i18n.T("use.tool_not_installed")+"\n", tool.ExecName)
-	cliout.Printf("  %s\n", tool.InstallCmd)
+	cliout.Printf("  %s\n", tools.InstallCommand(tool))
 	cliout.Printf(i18n.T("use.installing")+"\n", tool.Name)
 	if err := tools.RunInstall(tool); err != nil {
 		var notOnPath *tools.ErrInstalledButNotOnPath

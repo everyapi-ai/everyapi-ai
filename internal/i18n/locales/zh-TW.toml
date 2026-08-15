@@ -1297,13 +1297,13 @@ choice_later = "稍後提醒"
 choice_skip = "跳過此版本"
 
 [use]
+no_selectable_models = "此 relay key/group 沒有可供 %s 選擇的模型。"
 sanitize_bad_value = "--sanitize=%q 不是有效的 true/false 值 — 請使用 --sanitize 或 --sanitize=false"
 tool_picker = "選一個工具："
 group_picker = "選一個路由分組："
 yolo_prompt = "啟用 %s？（將略過所有安全確認）"
 hook_trust_prompt = "允許 Codex 不經逐項審查直接執行儲存庫 hooks？"
 launching = "正在啟動 %s，目標 %s"
-launching_transparent = "正在啟動 %s，目標 %s（透明模式）"
 launching_via = "正在啟動 %s，目標 %s → %s"
 claude_inflated_resume = "警告：這個 Claude 工作階段建立時注入了膨脹的 %d token 工具 schema 前綴。EveryAPI 的修正只對新工作階段生效，--resume 會原樣恢復舊記錄；要移除它，請新開 Claude 工作階段。"
 claude_polluted_resume_recovered = "偵測到 Claude 工作階段 %s 於 %s 出現已知輸出污染（受影響的 assistant 訊息 %d 則）。已啟動乾淨的復原工作階段 %s；原始記錄保持不變。"
@@ -1417,6 +1417,9 @@ unknown_sub = "未知 inbox 子命令 %q"
 [cliprompt]
 pick_toggle_hint = "空格切換 · 輸入鍵確認 · esc 返回"
 pick_enter_name_number = "輸入名稱或編號："
+pick_unavailable_label = "此用戶端不可用"
+pick_unavailable_selection = "%s 在此用戶端中不可用"
+pick_nothing_available = "沒有可用選項。"
 pick_toggle_csv = "輸入要切換的名稱或編號（逗號分隔，留空=不變）："
 
 [proxy.detector]

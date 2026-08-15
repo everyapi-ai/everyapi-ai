@@ -1322,13 +1322,13 @@ choice_later = "後で通知"
 choice_skip = "このバージョンをスキップ"
 
 [use]
+no_selectable_models = "この relay key/group では %s が選択できるモデルはありません。"
 sanitize_bad_value = "--sanitize=%q は有効な true/false の値ではありません — --sanitize または --sanitize=false を使用してください"
 tool_picker = "ツールを選択:"
 group_picker = "ルーティンググループを選択:"
 yolo_prompt = "%s を有効化しますか？ (すべての安全確認をスキップします)"
 hook_trust_prompt = "Codex が事前確認なしでリポジトリの hooks を実行することを許可しますか？"
 launching = "%s を %s に対して起動中"
-launching_transparent = "%s を %s に対して起動中（透過モード）"
 launching_via = "%s を %s 経由で %s に対して起動中"
 claude_inflated_resume = "警告: この Claude セッションは、%d トークンに膨張したツールスキーマのプレフィックスを含んだ状態で作成されました。EveryAPI の修正は新しいセッションに適用されますが、--resume は古い履歴をそのまま復元します。削除するには新しい Claude セッションを開始してください。"
 claude_polluted_resume_recovered = "Claude セッション %s の %s で既知の出力汚染を検出しました（影響を受けた assistant メッセージ: %d 件）。クリーンな復旧セッション %s を開始しました。元の履歴は変更されていません。"
@@ -1442,6 +1442,9 @@ unknown_sub = "不明な inbox サブコマンド %q"
 [cliprompt]
 pick_toggle_hint = "スペースで切替 · Enter で確定 · Esc で戻る"
 pick_enter_name_number = "名前または番号を入力: "
+pick_unavailable_label = "このクライアントでは利用不可"
+pick_unavailable_selection = "%s はこのクライアントでは利用できません"
+pick_nothing_available = "利用可能な選択肢がありません。"
 pick_toggle_csv = "切り替える名前または番号をカンマ区切りで入力（空欄=変更なし）: "
 
 [proxy.detector]
