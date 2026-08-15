@@ -561,15 +561,21 @@ if [ "$VERIFY_SIGNATURE" != "skip" ]; then
       err "install cosign from https://github.com/sigstore/cosign and retry"
       exit 1
     fi
-    # Default install path: cosign isn't installed, so we proceed
-    # with SHA256 integrity only — no cryptographic proof that the
-    # checksum file itself was produced by the release pipeline.
-    # `warn` (not `info`) because that tradeoff matters in a curl|bash
-    # installer; a user skimming output should see this is a degraded
-    # mode, not a clean success. Pass --require-signature to fail
-    # loudly instead.
-    warn "cosign not installed — skipping signature verify (SHA256 integrity only, no provenance)"
-    warn "  install cosign and rerun with --require-signature for cryptographic provenance"
+    # Default install path: cosign isn't installed, so we proceed with
+    # SHA256 integrity only. This is not a failed verification and does
+    # not mean the archive was identified as unofficial or tampered with;
+    # the publisher-provenance check simply did not run. Keep this as
+    # informational output so users do not mistake a missing optional
+    # verifier for evidence of a counterfeit download. Pass
+    # --require-signature to make provenance verification mandatory.
+    info "publisher verification skipped: cosign is not installed (this is not a signature failure)"
+    info "SHA256 integrity verified; publisher authenticity was not verified"
+    if [ "$OS" = "darwin" ]; then
+      info "for publisher verification: brew install cosign"
+    else
+      info "install cosign: https://docs.sigstore.dev/cosign/system_config/installation/"
+    fi
+    info "then re-verify: curl -fsSL https://dl.everyapi.ai/install.sh | bash -s -- --force --require-signature"
   fi
 fi
 
