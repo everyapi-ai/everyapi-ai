@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -162,6 +163,61 @@ func TestClinePrepareUsesLifecycleBoundProviderSettings(t *testing.T) {
 	cleanup()
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("Cline lifecycle settings survived cleanup: %v", err)
+	}
+}
+
+func TestClinePreparePublishesPickerCatalogAndDisablesHubReuse(t *testing.T) {
+	t.Setenv(clineModelEnv, "gpt-5.6-luna")
+	tool, _ := Lookup("cline")
+	models := []Model{
+		{ID: "MiniMax-M3", SupportedEndpointTypes: []string{"openai"}},
+		{ID: "vendor/chat model #1", SupportedEndpointTypes: []string{"openai"}},
+		{ID: "gpt-5.6-luna", SupportedEndpointTypes: []string{"openai-response"}},
+		{ID: "future-response-model", SupportedEndpointTypes: []string{"openai-response"}},
+	}
+	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", models, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer TakePreparedCleanup(extra)()
+	if got := extra["CLINE_SESSION_BACKEND_MODE"]; got != "local" {
+		t.Fatalf("CLINE_SESSION_BACKEND_MODE = %q, want isolated local runtime", got)
+	}
+
+	body, err := os.ReadFile(filepath.Join(extra["CLINE_DATA_DIR"], "settings", "models.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var catalog struct {
+		Providers map[string]struct {
+			Provider struct {
+				ModelsSourceURL string `json:"modelsSourceUrl"`
+			} `json:"provider"`
+		} `json:"providers"`
+	}
+	if err := json.Unmarshal(body, &catalog); err != nil {
+		t.Fatal(err)
+	}
+	for providerID, want := range map[string][]string{
+		clineChatProviderID:      {"MiniMax-M3", "vendor/chat model #1", "gpt-5.6-luna"},
+		clineResponsesProviderID: {"future-response-model"},
+	} {
+		source := catalog.Providers[providerID].Provider.ModelsSourceURL
+		const prefix = "data:application/json;base64,"
+		if !strings.HasPrefix(source, prefix) {
+			t.Fatalf("Cline %s modelsSourceUrl = %q, want embedded catalog", providerID, source)
+		}
+		decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(source, prefix))
+		if err != nil {
+			t.Fatalf("decode Cline %s modelsSourceUrl: %v", providerID, err)
+		}
+		var got []string
+		if err := json.Unmarshal(decoded, &got); err != nil {
+			t.Fatalf("parse Cline %s modelsSourceUrl: %v", providerID, err)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("Cline %s picker models = %#v, want %#v", providerID, got, want)
+		}
 	}
 }
 

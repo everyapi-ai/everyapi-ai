@@ -892,7 +892,7 @@ func TestClineChatAndResponsesModelsReachMatchingProviders(t *testing.T) {
 		selectedProvider string
 	}{
 		{name: "chat", selected: "MiniMax-M3", selectedProvider: "lmstudio"},
-		{name: "responses", selected: "gpt-5.6-luna", selectedProvider: "openai-native"},
+		{name: "responses", selected: "gpt-5.6-luna", selectedProvider: "lmstudio"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("EVERYAPI_CLINE_MODEL", tc.selected)
@@ -936,11 +936,68 @@ func TestClineChatAndResponsesModelsReachMatchingProviders(t *testing.T) {
 				t.Fatal(err)
 			}
 			if strings.Contains(string(catalogBody), "secret-relay-key") ||
-				!strings.Contains(string(catalogBody), `"name":"EveryAPI Chat"`) ||
-				!strings.Contains(string(catalogBody), `"name":"EveryAPI Responses"`) ||
+				!strings.Contains(string(catalogBody), `"name":"EveryAPI"`) ||
+				strings.Contains(string(catalogBody), `"name":"EveryAPI Responses"`) ||
 				!strings.Contains(string(catalogBody), `"MiniMax-M3"`) ||
 				!strings.Contains(string(catalogBody), `"gpt-5.6-luna"`) {
 				t.Fatalf("Cline model catalog = %s", catalogBody)
+			}
+		})
+	}
+}
+
+func TestClineNonGPTResponsesModelsRetainNativeProvider(t *testing.T) {
+	tool, err := tools.Lookup("cline")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, selected := range []string{"future-response-model", "codex-next", "o9-preview"} {
+		t.Run(selected, func(t *testing.T) {
+			t.Setenv("EVERYAPI_CLINE_MODEL", selected)
+			models := launchModelsForTool(tool, []api.RelayModel{
+				{ID: "MiniMax-M3", SupportedEndpointTypes: []string{"openai"}},
+				{ID: selected, SupportedEndpointTypes: []string{"openai-response"}},
+			}, "")
+			extra, err := tool.PrepareWithModels(
+				"https://api.everyapi.ai", "secret-relay-key", models, "",
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tools.TakePreparedCleanup(extra)()
+
+			providerBody, err := os.ReadFile(extra["CLINE_PROVIDER_SETTINGS_PATH"])
+			if err != nil {
+				t.Fatal(err)
+			}
+			var settings struct {
+				LastUsedProvider string `json:"lastUsedProvider"`
+			}
+			if err := json.Unmarshal(providerBody, &settings); err != nil {
+				t.Fatal(err)
+			}
+			if settings.LastUsedProvider != "openai-native" {
+				t.Fatalf("Cline provider for %q = %q, want native Responses", selected, settings.LastUsedProvider)
+			}
+
+			catalogBody, err := os.ReadFile(filepath.Join(extra["CLINE_DATA_DIR"], "settings", "models.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var catalog struct {
+				Providers map[string]struct {
+					Provider struct {
+						Protocol string `json:"protocol"`
+						Client   string `json:"client"`
+					} `json:"provider"`
+				} `json:"providers"`
+			}
+			if err := json.Unmarshal(catalogBody, &catalog); err != nil {
+				t.Fatal(err)
+			}
+			provider := catalog.Providers["openai-native"].Provider
+			if provider.Protocol != "openai-responses" || provider.Client != "openai" {
+				t.Fatalf("Cline fallback provider for %q = %#v", selected, provider)
 			}
 		})
 	}

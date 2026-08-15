@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -35,12 +36,13 @@ type clineProviderSettingsFile struct {
 }
 
 type clineCatalogProviderInfo struct {
-	Name           string   `json:"name"`
-	BaseURL        string   `json:"baseUrl"`
-	DefaultModelID string   `json:"defaultModelId"`
-	Protocol       string   `json:"protocol"`
-	Client         string   `json:"client"`
-	Capabilities   []string `json:"capabilities"`
+	Name            string   `json:"name"`
+	BaseURL         string   `json:"baseUrl"`
+	DefaultModelID  string   `json:"defaultModelId"`
+	Protocol        string   `json:"protocol"`
+	Client          string   `json:"client"`
+	Capabilities    []string `json:"capabilities"`
+	ModelsSourceURL string   `json:"modelsSourceUrl"`
 }
 
 type clineCatalogModel struct {
@@ -58,6 +60,17 @@ type clineModelCatalogFile struct {
 	Providers map[string]clineCatalogProvider `json:"providers"`
 }
 
+func clineResponsesModelUsesChatBridge(model Model) bool {
+	if !modelSupportsEndpoint(model.SupportedEndpointTypes, "openai-response") {
+		return false
+	}
+	modelID := strings.ToLower(strings.TrimSpace(model.ID))
+	if slash := strings.LastIndexByte(modelID, '/'); slash >= 0 {
+		modelID = modelID[slash+1:]
+	}
+	return strings.HasPrefix(modelID, "gpt-")
+}
+
 func prepareClineWithModels(apiBase, token string, models []Model) (map[string]string, error) {
 	selected := strings.TrimSpace(os.Getenv(clineModelEnv))
 	if selected == "" {
@@ -66,13 +79,15 @@ func prepareClineWithModels(apiBase, token string, models []Model) (map[string]s
 	var chatModels, responsesModels []Model
 	selectedProvider := ""
 	for _, model := range models {
-		if modelSupportsEndpoint(model.SupportedEndpointTypes, "openai") {
+		chatCompatible := modelSupportsEndpoint(model.SupportedEndpointTypes, "openai") ||
+			clineResponsesModelUsesChatBridge(model)
+		if chatCompatible {
 			chatModels = append(chatModels, model)
 			if model.ID == selected {
 				selectedProvider = clineChatProviderID
 			}
 		}
-		if modelSupportsEndpoint(model.SupportedEndpointTypes, "openai-response") {
+		if !chatCompatible && modelSupportsEndpoint(model.SupportedEndpointTypes, "openai-response") {
 			responsesModels = append(responsesModels, model)
 			if model.ID == selected && selectedProvider == "" {
 				selectedProvider = clineResponsesProviderID
@@ -102,9 +117,9 @@ func prepareClineWithModels(apiBase, token string, models []Model) (map[string]s
 		Version:   1,
 		Providers: make(map[string]clineCatalogProvider, 2),
 	}
-	addProvider := func(id, name, protocol, client string, providerModels []Model) {
+	addProvider := func(id, name, protocol, client string, providerModels []Model) error {
 		if len(providerModels) == 0 {
-			return
+			return nil
 		}
 		defaultModel := providerModels[0].ID
 		if id == selectedProvider {
@@ -121,27 +136,41 @@ func prepareClineWithModels(apiBase, token string, models []Model) (map[string]s
 			TokenSource: "manual",
 		}
 		catalogModels := make(map[string]clineCatalogModel, len(providerModels))
+		catalogIDs := make([]string, 0, len(providerModels))
 		for _, model := range providerModels {
 			displayName := strings.TrimSpace(model.DisplayName)
 			if displayName == "" {
 				displayName = model.ID
 			}
 			catalogModels[model.ID] = clineCatalogModel{ID: model.ID, Name: displayName}
+			catalogIDs = append(catalogIDs, model.ID)
+		}
+		catalogIDsBody, err := json.Marshal(catalogIDs)
+		if err != nil {
+			return fmt.Errorf("encode Cline %s picker catalog: %w", id, err)
 		}
 		catalog.Providers[id] = clineCatalogProvider{
 			Provider: clineCatalogProviderInfo{
-				Name:           name,
-				BaseURL:        baseURL,
-				DefaultModelID: defaultModel,
-				Protocol:       protocol,
-				Client:         client,
-				Capabilities:   []string{"tools"},
+				Name:            name,
+				BaseURL:         baseURL,
+				DefaultModelID:  defaultModel,
+				Protocol:        protocol,
+				Client:          client,
+				Capabilities:    []string{"tools"},
+				ModelsSourceURL: "data:application/json;base64," + base64.StdEncoding.EncodeToString(catalogIDsBody),
 			},
 			Models: catalogModels,
 		}
+		return nil
 	}
-	addProvider(clineChatProviderID, "EveryAPI Chat", "openai-chat", "openai-compatible", chatModels)
-	addProvider(clineResponsesProviderID, "EveryAPI Responses", "openai-responses", "openai", responsesModels)
+	if err := addProvider(clineChatProviderID, "EveryAPI", "openai-chat", "openai-compatible", chatModels); err != nil {
+		removePreparedHomeAfterQuiet(home)
+		return nil, err
+	}
+	if err := addProvider(clineResponsesProviderID, "EveryAPI Responses", "openai-responses", "openai", responsesModels); err != nil {
+		removePreparedHomeAfterQuiet(home)
+		return nil, err
+	}
 
 	catalogBody, err := json.Marshal(catalog)
 	if err != nil {
@@ -164,5 +193,6 @@ func prepareClineWithModels(apiBase, token string, models []Model) (map[string]s
 	}
 	env := preparedHomeEnv("CLINE_DATA_DIR", home)
 	env["CLINE_PROVIDER_SETTINGS_PATH"] = path
+	env["CLINE_SESSION_BACKEND_MODE"] = "local"
 	return env, nil
 }

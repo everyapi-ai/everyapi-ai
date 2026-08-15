@@ -669,8 +669,10 @@ var Registry = map[string]*Tool{
 
 	// Cline CLI supports an explicit provider-settings path. Redirect it to a
 	// lifecycle-bound data directory so EveryAPI never mutates ~/.cline. Use its
-	// overridable LM Studio provider for OpenAI-compatible Chat Completions and
-	// its official openai-native provider for the Responses API.
+	// overridable LM Studio provider for OpenAI-compatible Chat Completions. The
+	// gateway bridges OpenAI/Codex Responses models through that endpoint so
+	// Cline's provider-scoped /model picker can present one EveryAPI catalogue;
+	// future non-bridgeable Responses models retain an openai-native fallback.
 	"cline": {
 		Name:                "cline",
 		ExecName:            "clite",
