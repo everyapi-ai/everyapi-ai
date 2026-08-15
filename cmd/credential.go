@@ -36,6 +36,7 @@ type credentialOutputModel struct {
 	ID                     string   `json:"id"`
 	OwnedBy                string   `json:"owned_by,omitempty"`
 	SupportedEndpointTypes []string `json:"supported_endpoint_types"`
+	ChatCompletionsBridge  bool     `json:"chat_completions_bridge,omitempty"`
 }
 
 // credentialError keeps machine failures stable while allowing the existing
@@ -149,6 +150,7 @@ func Credential(args []string) error {
 				ID:                     model.ID,
 				OwnedBy:                model.OwnedBy,
 				SupportedEndpointTypes: model.SupportedEndpointTypes,
+				ChatCompletionsBridge:  model.ChatCompletionsBridge,
 			})
 		}
 		out.Models = &modelOutput

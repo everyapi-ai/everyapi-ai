@@ -133,7 +133,7 @@ func TestCredentialCanIncludeTheRelayScopedModelCatalog(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer sk-everyapi-models" {
 			t.Fatalf("Authorization = %q", got)
 		}
-		_, _ = w.Write([]byte(`{"data":[{"id":"image-only","owned_by":"vendor","supported_endpoint_types":["image-generation"]},{"id":"chat-model","owned_by":"vendor","supported_endpoint_types":["openai"]},{"id":"no-endpoint","owned_by":"vendor","supported_endpoint_types":[]}]}`))
+		_, _ = w.Write([]byte(`{"data":[{"id":"image-only","owned_by":"vendor","supported_endpoint_types":["image-generation"]},{"id":"chat-model","owned_by":"vendor","supported_endpoint_types":["openai"],"chat_completions_bridge":true},{"id":"no-endpoint","owned_by":"vendor","supported_endpoint_types":[]}]}`))
 	}))
 	defer srv.Close()
 	if err := config.Save(&config.Credentials{
@@ -151,6 +151,7 @@ func TestCredentialCanIncludeTheRelayScopedModelCatalog(t *testing.T) {
 		Models []struct {
 			ID                     string   `json:"id"`
 			SupportedEndpointTypes []string `json:"supported_endpoint_types"`
+			ChatCompletionsBridge  bool     `json:"chat_completions_bridge"`
 		} `json:"models"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
@@ -158,6 +159,9 @@ func TestCredentialCanIncludeTheRelayScopedModelCatalog(t *testing.T) {
 	}
 	if len(got.Models) != 3 || got.Models[0].ID != "chat-model" || got.Models[0].SupportedEndpointTypes[0] != "openai" {
 		t.Fatalf("models = %#v", got.Models)
+	}
+	if !got.Models[0].ChatCompletionsBridge {
+		t.Fatal("credential model did not preserve chat_completions_bridge")
 	}
 	var raw struct {
 		Models []map[string]any `json:"models"`

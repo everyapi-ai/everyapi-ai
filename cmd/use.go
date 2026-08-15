@@ -724,7 +724,7 @@ func Use(args []string) error {
 	// that worked read as one that had done something unexplained. Which path
 	// carried the traffic is a transport detail, and it is already recorded in
 	// connector.log for whoever is actually debugging the hop chain.
-	cliout.Printf(i18n.T("use.launching")+"\n", t.ExecName, gw)
+	cliout.Printf(i18n.T("use.launching")+"\n", t.Name, gw)
 	// Discard any terminal control-sequence reply (e.g. the OSC 11
 	// background-color report a huh picker triggered) still buffered on
 	// stdin, so it doesn't leak into the launched tool as phantom input.
