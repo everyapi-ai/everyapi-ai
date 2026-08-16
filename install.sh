@@ -383,6 +383,29 @@ dl() {
     --connect-timeout 10 --speed-limit 1024 --speed-time 20 "$@"
 }
 
+# curl writes its own diagnostics to stderr even under -s — that is exactly what
+# -S asks for — so a transient blip that the retry below recovers from still
+# printed a raw `curl: (56) The requested URL returned error: 500` at the user,
+# immediately followed by a successful install. That reads as a broken download
+# when nothing broke. Capture each attempt's stderr instead and surface only the
+# last one, and only once every attempt (mirror fallback included) is exhausted,
+# so a genuine failure still reports curl's actual reason.
+DL_ERR_FILE=""
+dl_quiet() {
+  DL_ERR_FILE="$TMP_DIR/.dl-stderr"
+  dl "$@" 2>"$DL_ERR_FILE"
+}
+
+# Echo whatever curl last complained about. Always succeeds: it runs on the
+# failure path, where `set -e` would otherwise turn "no error text captured"
+# into an abort that loses the caller's own message.
+dl_last_error() {
+  if [ -n "$DL_ERR_FILE" ] && [ -s "$DL_ERR_FILE" ]; then
+    sed 's/^/  /' "$DL_ERR_FILE" >&2
+  fi
+  return 0
+}
+
 # fetch <name> <outfile>: download $BASE_URL/<name>. Retry the primary source a
 # few times first — a transient blip on a REACHABLE GitHub should not silently
 # reroute trust to the mirror — then, only if the primary was GitHub, fall back
@@ -395,7 +418,7 @@ dl() {
 fetch() {
   local _name="$1" _out="$2" _try
   for _try in 1 2 3; do
-    if dl -o "$_out" "$BASE_URL/$_name"; then
+    if dl_quiet -o "$_out" "$BASE_URL/$_name"; then
       return 0
     fi
     [ "$_try" -lt 3 ] && sleep 1
@@ -404,7 +427,7 @@ fetch() {
   warn "github.com download failed — falling back to the mainland mirror"
   DOWNLOAD_BASE="$MIRROR_BASE"
   BASE_URL="$MIRROR_BASE/$VERSION"
-  if dl -o "$_out" "$BASE_URL/$_name"; then
+  if dl_quiet -o "$_out" "$BASE_URL/$_name"; then
     return 0
   fi
   [ "$VERSION_PINNED" -eq 1 ] && return 1   # explicit --version: don't substitute
@@ -420,7 +443,7 @@ fetch() {
     warn "mirror has no $VERSION yet — using the mirror's latest ($_ml)"
     VERSION="$_ml"
     BASE_URL="$MIRROR_BASE/$VERSION"
-    dl -o "$_out" "$BASE_URL/$_name"
+    dl_quiet -o "$_out" "$BASE_URL/$_name"
     return $?
   fi
   return 1
@@ -429,6 +452,7 @@ fetch() {
 info "downloading ${TARBALL}…"
 fetch "$TARBALL" "$TMP_DIR/$TARBALL" || {
   err "failed to download $TARBALL from GitHub and the mirror"
+  dl_last_error
   err "check your connection, or pin a known version with --version vX.Y.Z"
   exit 1
 }
@@ -441,6 +465,7 @@ DOWNLOAD_LOCKED=1
 info "downloading ${SUMS}…"
 fetch "$SUMS" "$TMP_DIR/$SUMS" || {
   err "failed to download $SUMS — refusing to install without checksum"
+  dl_last_error
   exit 1
 }
 

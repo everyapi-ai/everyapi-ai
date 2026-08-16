@@ -406,7 +406,7 @@ func TestToolArgsForLaunchUsesLibreFangStartByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := toolArgsForLaunch(librefang, nil); !reflect.DeepEqual(got, []string{"start", "--foreground"}) {
+	if got := toolArgsForLaunch(librefang, nil); !reflect.DeepEqual(got, []string{"start"}) {
 		t.Fatalf("toolArgsForLaunch(librefang, nil) = %v", got)
 	}
 	explicit := []string{"doctor"}

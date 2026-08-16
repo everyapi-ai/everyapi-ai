@@ -136,7 +136,7 @@ Each tool uses different conventions; the CLI remembers them:
 | qwen-code | env: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`; process-scoped `QWEN_HOME` user settings and pinned `--auth-type=openai` |
 | kimi-code | env: `KIMI_MODEL_API_KEY`, `KIMI_MODEL_BASE_URL`, `KIMI_MODEL_PROVIDER_TYPE`, `KIMI_MODEL_NAME`; isolated `KIMI_CODE_HOME` with generated model aliases |
 | hermes | generated `HERMES_HOME/config.yaml` (named custom provider, `base_url`, inline `api_key`); filtered live model discovery |
-| librefang | native `librefang start`; LibreFang resolves the current EveryAPI credential per request |
+| librefang | native `librefang start`, which detaches the daemon and returns the terminal (`librefang stop` ends it); LibreFang resolves the current EveryAPI credential per request |
 
 No more looking up which variable name each tool reads, whether you need to append `/v1`, or which auth-header style applies.
 

@@ -296,8 +296,9 @@ func TestLibreFangUsesItsOfficialCredentialProcessIntegration(t *testing.T) {
 	if !tool.Native {
 		t.Fatal("LibreFang must resolve EveryAPI through its own credential process")
 	}
-	if got := tool.DefaultArgs; !reflect.DeepEqual(got, []string{"start", "--foreground"}) {
-		t.Fatalf("DefaultArgs = %v, want [start --foreground]", got)
+	// `start` is LibreFang's documented daemon launch: it detaches and returns the terminal. Never pin it to the foreground — that turns a launch into an unattended log stream and makes Ctrl+C stop the daemon.
+	if got := tool.DefaultArgs; !reflect.DeepEqual(got, []string{"start"}) {
+		t.Fatalf("DefaultArgs = %v, want [start]", got)
 	}
 	if env := tool.Env("https://api.everyapi.ai", "must-not-leak"); len(env) != 0 {
 		t.Fatalf("LibreFang native launch received gateway material: %v", env)

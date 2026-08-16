@@ -815,8 +815,8 @@ var Registry = map[string]*Tool{
 		},
 		InstallCmdUnixOnly: true,
 		ExtraBinDirs:       []string{".librefang/bin"},
-		// Keep the daemon attached to the EveryAPI supervisor. Plain `start` detaches a second process and exits, which makes Connect immediately lose the only trustworthy session signal and report zero connections.
-		DefaultArgs: []string{"start", "--foreground"},
+		// LibreFang owns its daemon lifecycle through `start`/`status`/`stop`, so launch it the way it documents: `start` detaches, prints the API and dashboard URLs, and hands the terminal back. Forcing `--foreground` to keep a supervising sidecar alive would pin an unattended log stream to the user's terminal and make Ctrl+C or closing the window kill the daemon. Connect reads the detached daemon process directly instead of inferring a session from the sidecar.
+		DefaultArgs: []string{"start"},
 		Native:      true,
 		envFn: func(_, _ string) map[string]string {
 			return map[string]string{}
