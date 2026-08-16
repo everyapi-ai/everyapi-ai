@@ -8,9 +8,7 @@ import (
 
 const openHandsModelEnv = "EVERYAPI_OPENHANDS_MODEL"
 
-// prepareOpenHandsWithModels uses OpenHands CLI's explicit
-// --override-with-envs contract. The selected model remains process scoped and
-// the openai/ prefix tells LiteLLM which compatible wire protocol to use.
+// prepareOpenHandsWithModels uses OpenHands CLI's explicit --override-with-envs contract. The selected model remains process scoped and the openai/ prefix tells LiteLLM which compatible wire protocol to use.
 func prepareOpenHandsWithModels(_ string, _ string, models []Model) (map[string]string, error) {
 	selected := strings.TrimSpace(os.Getenv(openHandsModelEnv))
 	if selected == "" {

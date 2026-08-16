@@ -8,27 +8,18 @@ import (
 	"io"
 	"os"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
-	"github.com/everyapi-ai/everyapi-ai/internal/style"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliargs"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/style"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// Topup opens the dashboard top-up page behind the §7-5 Layer 3
-// anti-phishing handshake. The shape is deliberately verbose for
-// the user: print the URL, print the verification phrase, REQUIRE
-// an Enter confirmation, then open the browser. The dashboard page
-// will pin the same phrase at the top — if the page the user sees
-// shows a different phrase (or no phrase at all), they should
-// abort.
+// Topup opens the dashboard top-up page behind the §7-5 Layer 3 anti-phishing handshake. The shape is deliberately verbose for the user: print the URL, print the verification phrase, REQUIRE an Enter confirmation, then open the browser. The dashboard page will pin the same phrase at the top — if the page the user sees shows a different phrase (or no phrase at all), they should abort.
 //
-// The phrase is what defeats a phishing page: an attacker who
-// somehow tricked the user into opening evil.com cannot reach the
-// (single-use, in-memory) session in our backend, so they can't
-// display the matching phrase.
+// The phrase is what defeats a phishing page: an attacker who somehow tricked the user into opening evil.com cannot reach the (single-use, in-memory) session in our backend, so they can't display the matching phrase.
 func Topup(args []string) error {
 	fs := flag.NewFlagSet("topup", flag.ContinueOnError)
 	noBrowser := fs.Bool("no-browser", false, "skip auto-opening the browser; copy the URL by hand instead")
@@ -46,11 +37,7 @@ func Topup(args []string) error {
 	if err != nil {
 		return err
 	}
-	// OAuth2 relay-key logins carry no management session (no user id,
-	// the access token is a relay key), so CreateJumpSession would 401
-	// and surface the misleading "session expired — re-login" string
-	// that re-login via the same OAuth2 path can't fix. Tell the user
-	// plainly that top-up needs a full management login instead.
+	// OAuth2 relay-key logins carry no management session (no user id, the access token is a relay key), so CreateJumpSession would 401 and surface the misleading "session expired — re-login" string that re-login via the same OAuth2 path can't fix. Tell the user plainly that top-up needs a full management login instead.
 	if creds.OAuthClientID != "" {
 		return errors.New(i18n.T("topup.relay_key_mode"))
 	}
@@ -64,9 +51,7 @@ func Topup(args []string) error {
 		return fmt.Errorf("create jump session: %w", err)
 	}
 
-	// Compose the dashboard URL ourselves. The backend deliberately
-	// doesn't know about frontend routes (a frontend rename
-	// shouldn't be a backend deploy), so the path lives here.
+	// Compose the dashboard URL ourselves. The backend deliberately doesn't know about frontend routes (a frontend rename shouldn't be a backend deploy), so the path lives here.
 	jumpURL := fmt.Sprintf("%s/wallet?jump_session=%s",
 		api.WebOriginFromBase(creds.APIBase), res.SessionID)
 
@@ -85,11 +70,7 @@ func Topup(args []string) error {
 	cliout.Println(i18n.T("topup.phishing_hint"))
 	cliout.Println("")
 
-	// Confirmation gate. On a TTY this is a huh confirm prompt; off
-	// TTY (CI / piped invocation) cliprompt.YesNo falls back to the
-	// line-reader. EOF on a redirected stdin treats as proceed so a
-	// scripted invocation can still pipe through — the phrase is on
-	// stdout regardless and the caller can read it.
+	// Confirmation gate. On a TTY this is a huh confirm prompt; off TTY (CI / piped invocation) cliprompt.YesNo falls back to the line-reader. EOF on a redirected stdin treats as proceed so a scripted invocation can still pipe through — the phrase is on stdout regardless and the caller can read it.
 	confirmed, cErr := cliprompt.YesNo(bufio.NewReader(os.Stdin), i18n.T("common.open_browser_now"), true)
 	if cErr != nil {
 		if errors.Is(cErr, io.EOF) {

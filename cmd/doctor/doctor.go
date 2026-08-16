@@ -1,16 +1,6 @@
-// Package doctor wires `everyapi doctor` — local self-check that
-// bundles the diagnostics a user (or their support thread) would
-// otherwise piece together from `everyapi auth status` + `everyapi proxy
-// status` + manual `which claude/codex/gemini`. Output is one row
-// per check with a clear [OK|WARN|FAIL] prefix so it can be pasted
-// into a support ticket without further annotation.
+// Package doctor wires `everyapi doctor` — local self-check that bundles the diagnostics a user (or their support thread) would otherwise piece together from `everyapi auth status` + `everyapi proxy status` + manual `which claude/codex/gemini`. Output is one row per check with a clear [OK|WARN|FAIL] prefix so it can be pasted into a support ticket without further annotation.
 //
-// `--format=json` emits the same checks as data instead of prose, and an
-// optional tool name narrows the tool section to one client. Both exist for
-// EveryAPI Connect, which renders the report in its own window: the desktop
-// app knows nothing about how any client is wired — that knowledge lives here,
-// in the same package that does the wiring — so it asks this command rather
-// than reimplementing the checks against a second copy of the rules.
+// `--format=json` emits the same checks as data instead of prose, and an optional tool name narrows the tool section to one client. Both exist for EveryAPI Connect, which renders the report in its own window: the desktop app knows nothing about how any client is wired — that knowledge lives here, in the same package that does the wiring — so it asks this command rather than reimplementing the checks against a second copy of the rules.
 package doctor
 
 import (
@@ -26,25 +16,21 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/everyapi-ai/everyapi-ai/cmd/proxy"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
-	"github.com/everyapi-ai/everyapi-ai/internal/style"
-	"github.com/everyapi-ai/everyapi-ai/internal/tools"
+	"github.com/everyapi-ai/everyapi-ai/v3/cmd/proxy"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/style"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/tools"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// machineProtocolVersion is the shape contract for --format=json. Bump it when
-// a consumer that pinned the old shape would misread the new one.
+// machineProtocolVersion is the shape contract for --format=json. Bump it when a consumer that pinned the old shape would misread the new one.
 const machineProtocolVersion = 1
 
-// Run runs every check in order and returns a non-nil error if any FAIL row
-// landed. WARN rows do not fail the command — they're advisory.
+// Run runs every check in order and returns a non-nil error if any FAIL row landed. WARN rows do not fail the command — they're advisory.
 //
-// In human mode checks print as they complete (not all-at-once at the end — so
-// a hanging network probe is obvious). In machine mode they are collected and
-// emitted as one JSON document, because a partial document is not parseable.
+// In human mode checks print as they complete (not all-at-once at the end — so a hanging network probe is obvious). In machine mode they are collected and emitted as one JSON document, because a partial document is not parseable.
 func Run(args []string) error {
 	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
 		cliout.Println(i18n.T("doctor.usage"))
@@ -64,10 +50,7 @@ func Run(args []string) error {
 		return fmt.Errorf("unsupported format %q", *format)
 	}
 
-	// One optional positional: the tool to narrow the tool section to. flag
-	// stops at the first non-flag argument, so parse again past it — otherwise
-	// `doctor claude --format=json`, the order everyone types, would read the
-	// flag as a second tool name.
+	// One optional positional: the tool to narrow the tool section to. flag stops at the first non-flag argument, so parse again past it — otherwise `doctor claude --format=json`, the order everyone types, would read the flag as a second tool name.
 	var only string
 	if rest := fs.Args(); len(rest) > 0 {
 		only = rest[0]
@@ -103,8 +86,7 @@ func Run(args []string) error {
 		return fmt.Sprintf("user_id=%d, base=%s", creds.UserID, creds.APIBase), "", nil
 	})
 
-	// Subsequent checks need creds; bail early if the first one
-	// failed.
+	// Subsequent checks need creds; bail early if the first one failed.
 	creds, _ := config.Load()
 	if creds == nil {
 		report.summarize()
@@ -115,9 +97,7 @@ func Run(args []string) error {
 	report.run(i18n.T("doctor.check.session"), func() (string, string, error) {
 		self, err := client.GetSelf(ctx)
 		if err != nil {
-			// A dead token surfaces as a 401 OR, the legacy way, an
-			// HTTP-200 envelope rejection (EnvelopeError) — both mean
-			// "re-login", not a generic failure.
+			// A dead token surfaces as a 401 OR, the legacy way, an HTTP-200 envelope rejection (EnvelopeError) — both mean "re-login", not a generic failure.
 			var envErr *api.EnvelopeError
 			if api.IsUnauthorized(err) || errors.As(err, &envErr) {
 				return "", i18n.T("doctor.hint.relogin"), err
@@ -146,14 +126,10 @@ func Run(args []string) error {
 		return fmt.Sprintf(i18n.T("doctor.detail.tokens"), enabled, len(toks)), "", nil
 	})
 
-	// A healthy session does NOT imply a working relay: /api/user/self runs
-	// UserAuth and skips the quota/expiry gates that /v1/* enforces, so an
-	// exhausted or disabled key passes every check above and still 401s the
-	// moment a tool sends a request. This is the check that catches it.
+	// A healthy session does NOT imply a working relay: /api/user/self runs UserAuth and skips the quota/expiry gates that /v1/* enforces, so an exhausted or disabled key passes every check above and still 401s the moment a tool sends a request. This is the check that catches it.
 	report.run(i18n.T("doctor.check.relay"), func() (string, string, error) {
 		if creds.RelayKey == "" {
-			// Resolving one would rewrite credentials.json, and a self-check
-			// must not have side effects. Say so instead.
+			// Resolving one would rewrite credentials.json, and a self-check must not have side effects. Say so instead.
 			return i18n.T("doctor.detail.relay_absent"), i18n.T("doctor.hint.relogin"), errSoft("no relay key cached")
 		}
 		gateway := config.ResolveAPIBaseForBase(creds.APIBase)
@@ -179,13 +155,7 @@ func Run(args []string) error {
 	})
 
 	report.run(i18n.T("doctor.check.sanitizer"), func() (string, string, error) {
-		// Sanitizer is best-effort. Probe the proxy's RECORDED listen
-		// address (proxy start picks a free port when the 127.0.0.1:8888
-		// default is taken and writes it to its PID file) on the liveness
-		// path /__sanitizer/health with a 1s timeout — hardcoding 8888 here
-		// would report a healthy proxy on a fallback port as "down". If no
-		// socket answers we surface as WARN, not FAIL, because the sanitizer
-		// is opt-in (--sanitize) and off by default.
+		// Sanitizer is best-effort. Probe the proxy's RECORDED listen address (proxy start picks a free port when the 127.0.0.1:8888 default is taken and writes it to its PID file) on the liveness path /__sanitizer/health with a 1s timeout — hardcoding 8888 here would report a healthy proxy on a fallback port as "down". If no socket answers we surface as WARN, not FAIL, because the sanitizer is opt-in (--sanitize) and off by default.
 		addr := proxy.ResolveListen()
 		hc := &http.Client{Timeout: 1 * time.Second}
 		resp, err := hc.Get("http://" + addr + "/__sanitizer/health")
@@ -225,8 +195,7 @@ func Run(args []string) error {
 	return report.finish()
 }
 
-// machineRequested mirrors the check `everyapi auth status` uses, so a parse
-// error under --format=json cannot leak flag-usage prose into the JSON stream.
+// machineRequested mirrors the check `everyapi auth status` uses, so a parse error under --format=json cannot leak flag-usage prose into the JSON stream.
 func machineRequested(args []string) bool {
 	for i, arg := range args {
 		if arg == "--format=json" || arg == "-format=json" {
@@ -241,10 +210,7 @@ func machineRequested(args []string) bool {
 
 // --- report plumbing ---------------------------------------------
 
-// Column widths chosen so the longest expected name + the longest
-// status badge fit without ragged wrapping on an 80-col terminal.
-// Names exceeding nameCol just push the badge right; better than
-// truncating something the user is trying to copy into a ticket.
+// Column widths chosen so the longest expected name + the longest status badge fit without ragged wrapping on an 80-col terminal. Names exceeding nameCol just push the badge right; better than truncating something the user is trying to copy into a ticket.
 const nameCol = 28
 
 const (
@@ -253,8 +219,7 @@ const (
 	statusFail = "fail"
 )
 
-// Check is one row of the report. Section and Name are localized display
-// strings; Status is a stable identifier a consumer can branch on.
+// Check is one row of the report. Section and Name are localized display strings; Status is a stable identifier a consumer can branch on.
 type Check struct {
 	Section string `json:"section"`
 	Name    string `json:"name"`
@@ -341,9 +306,7 @@ func (r *report) run(name string, fn func() (detail, hint string, err error)) {
 		})
 		return
 	}
-	// Reverse-video chip: the status word padded to badgeW with a
-	// 1-space margin each side. The name column pads by DISPLAY width so
-	// CJK labels keep the detail column aligned with ASCII rows.
+	// Reverse-video chip: the status word padded to badgeW with a 1-space margin each side. The name column pads by DISPLAY width so CJK labels keep the detail column aligned with ASCII rows.
 	chip := paint(" "+word+repeat(" ", r.badgeW-style.Width(word))+" ", color, ansiInverse)
 	cliout.Printf("  %s  %s  %s\n", chip, padTo(name, nameCol), detail)
 	if hint != "" {
@@ -411,9 +374,7 @@ func (r *report) err() error {
 	return nil
 }
 
-// errSoft / isSoft demote an error so a failed check renders as
-// WARN instead of FAIL. Used for things that aren't blocking — no
-// enabled tokens, sanitizer not running, optional tool missing.
+// errSoft / isSoft demote an error so a failed check renders as WARN instead of FAIL. Used for things that aren't blocking — no enabled tokens, sanitizer not running, optional tool missing.
 type softErr struct{ s string }
 
 func (e *softErr) Error() string { return e.s }
@@ -425,14 +386,9 @@ func isSoft(err error) bool {
 
 // --- tiny ANSI wrapper (TTY-aware, NO_COLOR-aware) ----------------
 //
-// Doctor prints colored status badges + section headers, but only
-// when the output is a real terminal. Captured into a file, piped
-// to another program, or running under NO_COLOR=1, every paint()
-// call short-circuits and just returns the unstyled text.
+// Doctor prints colored status badges + section headers, but only when the output is a real terminal. Captured into a file, piped to another program, or running under NO_COLOR=1, every paint() call short-circuits and just returns the unstyled text.
 //
-// Kept inline (not a shared internal/ansi package) because doctor
-// is the only command that needs styling today; if a second comes
-// along, extract.
+// Kept inline (not a shared internal/ansi package) because doctor is the only command that needs styling today; if a second comes along, extract.
 
 const (
 	ansiReset   = "\x1b[0m"
@@ -455,10 +411,7 @@ func paint(s string, codes ...string) string {
 	return buf + s + ansiReset
 }
 
-// colorEnabled is intentionally checked per-call: NO_COLOR could
-// be flipped mid-run (rare, but cheap to honour) and stdout could
-// be redirected partway through tests. The Fd() / IsTerminal()
-// pair is the same shape cliprompt uses for its picker gate.
+// colorEnabled is intentionally checked per-call: NO_COLOR could be flipped mid-run (rare, but cheap to honour) and stdout could be redirected partway through tests. The Fd() / IsTerminal() pair is the same shape cliprompt uses for its picker gate.
 func colorEnabled() bool {
 	if os.Getenv("NO_COLOR") != "" {
 		return false

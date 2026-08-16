@@ -1,9 +1,4 @@
-// Package user wires `everyapi account user …` — profile / 2FA / passkey
-// status / OAuth bindings / affiliate code. Operations that need a
-// browser (passkey register, 2FA setup QR scan, email verification)
-// are intentionally out of scope; the CLI surfaces what it can do
-// over a bearer-token session and points at the dashboard for the
-// rest.
+// Package user wires `everyapi account user …` — profile / 2FA / passkey status / OAuth bindings / affiliate code. Operations that need a browser (passkey register, 2FA setup QR scan, email verification) are intentionally out of scope; the CLI surfaces what it can do over a bearer-token session and points at the dashboard for the rest.
 package user
 
 import (
@@ -20,11 +15,11 @@ import (
 	"github.com/mdp/qrterminal/v3"
 	"golang.org/x/term"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
-	"github.com/everyapi-ai/everyapi-ai/internal/style"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliargs"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/style"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -107,12 +102,7 @@ func runInfo(args []string) error {
 		cliout.Printf("  seller earnings (pending): %d\n", self.SellerQuota)
 	}
 
-	// 2FA / passkey / bindings are best-effort — each may 401 on a
-	// pure bearer-token session if backend gates that surface on the
-	// dashboard cookie. Render the failures as "(unknown — N/A on
-	// CLI session)" rather than killing the whole info command OR
-	// silently dropping the line (which makes a real backend outage
-	// look identical to the feature being unset).
+	// 2FA / passkey / bindings are best-effort — each may 401 on a pure bearer-token session if backend gates that surface on the dashboard cookie. Render the failures as "(unknown — N/A on CLI session)" rather than killing the whole info command OR silently dropping the line (which makes a real backend outage look identical to the feature being unset).
 	const unknown = "(unknown — N/A on CLI session)"
 	if st, err := client.Get2FAStatus(ctx); err == nil {
 		extra := ""
@@ -147,10 +137,7 @@ func runInfo(args []string) error {
 	} else {
 		cliout.Printf("  oauth bindings: %s\n", unknown)
 	}
-	// aff code: only shown when present; an error is non-actionable
-	// noise here (affiliate code is optional), so keep omitting on
-	// failure — but distinguish it from the gated surfaces above,
-	// which the user might otherwise think are simply unset.
+	// aff code: only shown when present; an error is non-actionable noise here (affiliate code is optional), so keep omitting on failure — but distinguish it from the gated surfaces above, which the user might otherwise think are simply unset.
 	if aff, err := client.GetAffCode(ctx); err == nil && aff != "" {
 		cliout.Printf("  aff code:       %s\n", cliout.Sanitize(aff))
 	}
@@ -264,11 +251,7 @@ func runTwoFABackup(args []string) error {
 	return nil
 }
 
-// runTwoFAEnable runs the two-step enrollment: Setup2FA mints a secret
-// + otpauth URI + backup codes (persisting a DISABLED row), we render
-// the QR / secret / backup codes, then Enable2FA flips it on once the
-// user types the 6-digit code from their authenticator. The secret and
-// backup codes are only ever written to the terminal, never logged.
+// runTwoFAEnable runs the two-step enrollment: Setup2FA mints a secret + otpauth URI + backup codes (persisting a DISABLED row), we render the QR / secret / backup codes, then Enable2FA flips it on once the user types the 6-digit code from their authenticator. The secret and backup codes are only ever written to the terminal, never logged.
 func runTwoFAEnable(args []string) error {
 	fs := flag.NewFlagSet("user 2fa enable", flag.ContinueOnError)
 	noQR := fs.Bool("no-qr", false, "skip the terminal QR; show the secret to type instead")
@@ -410,10 +393,7 @@ func runOAuthUnbind(args []string) error {
 		cliout.Println(i18n.T("user.oauth_usage"))
 		return nil
 	}
-	// Accept the id and -y in any order (mirrors runAffTransfer / runRevoke):
-	// stdlib flag stops at the first non-flag token, so parsing args[0] with
-	// Atoi before flag parsing rejects a leading `-y` with a misleading
-	// "invalid provider id" error.
+	// Accept the id and -y in any order (mirrors runAffTransfer / runRevoke): stdlib flag stops at the first non-flag token, so parsing args[0] with Atoi before flag parsing rejects a leading `-y` with a misleading "invalid provider id" error.
 	yes, positional := cliprompt.SplitConfirmFlag(args)
 	if len(positional) == 0 {
 		return errors.New("usage: everyapi account user oauth unbind <provider_id>")
@@ -431,8 +411,7 @@ func runOAuthUnbind(args []string) error {
 	}
 	if !yes {
 		if !cliprompt.IsInteractive() {
-			// Destructive + no TTY to confirm on: fail closed rather than
-			// silently unbinding. Require explicit -y for non-interactive use.
+			// Destructive + no TTY to confirm on: fail closed rather than silently unbinding. Require explicit -y for non-interactive use.
 			return errors.New("refusing to unbind without confirmation; pass -y to unbind non-interactively")
 		}
 		ok, err := cliprompt.YesNo(
@@ -494,24 +473,15 @@ func runAff(args []string) error {
 	return nil
 }
 
-// runAffTransfer moves affiliate-reward quota into the main balance —
-// the affiliate-side mirror of `seller withdraw`. Amount is the first
-// positional arg (gateway quota units); -y skips the confirm.
+// runAffTransfer moves affiliate-reward quota into the main balance — the affiliate-side mirror of `seller withdraw`. Amount is the first positional arg (gateway quota units); -y skips the confirm.
 func runAffTransfer(client *api.Client, args []string) error {
 	if err := validateAffTransferArgs(args); err != nil {
 		return err
 	}
-	// Accept the amount and the confirm-skip flag in any order (stdlib flag
-	// would mis-read the amount-first form's trailing flag). Both
-	// `aff transfer -y 1000` and `aff transfer 1000 -y` work.
+	// Accept the amount and the confirm-skip flag in any order (stdlib flag would mis-read the amount-first form's trailing flag). Both `aff transfer -y 1000` and `aff transfer 1000 -y` work.
 	yes, positional := cliprompt.SplitConfirmFlag(args)
 	amount, _ := strconv.Atoi(positional[0])
-	// Render the amount in USD (like `seller withdraw` / `status`) so the
-	// confirm + result speak the same units as the rest of the CLI — a
-	// user typing too small an amount sees "$0.00" and backs out instead
-	// of bouncing off the backend's $1 minimum. perUnit is a free
-	// /api/status round-trip; fall back to raw DB units on the rare
-	// failure rather than blocking the transfer.
+	// Render the amount in USD (like `seller withdraw` / `status`) so the confirm + result speak the same units as the rest of the CLI — a user typing too small an amount sees "$0.00" and backs out instead of bouncing off the backend's $1 minimum. perUnit is a free /api/status round-trip; fall back to raw DB units on the rare failure rather than blocking the transfer.
 	perUnit := 1.0
 	haveUSD := false
 	if status, sErr := client.GetStatus(cliout.WithCtx()); sErr == nil && status.QuotaPerUnit > 0 {
@@ -521,13 +491,10 @@ func runAffTransfer(client *api.Client, args []string) error {
 	usd := float64(amount) / perUnit
 	if !yes {
 		if !cliprompt.IsInteractive() {
-			// Financial + no TTY to confirm on: fail closed rather than
-			// silently transferring. Require explicit -y for non-interactive use.
+			// Financial + no TTY to confirm on: fail closed rather than silently transferring. Require explicit -y for non-interactive use.
 			return errors.New("refusing to transfer without confirmation; pass -y to transfer non-interactively")
 		}
-		// Without a quota→USD divisor, dividing raw units by 1.0 and
-		// labelling it "$" overstates the value by QuotaPerUnit (default
-		// 500000×), so show a unit-neutral confirm instead of a bogus $.
+		// Without a quota→USD divisor, dividing raw units by 1.0 and labelling it "$" overstates the value by QuotaPerUnit (default 500000×), so show a unit-neutral confirm instead of a bogus $.
 		var prompt string
 		if haveUSD {
 			prompt = fmt.Sprintf(i18n.T("user.aff_transfer_confirm"), usd, amount)
@@ -571,9 +538,7 @@ func validateAffTransferArgs(args []string) error {
 
 // --- update / passwd ------------------------------------------
 
-// runUpdate edits the profile fields the generic PUT /api/user/self
-// branch honors: username and display name. Password lives in its own
-// `passwd` verb so the original-password prompt stays out of argv.
+// runUpdate edits the profile fields the generic PUT /api/user/self branch honors: username and display name. Password lives in its own `passwd` verb so the original-password prompt stays out of argv.
 func runUpdate(args []string) error {
 	fs := flag.NewFlagSet("user update", flag.ContinueOnError)
 	username := fs.String("username", "", "new username (max 20 chars)")
@@ -603,10 +568,7 @@ func runUpdate(args []string) error {
 	return nil
 }
 
-// runPasswd changes the account password. Both the current and the new
-// password are read with echo off (golang.org/x/term) so they never
-// land in the scrollback or a shell history. The backend verifies the
-// current password before applying the change.
+// runPasswd changes the account password. Both the current and the new password are read with echo off (golang.org/x/term) so they never land in the scrollback or a shell history. The backend verifies the current password before applying the change.
 func runPasswd(args []string) error {
 	fs := flag.NewFlagSet("user passwd", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
@@ -666,13 +628,9 @@ func readSecret(prompt string) (string, error) {
 
 // --- setting (quota-warning notifications) --------------------
 
-// runSetting shows or updates the quota-warning notification channel.
-// Bare `user setting` prints the current config; `user setting test`
-// fires a test message; `user setting --type <ch> ...` rewrites it.
+// runSetting shows or updates the quota-warning notification channel. Bare `user setting` prints the current config; `user setting test` fires a test message; `user setting --type <ch> ...` rewrites it.
 //
-// The backend rebuilds the whole setting blob on each write, so this
-// relies on the server-side fix that preserves the non-notify fields
-// (sidebar / language / seller-mode / marketplace opt-in).
+// The backend rebuilds the whole setting blob on each write, so this relies on the server-side fix that preserves the non-notify fields (sidebar / language / seller-mode / marketplace opt-in).
 func runSetting(args []string) error {
 	if len(args) > 0 && args[0] == "test" {
 		return runSettingTest(args[1:])
@@ -736,11 +694,9 @@ func showSetting(client *api.Client) error {
 		return nil
 	}
 	cliout.Printf(i18n.T("user.setting_header")+"\n", v.NotifyType)
-	// %.2f, not %g: a large threshold (e.g. 1000000) would otherwise
-	// render in scientific notation ("1e+06").
+	// %.2f, not %g: a large threshold (e.g. 1000000) would otherwise render in scientific notation ("1e+06").
 	cliout.Printf("  %-12s %.2f\n", i18n.T("user.setting_threshold"), v.QuotaWarningThreshold)
-	// Sanitize server-echoed endpoint values before printing — same
-	// terminal-escape guard the rest of the CLI applies to server strings.
+	// Sanitize server-echoed endpoint values before printing — same terminal-escape guard the rest of the CLI applies to server strings.
 	switch v.NotifyType {
 	case "email":
 		cliout.Printf("  %-12s %s\n", "email", cliout.Sanitize(v.NotificationEmail))

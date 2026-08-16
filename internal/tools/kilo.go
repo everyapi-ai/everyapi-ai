@@ -33,12 +33,7 @@ func prepareKiloWithModels(apiBase, _ string, models []Model) (map[string]string
 	if selected == "" {
 		return nil, fmt.Errorf("%s is required", kiloModelEnv)
 	}
-	// Kilo 7.4.22 injects prompt_cache_breakpoint into GPT-5.6+/GPT-6+
-	// Responses requests whenever a custom provider uses @ai-sdk/openai.
-	// ChatGPT-backed Codex channels reject that field, while EveryAPI's chat
-	// endpoint already bridges these models to Responses upstream. Move only
-	// the affected cohort to the compatible chat SDK; unaffected Responses
-	// models must retain their native protocol.
+	// Kilo 7.4.22 injects prompt_cache_breakpoint into GPT-5.6+/GPT-6+ Responses requests whenever a custom provider uses @ai-sdk/openai. ChatGPT-backed Codex channels reject that field, while EveryAPI's chat endpoint already bridges these models to Responses upstream. Move only the affected cohort to the compatible chat SDK; unaffected Responses models must retain their native protocol.
 	compatibleModels := append([]Model(nil), models...)
 	for index := range compatibleModels {
 		if modelSupportsEndpoint(compatibleModels[index].SupportedEndpointTypes, "openai-response") &&

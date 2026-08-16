@@ -2,11 +2,7 @@ package sellertype
 
 import "testing"
 
-// TestResolveKindSlug pins the alias→kind_slug contract to the backend
-// allow-list (backend/internal/transport/http/channeladmin/seller.go
-// sellerAllowedChannelKinds). The backend binds `kind_slug` and 422s on
-// anything outside this set, so a drift here silently breaks every
-// `seller add-key` mount.
+// TestResolveKindSlug pins the alias→kind_slug contract to the backend allow-list (backend/internal/transport/http/channeladmin/seller.go sellerAllowedChannelKinds). The backend binds `kind_slug` and 422s on anything outside this set, so a drift here silently breaks every `seller add-key` mount.
 func TestResolveKindSlug(t *testing.T) {
 	cases := []struct {
 		in       string
@@ -40,8 +36,7 @@ func TestResolveKindSlug(t *testing.T) {
 	}
 }
 
-// TestResolvedSlugsMatchBackendAllowList guards that every advertised
-// choice resolves to one of the backend's accepted kind_slugs.
+// TestResolvedSlugsMatchBackendAllowList guards that every advertised choice resolves to one of the backend's accepted kind_slugs.
 func TestResolvedSlugsMatchBackendAllowList(t *testing.T) {
 	allowed := map[string]bool{
 		"openai": true, "anthropic": true, "codex": true, "gemini": true,
@@ -59,8 +54,7 @@ func TestResolvedSlugsMatchBackendAllowList(t *testing.T) {
 	}
 }
 
-// TestLabelPrefersMarketingName mirrors the display contract: a slug
-// with multiple aliases renders the marketing-recognisable spelling.
+// TestLabelPrefersMarketingName mirrors the display contract: a slug with multiple aliases renders the marketing-recognisable spelling.
 func TestLabelPrefersMarketingName(t *testing.T) {
 	cases := map[string]string{
 		"anthropic": "claude",

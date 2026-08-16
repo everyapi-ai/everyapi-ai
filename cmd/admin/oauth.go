@@ -9,21 +9,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 	"github.com/everyapi-ai/everyapi-sdk/oauthloopback"
 )
 
-// adminChannelAddOAuth is the operator counterpart of `seller add-oauth`:
-// it mounts a platform-operated OAuth channel (OwnerUserID 0, operator
-// group, no marketplace gating) rather than a seller channel. Only
-// antigravity is wired — codex/claude/gemini already have an admin
-// connect path in the dashboard, but antigravity's Google client accepts
-// only a loopback redirect (no hosted-paste / device flow), so the
-// dashboard can't drive it and the CLI's local listener is the only way.
+// adminChannelAddOAuth is the operator counterpart of `seller add-oauth`: it mounts a platform-operated OAuth channel (OwnerUserID 0, operator group, no marketplace gating) rather than a seller channel. Only antigravity is wired — codex/claude/gemini already have an admin connect path in the dashboard, but antigravity's Google client accepts only a loopback redirect (no hosted-paste / device flow), so the dashboard can't drive it and the CLI's local listener is the only way.
 func adminChannelAddOAuth(args []string) error {
 	if len(args) == 0 {
 		return errors.New(i18n.T("admin.channel.oauth_usage"))
@@ -38,11 +32,7 @@ func adminChannelAddOAuth(args []string) error {
 	}
 }
 
-// adminChannelAddOAuthAntigravity drives Google Antigravity's loopback OAuth
-// and mounts an operator channel. Same listener dance as the seller flow
-// (cmd/seller/oauth.go) — the only differences are the backend endpoint
-// (/api/channel/antigravity/oauth/*, channels:write), an operator --group,
-// and no seller-eligibility pre-check.
+// adminChannelAddOAuthAntigravity drives Google Antigravity's loopback OAuth and mounts an operator channel. Same listener dance as the seller flow (cmd/seller/oauth.go) — the only differences are the backend endpoint (/api/channel/antigravity/oauth/*, channels:write), an operator --group, and no seller-eligibility pre-check.
 //
 // Usage:
 //
@@ -81,8 +71,7 @@ func adminChannelAddOAuthAntigravity(args []string) error {
 	if err != nil {
 		return err
 	}
-	// CookieJar is required: the backend stashes the OAuth flow state in a
-	// session keyed by the everyapi_session cookie across start→complete.
+	// CookieJar is required: the backend stashes the OAuth flow state in a session keyed by the everyapi_session cookie across start→complete.
 	client := api.ForCredentials(creds).WithCookieJar()
 
 	listener, err := oauthloopback.Listen()
@@ -118,8 +107,7 @@ func adminChannelAddOAuthAntigravity(args []string) error {
 	cb, err := listener.Wait(waitCtx)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			// Ctrl+C while waiting for the browser callback: exit cleanly
-			// instead of "Error: waiting for OAuth callback: context canceled".
+			// Ctrl+C while waiting for the browser callback: exit cleanly instead of "Error: waiting for OAuth callback: context canceled".
 			cliout.Println(i18n.T("login.cancelled"))
 			return nil
 		}

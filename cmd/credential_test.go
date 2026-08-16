@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 

@@ -15,11 +15,7 @@ import (
 	"time"
 )
 
-// compareSemver is the only piece of `everyapi update` worth unit-
-// testing in isolation: the GitHub roundtrip is integration-shaped
-// (handled in the CI smoke test against a real release), but the
-// version comparison is pure logic + drives the "outdated vs
-// up-to-date" branch the user actually sees.
+// compareSemver is the only piece of `everyapi update` worth unit- testing in isolation: the GitHub roundtrip is integration-shaped (handled in the CI smoke test against a real release), but the version comparison is pure logic + drives the "outdated vs up-to-date" branch the user actually sees.
 func TestCompareSemver(t *testing.T) {
 	cases := []struct {
 		a, b string
@@ -38,11 +34,7 @@ func TestCompareSemver(t *testing.T) {
 		{"unknown", "v0.1.0", -1},
 		{"v0.1.0", "dev", 1},
 
-		// Pre-release suffix stripped — only X.Y.Z compared. semver
-		// strictly considers a pre-release LESS than the same base
-		// version, but for this CLI's purpose ("can I `update`?")
-		// rounding to equal is safer — telling a -rc1 user to
-		// upgrade to the same .0 release would confuse more than help.
+		// Pre-release suffix stripped — only X.Y.Z compared. semver strictly considers a pre-release LESS than the same base version, but for this CLI's purpose ("can I `update`?") rounding to equal is safer — telling a -rc1 user to upgrade to the same .0 release would confuse more than help.
 		{"v0.2.0-rc1", "v0.2.0", 0},
 		{"v0.2.0", "v0.2.0-rc1", 0},
 		{"v0.2.0+meta", "v0.2.0", 0},
@@ -59,14 +51,10 @@ func TestCompareSemver(t *testing.T) {
 	}
 }
 
-// TestParseSemver_NonNumericFails guards the "non-numeric segments
-// fall back to -1" branch — important because that's what makes
-// `dev` / `unknown` always lose to real tags.
+// TestParseSemver_NonNumericFails guards the "non-numeric segments fall back to -1" branch — important because that's what makes `dev` / `unknown` always lose to real tags.
 func TestParseSemver_NonNumericFails(t *testing.T) {
 	got := parseSemver("v0.x.0")
-	// First segment parses (0), second is non-numeric (x), third parses (0)
-	// but we expect at most the first non-numeric to taint subsequent reads —
-	// the function is per-segment so 0.x.0 → [0, -1, 0].
+	// First segment parses (0), second is non-numeric (x), third parses (0) but we expect at most the first non-numeric to taint subsequent reads — the function is per-segment so 0.x.0 → [0, -1, 0].
 	if got != [3]int{0, -1, 0} {
 		t.Errorf("parseSemver(v0.x.0) = %v, want [0 -1 0]", got)
 	}
@@ -77,12 +65,9 @@ func TestParseSemver_NonNumericFails(t *testing.T) {
 	}
 }
 
-// TestGoBinDirs_RespectsEnv covers the precedence order so a future
-// rewrite doesn't accidentally let GOPATH override GOBIN.
+// TestGoBinDirs_RespectsEnv covers the precedence order so a future rewrite doesn't accidentally let GOPATH override GOBIN.
 func TestGoBinDirs_RespectsEnv(t *testing.T) {
-	// filepath.SplitList / filepath.Join so the expectations hold on
-	// Windows too (`;` list separator, `\` joins) — goBinDirs itself
-	// is platform-neutral.
+	// filepath.SplitList / filepath.Join so the expectations hold on Windows too (`;` list separator, `\` joins) — goBinDirs itself is platform-neutral.
 	t.Setenv("GOBIN", "/tmp/test-gobin")
 	t.Setenv("GOPATH", "/tmp/test-gopath"+string(os.PathListSeparator)+"/tmp/test-gopath2")
 	dirs := goBinDirs()
@@ -104,9 +89,7 @@ func TestGoBinDirs_EmptyEnvFallsBackToHome(t *testing.T) {
 	t.Setenv("GOBIN", "")
 	t.Setenv("GOPATH", "")
 	dirs := goBinDirs()
-	// Without env vars we should still get $HOME/go/bin as the last
-	// resort. Exact path depends on the test runner's $HOME; just
-	// assert non-empty + ends in "go/bin".
+	// Without env vars we should still get $HOME/go/bin as the last resort. Exact path depends on the test runner's $HOME; just assert non-empty + ends in "go/bin".
 	if len(dirs) == 0 {
 		t.Fatal("expected $HOME/go/bin fallback, got empty slice")
 	}
@@ -123,10 +106,7 @@ func endsWith(s, suffix string) bool {
 	return s[len(s)-len(suffix):] == suffix
 }
 
-// TestGithubAPIError covers the three branches githubAPIError walks
-// through. The rate-limit path is the one users actually hit (60 req
-// shared per IP, exhausted on busy NATs) and the error message has to
-// be specific enough to point at the GITHUB_TOKEN workaround.
+// TestGithubAPIError covers the three branches githubAPIError walks through. The rate-limit path is the one users actually hit (60 req shared per IP, exhausted on busy NATs) and the error message has to be specific enough to point at the GITHUB_TOKEN workaround.
 func TestGithubAPIError(t *testing.T) {
 	t.Run("rate-limit exhausted with reset header", func(t *testing.T) {
 		reset := time.Now().Add(15 * time.Minute).Unix()
@@ -153,8 +133,7 @@ func TestGithubAPIError(t *testing.T) {
 	})
 
 	t.Run("rate-limit exhausted without reset header", func(t *testing.T) {
-		// Some proxies strip the rate-limit headers; fall back to a
-		// shorter message that still names the bucket + workaround.
+		// Some proxies strip the rate-limit headers; fall back to a shorter message that still names the bucket + workaround.
 		resp := &http.Response{StatusCode: http.StatusForbidden, Header: http.Header{}}
 		resp.Header.Set("X-RateLimit-Remaining", "0")
 		err := githubAPIError(resp)
@@ -164,11 +143,9 @@ func TestGithubAPIError(t *testing.T) {
 	})
 
 	t.Run("403 that is NOT a rate-limit case falls through generic", func(t *testing.T) {
-		// Could be auth (private repo + bad token) or abuse detection.
-		// Don't claim rate-limit when there's no header proof.
+		// Could be auth (private repo + bad token) or abuse detection. Don't claim rate-limit when there's no header proof.
 		resp := &http.Response{StatusCode: http.StatusForbidden, Header: http.Header{}}
-		// X-RateLimit-Remaining absent or non-zero → not the bucket
-		// case; surface raw status so the user sees the real story.
+		// X-RateLimit-Remaining absent or non-zero → not the bucket case; surface raw status so the user sees the real story.
 		err := githubAPIError(resp)
 		if err == nil || !strings.Contains(err.Error(), "returned 403") {
 			t.Errorf("want generic 403, got %v", err)
@@ -184,11 +161,7 @@ func TestGithubAPIError(t *testing.T) {
 	})
 }
 
-// TestFetchLatestRelease_Auth covers the header-injection plumbing
-// — the actual behavioural change of the rate-limit fix. Without
-// these checks a refactor could silently drop the Authorization
-// header and the loud-fail-on-403 message would still test green
-// while users still got rate-limited.
+// TestFetchLatestRelease_Auth covers the header-injection plumbing — the actual behavioural change of the rate-limit fix. Without these checks a refactor could silently drop the Authorization header and the loud-fail-on-403 message would still test green while users still got rate-limited.
 func TestFetchLatestRelease_Auth(t *testing.T) {
 	t.Run("no env vars → no Authorization header", func(t *testing.T) {
 		t.Setenv("GH_TOKEN", "")
@@ -227,8 +200,7 @@ func TestFetchLatestRelease_Auth(t *testing.T) {
 	})
 
 	t.Run("GH_TOKEN wins over GITHUB_TOKEN", func(t *testing.T) {
-		// gh CLI sets GH_TOKEN; CI sets GITHUB_TOKEN. When both are
-		// set the user's gh login should take precedence.
+		// gh CLI sets GH_TOKEN; CI sets GITHUB_TOKEN. When both are set the user's gh login should take precedence.
 		t.Setenv("GH_TOKEN", "ghp_from_gh_cli")
 		t.Setenv("GITHUB_TOKEN", "ghp_from_ci")
 		var seen string
@@ -291,12 +263,7 @@ func testCtx(t *testing.T) context.Context {
 	return ctx
 }
 
-// TestCleanReleaseNotes verifies cleanReleaseNotes turns goreleaser's
-// GitHub-flavoured-markdown body into terminal-readable plain text. The
-// CLI can't render markdown, so these cases pin the de-markdowning
-// (headings/bold/code/links/bullets) plus the noise-trimming (fenced
-// code blocks, "Full diff" line, horizontal rules) the upgrade box
-// relies on.
+// TestCleanReleaseNotes verifies cleanReleaseNotes turns goreleaser's GitHub-flavoured-markdown body into terminal-readable plain text. The CLI can't render markdown, so these cases pin the de-markdowning (headings/bold/code/links/bullets) plus the noise-trimming (fenced code blocks, "Full diff" line, horizontal rules) the upgrade box relies on.
 func TestCleanReleaseNotes(t *testing.T) {
 	cases := []struct {
 		name string
@@ -309,10 +276,7 @@ func TestCleanReleaseNotes(t *testing.T) {
 			want: "",
 		},
 		{
-			// The exact shape goreleaser emits for this repo: headings,
-			// a bullet, an HR, the Full-diff line, then a fenced
-			// install snippet. Everything but the changelog proper is
-			// noise inside an upgrade flow the CLI runs itself.
+			// The exact shape goreleaser emits for this repo: headings, a bullet, an HR, the Full-diff line, then a fenced install snippet. Everything but the changelog proper is noise inside an upgrade flow the CLI runs itself.
 			name: "real goreleaser body strips to changelog only",
 			body: "## Changelog\n" +
 				"### Other changes\n" +
@@ -349,10 +313,7 @@ func TestCleanReleaseNotes(t *testing.T) {
 			want: "first\n\nsecond",
 		},
 		{
-			// Pins the prefix drops in isolation (the real-body case
-			// covers them transitively): a reworded template that
-			// breaks this filter fails here directly. The bold markers
-			// must be stripped before the prefix check matches.
+			// Pins the prefix drops in isolation (the real-body case covers them transitively): a reworded template that breaks this filter fails here directly. The bold markers must be stripped before the prefix check matches.
 			name: "Full diff / Install-upgrade lead-ins dropped, kept line survives",
 			body: "actual change here\n\n" +
 				"**Full diff:** https://example.com/compare/aaa...bbb\n\n" +
@@ -360,8 +321,7 @@ func TestCleanReleaseNotes(t *testing.T) {
 			want: "actual change here",
 		},
 		{
-			// Triple-marker bold-italic must not leave stray asterisks
-			// (the double-marker pass alone would turn ***x*** into *x*).
+			// Triple-marker bold-italic must not leave stray asterisks (the double-marker pass alone would turn ***x*** into *x*).
 			name: "triple-marker bold-italic strips clean",
 			body: "- bumped to ***v2*** today",
 			want: "• bumped to v2 today",
@@ -377,14 +337,7 @@ func TestCleanReleaseNotes(t *testing.T) {
 	}
 }
 
-// TestFetchLatestTag pins the github.com redirect parsing — the
-// rate-limit-safe tag lookup that backs both `update` and the silent
-// auto-check. The whole point of routing through the redirect is to
-// avoid the api.github.com 60/hour bucket, so the cases that matter
-// are: a normal 302 → tag, a missing/indexed redirect → errNoReleaseYet
-// (no published release), a 404 → errNoReleaseYet, and a non-redirect
-// status → hard error. A regression here silently reintroduces the
-// rate-limited API path's failure mode.
+// TestFetchLatestTag pins the github.com redirect parsing — the rate-limit-safe tag lookup that backs both `update` and the silent auto-check. The whole point of routing through the redirect is to avoid the api.github.com 60/hour bucket, so the cases that matter are: a normal 302 → tag, a missing/indexed redirect → errNoReleaseYet (no published release), a 404 → errNoReleaseYet, and a non-redirect status → hard error. A regression here silently reintroduces the rate-limited API path's failure mode.
 func TestFetchLatestTag(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -433,11 +386,7 @@ func TestFetchLatestTag(t *testing.T) {
 	}
 }
 
-// TestChangelogRelease covers the best-effort changelog resolution in
-// the outdated `update` branch: a working API yields the real release
-// body; a drained / erroring API degrades to a body-less release whose
-// link is derived from the tag (so renderChangelog still shows a URL
-// rather than the upgrade aborting).
+// TestChangelogRelease covers the best-effort changelog resolution in the outdated `update` branch: a working API yields the real release body; a drained / erroring API degrades to a body-less release whose link is derived from the tag (so renderChangelog still shows a URL rather than the upgrade aborting).
 func TestChangelogRelease(t *testing.T) {
 	t.Run("API ok -> real release with body", func(t *testing.T) {
 		srv := newReleaseTestServer(func(r *http.Request) (int, string) {
@@ -483,9 +432,7 @@ func swapRedirectURL(t *testing.T, url string) {
 	t.Cleanup(func() { latestReleaseRedirectURL = prev })
 }
 
-// TestScriptBinDirs pins the install script's default target dir per
-// platform — the dir classifyExePath must recognise so script installs
-// stop reading as "unknown (curl / manual)".
+// TestScriptBinDirs pins the install script's default target dir per platform — the dir classifyExePath must recognise so script installs stop reading as "unknown (curl / manual)".
 func TestScriptBinDirs(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Setenv("LOCALAPPDATA", `C:\Users\test\AppData\Local`)
@@ -507,13 +454,7 @@ func TestScriptBinDirs(t *testing.T) {
 	}
 }
 
-// TestClassifyExePath_ScriptInstall is the regression guard for the
-// "installed by install.sh / install.ps1 but reported as unknown"
-// bug: a binary in the script's default bin dir must classify as the
-// script method (and get the script's one-liner), not the unknown
-// grab-bag whose brew/bash entries don't even fit the platform. The
-// Windows path deliberately varies the casing — NTFS is
-// case-insensitive, and %LOCALAPPDATA% casing differs by source.
+// TestClassifyExePath_ScriptInstall is the regression guard for the "installed by install.sh / install.ps1 but reported as unknown" bug: a binary in the script's default bin dir must classify as the script method (and get the script's one-liner), not the unknown grab-bag whose brew/bash entries don't even fit the platform. The Windows path deliberately varies the casing — NTFS is case-insensitive, and %LOCALAPPDATA% casing differs by source.
 func TestClassifyExePath_ScriptInstall(t *testing.T) {
 	var exe string
 	if runtime.GOOS == "windows" {
@@ -526,8 +467,7 @@ func TestClassifyExePath_ScriptInstall(t *testing.T) {
 		}
 		exe = filepath.Join(home, ".local", "bin", "everyapi")
 	}
-	// Point the go-install candidates away from exe so a dev machine's
-	// GOBIN/GOPATH can't shadow the branch under test.
+	// Point the go-install candidates away from exe so a dev machine's GOBIN/GOPATH can't shadow the branch under test.
 	t.Setenv("GOBIN", filepath.Join(t.TempDir(), "gobin"))
 	t.Setenv("GOPATH", filepath.Join(t.TempDir(), "gopath"))
 	if got := classifyExePath(exe); got != installMethodScript {
@@ -598,9 +538,7 @@ func TestRunInstallScriptUpgrade_DryRunDoesNotDispatch(t *testing.T) {
 	}
 }
 
-// A GOBIN deliberately pointed at the script dir must classify as go
-// install — `go install` is what actually overwrites that binary, so
-// its upgrade flow is the right one to run.
+// A GOBIN deliberately pointed at the script dir must classify as go install — `go install` is what actually overwrites that binary, so its upgrade flow is the right one to run.
 func TestClassifyExePath_GoInstallWinsOverScriptDir(t *testing.T) {
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skip("no go toolchain on PATH")
@@ -641,9 +579,7 @@ func TestClassifyExePath_BrewAndUnknown(t *testing.T) {
 	}
 }
 
-// TestReleaseAssetName pins the zip-vs-tar.gz split (.goreleaser.yml
-// format_overrides): the old hint hardcoded .tar.gz, which on Windows
-// pointed at an asset that doesn't exist (the release ships a .zip).
+// TestReleaseAssetName pins the zip-vs-tar.gz split (.goreleaser.yml format_overrides): the old hint hardcoded .tar.gz, which on Windows pointed at an asset that doesn't exist (the release ships a .zip).
 func TestReleaseAssetName(t *testing.T) {
 	got := releaseAssetName()
 	wantExt := ".tar.gz"

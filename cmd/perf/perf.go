@@ -1,10 +1,4 @@
-// Package perf wires `everyapi stats perf` — a per-model performance summary
-// (success rate / latency / throughput) of the gateway's relay traffic.
-// Complements `everyapi stats upstream` (provider-side status). The
-// /api/perf-metrics/summary endpoint is admin-only (it exposes internal
-// upstream channel topology and runs heavy log scans), so this sends the
-// logged-in credentials and an anonymous call gets 401; pass --base to point
-// at a non-default gateway.
+// Package perf wires `everyapi stats perf` — a per-model performance summary (success rate / latency / throughput) of the gateway's relay traffic. Complements `everyapi stats upstream` (provider-side status). The /api/perf-metrics/summary endpoint is admin-only (it exposes internal upstream channel topology and runs heavy log scans), so this sends the logged-in credentials and an anonymous call gets 401; pass --base to point at a non-default gateway.
 package perf
 
 import (
@@ -12,9 +6,9 @@ import (
 	"flag"
 	"sort"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliargs"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -30,20 +24,16 @@ func Run(args []string) error {
 		return err
 	}
 	if *hours <= 0 {
-		// A non-positive window would print a misleading header (e.g. "0h")
-		// while the backend silently falls back to its default; normalize.
+		// A non-positive window would print a misleading header (e.g. "0h") while the backend silently falls back to its default; normalize.
 		*hours = 24
 	}
 
-	// /api/perf-metrics/summary is admin-only — send credentials when present
-	// so a logged-in admin gets data instead of a 401.
+	// /api/perf-metrics/summary is admin-only — send credentials when present so a logged-in admin gets data instead of a 401.
 	base := config.ResolveAPIBase(*baseFlag)
 	client := api.New(base, "")
 	creds, lerr := config.Load()
 	if lerr != nil && !errors.Is(lerr, config.ErrNoCredentials) {
-		// A real load failure (corrupt/unreadable credentials.json) must
-		// not masquerade as "not logged in" and surface downstream as an
-		// opaque 401 — report it directly.
+		// A real load failure (corrupt/unreadable credentials.json) must not masquerade as "not logged in" and surface downstream as an opaque 401 — report it directly.
 		return lerr
 	}
 	if creds != nil {
@@ -58,8 +48,7 @@ func Run(args []string) error {
 		return nil
 	}
 
-	// Most-used models first — that's what a buyer comparing routes cares
-	// about, and it keeps low-sample noise at the bottom.
+	// Most-used models first — that's what a buyer comparing routes cares about, and it keeps low-sample noise at the bottom.
 	sort.Slice(models, func(i, j int) bool { return models[i].RequestCount > models[j].RequestCount })
 
 	cliout.Printf(i18n.T("perf.header")+"\n", *hours)

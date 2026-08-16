@@ -10,21 +10,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 )
 
 // --- seller update -----------------------------------------------
 
-// sellerUpdate is read-modify-write over a single seller channel.
-// Like cmd/token's update, we fetch the current row (via the
-// pre-existing list endpoint — there's no GET-by-id on /api/seller
-// today, so we filter list locally), overlay only the flags the
-// caller passed, and PUT the merged shape. The backend rejects
-// unknown status values and enforces the auto-disable re-enable
-// limit; both surface verbatim.
+// sellerUpdate is read-modify-write over a single seller channel. Like cmd/token's update, we fetch the current row (via the pre-existing list endpoint — there's no GET-by-id on /api/seller today, so we filter list locally), overlay only the flags the caller passed, and PUT the merged shape. The backend rejects unknown status values and enforces the auto-disable re-enable limit; both surface verbatim.
 func sellerUpdate(args []string) error {
 	if len(args) == 0 {
 		return errors.New(i18n.T("seller.usage_update"))
@@ -70,12 +64,7 @@ func sellerUpdate(args []string) error {
 	if cur == nil {
 		return fmt.Errorf(i18n.T("seller.channel_not_found"), id)
 	}
-	// Seed EVERY editable field from the current row, then overlay only the
-	// flags the caller actually passed (fs.Visit-tracked in `seen`).
-	// Previously test-model / model-mapping / remark were written from their
-	// flag values unconditionally — and status-code-mapping had no flag at
-	// all — so any edit that didn't re-supply them blanked the channel's
-	// existing values.
+	// Seed EVERY editable field from the current row, then overlay only the flags the caller actually passed (fs.Visit-tracked in `seen`). Previously test-model / model-mapping / remark were written from their flag values unconditionally — and status-code-mapping had no flag at all — so any edit that didn't re-supply them blanked the channel's existing values.
 	req := api.SellerChannelUpdate{
 		Name:          cur.Name,
 		Models:        cur.Models,
@@ -94,12 +83,7 @@ func sellerUpdate(args []string) error {
 	if seen["status"] {
 		req.Status = *status
 	} else if req.Status != 1 && req.Status != 2 {
-		// cur.Status is auto-disabled (3) and no --status was given. The
-		// seller-update endpoint only accepts 1/2, but silently forwarding 2
-		// (manually-disabled) would strip the channel of health-check
-		// auto-recovery — the backend only auto-re-enables status 3 — so a
-		// field-only edit (e.g. a remark change) would permanently strand an
-		// auto-disabled channel. Refuse and make the seller decide explicitly.
+		// cur.Status is auto-disabled (3) and no --status was given. The seller-update endpoint only accepts 1/2, but silently forwarding 2 (manually-disabled) would strip the channel of health-check auto-recovery — the backend only auto-re-enables status 3 — so a field-only edit (e.g. a remark change) would permanently strand an auto-disabled channel. Refuse and make the seller decide explicitly.
 		return errors.New("channel is auto-disabled by health checks; pass --status 1 to re-enable it or --status 2 to keep it manually disabled (a field-only edit cannot safely change auto-disabled status)")
 	}
 	if seen["remark"] {
@@ -146,8 +130,7 @@ func sellerRemove(args []string) error {
 	}
 	if !*yes && !*yesLong {
 		if !cliprompt.IsInteractive() {
-			// Destructive + no TTY to confirm on: fail closed rather than
-			// silently removing. Require explicit -y for non-interactive use.
+			// Destructive + no TTY to confirm on: fail closed rather than silently removing. Require explicit -y for non-interactive use.
 			return errors.New(i18n.T("token.revoke_needs_confirm"))
 		}
 		all, _ := client.ListSellerChannels(cliout.WithCtx())
@@ -202,10 +185,7 @@ func sellerRefresh(args []string) error {
 	}
 	kind := strings.ToLower(*kindFlag)
 	if kind == "" {
-		// Auto-detect from the channel's kind_slug. SellerChannel.KindSlug
-		// is the backend's channel_kinds.slug; map it to the refresh
-		// URL suffix via a small whitelist of the OAuth kinds we know
-		// how to refresh.
+		// Auto-detect from the channel's kind_slug. SellerChannel.KindSlug is the backend's channel_kinds.slug; map it to the refresh URL suffix via a small whitelist of the OAuth kinds we know how to refresh.
 		all, err := client.ListSellerChannels(cliout.WithCtx())
 		if err != nil {
 			return classifySellerErr(err)
@@ -244,13 +224,7 @@ func sellerRefresh(args []string) error {
 	return nil
 }
 
-// oauthKindForChannelType maps the backend kind_slug to the URL suffix
-// used by the refresh endpoints. Returns "" for non-OAuth kinds (which
-// can't be refreshed). The refresh suffix and the kind_slug differ for
-// Anthropic — the slug is "anthropic" but the refresh route is
-// /claude/refresh — so this is a genuine mapping, not an identity.
-// Only codex / anthropic / gemini are refreshable (see backend
-// api-router.go, which registers only those three refresh routes).
+// oauthKindForChannelType maps the backend kind_slug to the URL suffix used by the refresh endpoints. Returns "" for non-OAuth kinds (which can't be refreshed). The refresh suffix and the kind_slug differ for Anthropic — the slug is "anthropic" but the refresh route is /claude/refresh — so this is a genuine mapping, not an identity. Only codex / anthropic / gemini are refreshable (see backend api-router.go, which registers only those three refresh routes).
 func oauthKindForChannelType(slug string) string {
 	switch strings.ToLower(strings.TrimSpace(slug)) {
 	case "anthropic", "claude":

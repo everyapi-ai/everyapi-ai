@@ -2,12 +2,9 @@ package tools
 
 import "testing"
 
-// TestTransparentClaudePromptCaching1hMatchesInjectedPath pins the transparent
-// overlay to the same 1h prompt-cache decision the injected (non-transparent)
-// path makes for standalone `everyapi use claude`.
+// TestTransparentClaudePromptCaching1hMatchesInjectedPath pins the transparent overlay to the same 1h prompt-cache decision the injected (non-transparent) path makes for standalone `everyapi use claude`.
 //
-// Without this, a refactor of the shared transparentClaudeEnv could silently
-// re-introduce the regression (transparent standalone claude losing the flag).
+// Without this, a refactor of the shared transparentClaudeEnv could silently re-introduce the regression (transparent standalone claude losing the flag).
 func TestTransparentClaudePromptCaching1hMatchesInjectedPath(t *testing.T) {
 	const caPath = "/tmp/ca.pem"
 	const flag = "ENABLE_PROMPT_CACHING_1H"

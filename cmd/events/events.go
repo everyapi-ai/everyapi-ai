@@ -1,7 +1,4 @@
-// Package events wires `everyapi events` — long-lived subscriber to
-// the backend SSE stream at /api/cli/events. The SDK does the
-// reconnect / backoff / heartbeat bookkeeping; this command just
-// renders the event channel until ctx is cancelled.
+// Package events wires `everyapi events` — long-lived subscriber to the backend SSE stream at /api/cli/events. The SDK does the reconnect / backoff / heartbeat bookkeeping; this command just renders the event channel until ctx is cancelled.
 package events
 
 import (
@@ -14,9 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliargs"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -60,20 +57,11 @@ func Run(args []string) error {
 	}
 	client := api.ForCredentials(creds)
 
-	// ctx is cancelled on SIGINT/SIGTERM so a Ctrl-C closes the SSE
-	// loop cleanly instead of leaving an open TCP socket to the
-	// backend. The SDK's SubscribeEvents drains its goroutine off
-	// ctx cancellation.
+	// ctx is cancelled on SIGINT/SIGTERM so a Ctrl-C closes the SSE loop cleanly instead of leaving an open TCP socket to the backend. The SDK's SubscribeEvents drains its goroutine off ctx cancellation.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// authErr latches a 401 surfaced by the SSE stream. The SDK ends
-	// the subscription on 401 rather than reconnecting forever (see
-	// SubscribeEvents); we capture the error here and surface it as a
-	// normal command error once the stream drains, so a revoked token
-	// reads as "session expired" instead of a silent return to the
-	// menu — and we skip the "reconnecting" line, which would be a
-	// lie for a 401.
+	// authErr latches a 401 surfaced by the SSE stream. The SDK ends the subscription on 401 rather than reconnecting forever (see SubscribeEvents); we capture the error here and surface it as a normal command error once the stream drains, so a revoked token reads as "session expired" instead of a silent return to the menu — and we skip the "reconnecting" line, which would be a lie for a 401.
 	var authErr error
 	onErr := func(e error) {
 		if api.IsUnauthorized(e) {
@@ -95,9 +83,7 @@ func Run(args []string) error {
 		ts := time.Now().Format("15:04:05")
 		cliout.Printf("[%s] %s  %s\n", ts, cliout.Sanitize(ev.Type), cliout.Sanitize(string(ev.Data)))
 	}
-	// onErr (SDK goroutine) writes authErr strictly before the SDK
-	// closes ch on a 401; the channel close synchronises that write
-	// with this read, so the access is race-free.
+	// onErr (SDK goroutine) writes authErr strictly before the SDK closes ch on a 401; the channel close synchronises that write with this read, so the access is race-free.
 	if authErr != nil {
 		return errors.New(i18n.T("auth.session_expired"))
 	}

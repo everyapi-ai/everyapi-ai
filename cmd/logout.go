@@ -6,25 +6,15 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// toolCredentialHomes are the per-tool config dirs that `everyapi use`
-// seeds with the resolved relay key (codex-home/auth.json holds it as
-// OPENAI_API_KEY; hermes-home/config.yaml inlines it as api_key). They
-// live next to credentials.json but config.Delete only removes the
-// latter, so logout must scrub these too — otherwise a fully working,
-// billable spend credential survives "logout" on disk.
+// toolCredentialHomes are the per-tool config dirs that `everyapi use` seeds with the resolved relay key (codex-home/auth.json holds it as OPENAI_API_KEY; hermes-home/config.yaml inlines it as api_key). They live next to credentials.json but config.Delete only removes the latter, so logout must scrub these too — otherwise a fully working, billable spend credential survives "logout" on disk.
 var toolCredentialHomes = []string{"codex-home", "hermes-home"}
 
-// Logout removes the on-disk credentials. Idempotent — calling it
-// twice doesn't error (config.Delete handles missing file as success).
-// We deliberately do NOT call the backend to invalidate the token:
-// (a) the user wants offline logout to work, (b) the token is the
-// same user-scoped access_token used by /api/user/self, killing it
-// remotely would log them out of the dashboard too.
+// Logout removes the on-disk credentials. Idempotent — calling it twice doesn't error (config.Delete handles missing file as success). We deliberately do NOT call the backend to invalidate the token: (a) the user wants offline logout to work, (b) the token is the same user-scoped access_token used by /api/user/self, killing it remotely would log them out of the dashboard too.
 func Logout(args []string) error {
 	fs := flag.NewFlagSet("logout", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
@@ -38,14 +28,7 @@ func Logout(args []string) error {
 		return err
 	}
 	defer unlock()
-	// Delete credentials.json (config.Delete treats a missing file as
-	// success) AND scrub the per-tool credential homes on EVERY logout.
-	// The scrub must run even when credentials.json is already gone: a
-	// prior partial logout (e.g. the Windows file-held-open warning path
-	// below), a crash, or a manual deletion can leave a live, billable
-	// relay key behind in codex-home/hermes-home. Gating the scrub on
-	// credentials.json still being present — as an early ErrNoCredentials
-	// return would — is exactly what lets that key outlive logout.
+	// Delete credentials.json (config.Delete treats a missing file as success) AND scrub the per-tool credential homes on EVERY logout. The scrub must run even when credentials.json is already gone: a prior partial logout (e.g. the Windows file-held-open warning path below), a crash, or a manual deletion can leave a live, billable relay key behind in codex-home/hermes-home. Gating the scrub on credentials.json still being present — as an early ErrNoCredentials return would — is exactly what lets that key outlive logout.
 	if err := config.Delete(); err != nil {
 		return err
 	}
@@ -54,11 +37,7 @@ func Logout(args []string) error {
 	return nil
 }
 
-// scrubToolCredentials removes the per-tool config homes seeded by
-// `everyapi use` so a working relay key never outlives logout. Best
-// effort: credentials.json is already gone by here, so a removal error
-// only warrants a warning (e.g. a file held open on Windows), not a
-// failed logout.
+// scrubToolCredentials removes the per-tool config homes seeded by `everyapi use` so a working relay key never outlives logout. Best effort: credentials.json is already gone by here, so a removal error only warrants a warning (e.g. a file held open on Windows), not a failed logout.
 func scrubToolCredentials() {
 	cfgDir, err := config.ConfigDir()
 	if err != nil {

@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -47,9 +47,7 @@ var (
 	claudeUpdateErrorFn       = reportClaudeUpdateError
 )
 
-// maybeNotifyClaudeUpdate checks only the plain `everyapi use claude` launch.
-// It is deliberately best-effort: version-command, network, and cache failures
-// never prevent the requested Claude session from starting.
+// maybeNotifyClaudeUpdate checks only the plain `everyapi use claude` launch. It is deliberately best-effort: version-command, network, and cache failures never prevent the requested Claude session from starting.
 func maybeNotifyClaudeUpdate(toolName string) {
 	if !strings.EqualFold(toolName, "claude") ||
 		!claudeUpdateInteractiveFn() ||

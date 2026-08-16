@@ -1,7 +1,4 @@
-// Package subscription wires `everyapi account subscription …` — plans
-// (read), self (read), preference (write). Online payment intentionally stays
-// on `everyapi wallet topup`
-// since card collection needs a browser.
+// Package subscription wires `everyapi account subscription …` — plans (read), self (read), preference (write). Online payment intentionally stays on `everyapi wallet topup` since card collection needs a browser.
 package subscription
 
 import (
@@ -12,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliargs"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -188,10 +185,7 @@ func runPreference(args []string) error {
 	if err := client.UpdateSubscriptionPreference(cliout.WithCtx(), *set); err != nil {
 		return classifyErr(err)
 	}
-	// The backend silently normalises an unrecognised value to a default
-	// instead of rejecting it, so echoing the raw input would falsely
-	// confirm a typo as applied. Re-read and report the SERVER's stored
-	// value, warning when it differs from what was requested.
+	// The backend silently normalises an unrecognised value to a default instead of rejecting it, so echoing the raw input would falsely confirm a typo as applied. Re-read and report the SERVER's stored value, warning when it differs from what was requested.
 	applied := strings.TrimSpace(*set)
 	if self, rErr := client.GetSubscriptionSelf(cliout.WithCtx()); rErr == nil {
 		applied = self.BillingPreference

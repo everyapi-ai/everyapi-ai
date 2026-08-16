@@ -44,7 +44,7 @@ To upgrade later, re-run the same command. The script resolves the latest releas
 **Go users (`go install`):**
 
 ```bash
-go install github.com/everyapi-ai/everyapi-ai@latest
+go install github.com/everyapi-ai/everyapi-ai/v3@latest
 ```
 
 **Windows (PowerShell):**
@@ -462,7 +462,7 @@ Same binary as the CLI — installing the CLI gives you the MCP server:
 ```bash
 make cli                                              # local build, produces ./bin/everyapi
 # or via go install:
-go install github.com/everyapi-ai/everyapi-ai@latest
+go install github.com/everyapi-ai/everyapi-ai/v3@latest
 ```
 
 ### Wiring into Claude Code

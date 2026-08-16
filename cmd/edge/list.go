@@ -5,16 +5,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 )
 
-// edgeList renders every node the authenticated user owns on the
-// backend the CLI is currently pointed at. Mirrors the seller
-// dashboard's `/seller/edge` view, but anchored to the CLI's own
-// api_base + user — useful as a diagnostic when nodes show up in
-// the CLI but not in the browser (or vice versa: confirms which
-// backend / account the register call actually wrote to).
+// edgeList renders every node the authenticated user owns on the backend the CLI is currently pointed at. Mirrors the seller dashboard's `/seller/edge` view, but anchored to the CLI's own api_base + user — useful as a diagnostic when nodes show up in the CLI but not in the browser (or vice versa: confirms which backend / account the register call actually wrote to).
 func edgeList(args []string) error {
 	fs := flag.NewFlagSet("edge list", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
@@ -29,11 +24,7 @@ func edgeList(args []string) error {
 		return err
 	}
 
-	// Header echoes the api_base + signed-in user. If the user is
-	// staring at an empty browser dashboard but a populated CLI list,
-	// the api_base printed here vs. the dashboard's host is the first
-	// thing to compare. Field-label width matches the per-node block
-	// below so the colon column lines up across the whole output.
+	// Header echoes the api_base + signed-in user. If the user is staring at an empty browser dashboard but a populated CLI list, the api_base printed here vs. the dashboard's host is the first thing to compare. Field-label width matches the per-node block below so the colon column lines up across the whole output.
 	cliout.Printf("%-12s%s\n", "api_base:", creds.APIBase)
 	if creds.Username != "" {
 		cliout.Printf("%-12s%s (id=%d)\n\n", i18n.T("edge.field.user"), cliout.Sanitize(creds.Username), creds.UserID)

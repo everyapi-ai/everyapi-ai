@@ -6,17 +6,14 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 )
 
-// render is locale-sensitive through indicatorLabel; pin English so the
-// label assertions are deterministic regardless of the dev's $LANG.
+// render is locale-sensitive through indicatorLabel; pin English so the label assertions are deterministic regardless of the dev's $LANG.
 func init() { i18n.SetLanguage("en") }
 
-// TestRenderCollapsesHealthyProviders is the core of the change: a green
-// provider becomes a single aligned line and its operational
-// sub-components (which the backend still sends) are dropped as noise.
+// TestRenderCollapsesHealthyProviders is the core of the change: a green provider becomes a single aligned line and its operational sub-components (which the backend still sends) are dropped as noise.
 func TestRenderCollapsesHealthyProviders(t *testing.T) {
 	out := render([]api.UpstreamProvider{{
 		Name:        "OpenAI",
@@ -41,9 +38,7 @@ func TestRenderCollapsesHealthyProviders(t *testing.T) {
 	}
 }
 
-// TestRenderExpandsDegradedProvider checks that a non-green provider
-// shows its summary, ONLY the broken components (operational ones still
-// filtered out), and incidents — with snake_case enums humanized.
+// TestRenderExpandsDegradedProvider checks that a non-green provider shows its summary, ONLY the broken components (operational ones still filtered out), and incidents — with snake_case enums humanized.
 func TestRenderExpandsDegradedProvider(t *testing.T) {
 	out := render([]api.UpstreamProvider{{
 		Name:        "xAI",
@@ -74,9 +69,7 @@ func TestRenderExpandsDegradedProvider(t *testing.T) {
 	}
 }
 
-// TestRenderAlignsLabelColumn verifies names of different display widths
-// (including CJK, where fmt's rune-counting %-Ns drifts) line their
-// labels up at the same column.
+// TestRenderAlignsLabelColumn verifies names of different display widths (including CJK, where fmt's rune-counting %-Ns drifts) line their labels up at the same column.
 func TestRenderAlignsLabelColumn(t *testing.T) {
 	out := render([]api.UpstreamProvider{
 		{Name: "xAI", Indicator: "none"},
@@ -88,9 +81,7 @@ func TestRenderAlignsLabelColumn(t *testing.T) {
 	if len(lines) != 3 {
 		t.Fatalf("want 3 lines, got %d:\n%s", len(lines), out)
 	}
-	// Compare the label's start in display CELLS, not bytes: a CJK name
-	// has more bytes than cells, so byte offsets would differ even when
-	// the columns line up visually.
+	// Compare the label's start in display CELLS, not bytes: a CJK name has more bytes than cells, so byte offsets would differ even when the columns line up visually.
 	col := -1
 	for _, ln := range lines {
 		i := strings.Index(ln, "operational")

@@ -8,9 +8,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 )
 
 func edgeRemove(args []string) error {
@@ -18,9 +18,7 @@ func edgeRemove(args []string) error {
 	nodeFlag := fs.Int("node", 0, "Operate on this node id (default: active node)")
 	keepBackend := fs.Bool("keep-backend", false, "Skip the DELETE /api/seller/edge/nodes/<id> call (useful when re-pointing the node at a different host)")
 	yes := fs.Bool("yes", false, "Skip the interactive confirmation")
-	// `-y` writes the same *bool via fs.BoolVar so either --yes or -y
-	// skips the prompt, matching the other destructive commands
-	// (uninstall / pause / stop).
+	// `-y` writes the same *bool via fs.BoolVar so either --yes or -y skips the prompt, matching the other destructive commands (uninstall / pause / stop).
 	fs.BoolVar(yes, "y", false, "alias for --yes")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -52,17 +50,10 @@ func edgeRemove(args []string) error {
 		}
 	}
 
-	// docker compose down -v — best effort. A failure shouldn't block
-	// the backend delete (operator may have already manually
-	// destroyed the containers).
+	// docker compose down -v — best effort. A failure shouldn't block the backend delete (operator may have already manually destroyed the containers).
 	if dockerErr := ensureDocker(); dockerErr == nil {
 		dir, dirErr := nodeDir(nodeID)
-		// Only attempt compose down when the node was actually started here
-		// (docker-compose.yml exists). A registered-but-never-started node
-		// has none, and `compose -f docker-compose.yml down` against a
-		// missing file aborts with a cryptic "no configuration file
-		// provided" (surfaced via down_failed) for what is a no-op. Mirror
-		// status.go's composeFileExists guard.
+		// Only attempt compose down when the node was actually started here (docker-compose.yml exists). A registered-but-never-started node has none, and `compose -f docker-compose.yml down` against a missing file aborts with a cryptic "no configuration file provided" (surfaced via down_failed) for what is a no-op. Mirror status.go's composeFileExists guard.
 		if dirErr == nil && composeFileExists(dir) {
 			cliout.Printf(i18n.T("edge.remove.down"), nodeID)
 			if err := runComposeCmd(dir, projectFor(nodeID), "down", "-v"); err != nil {
@@ -87,24 +78,13 @@ func edgeRemove(args []string) error {
 	dir, err := nodeDir(nodeID)
 	if err == nil {
 		if *keepBackend {
-			// The backend node row survives (the flag's purpose is
-			// re-pointing the node at a different host), and node.json holds
-			// the ONLY copy of the raw registration token — the backend
-			// keeps just its sha256. Wiping the whole workdir here would
-			// leave a live backend row that can never be reconnected. So
-			// preserve node.json; drop only the regenerable compose file and
-			// container data.
+			// The backend node row survives (the flag's purpose is re-pointing the node at a different host), and node.json holds the ONLY copy of the raw registration token — the backend keeps just its sha256. Wiping the whole workdir here would leave a live backend row that can never be reconnected. So preserve node.json; drop only the regenerable compose file and container data.
 			kept := true
 			for _, name := range []string{"docker-compose.yml", "data"} {
 				p := filepath.Join(dir, name)
 				if rmErr := os.RemoveAll(p); rmErr != nil {
 					kept = false
-					// Must NOT reuse workdir_failed here: its hint tells the
-					// user to `sudo rm -rf <workdir>`, which would delete the
-					// node.json this branch exists to preserve. The ollama
-					// `data` dir is root-owned, so this EPERM is the common
-					// case — point only at the specific leftover subpath and
-					// reassure the token is kept.
+					// Must NOT reuse workdir_failed here: its hint tells the user to `sudo rm -rf <workdir>`, which would delete the node.json this branch exists to preserve. The ollama `data` dir is root-owned, so this EPERM is the common case — point only at the specific leftover subpath and reassure the token is kept.
 					cliout.Printf(i18n.T("edge.remove.workdir_kept_partial"), dir, p, rmErr, p)
 				}
 			}

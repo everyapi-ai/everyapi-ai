@@ -491,9 +491,7 @@ func TestCopilotUsesOfficialProcessScopedBYOKContract(t *testing.T) {
 		"COPILOT_PROVIDER_BASE_URL": "https://api.everyapi.ai/v1",
 		"COPILOT_PROVIDER_TYPE":     "openai",
 		"COPILOT_PROVIDER_API_KEY":  "secret-relay-key",
-		// Copilot gives both of these higher precedence than API_KEY. Empty
-		// process-scoped values prevent ambient provider credentials or header
-		// overrides from bypassing EveryAPI.
+		// Copilot gives both of these higher precedence than API_KEY. Empty process-scoped values prevent ambient provider credentials or header overrides from bypassing EveryAPI.
 		"COPILOT_PROVIDER_BEARER_TOKEN": "",
 		"COPILOT_PROVIDER_HEADERS":      "",
 	} {

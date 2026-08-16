@@ -1,9 +1,4 @@
-// Package token wires `everyapi token …` — CRUD over the relay API
-// tokens a buyer issues to their own apps. The dispatcher mirrors
-// cmd/seller: one verb per subcommand, each a thin handler around an
-// api.Client method. The full key (sk-everyapi-…) is only printed
-// from `token key <id>` so the audit trail in the backend lines up
-// 1:1 with explicit user intent.
+// Package token wires `everyapi token …` — CRUD over the relay API tokens a buyer issues to their own apps. The dispatcher mirrors cmd/seller: one verb per subcommand, each a thin handler around an api.Client method. The full key (sk-everyapi-…) is only printed from `token key <id>` so the audit trail in the backend lines up 1:1 with explicit user intent.
 package token
 
 import (
@@ -17,18 +12,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/credentiallock"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
-	"github.com/everyapi-ai/everyapi-ai/internal/style"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/credentiallock"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/style"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// Run is the dispatcher registered in main.go. Behaves like
-// cmd/seller's Run: bare invocation prints help + errors so the
-// launcher's sub-picker isn't masked by a successful no-op.
+// Run is the dispatcher registered in main.go. Behaves like cmd/seller's Run: bare invocation prints help + errors so the launcher's sub-picker isn't masked by a successful no-op.
 func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
 		cliout.Println(style.Emph(i18n.T("token.usage")))
@@ -68,15 +61,10 @@ func Run(args []string) error {
 	}
 }
 
-// SwitchDefaultKey opens the same picker `everyapi token switch` uses and
-// persists the chosen key as the default. Exported for the settings editor,
-// which lists the default relay key alongside the CLI preferences: the key
-// lives in credentials.json rather than settings.json, so the editor has to
-// delegate here instead of writing it itself.
+// SwitchDefaultKey opens the same picker `everyapi token switch` uses and persists the chosen key as the default. Exported for the settings editor, which lists the default relay key alongside the CLI preferences: the key lives in credentials.json rather than settings.json, so the editor has to delegate here instead of writing it itself.
 func SwitchDefaultKey() error { return runSwitch(nil) }
 
-// runSwitch renders the API-key picker used by the token TUI menu and saves
-// the chosen enabled key as the default for subsequent relay commands.
+// runSwitch renders the API-key picker used by the token TUI menu and saves the chosen enabled key as the default for subsequent relay commands.
 func runSwitch(args []string) error {
 	if len(args) != 0 {
 		return unexpectedPositionals(args)
@@ -189,17 +177,9 @@ func classifyErr(err error) error {
 	return err
 }
 
-// clearCachedRelayKey wipes the cached relay key from credentials.json so the
-// next `everyapi use` re-resolves to a live sibling token instead of handing
-// out the key just disabled/revoked. Delegates to api.InvalidateCachedRelayKey
-// so the OAuth2-mode guard (there the cached key IS the refreshable access
-// token — never wipe it) and the nil/empty checks live in one place.
+// clearCachedRelayKey wipes the cached relay key from credentials.json so the next `everyapi use` re-resolves to a live sibling token instead of handing out the key just disabled/revoked. Delegates to api.InvalidateCachedRelayKey so the OAuth2-mode guard (there the cached key IS the refreshable access token — never wipe it) and the nil/empty checks live in one place.
 //
-// RelayKeyTokenID lets new credentials skip invalidation when a different key
-// was changed. Legacy credentials have ID zero, so they retain the conservative
-// unconditional clear without fetching plaintext and creating a disclosure
-// audit event. Best-effort: a Save failure is warned but never changes the
-// successful disable/revoke result.
+// RelayKeyTokenID lets new credentials skip invalidation when a different key was changed. Legacy credentials have ID zero, so they retain the conservative unconditional clear without fetching plaintext and creating a disclosure audit event. Best-effort: a Save failure is warned but never changes the successful disable/revoke result.
 func clearCachedRelayKey(creds *config.Credentials, affectedTokenID int) {
 	originalAPIBase, originalUserID, originalAccessToken := creds.APIBase, creds.UserID, creds.AccessToken
 	unlock, lockErr := credentiallock.Acquire()
@@ -370,25 +350,20 @@ func runKey(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	// Single bare line so `everyapi token key 42 | pbcopy` is the
-	// obvious one-shot for piping the key into another tool.
+	// Single bare line so `everyapi token key 42 | pbcopy` is the obvious one-shot for piping the key into another tool.
 	cliout.Println(key)
 	return nil
 }
 
 // --- usage ------------------------------------------------------------
 
-// runUsage queries GET /api/usage/token for one relay key. Unlike every
-// other token verb this authenticates with the KEY ITSELF, so it works
-// WITHOUT `everyapi auth login`: a bare key-holder (CI, a key handed down by
-// someone else) can check remaining quota by passing the key directly.
+// runUsage queries GET /api/usage/token for one relay key. Unlike every other token verb this authenticates with the KEY ITSELF, so it works WITHOUT `everyapi auth login`: a bare key-holder (CI, a key handed down by someone else) can check remaining quota by passing the key directly.
 func runUsage(args []string) error {
 	fs := flag.NewFlagSet("token usage", flag.ContinueOnError)
 	keyFlag := fs.String("key", "", "relay key to query (sk-…); or pass it as the first argument, or set $EVERYAPI_RELAY_KEY")
 	baseFlag := fs.String("base", "", "gateway base URL (default: your logged-in gateway, else the public gateway)")
 
-	// Accept both `token usage <key>` and `token usage --key <key>`.
-	// A leading non-flag arg is taken as the key before flag parsing.
+	// Accept both `token usage <key>` and `token usage --key <key>`. A leading non-flag arg is taken as the key before flag parsing.
 	rest := args
 	key := ""
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
@@ -404,16 +379,11 @@ func runUsage(args []string) error {
 	if *keyFlag != "" {
 		key = *keyFlag
 	}
-	// A positional key placed AFTER a flag (e.g. `token usage --base URL sk-…`)
-	// isn't caught by the leading-arg check above — flag.Parse stops at the
-	// first non-flag token and leaves it in fs.Args(). Recover it here so the
-	// documented "pass it as the first argument" works regardless of order.
+	// A positional key placed AFTER a flag (e.g. `token usage --base URL sk-…`) isn't caught by the leading-arg check above — flag.Parse stops at the first non-flag token and leaves it in fs.Args(). Recover it here so the documented "pass it as the first argument" works regardless of order.
 	if key == "" && fs.NArg() > 0 {
 		key = fs.Arg(0)
 	}
-	// Fall back to the environment so the secret can stay off argv
-	// (visible in ps / /proc/<pid>/cmdline / shell history). The
-	// explicit positional/flag forms still win when given.
+	// Fall back to the environment so the secret can stay off argv (visible in ps / /proc/<pid>/cmdline / shell history). The explicit positional/flag forms still win when given.
 	if key == "" {
 		key = os.Getenv("EVERYAPI_RELAY_KEY")
 	}
@@ -421,17 +391,10 @@ func runUsage(args []string) error {
 		return errors.New(i18n.T("token.usage_key_required"))
 	}
 
-	// Resolve the gateway: explicit --base wins, else the logged-in
-	// gateway, else the public default. Works without login by design.
+	// Resolve the gateway: explicit --base wins, else the logged-in gateway, else the public default. Works without login by design.
 	u, err := api.New(config.ResolveAPIBase(*baseFlag), key).GetTokenUsage(cliout.WithCtx())
 	if err != nil {
-		// This path authenticates with the relay key itself (no login
-		// session, no WithUserID), so don't route through the session-
-		// oriented classifyErr: a 401 here means the KEY is invalid /
-		// revoked / banned, not that a login expired. Surface the backend's
-		// own message (which already says the key is bad) instead of telling
-		// the user to run `everyapi login`, which wouldn't fix anything on
-		// this key-auth surface.
+		// This path authenticates with the relay key itself (no login session, no WithUserID), so don't route through the session- oriented classifyErr: a 401 here means the KEY is invalid / revoked / banned, not that a login expired. Surface the backend's own message (which already says the key is bad) instead of telling the user to run `everyapi login`, which wouldn't fix anything on this key-auth surface.
 		return err
 	}
 
@@ -443,10 +406,7 @@ func runUsage(args []string) error {
 		cliout.Printf("  %-12s %d\n", i18n.T("token.usage_granted"), u.TotalGranted)
 	}
 	cliout.Printf("  %-12s %d\n", i18n.T("token.usage_used"), u.TotalUsed)
-	// The /api/usage/token endpoint normalizes a never-expiry token to
-	// expires_at=0 (the management API uses -1). expiresLabel only knows
-	// the -1 sentinel, so map 0 -> never here rather than rendering
-	// time.Unix(0,0) = 1970-01-01.
+	// The /api/usage/token endpoint normalizes a never-expiry token to expires_at=0 (the management API uses -1). expiresLabel only knows the -1 sentinel, so map 0 -> never here rather than rendering time.Unix(0,0) = 1970-01-01.
 	usageExpires := u.ExpiresAt
 	if usageExpires == 0 {
 		usageExpires = api.TokenExpiresNever
@@ -465,10 +425,7 @@ func runUsage(args []string) error {
 
 // --- create / update --------------------------------------------------
 
-// tokenFlags binds the flags shared by create / update onto a flag.
-// FlagSet and reports which were explicitly set by the caller. For
-// update we need that distinction so an omitted flag preserves the
-// stored value instead of zeroing it.
+// tokenFlags binds the flags shared by create / update onto a flag. FlagSet and reports which were explicitly set by the caller. For update we need that distinction so an omitted flag preserves the stored value instead of zeroing it.
 type tokenFlags struct {
 	name       string
 	group      string
@@ -504,12 +461,7 @@ func (tf *tokenFlags) parse(fs *flag.FlagSet, args []string) error {
 	return nil
 }
 
-// expiresValue parses --expires into the int64 the server stores.
-// Empty string falls back to def. "never" is the documented sentinel
-// for "no expiry"; everything else must be a Unix-seconds integer to
-// stay scriptable — humans should compute the absolute timestamp
-// upstream (e.g. `date -v+30d +%s`) rather than having the CLI guess
-// timezones.
+// expiresValue parses --expires into the int64 the server stores. Empty string falls back to def. "never" is the documented sentinel for "no expiry"; everything else must be a Unix-seconds integer to stay scriptable — humans should compute the absolute timestamp upstream (e.g. `date -v+30d +%s`) rather than having the CLI guess timezones.
 func expiresValue(s string, def int64) (int64, error) {
 	if s == "" {
 		return def, nil
@@ -534,10 +486,7 @@ func runCreate(args []string) error {
 	if strings.TrimSpace(tf.name) == "" {
 		return errors.New(i18n.T("token.name_required"))
 	}
-	// A token with neither --unlimited nor a positive --quota is created
-	// enabled but with 0 remaining quota — it cannot relay a single
-	// request, yet `everyapi use` would happily select it and every call
-	// fails with an opaque quota error. Refuse at the boundary.
+	// A token with neither --unlimited nor a positive --quota is created enabled but with 0 remaining quota — it cannot relay a single request, yet `everyapi use` would happily select it and every call fails with an opaque quota error. Refuse at the boundary.
 	if !tf.unlimited && tf.quota <= 0 {
 		return errors.New(i18n.T("token.quota_required"))
 	}
@@ -587,10 +536,7 @@ func runUpdate(args []string) error {
 	if err != nil {
 		return err
 	}
-	// Read-modify-write: full PUT overwrites every field, so we need
-	// the current row to preserve flags the user didn't pass. The
-	// alternative — making each field optional in the backend — is a
-	// much bigger surface change.
+	// Read-modify-write: full PUT overwrites every field, so we need the current row to preserve flags the user didn't pass. The alternative — making each field optional in the backend — is a much bigger surface change.
 	cur, err := client.GetToken(cliout.WithCtx(), id)
 	if err != nil {
 		return classifyErr(err)
@@ -673,11 +619,7 @@ func runSetStatus(args []string, status int) (err error) {
 	if err != nil {
 		return classifyErr(err)
 	}
-	// A disable kills the key for relay use; if `everyapi use` cached a key,
-	// drop it so the next run re-resolves to a live sibling instead of the
-	// just-disabled one. RelayKeyTokenID avoids clearing an explicitly selected
-	// sibling; legacy credentials still clear conservatively. Enable is not a
-	// kill — never invalidate on it.
+	// A disable kills the key for relay use; if `everyapi use` cached a key, drop it so the next run re-resolves to a live sibling instead of the just-disabled one. RelayKeyTokenID avoids clearing an explicitly selected sibling; legacy credentials still clear conservatively. Enable is not a kill — never invalidate on it.
 	if status == api.TokenStatusDisabled {
 		clearCachedRelayKey(creds, id)
 	}
@@ -688,9 +630,7 @@ func runSetStatus(args []string, status int) (err error) {
 // --- revoke ----------------------------------------------------------
 
 func runRevoke(args []string) error {
-	// Accept the id and the confirm-skip flag in any order (stdlib flag
-	// stops at the first non-flag token). Both `revoke -y 5` and
-	// `revoke 5 -y` work.
+	// Accept the id and the confirm-skip flag in any order (stdlib flag stops at the first non-flag token). Both `revoke -y 5` and `revoke 5 -y` work.
 	skip, positional := cliprompt.SplitConfirmFlag(args)
 	if len(positional) == 0 {
 		return errors.New(i18n.T("token.usage_revoke"))
@@ -708,8 +648,7 @@ func runRevoke(args []string) error {
 	}
 	if !skip {
 		if !cliprompt.IsInteractive() {
-			// Destructive + no TTY to confirm on: fail closed rather than
-			// silently revoking. Require explicit -y for non-interactive use.
+			// Destructive + no TTY to confirm on: fail closed rather than silently revoking. Require explicit -y for non-interactive use.
 			return errors.New(i18n.T("token.revoke_needs_confirm"))
 		}
 		t, err := client.GetToken(cliout.WithCtx(), id)
@@ -732,10 +671,7 @@ func runRevoke(args []string) error {
 	if err := client.DeleteToken(cliout.WithCtx(), id); err != nil {
 		return classifyErr(err)
 	}
-	// A revoke kills the key; if `everyapi use` cached one, drop it so the next
-	// run re-resolves to a live sibling. RelayKeyTokenID avoids clearing an
-	// explicitly selected sibling without disclosing either key; legacy
-	// credentials still clear conservatively.
+	// A revoke kills the key; if `everyapi use` cached one, drop it so the next run re-resolves to a live sibling. RelayKeyTokenID avoids clearing an explicitly selected sibling without disclosing either key; legacy credentials still clear conservatively.
 	clearCachedRelayKey(creds, id)
 	cliout.Printf(i18n.T("token.revoked")+"\n", id)
 	return nil

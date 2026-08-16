@@ -8,10 +8,7 @@ import (
 	"testing"
 )
 
-// TestWindowsExitCause covers the Windows cause-rendering path, which the
-// unix-tagged diaglog test can't compile. Windows has no POSIX signal
-// death, so every termination surfaces as an exit code (a task killed by
-// the OS included).
+// TestWindowsExitCause covers the Windows cause-rendering path, which the unix-tagged diaglog test can't compile. Windows has no POSIX signal death, so every termination surfaces as an exit code (a task killed by the OS included).
 func TestWindowsExitCause(t *testing.T) {
 	if got := windowsExitCause(nil); got != "exit=0 (clean)" {
 		t.Errorf("clean exit cause = %q", got)

@@ -1,17 +1,11 @@
 package mcp
 
-// Tool handlers — placeholder stubs replaced in handlers.go once the
-// seller API client + status renderer land. Kept separate so the
-// protocol layer (server.go) can be reviewed without the api/config
-// dependency tangle, and so tests can replace each tool 1-by-1.
+// Tool handlers — placeholder stubs replaced in handlers.go once the seller API client + status renderer land. Kept separate so the protocol layer (server.go) can be reviewed without the api/config dependency tangle, and so tests can replace each tool 1-by-1.
 //
 // V0 invariants for every handler:
-//   - First load credentials. ErrNoCredentials → friendly "run
-//     everyapi auth login first" error.
-//   - 401 from backend → same error shape so the user-facing message
-//     is consistent.
-//   - All other errors → propagate via `error` return; protocol
-//     layer renders them as isError=true tool results.
+//   - First load credentials. ErrNoCredentials → friendly "run everyapi auth login first" error.
+//   - 401 from backend → same error shape so the user-facing message is consistent.
+//   - All other errors → propagate via `error` return; protocol layer renders them as isError=true tool results.
 
 import (
 	"context"
@@ -21,20 +15,16 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/sellertype"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/sellertype"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// errNotLoggedIn is the canonical user-facing message for missing
-// credentials. Single constant so every tool reports the same fix
-// instruction.
+// errNotLoggedIn is the canonical user-facing message for missing credentials. Single constant so every tool reports the same fix instruction.
 var errNotLoggedIn = errors.New("not logged in — run 'everyapi auth login' in your terminal first")
 
-// loadCreds returns the on-disk credentials or errNotLoggedIn. Other
-// I/O errors (corrupt JSON, perm) bubble up so the user sees the
-// real problem.
+// loadCreds returns the on-disk credentials or errNotLoggedIn. Other I/O errors (corrupt JSON, perm) bubble up so the user sees the real problem.
 func loadCreds() (*config.Credentials, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
@@ -43,35 +33,17 @@ func loadCreds() (*config.Credentials, error) {
 	return creds, err
 }
 
-// sharedOAuthClient is a single api.Client kept alive for the duration
-// of the MCP server process. The OAuth seller flows (codex device,
-// claude paste) span MULTIPLE tool calls — start sets a session
-// cookie on the backend, complete/poll must replay it — so the
-// http.CookieJar can't be per-call. The CLI's per-invocation jar
-// pattern doesn't apply: MCP is long-lived.
+// sharedOAuthClient is a single api.Client kept alive for the duration of the MCP server process. The OAuth seller flows (codex device, claude paste) span MULTIPLE tool calls — start sets a session cookie on the backend, complete/poll must replay it — so the http.CookieJar can't be per-call. The CLI's per-invocation jar pattern doesn't apply: MCP is long-lived.
 //
-// One jar per process is also one user per process (credentials.json
-// is a single account); concurrent flows from the same user are
-// distinct backend session entries keyed by state, so they coexist.
+// One jar per process is also one user per process (credentials.json is a single account); concurrent flows from the same user are distinct backend session entries keyed by state, so they coexist.
 //
-// Not used by tools that don't need session continuity
-// (everyapi_status, _topup, _seller_list, _seller_withdraw) — those
-// still build a fresh client per call so a stale jar doesn't surprise
-// them.
+// Not used by tools that don't need session continuity (everyapi_status, _topup, _seller_list, _seller_withdraw) — those still build a fresh client per call so a stale jar doesn't surprise them.
 var (
 	sharedOAuthClient     *api.Client
 	sharedOAuthClientOnce sync.Once
 )
 
-// loadOAuthClient hands back the long-lived OAuth-aware client. The
-// sync.Once is required: an OAuth flow's start and complete calls must share
-// one cookie jar, so the client (and its dialed base) is frozen on first use.
-// Consequence: both a relogin AND a settings.gateway_region change made while
-// the MCP server is running are ignored until restart — the region base is
-// memoized here even though it is live for every other command. This matches
-// the CLI's "credentials are stable per process" assumption and is the price
-// of a shared jar; a mid-session region flip on a long-lived MCP server is the
-// only case it costs, and the fix is a server restart.
+// loadOAuthClient hands back the long-lived OAuth-aware client. The sync.Once is required: an OAuth flow's start and complete calls must share one cookie jar, so the client (and its dialed base) is frozen on first use. Consequence: both a relogin AND a settings.gateway_region change made while the MCP server is running are ignored until restart — the region base is memoized here even though it is live for every other command. This matches the CLI's "credentials are stable per process" assumption and is the price of a shared jar; a mid-session region flip on a long-lived MCP server is the only case it costs, and the fix is a server restart.
 func loadOAuthClient() (*api.Client, *config.Credentials, error) {
 	creds, err := loadCreds()
 	if err != nil {
@@ -84,9 +56,7 @@ func loadOAuthClient() (*api.Client, *config.Credentials, error) {
 	return sharedOAuthClient, creds, nil
 }
 
-// classifyAPIErr maps backend API errors to user-facing tool errors.
-// 401 gets a "session expired, re-login" hint; everything else is
-// passed through with the server's message intact.
+// classifyAPIErr maps backend API errors to user-facing tool errors. 401 gets a "session expired, re-login" hint; everything else is passed through with the server's message intact.
 func classifyAPIErr(err error) error {
 	if err == nil {
 		return nil
@@ -153,11 +123,7 @@ func toolTopup() Tool {
 }
 
 func handleTopup(_ context.Context, _ json.RawMessage) (string, error) {
-	// topup doesn't strictly require credentials — the URL is
-	// per-account on the dashboard side. But returning a URL the
-	// user can't reach without logging in would be confusing; we
-	// gate on credentials so the error is "go login first" rather
-	// than "here's a link that won't work for you".
+	// topup doesn't strictly require credentials — the URL is per-account on the dashboard side. But returning a URL the user can't reach without logging in would be confusing; we gate on credentials so the error is "go login first" rather than "here's a link that won't work for you".
 	creds, err := loadCreds()
 	if err != nil {
 		return "", err
@@ -200,11 +166,7 @@ func handleSellerList(ctx context.Context, _ json.RawMessage) (string, error) {
 	return strings.TrimRight(b.String(), "\n"), nil
 }
 
-// statusLabel maps the integer Channel.status to a human string.
-// Aligned with the server's ChannelStatus enum:
-// 1=enabled, 2=manually-disabled, 3=auto-disabled. Unknown values
-// pass through as the raw integer so a future status doesn't render
-// as a misleading label.
+// statusLabel maps the integer Channel.status to a human string. Aligned with the server's ChannelStatus enum: 1=enabled, 2=manually-disabled, 3=auto-disabled. Unknown values pass through as the raw integer so a future status doesn't render as a misleading label.
 func statusLabel(s int) string {
 	switch s {
 	case 1:
@@ -222,28 +184,15 @@ func statusLabel(s int) string {
 
 // sellerWithdrawArgs is the JSON schema's mirror.
 //
-// `confirm` is a deliberate friction step on a money-moving tool.
-// Any process on the user's machine that can read
-// ~/.config/everyapi/credentials.json (a debug-enabled AI agent, a
-// stowaway MCP client, malware that's reached the home dir) can
-// otherwise invoke this transfer silently — the access token alone
-// authorises the backend. Requiring an explicit "yes" string in the
-// request body forces the calling AI to surface the action to the
-// human first; a credential-stealing process can't fabricate
-// intent. The token still needs to be guarded by the OS, but at
-// least this tool stops being a one-step silent drain.
+// `confirm` is a deliberate friction step on a money-moving tool. Any process on the user's machine that can read ~/.config/everyapi/credentials.json (a debug-enabled AI agent, a stowaway MCP client, malware that's reached the home dir) can otherwise invoke this transfer silently — the access token alone authorises the backend. Requiring an explicit "yes" string in the request body forces the calling AI to surface the action to the human first; a credential-stealing process can't fabricate intent. The token still needs to be guarded by the OS, but at least this tool stops being a one-step silent drain.
 //
-// Quota is in DB units. Optional — omitted = transfer the full
-// pending balance.
+// Quota is in DB units. Optional — omitted = transfer the full pending balance.
 type sellerWithdrawArgs struct {
 	Confirm string `json:"confirm"`
 	Quota   *int   `json:"quota,omitempty"`
 }
 
-// sellerWithdrawConfirmToken is the literal a caller must echo back
-// in the `confirm` field to authorise a transfer. A constant string
-// rather than a server-issued nonce so the tool stays stateless
-// across the stdin/stdout MCP transport.
+// sellerWithdrawConfirmToken is the literal a caller must echo back in the `confirm` field to authorise a transfer. A constant string rather than a server-issued nonce so the tool stays stateless across the stdin/stdout MCP transport.
 const sellerWithdrawConfirmToken = "yes"
 
 var sellerWithdrawSchema = json.RawMessage(`{
@@ -277,9 +226,7 @@ func toolSellerWithdraw() Tool {
 	}
 }
 
-// errSellerWithdrawNeedsConfirm is the user-facing message when the
-// confirm guard rejects a request. Kept as a sentinel so tests can
-// assert on the exact contract surface.
+// errSellerWithdrawNeedsConfirm is the user-facing message when the confirm guard rejects a request. Kept as a sentinel so tests can assert on the exact contract surface.
 var errSellerWithdrawNeedsConfirm = fmt.Errorf(
 	`everyapi_seller_withdraw requires confirm: %q. `+
 		`This is a money-moving tool — surface the transfer to the user before retrying with the confirm field set.`,
@@ -289,12 +236,7 @@ var errSellerWithdrawNeedsConfirm = fmt.Errorf(
 func handleSellerWithdraw(ctx context.Context, raw json.RawMessage) (string, error) {
 	// Order matters: loadCreds first → unmarshal → confirm gate.
 	//
-	// An unauthenticated caller hits errNotLoggedIn before they see
-	// the friction step, so the suggested fix-action is the right
-	// one ("run everyapi auth login") rather than the misleading "missing
-	// confirm". The friction gate's threat model assumes the caller
-	// already has credentials; protecting against unauthenticated
-	// callers is loadCreds's job, not the gate's.
+	// An unauthenticated caller hits errNotLoggedIn before they see the friction step, so the suggested fix-action is the right one ("run everyapi auth login") rather than the misleading "missing confirm". The friction gate's threat model assumes the caller already has credentials; protecting against unauthenticated callers is loadCreds's job, not the gate's.
 	creds, err := loadCreds()
 	if err != nil {
 		return "", err
@@ -305,26 +247,18 @@ func handleSellerWithdraw(ctx context.Context, raw json.RawMessage) (string, err
 			return "", fmt.Errorf("invalid arguments: %w", err)
 		}
 	}
-	// Friction gate. Constant-string check by design — see
-	// sellerWithdrawArgs godoc for the threat model.
+	// Friction gate. Constant-string check by design — see sellerWithdrawArgs godoc for the threat model.
 	if args.Confirm != sellerWithdrawConfirmToken {
 		return "", errSellerWithdrawNeedsConfirm
 	}
 
 	client := api.ForCredentials(creds)
 
-	// "Full balance" path: query /self for the pending seller_quota,
-	// then transfer that. Two round-trips, but it's the only way
-	// the user-friendly default works against a backend that
-	// requires a numeric quota arg.
+	// "Full balance" path: query /self for the pending seller_quota, then transfer that. Two round-trips, but it's the only way the user-friendly default works against a backend that requires a numeric quota arg.
 	var quota int
 	if args.Quota != nil {
 		if *args.Quota <= 0 {
-			// Explicit 0 / negative. The schema declares minimum:1, but MCP
-			// input schemas are advisory and most clients don't enforce
-			// them, so guard locally instead of forwarding a confusing value
-			// upstream (the backend's `binding:required` treats integer 0 as
-			// "missing" → a generic validation error).
+			// Explicit 0 / negative. The schema declares minimum:1, but MCP input schemas are advisory and most clients don't enforce them, so guard locally instead of forwarding a confusing value upstream (the backend's `binding:required` treats integer 0 as "missing" → a generic validation error).
 			return "Nothing to withdraw — quota must be a positive integer.", nil
 		}
 		quota = *args.Quota
@@ -344,17 +278,13 @@ func handleSellerWithdraw(ctx context.Context, raw json.RawMessage) (string, err
 	}
 	status, sErr := client.GetStatus(ctx)
 	if sErr != nil || status.QuotaPerUnit <= 0 {
-		// Without a real quota→USD divisor, float64(quota)/1.0 would render
-		// raw gateway units as if they were dollars. Report success plainly.
+		// Without a real quota→USD divisor, float64(quota)/1.0 would render raw gateway units as if they were dollars. Report success plainly.
 		return "Transferred your pending seller balance to your main balance.", nil
 	}
 	return fmt.Sprintf("Transferred $%.2f from seller balance to main balance.", float64(quota)/status.QuotaPerUnit), nil
 }
 
-// isJSONNull is a quick check for the literal `null` payload that
-// MCP clients sometimes send when a tool takes no args (instead of
-// omitting the field). Treating both as "no args" avoids a
-// false-positive "invalid arguments" rejection.
+// isJSONNull is a quick check for the literal `null` payload that MCP clients sometimes send when a tool takes no args (instead of omitting the field). Treating both as "no args" avoids a false-positive "invalid arguments" rejection.
 func isJSONNull(raw json.RawMessage) bool {
 	s := strings.TrimSpace(string(raw))
 	return s == "" || s == "null"

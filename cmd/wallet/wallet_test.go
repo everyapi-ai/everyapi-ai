@@ -8,16 +8,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
-	"github.com/everyapi-ai/everyapi-ai/internal/styletest"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/styletest"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 	"github.com/muesli/termenv"
 )
 
-// styledRedeemed bolds the credited quota in the wallet.redeemed line
-// (the amount is **-marked in every locale and routed through Emph) and
-// strips to plain text when piped.
+// styledRedeemed bolds the credited quota in the wallet.redeemed line (the amount is **-marked in every locale and routed through Emph) and strips to plain text when piped.
 func TestStyledRedeemed(t *testing.T) {
 	orig := i18n.Language()
 	i18n.SetLanguage("en")
@@ -43,10 +41,7 @@ func TestStyledRedeemed(t *testing.T) {
 	})
 }
 
-// TestWalletBoldsValues drives `wallet history` and `wallet info` and
-// asserts the scannable values — the per-row money figure and the
-// dashboard top-up URL — render bold on a styled terminal and strip to
-// plain text when piped.
+// TestWalletBoldsValues drives `wallet history` and `wallet info` and asserts the scannable values — the per-row money figure and the dashboard top-up URL — render bold on a styled terminal and strip to plain text when piped.
 func TestWalletBoldsValues(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)

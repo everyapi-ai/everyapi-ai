@@ -12,14 +12,10 @@ import (
 	"testing"
 )
 
-// Each test resets the shared OAuth client so a previous test's
-// long-lived jar doesn't leak — necessary because the helper is a
-// sync.Once singleton by design. Cleanup runs after the test
-// finishes so the next test sees a fresh Once.
+// Each test resets the shared OAuth client so a previous test's long-lived jar doesn't leak — necessary because the helper is a sync.Once singleton by design. Cleanup runs after the test finishes so the next test sees a fresh Once.
 func resetSharedOAuthClient(t *testing.T) {
 	t.Helper()
-	// Reset BEFORE the test runs too, in case a sibling test in this
-	// package already triggered the Once.
+	// Reset BEFORE the test runs too, in case a sibling test in this package already triggered the Once.
 	sharedOAuthClient = nil
 	sharedOAuthClientOnce = sync.Once{}
 	t.Cleanup(func() {
@@ -118,10 +114,7 @@ func TestHandleSellerAddOAuthCodexPoll_PendingTellsToWait(t *testing.T) {
 	}
 }
 
-// TestHandleSellerAddOAuthCodexPoll_NonAuthorizedStates pins the
-// distinct user-facing copy for each non-authorized poll outcome.
-// These are not errors (err==nil) — the AI agent drives next steps
-// off the rendered string, so the keyword has to be present.
+// TestHandleSellerAddOAuthCodexPoll_NonAuthorizedStates pins the distinct user-facing copy for each non-authorized poll outcome. These are not errors (err==nil) — the AI agent drives next steps off the rendered string, so the keyword has to be present.
 func TestHandleSellerAddOAuthCodexPoll_NonAuthorizedStates(t *testing.T) {
 	cases := []struct {
 		code string
@@ -224,10 +217,7 @@ func TestHandleSellerAddOAuthClaudeComplete_RequiresInput(t *testing.T) {
 
 // ---- shared cookie jar across tool calls ---------------------------
 
-// TestOAuthClient_CookieJarSurvivesAcrossTools asserts the key
-// invariant that justifies loadOAuthClient existing as a singleton:
-// a session cookie set by one tool call MUST replay on the next.
-// Without this, the codex/claude OAuth flows can't function.
+// TestOAuthClient_CookieJarSurvivesAcrossTools asserts the key invariant that justifies loadOAuthClient existing as a singleton: a session cookie set by one tool call MUST replay on the next. Without this, the codex/claude OAuth flows can't function.
 func TestOAuthClient_CookieJarSurvivesAcrossTools(t *testing.T) {
 	resetSharedOAuthClient(t)
 	var secondCallSawCookie atomic.Bool

@@ -1,6 +1,4 @@
-// Package models wires `everyapi models` — model catalog (which
-// models my user can call, what they cost, what routing groups
-// reach them). Three subs: list, pricing, groups.
+// Package models wires `everyapi models` — model catalog (which models my user can call, what they cost, what routing groups reach them). Three subs: list, pricing, groups.
 package models
 
 import (
@@ -10,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliargs"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -168,13 +166,7 @@ func runGroups(args []string) error {
 	if err != nil {
 		return err
 	}
-	// UserGroups is the anonymous mount, so the usable column below describes
-	// the anonymous tier rather than this account — a real bug, but not one to
-	// fix by switching to SelfGroups here: that mount is behind UserAuth, and
-	// an OAuth2 relay-key login carries no user id, so every such install would
-	// get a 401 rendered as "session expired, log in again" — which re-login
-	// cannot clear. Fixing it properly means falling back to this mount for
-	// credentials that cannot reach the authenticated one.
+	// UserGroups is the anonymous mount, so the usable column below describes the anonymous tier rather than this account — a real bug, but not one to fix by switching to SelfGroups here: that mount is behind UserAuth, and an OAuth2 relay-key login carries no user id, so every such install would get a 401 rendered as "session expired, log in again" — which re-login cannot clear. Fixing it properly means falling back to this mount for credentials that cannot reach the authenticated one.
 	groups, err := client.UserGroups(cliout.WithCtx())
 	if err != nil {
 		return classifyErr(err)
@@ -197,9 +189,7 @@ func runGroups(args []string) error {
 	cliout.Printf("%d routing group(s):\n", len(ids))
 	for _, id := range ids {
 		g := groups[id]
-		// g.Ratio is `any` (the backend may send a number or a string),
-		// so the formatted value is attacker-influenced text — sanitize
-		// it like every other server-sourced field printed here.
+		// g.Ratio is `any` (the backend may send a number or a string), so the formatted value is attacker-influenced text — sanitize it like every other server-sourced field printed here.
 		ratio := cliout.Sanitize(fmt.Sprintf("%v", g.Ratio))
 		availability := "usable"
 		if !g.Usable {
@@ -212,9 +202,7 @@ func runGroups(args []string) error {
 }
 
 func ratioOrOne(r float64) float64 {
-	// Pricing rows often leave completion_ratio at 0 to mean "same
-	// as prompt"; render that as 1× so the output isn't a confusing
-	// "completion×0".
+	// Pricing rows often leave completion_ratio at 0 to mean "same as prompt"; render that as 1× so the output isn't a confusing "completion×0".
 	if r == 0 {
 		return 1
 	}

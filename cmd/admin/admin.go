@@ -1,33 +1,22 @@
-// Package admin holds `everyapi admin ...`, the operator-side
-// subcommands gated by the backend's middleware.AdminAuth. It spans
-// seven areas — marketplace, user, channel, log, abuse, audit and
-// redemption (see the admin.help.usage locale text for the verb list).
+// Package admin holds `everyapi admin ...`, the operator-side subcommands gated by the backend's middleware.AdminAuth. It spans seven areas — marketplace, user, channel, log, abuse, audit and redemption (see the admin.help.usage locale text for the verb list).
 //
 // Two entry points share one dispatch:
 //   - typed: `everyapi admin <area> <action> [flags]` → Run's switch.
-//   - interactive: bare `everyapi admin` on a TTY → runConsole (see
-//     console.go), a two-level area→action picker that prompts inline
-//     for any value an action needs and then feeds the same Run switch.
+//   - interactive: bare `everyapi admin` on a TTY → runConsole (see console.go), a two-level area→action picker that prompts inline for any value an action needs and then feeds the same Run switch.
 //
-// Auth: the same `sk-everyapi-` access token from 'everyapi auth login' —
-// the user must already be an admin on the backend (role >=
-// RoleAdminUser); non-admin tokens get a 403 with the backend's
-// stock "unauthorized" message.
+// Auth: the same `sk-everyapi-` access token from 'everyapi auth login' — the user must already be an admin on the backend (role >= RoleAdminUser); non-admin tokens get a 403 with the backend's stock "unauthorized" message.
 package admin
 
 import (
 	"fmt"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 )
 
 func Run(args []string) error {
-	// Bare `everyapi admin` on a TTY launches the interactive operator
-	// console (area → action → inline prompts). Non-TTY (scripts/CI) keeps
-	// the old "missing subcommand" usage so piped callers don't hang on a
-	// picker.
+	// Bare `everyapi admin` on a TTY launches the interactive operator console (area → action → inline prompts). Non-TTY (scripts/CI) keeps the old "missing subcommand" usage so piped callers don't hang on a picker.
 	if len(args) == 0 && cliprompt.IsInteractive() {
 		return runConsole()
 	}

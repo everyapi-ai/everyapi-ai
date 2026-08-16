@@ -8,28 +8,19 @@ import (
 	"os"
 	"strings"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
-	"github.com/everyapi-ai/everyapi-ai/internal/sellertype"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/sellertype"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// Seller is the top-level dispatcher for `everyapi seller …`. Each
-// subcommand is a thin handler: load creds → call one or two API client
-// methods → render. OAuth flows (`add-oauth claude/chatgpt`) are
-// intentionally out of scope here — they need PKCE + a local listener
-// + browser launch, which is its own follow-up release.
+// Seller is the top-level dispatcher for `everyapi seller …`. Each subcommand is a thin handler: load creds → call one or two API client methods → render. OAuth flows (`add-oauth claude/chatgpt`) are intentionally out of scope here — they need PKCE + a local listener + browser launch, which is its own follow-up release.
 //
 // Subcommands:
 //
-//	everyapi seller list                          List the user's mounted channels
-//	everyapi seller withdraw [--quota <int>]      Transfer pending earnings to main balance
-//	everyapi seller add-key   --type <T> --name <N> --key <K> --models <M>  [--remark <R>]
-//	                                            POST /api/seller/channel with a plain API key
-//	everyapi seller setup                         Interactive wizard wrapping add-key
-//	everyapi seller help                          Print this help
+//	everyapi seller list                          List the user's mounted channels everyapi seller withdraw [--quota <int>]      Transfer pending earnings to main balance everyapi seller add-key   --type <T> --name <N> --key <K> --models <M>  [--remark <R>] POST /api/seller/channel with a plain API key everyapi seller setup                         Interactive wizard wrapping add-key everyapi seller help                          Print this help
 func Run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
 		cliout.Println(sellerUsage)
@@ -94,9 +85,7 @@ SUBCOMMANDS
 
 // ---- seller list ---------------------------------------------------
 
-// sellerList prints every channel the user owns. Mirrors the MCP
-// everyapi_seller_list output shape so a buyer who's been using the AI
-// surface sees consistent data on the terminal.
+// sellerList prints every channel the user owns. Mirrors the MCP everyapi_seller_list output shape so a buyer who's been using the AI surface sees consistent data on the terminal.
 func sellerList(args []string) error {
 	fs := flag.NewFlagSet("seller list", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
@@ -126,9 +115,7 @@ func sellerList(args []string) error {
 	return nil
 }
 
-// channelStatusLabel mirrors the MCP server's statusLabel; kept
-// duplicated rather than imported across the cmd/mcp boundary so the
-// two packages don't develop a cyclic dependency on a tiny helper.
+// channelStatusLabel mirrors the MCP server's statusLabel; kept duplicated rather than imported across the cmd/mcp boundary so the two packages don't develop a cyclic dependency on a tiny helper.
 func channelStatusLabel(s int) string {
 	switch s {
 	case 1:
@@ -144,9 +131,7 @@ func channelStatusLabel(s int) string {
 
 // ---- seller withdraw -----------------------------------------------
 
-// sellerWithdraw moves SellerQuota → Quota. Empty --quota = "everything
-// pending"; explicit --quota lets a power user partial-transfer in DB
-// units (the same shape as the MCP tool's `quota` arg).
+// sellerWithdraw moves SellerQuota → Quota. Empty --quota = "everything pending"; explicit --quota lets a power user partial-transfer in DB units (the same shape as the MCP tool's `quota` arg).
 func sellerWithdraw(args []string) error {
 	fs := flag.NewFlagSet("seller withdraw", flag.ContinueOnError)
 	quota := fs.Int("quota", 0, "amount to transfer in DB units (omit for the full pending balance)")
@@ -156,11 +141,7 @@ func sellerWithdraw(args []string) error {
 	if err := rejectPositionals(fs); err != nil {
 		return err
 	}
-	// Distinguish an omitted --quota (sweep the full pending balance) from
-	// an explicit value. Overloading amount==0 as the "full balance"
-	// sentinel would turn `--quota 0` (or a caller whose amount computes
-	// to 0 = "nothing") into a full sweep — the opposite of intent. Mirror
-	// the fs.Visit pattern token/seller `update` already use.
+	// Distinguish an omitted --quota (sweep the full pending balance) from an explicit value. Overloading amount==0 as the "full balance" sentinel would turn `--quota 0` (or a caller whose amount computes to 0 = "nothing") into a full sweep — the opposite of intent. Mirror the fs.Visit pattern token/seller `update` already use.
 	quotaSet := false
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "quota" {
@@ -192,18 +173,11 @@ func sellerWithdraw(args []string) error {
 		return classifySellerErr(err)
 	}
 
-	// Render the transferred amount in USD so the user sees the same units
-	// the dashboard / `everyapi auth status` use. perUnit is a free
-	// /api/status round-trip; on failure (rare) report success WITHOUT
-	// misrendering raw DB units as dollars.
+	// Render the transferred amount in USD so the user sees the same units the dashboard / `everyapi auth status` use. perUnit is a free /api/status round-trip; on failure (rare) report success WITHOUT misrendering raw DB units as dollars.
 	if status, sErr := client.GetStatus(cliout.WithCtx()); sErr == nil && status.QuotaPerUnit > 0 {
 		cliout.Printf(i18n.T("seller.withdraw_done"), float64(amount)/status.QuotaPerUnit)
 	} else {
-		// No quota→USD divisor available: dividing raw DB units by 1.0 and
-		// labelling the result "$" overstates the value by QuotaPerUnit
-		// (default 500000), so a $1 withdrawal would print "$500000.00".
-		// Show a unit-neutral line instead; the wallet link below carries
-		// the real figure.
+		// No quota→USD divisor available: dividing raw DB units by 1.0 and labelling the result "$" overstates the value by QuotaPerUnit (default 500000), so a $1 withdrawal would print "$500000.00". Show a unit-neutral line instead; the wallet link below carries the real figure.
 		cliout.Printf(i18n.T("seller.withdraw_done_no_usd"), amount)
 	}
 	cliout.Printf(i18n.T("seller.withdraw_check_url"), api.WebOriginFromBase(creds.APIBase))
@@ -212,17 +186,9 @@ func sellerWithdraw(args []string) error {
 
 // ---- seller add-key ------------------------------------------------
 
-// addKeyArgs is the parsed shape of `seller add-key` flags. Kept as a
-// dedicated struct so parseAddKeyArgs can be tested without a network
-// or filesystem.
+// addKeyArgs is the parsed shape of `seller add-key` flags. Kept as a dedicated struct so parseAddKeyArgs can be tested without a network or filesystem.
 //
-// Keys/KeyRemarks: --key may be repeated to attach N credentials as a
-// multi-key backup pool (B2, PRODUCT §4.5). --key-remark is optional
-// and index-aligned: the i-th --key-remark labels the i-th --key.
-// Aligning by position keeps the flag surface trivially scriptable
-// without nesting (no `--key=foo:label` syntax to parse). Backend
-// rejects OAuth blobs in a multi-key set; for those, supply a single
-// --key.
+// Keys/KeyRemarks: --key may be repeated to attach N credentials as a multi-key backup pool (B2, PRODUCT §4.5). --key-remark is optional and index-aligned: the i-th --key-remark labels the i-th --key. Aligning by position keeps the flag surface trivially scriptable without nesting (no `--key=foo:label` syntax to parse). Backend rejects OAuth blobs in a multi-key set; for those, supply a single --key.
 type addKeyArgs struct {
 	Type    string
 	Name    string
@@ -232,20 +198,13 @@ type addKeyArgs struct {
 	Remark  string
 }
 
-// stringSliceFlag is a flag.Value that accumulates repeated flag
-// invocations into a slice (stdlib's flag has no built-in for this).
-// Used for --key and --key-remark so the CLI accepts an arbitrary
-// number of credentials in one invocation.
+// stringSliceFlag is a flag.Value that accumulates repeated flag invocations into a slice (stdlib's flag has no built-in for this). Used for --key and --key-remark so the CLI accepts an arbitrary number of credentials in one invocation.
 type stringSliceFlag []string
 
 func (s *stringSliceFlag) String() string     { return strings.Join(*s, ",") }
 func (s *stringSliceFlag) Set(v string) error { *s = append(*s, v); return nil }
 
-// sellerAddKey wraps POST /api/seller/channel. The type is a human
-// alias (openai / claude / gemini / …) resolved to the backend
-// kind_slug via sellertype.Resolve; an unknown alias is rejected
-// locally with the list of valid choices rather than forwarded to a
-// backend 422.
+// sellerAddKey wraps POST /api/seller/channel. The type is a human alias (openai / claude / gemini / …) resolved to the backend kind_slug via sellertype.Resolve; an unknown alias is rejected locally with the list of valid choices rather than forwarded to a backend 422.
 func sellerAddKey(args []string) error {
 	parsed, err := parseAddKeyArgs(args)
 	if err != nil {
@@ -260,12 +219,7 @@ func sellerAddKey(args []string) error {
 		return err
 	}
 
-	// Eligibility pre-check. Same reasoning as `seller add-oauth`:
-	// failing the gate AFTER the seller typed out a real API key is a
-	// worse experience than telling them up front which gate to fix.
-	// A failed eligibility query (not a failed gate — actual transport
-	// error) is non-fatal: fall through to the create call, which will
-	// retry the same gates server-side and produce a coherent error.
+	// Eligibility pre-check. Same reasoning as `seller add-oauth`: failing the gate AFTER the seller typed out a real API key is a worse experience than telling them up front which gate to fix. A failed eligibility query (not a failed gate — actual transport error) is non-fatal: fall through to the create call, which will retry the same gates server-side and produce a coherent error.
 	elig, err := client.GetSellerEligibility(cliout.WithCtx())
 	if err == nil && !elig.Eligible {
 		renderEligibility(elig)
@@ -295,17 +249,9 @@ func sellerAddKey(args []string) error {
 	return nil
 }
 
-// parseAddKeyArgs validates the flag set. All four core flags are
-// required because there's no sane default — picking a name / type /
-// key / models is the seller decision the wizard helps with; this
-// command is the non-interactive shortcut for scripted onboarding.
-// --remark is the channel-level note (optional). --key may be repeated
-// for a multi-key backup pool; --key-remark per-key labels are
-// optional and index-aligned with --key (more --key-remark than --key
-// is a hard error to catch typos early).
+// parseAddKeyArgs validates the flag set. All four core flags are required because there's no sane default — picking a name / type / key / models is the seller decision the wizard helps with; this command is the non-interactive shortcut for scripted onboarding. --remark is the channel-level note (optional). --key may be repeated for a multi-key backup pool; --key-remark per-key labels are optional and index-aligned with --key (more --key-remark than --key is a hard error to catch typos early).
 //
-// Exported via package-internal name so cmd/seller_test.go can poke at
-// it without hitting the network.
+// Exported via package-internal name so cmd/seller_test.go can poke at it without hitting the network.
 func parseAddKeyArgs(args []string) (*addKeyArgs, error) {
 	fs := flag.NewFlagSet("seller add-key", flag.ContinueOnError)
 	a := &addKeyArgs{}
@@ -341,20 +287,11 @@ func parseAddKeyArgs(args []string) (*addKeyArgs, error) {
 	if len(missing) > 0 {
 		return nil, fmt.Errorf(i18n.T("seller.oauth_missing_flags"), strings.Join(missing, ", "))
 	}
-	// More --key-remark than --key is a typo, not a feature: the extra
-	// remarks would never be applied. Catch it here so the failure
-	// message names the mismatch instead of the backend rejecting an
-	// already-submitted form.
+	// More --key-remark than --key is a typo, not a feature: the extra remarks would never be applied. Catch it here so the failure message names the mismatch instead of the backend rejecting an already-submitted form.
 	if len(a.Remarks) > len(a.Keys) {
 		return nil, fmt.Errorf("got %d --key-remark but only %d --key — each --key-remark labels one --key by position", len(a.Remarks), len(a.Keys))
 	}
-	// Duplicate --key value is also a typo. The backend's SetMultiKeySet
-	// silently keeps the first occurrence ("first wins" — a dup is a
-	// user error, not a state to split), which means a pasted-twice
-	// credential would mount a channel that LOOKS like a 2-key pool but
-	// actually carries one credential twice in storage and only one of
-	// them in routing state. Surface it here so the seller can fix the
-	// argv before submit.
+	// Duplicate --key value is also a typo. The backend's SetMultiKeySet silently keeps the first occurrence ("first wins" — a dup is a user error, not a state to split), which means a pasted-twice credential would mount a channel that LOOKS like a 2-key pool but actually carries one credential twice in storage and only one of them in routing state. Surface it here so the seller can fix the argv before submit.
 	if len(a.Keys) > 1 {
 		seen := make(map[string]bool, len(a.Keys))
 		for _, k := range a.Keys {
@@ -369,19 +306,9 @@ func parseAddKeyArgs(args []string) (*addKeyArgs, error) {
 
 // ---- seller setup --------------------------------------------------
 
-// sellerSetup is the small-talk wizard for mounting a new seller
-// channel. Asks the user up-front which auth method they want —
-// raw API key, or one of the OAuth flows (Codex / Claude / Gemini)
-// — and routes into either the inline add-key wizard (key path)
-// or sellerAddOAuth (OAuth paths). Eligibility is checked once,
-// here, so a failed gate surfaces before the user types anything.
+// sellerSetup is the small-talk wizard for mounting a new seller channel. Asks the user up-front which auth method they want — raw API key, or one of the OAuth flows (Codex / Claude / Gemini) — and routes into either the inline add-key wizard (key path) or sellerAddOAuth (OAuth paths). Eligibility is checked once, here, so a failed gate surfaces before the user types anything.
 //
-// The OAuth branches forward the collected name + models via argv
-// to sellerAddOAuth — same validator, same flow as a flag-driven
-// `everyapi seller add-oauth <provider> --name N --models M` call.
-// The add-oauth* handlers re-run the eligibility check internally;
-// the duplicate round-trip is intentional (defense-in-depth: nothing
-// downstream of this function trusts the caller has gated).
+// The OAuth branches forward the collected name + models via argv to sellerAddOAuth — same validator, same flow as a flag-driven `everyapi seller add-oauth <provider> --name N --models M` call. The add-oauth* handlers re-run the eligibility check internally; the duplicate round-trip is intentional (defense-in-depth: nothing downstream of this function trusts the caller has gated).
 func sellerSetup(args []string) error {
 	fs := flag.NewFlagSet("seller setup", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
@@ -412,8 +339,7 @@ func sellerSetup(args []string) error {
 	cliout.Println(i18n.T("seller.mounting_new_channel"))
 	cliout.Println("")
 
-	// Auth-method picker. Index → branch so the labels stay free
-	// to grow without breaking string-match branching.
+	// Auth-method picker. Index → branch so the labels stay free to grow without breaking string-match branching.
 	methodIdx, err := cliprompt.Pick(i18n.T("seller.method_picker_label"),
 		[]string{
 			i18n.T("seller.method_api_key"),
@@ -470,12 +396,7 @@ func sellerSetup(args []string) error {
 		return nil
 	}
 
-	// Forward via argv so wizard + non-interactive path share one
-	// validator + one POST site. `--key` / `--key-remark` are
-	// stringSliceFlag and parseAddKeyArgs aligns them by position.
-	// If any remark is non-empty we must push EVERY slot (empty
-	// included) so the i-th remark stays paired with the i-th key —
-	// sparse remarks would silently slide onto an earlier key.
+	// Forward via argv so wizard + non-interactive path share one validator + one POST site. `--key` / `--key-remark` are stringSliceFlag and parseAddKeyArgs aligns them by position. If any remark is non-empty we must push EVERY slot (empty included) so the i-th remark stays paired with the i-th key — sparse remarks would silently slide onto an earlier key.
 	forward := []string{
 		"--type", typeAlias,
 		"--name", name,
@@ -498,14 +419,7 @@ func sellerSetup(args []string) error {
 	return sellerAddKey(forward)
 }
 
-// collectSellerKeys prompts the user for one or more keys + per-key
-// sellerSetupOAuth is the OAuth branch of the setup wizard. Asks
-// for name + models (the only two values add-oauth* needs from the
-// user beyond what the OAuth provider gives) and forwards via
-// argv to sellerAddOAuth so the wizard and the flag-driven call
-// share one execution path. Each provider gets a sensible default
-// model list so a user who just wants the most common models can
-// hit Enter through both prompts.
+// collectSellerKeys prompts the user for one or more keys + per-key sellerSetupOAuth is the OAuth branch of the setup wizard. Asks for name + models (the only two values add-oauth* needs from the user beyond what the OAuth provider gives) and forwards via argv to sellerAddOAuth so the wizard and the flag-driven call share one execution path. Each provider gets a sensible default model list so a user who just wants the most common models can hit Enter through both prompts.
 func sellerSetupOAuth(in *bufio.Reader, provider string) error {
 	name, err := cliprompt.Line(in, i18n.T("seller.prompt_channel_name"), "")
 	if err != nil {
@@ -535,20 +449,12 @@ func sellerSetupOAuth(in *bufio.Reader, provider string) error {
 	return sellerAddOAuth([]string{provider, "--name", name, "--models", models})
 }
 
-// remarks. Pulled out of sellerSetup so the multi-slot/OAuth-blob
-// interaction can be unit-tested with a mock stdin (bytes.Buffer
-// wrapped in bufio.Reader) — the rest of the wizard (eligibility
-// fetch, type/name prompts, submit) is too entangled with I/O for an
-// in-process test to be worth the mock surface.
+// remarks. Pulled out of sellerSetup so the multi-slot/OAuth-blob interaction can be unit-tested with a mock stdin (bytes.Buffer wrapped in bufio.Reader) — the rest of the wizard (eligibility fetch, type/name prompts, submit) is too entangled with I/O for an in-process test to be worth the mock surface.
 //
 // Semantics:
-//   - slot 1 is always required; a lone OAuth blob there is the legal
-//     single-key OAuth channel and breaks the loop.
-//   - slot ≥ 2 OAuth blob is illegal (SetMultiKeySet rejects multi-key
-//     sets containing a blob) — warn and re-prompt the SAME slot
-//     without appending, so keys[] doesn't get poisoned.
-//   - per-key remark is collected for every slot to keep i-th remark
-//     paired with i-th key (sparse remarks would silently slide).
+//   - slot 1 is always required; a lone OAuth blob there is the legal single-key OAuth channel and breaks the loop.
+//   - slot ≥ 2 OAuth blob is illegal (SetMultiKeySet rejects multi-key sets containing a blob) — warn and re-prompt the SAME slot without appending, so keys[] doesn't get poisoned.
+//   - per-key remark is collected for every slot to keep i-th remark paired with i-th key (sparse remarks would silently slide).
 func collectSellerKeys(in *bufio.Reader) ([]string, []string, error) {
 	var keys []string
 	var remarks []string
@@ -578,9 +484,7 @@ func collectSellerKeys(in *bufio.Reader) ([]string, []string, error) {
 		keys = append(keys, k)
 		remarks = append(remarks, r)
 
-		// A lone OAuth blob (slot 1) is a complete single-key channel;
-		// stop without offering to add backups (the same isBlob check
-		// above would bounce the next slot anyway).
+		// A lone OAuth blob (slot 1) is a complete single-key channel; stop without offering to add backups (the same isBlob check above would bounce the next slot anyway).
 		if isBlob {
 			break
 		}
@@ -614,10 +518,7 @@ func checkmark(ok bool) string {
 
 // ---- internals -----------------------------------------------------
 
-// sellerClient is the shared "load creds, build client, hand them
-// both back" path every seller subcommand starts with. Returning creds
-// alongside the client saves the caller a second config.Load() when it
-// needs the API base for api.WebOriginFromBase.
+// sellerClient is the shared "load creds, build client, hand them both back" path every seller subcommand starts with. Returning creds alongside the client saves the caller a second config.Load() when it needs the API base for api.WebOriginFromBase.
 func sellerClient() (*api.Client, *config.Credentials, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
@@ -629,19 +530,12 @@ func sellerClient() (*api.Client, *config.Credentials, error) {
 	return api.ForCredentials(creds), creds, nil
 }
 
-// classifySellerErr maps backend API errors to friendly CLI messages.
-// 401 = stale token (same shape as `everyapi auth status`); everything else
-// passes through so the server's explicit messages (eligibility
-// reasons, cap-reached, type-not-allowed) surface verbatim.
+// classifySellerErr maps backend API errors to friendly CLI messages. 401 = stale token (same shape as `everyapi auth status`); everything else passes through so the server's explicit messages (eligibility reasons, cap-reached, type-not-allowed) surface verbatim.
 func classifySellerErr(err error) error {
 	if err == nil {
 		return nil
 	}
-	// A stale token surfaces as a 401 OR, the legacy way, an HTTP-200
-	// envelope rejection (EnvelopeError) — e.g. GetSelf in the no-quota
-	// branch. Both mean "re-login", same as `everyapi auth status` /
-	// doctor; without the EnvelopeError arm a withdraw on an expired
-	// token would leak the raw backend envelope instead.
+	// A stale token surfaces as a 401 OR, the legacy way, an HTTP-200 envelope rejection (EnvelopeError) — e.g. GetSelf in the no-quota branch. Both mean "re-login", same as `everyapi auth status` / doctor; without the EnvelopeError arm a withdraw on an expired token would leak the raw backend envelope instead.
 	var envErr *api.EnvelopeError
 	if api.IsUnauthorized(err) || errors.As(err, &envErr) {
 		return errors.New(i18n.T("auth.session_expired"))
@@ -649,11 +543,7 @@ func classifySellerErr(err error) error {
 	return err
 }
 
-// The alias map and its helpers live in internal/sellertype — shared
-// with the MCP seller tools so the two surfaces can't drift. These
-// package-local names are kept as thin delegates so call sites and
-// tests stay untouched; error wording (i18n) stays here because the
-// MCP side is English-only.
+// The alias map and its helpers live in internal/sellertype — shared with the MCP seller tools so the two surfaces can't drift. These package-local names are kept as thin delegates so call sites and tests stay untouched; error wording (i18n) stays here because the MCP side is English-only.
 
 func resolveSellerType(s string) (string, error) {
 	if slug, ok := sellertype.Resolve(s); ok {
@@ -667,5 +557,4 @@ func sellerTypeChoices() []string { return sellertype.Choices() }
 
 func channelTypeLabel(slug string) string { return sellertype.Label(slug) }
 
-// Prompt helpers (Line, Optional, Choice, YesNo) live in
-// internal/cliprompt — shared with cmd/proxy and the login flow.
+// Prompt helpers (Line, Optional, Choice, YesNo) live in internal/cliprompt — shared with cmd/proxy and the login flow.

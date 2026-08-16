@@ -1,7 +1,4 @@
-// Package log wires `everyapi stats log …` — buyer-visible request log
-// telemetry. Three subs: list (most recent rows), stat (totals over
-// a window), summary (per-model breakdown). All read-only and
-// auth-bound to the calling user.
+// Package log wires `everyapi stats log …` — buyer-visible request log telemetry. Three subs: list (most recent rows), stat (totals over a window), summary (per-model breakdown). All read-only and auth-bound to the calling user.
 package log
 
 import (
@@ -12,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliargs"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -61,13 +58,9 @@ func classifyErr(err error) error {
 	return err
 }
 
-// parseWindow accepts shorthand windows (1h / 24h / 7d / 30d) or an
-// absolute Unix-seconds integer. Empty → 0 (server-side default).
-// Returning Unix seconds means everything downstream is the same
-// shape the backend speaks; no timezone in the SDK boundary.
+// parseWindow accepts shorthand windows (1h / 24h / 7d / 30d) or an absolute Unix-seconds integer. Empty → 0 (server-side default). Returning Unix seconds means everything downstream is the same shape the backend speaks; no timezone in the SDK boundary.
 //
-// Go's time.ParseDuration recognizes h/m/s/ms/us/ns but not d, so
-// we strip a trailing 'd' and multiply by 24h before handing off.
+// Go's time.ParseDuration recognizes h/m/s/ms/us/ns but not d, so we strip a trailing 'd' and multiply by 24h before handing off.
 func parseWindow(s string, now time.Time) (int64, error) {
 	if s == "" {
 		return 0, nil
@@ -213,9 +206,7 @@ func runSummary(args []string) error {
 		return err
 	}
 	if end == 0 {
-		// Empty --until means "now"; the backend rejects an open upper bound
-		// (endTimestamp <= 0) with "time span too large", so the default
-		// `stats log summary` would always error. Bound it to now.
+		// Empty --until means "now"; the backend rejects an open upper bound (endTimestamp <= 0) with "time span too large", so the default `stats log summary` would always error. Bound it to now.
 		end = now.Unix()
 	}
 	client, err := newClient()

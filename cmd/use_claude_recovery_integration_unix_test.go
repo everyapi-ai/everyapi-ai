@@ -22,11 +22,7 @@ const (
 	useClaudeRecoveryShimEnv   = "EVERYAPI_TEST_USE_CLAUDE_RECOVERY_SHIM"
 )
 
-// TestUseExecReceivesRecoveredClaudeSessionID covers the INJECTED path
-// (--transparent=false): the tool is handed the sanitizer's loopback base URL
-// directly. Transparent mode is the default now, so the flag is explicit here;
-// the transparent path's equivalent guard coverage lives in
-// TestTransparentConnectorChainsThroughRecoveryGuard.
+// TestUseExecReceivesRecoveredClaudeSessionID covers the INJECTED path (--transparent=false): the tool is handed the sanitizer's loopback base URL directly. Transparent mode is the default now, so the flag is explicit here; the transparent path's equivalent guard coverage lives in TestTransparentConnectorChainsThroughRecoveryGuard.
 func TestUseExecReceivesRecoveredClaudeSessionID(t *testing.T) {
 	if os.Getenv(useClaudeRecoveryShimEnv) == "1" {
 		runClaudeRecoveryShim(t)

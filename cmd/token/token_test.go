@@ -8,10 +8,7 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// TestRunCreateRequiresQuota locks the boundary guard: `token create`
-// with neither --unlimited nor a positive --quota must be refused
-// before any network call, so we never mint an enabled 0-quota token
-// that `everyapi use` would select and then fail every relay on.
+// TestRunCreateRequiresQuota locks the boundary guard: `token create` with neither --unlimited nor a positive --quota must be refused before any network call, so we never mint an enabled 0-quota token that `everyapi use` would select and then fail every relay on.
 func TestRunCreateRequiresQuota(t *testing.T) {
 	err := runCreate([]string{"--name", "x"})
 	if err == nil {
@@ -169,10 +166,7 @@ func TestExpiresLabel(t *testing.T) {
 	if got := expiresLabel(api.TokenExpiresNever); got != "never" {
 		t.Errorf("never sentinel: got %q, want %q", got, "never")
 	}
-	// Concrete timestamp: 2023-11-14 22:13:20 UTC. Don't pin the
-	// formatted string because expiresLabel uses local-time
-	// formatting (intentional for the dashboard-style UX) and CI
-	// timezones differ — just assert non-empty + non-"never".
+	// Concrete timestamp: 2023-11-14 22:13:20 UTC. Don't pin the formatted string because expiresLabel uses local-time formatting (intentional for the dashboard-style UX) and CI timezones differ — just assert non-empty + non-"never".
 	if got := expiresLabel(1700000000); got == "" || got == "never" {
 		t.Errorf("concrete timestamp produced %q", got)
 	}

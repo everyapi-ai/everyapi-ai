@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
 )
 
 // captureOut redirects cliout for the duration of fn.
@@ -28,8 +28,7 @@ func TestRunRejectsAnUnknownToolName(t *testing.T) {
 	}
 }
 
-// The single positional is the tool to narrow to; a second one is a typo, not
-// a second tool, and must not silently run the full sweep instead.
+// The single positional is the tool to narrow to; a second one is a typo, not a second tool, and must not silently run the full sweep instead.
 func TestRunRejectsTwoPositionalArguments(t *testing.T) {
 	if err := Run([]string{"claude", "codex"}); err == nil {
 		t.Fatal("doctor accepted two positional arguments")
@@ -50,8 +49,7 @@ func TestRunHelpBeforeArgumentValidation(t *testing.T) {
 	}
 }
 
-// A half-written JSON document is not parseable, so machine mode must collect
-// every row and emit once — nothing may reach the stream as it goes.
+// A half-written JSON document is not parseable, so machine mode must collect every row and emit once — nothing may reach the stream as it goes.
 func TestMachineModeEmitsOneDocumentAndPrintsNothingEarly(t *testing.T) {
 	report := newReport(true)
 
@@ -96,8 +94,7 @@ func TestMachineModeEmitsOneDocumentAndPrintsNothingEarly(t *testing.T) {
 	}
 }
 
-// A hint only makes sense next to something that went wrong; carrying one on a
-// passing row would have the UI offer a fix for a check that just succeeded.
+// A hint only makes sense next to something that went wrong; carrying one on a passing row would have the UI offer a fix for a check that just succeeded.
 func TestPassingChecksCarryNoHint(t *testing.T) {
 	report := newReport(true)
 	report.section("Account")
@@ -150,8 +147,7 @@ func TestMachineStatusIsTheWorstCheck(t *testing.T) {
 			if got := report.machineReport().Status; got != testCase.want {
 				t.Fatalf("status = %q, want %q", got, testCase.want)
 			}
-			// The exit code has to agree with the document, or a script that
-			// branches on one and a human reading the other disagree.
+			// The exit code has to agree with the document, or a script that branches on one and a human reading the other disagree.
 			if gotErr := report.err() != nil; gotErr != testCase.fails {
 				t.Fatalf("err() non-nil = %v, want %v", gotErr, testCase.fails)
 			}
@@ -221,8 +217,7 @@ func TestMachineRequestedRecognisesBothFlagSpellings(t *testing.T) {
 	}
 }
 
-// Under --format=json a usage error must not put flag prose on the stream the
-// caller is parsing.
+// Under --format=json a usage error must not put flag prose on the stream the caller is parsing.
 func TestMachineParseErrorsStayOffTheStream(t *testing.T) {
 	out := captureOut(t, func() {
 		if err := Run([]string{"--format=json", "--nope"}); err == nil {

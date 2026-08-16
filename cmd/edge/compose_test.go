@@ -131,10 +131,7 @@ func TestRenderComposeCPU(t *testing.T) {
 	}
 }
 
-// TestRenderComposeYAMLInjectionResistant ensures user/server-controlled
-// strings (NodeName, RegistrationToken) get quoted so a stray `:`,
-// `#`, or newline can't desync the YAML or smuggle keys. This is the
-// reason renderCompose() runs every env value through strconv.Quote.
+// TestRenderComposeYAMLInjectionResistant ensures user/server-controlled strings (NodeName, RegistrationToken) get quoted so a stray `:`, `#`, or newline can't desync the YAML or smuggle keys. This is the reason renderCompose() runs every env value through strconv.Quote.
 func TestRenderComposeYAMLInjectionResistant(t *testing.T) {
 	out, err := renderCompose(composeData{
 		NodeID: 1,
@@ -143,8 +140,7 @@ extra_key: pwn`,
 		Mode:              ModeNVIDIA,
 		Gateway:           "wss://api.everyapi.ai",
 		RegistrationToken: `rt"with:weird\stuff`,
-		// Operator-supplied image tags must be quoted too, or a newline
-		// in --agent-image / --ollama-image injects a service key.
+		// Operator-supplied image tags must be quoted too, or a newline in --agent-image / --ollama-image injects a service key.
 		AgentImage:  "ghcr.io/x/y:latest\n    privileged: true",
 		OllamaImage: "ollama/ollama:latest\n    privileged: true",
 	})
@@ -152,14 +148,11 @@ extra_key: pwn`,
 		t.Fatal(err)
 	}
 	s := string(out)
-	// Quoted form must escape both " and \ — strconv.Quote handles
-	// this. The dangerous standalone "extra_key: pwn" line MUST NOT
-	// appear as its own YAML key.
+	// Quoted form must escape both " and \ — strconv.Quote handles this. The dangerous standalone "extra_key: pwn" line MUST NOT appear as its own YAML key.
 	if strings.Contains(s, "\nextra_key:") {
 		t.Errorf("node name newline-injection leaked into YAML:\n%s", s)
 	}
-	// The image-tag newline must not break out into a standalone
-	// `privileged: true` line on either service.
+	// The image-tag newline must not break out into a standalone `privileged: true` line on either service.
 	if strings.Contains(s, "\n    privileged:") {
 		t.Errorf("image-tag newline-injection leaked into YAML:\n%s", s)
 	}
@@ -173,11 +166,7 @@ extra_key: pwn`,
 	}
 }
 
-// TestRenderComposeDollarInterpolationResistant ensures a `$` in a baked
-// scalar is doubled to `$$` so Docker Compose does NOT substitute it from
-// the operator's shell env at `up`/`pull` time (leaking host state, or
-// silently emptying the value). YAML double-quoting alone does not stop
-// Compose interpolation — only `$$` does.
+// TestRenderComposeDollarInterpolationResistant ensures a `$` in a baked scalar is doubled to `$$` so Docker Compose does NOT substitute it from the operator's shell env at `up`/`pull` time (leaking host state, or silently emptying the value). YAML double-quoting alone does not stop Compose interpolation — only `$$` does.
 func TestRenderComposeDollarInterpolationResistant(t *testing.T) {
 	out, err := renderCompose(composeData{
 		NodeID:            1,
@@ -190,9 +179,7 @@ func TestRenderComposeDollarInterpolationResistant(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(out)
-	// Every `$` must be doubled to `$$` so Compose does not interpolate.
-	// The exact escaped forms below are unambiguous — a single-`$` leak
-	// would render `gpu-${HOME}` / `tok$ign` and fail these.
+	// Every `$` must be doubled to `$$` so Compose does not interpolate. The exact escaped forms below are unambiguous — a single-`$` leak would render `gpu-${HOME}` / `tok$ign` and fail these.
 	for _, want := range []string{
 		`EVERYAPI_NODE_NAME: "gpu-$${HOME}-a$$b"`,
 		`EVERYAPI_REGISTRATION_TOKEN: "tok$$ign"`,
@@ -242,10 +229,7 @@ func TestGatewayURLFromAPIBase(t *testing.T) {
 }
 
 func TestRenderComposeWorkloads(t *testing.T) {
-	// Declared workloads render as a comma-joined EVERYAPI_WORKLOADS
-	// env in both the sidecar and macOS (host-native ollama) branches;
-	// an empty declaration omits the line entirely so older agents'
-	// compose files stay byte-identical.
+	// Declared workloads render as a comma-joined EVERYAPI_WORKLOADS env in both the sidecar and macOS (host-native ollama) branches; an empty declaration omits the line entirely so older agents' compose files stay byte-identical.
 	withWl, err := renderCompose(composeData{
 		NodeID:            42,
 		Mode:              ModeNVIDIA,

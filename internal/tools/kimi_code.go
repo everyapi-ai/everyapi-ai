@@ -10,9 +10,7 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// prepareKimiCode keeps EveryAPI-routed Kimi Code sessions and OAuth state in
-// a dedicated home. The KIMI_MODEL_* variables supply an in-memory provider,
-// so no relay credential or generated provider config needs to be written.
+// prepareKimiCode keeps EveryAPI-routed Kimi Code sessions and OAuth state in a dedicated home. The KIMI_MODEL_* variables supply an in-memory provider, so no relay credential or generated provider config needs to be written.
 func prepareKimiCode(_, _ string) (map[string]string, error) {
 	return prepareKimiCodeWithModels("", "", nil)
 }

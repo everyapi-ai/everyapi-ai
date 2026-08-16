@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
 )
 
 func TestParseAddKeyArgs(t *testing.T) {
@@ -114,9 +114,7 @@ func TestParseAddKeyArgs(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			// Compare with reflect.DeepEqual because addKeyArgs now
-			// holds slices — direct struct compare won't work with
-			// nil-vs-empty differences.
+			// Compare with reflect.DeepEqual because addKeyArgs now holds slices — direct struct compare won't work with nil-vs-empty differences.
 			if !reflect.DeepEqual(got, c.want) {
 				t.Errorf("parsed = %+v, want %+v", got, c.want)
 			}
@@ -124,11 +122,7 @@ func TestParseAddKeyArgs(t *testing.T) {
 	}
 }
 
-// TestResolveSellerType covers the alias map + canonical-slug
-// acceptance + case-insensitivity. The point of the alias map is that
-// a user types "claude" and the CLI sends the backend's kind_slug
-// ("anthropic"). Unknown inputs are rejected locally (no numeric
-// passthrough — the backend retired the integer type contract).
+// TestResolveSellerType covers the alias map + canonical-slug acceptance + case-insensitivity. The point of the alias map is that a user types "claude" and the CLI sends the backend's kind_slug ("anthropic"). Unknown inputs are rejected locally (no numeric passthrough — the backend retired the integer type contract).
 func TestResolveSellerType(t *testing.T) {
 	cases := []struct {
 		in       string
@@ -167,10 +161,7 @@ func TestResolveSellerType(t *testing.T) {
 	}
 }
 
-// TestSellerTypeChoicesStable: the picker rendering relies on the
-// order being deterministic — the wizard shows numbered options and a
-// reshuffle would silently change "press 2" to mean a different
-// provider between releases. Keep the explicit ordering covered.
+// TestSellerTypeChoicesStable: the picker rendering relies on the order being deterministic — the wizard shows numbered options and a reshuffle would silently change "press 2" to mean a different provider between releases. Keep the explicit ordering covered.
 func TestSellerTypeChoicesStable(t *testing.T) {
 	got := sellerTypeChoices()
 	want := []string{"openai", "claude", "gemini", "codex", "vertex", "aws", "xai", "deepseek"}
@@ -184,11 +175,7 @@ func TestSellerTypeChoicesStable(t *testing.T) {
 	}
 }
 
-// TestChannelTypeLabel: when a slug maps to several aliases
-// (anthropic→claude/anthropic, aws→aws/bedrock, …) the displayed label
-// must be the marketing name we prefer, not whichever string sorts
-// first. Without this guard the label could flip on a stdlib map
-// iteration order change between Go versions.
+// TestChannelTypeLabel: when a slug maps to several aliases (anthropic→claude/anthropic, aws→aws/bedrock, …) the displayed label must be the marketing name we prefer, not whichever string sorts first. Without this guard the label could flip on a stdlib map iteration order change between Go versions.
 func TestChannelTypeLabel(t *testing.T) {
 	cases := []struct {
 		slug string
@@ -231,18 +218,14 @@ func TestChannelStatusLabel(t *testing.T) {
 	}
 }
 
-// TestCollectSellerKeys exercises the wizard's multi-slot key prompt
-// loop with a scripted stdin. The four cases catch:
+// TestCollectSellerKeys exercises the wizard's multi-slot key prompt loop with a scripted stdin. The four cases catch:
 //
 //   - the single-key happy path (the most common; "no more keys")
 //   - a multi-key pool (n→y→y→n) with index-aligned remarks
-//   - slot-2 OAuth blob rejection: the blob must NOT land in keys,
-//     and the loop must re-prompt the same slot
+//   - slot-2 OAuth blob rejection: the blob must NOT land in keys, and the loop must re-prompt the same slot
 //   - slot-1 OAuth blob: a complete single-key channel, no follow-up
 //
-// Each scripted line ends with "\n" so bufio.Reader returns it the
-// same way a terminal would. Empty lines (\n) accept defaults; we use
-// "n\n" / "y\n" for cliprompt.YesNo and bare values for cliprompt.Line.
+// Each scripted line ends with "\n" so bufio.Reader returns it the same way a terminal would. Empty lines (\n) accept defaults; we use "n\n" / "y\n" for cliprompt.YesNo and bare values for cliprompt.Line.
 func TestCollectSellerKeys(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -267,8 +250,7 @@ func TestCollectSellerKeys(t *testing.T) {
 		},
 		{
 			name: "slot 2 OAuth blob → re-prompted, never lands in keys",
-			// slot 1 plain + remark, more? y,
-			// slot 2 OAuth blob (rejected), retry slot 2 plain + remark, more? n
+			// slot 1 plain + remark, more? y, slot 2 OAuth blob (rejected), retry slot 2 plain + remark, more? n
 			script:      "sk-a\nteam\ny\n{\"type\":\"oauth\"}\nsk-b\nbackup\nn\n",
 			wantKeys:    []string{"sk-a", "sk-b"},
 			wantRemarks: []string{"team", "backup"},
@@ -283,9 +265,7 @@ func TestCollectSellerKeys(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			// Redirect prompts' Out so the test isn't drowned in
-			// prompt-label echo + the OAuth-blob warning. io.Discard
-			// is the natural choice — Out is now typed as io.Writer.
+			// Redirect prompts' Out so the test isn't drowned in prompt-label echo + the OAuth-blob warning. io.Discard is the natural choice — Out is now typed as io.Writer.
 			origOut := cliout.Out
 			cliout.Out = io.Discard
 			defer func() { cliout.Out = origOut }()
@@ -310,12 +290,7 @@ func TestCollectSellerKeys(t *testing.T) {
 	}
 }
 
-// TestSellerWithdrawRejectsExplicitZero pins that an explicit --quota <= 0
-// is rejected at the boundary rather than being overloaded as the
-// "withdraw the full pending balance" sentinel (which an omitted flag
-// means). The guard returns before any network call, so no client is
-// needed. Regression for the audit finding where `--quota 0` swept the
-// entire SellerQuota.
+// TestSellerWithdrawRejectsExplicitZero pins that an explicit --quota <= 0 is rejected at the boundary rather than being overloaded as the "withdraw the full pending balance" sentinel (which an omitted flag means). The guard returns before any network call, so no client is needed. Regression for the audit finding where `--quota 0` swept the entire SellerQuota.
 func TestSellerWithdrawRejectsExplicitZero(t *testing.T) {
 	for _, arg := range []string{"0", "-5"} {
 		err := sellerWithdraw([]string{"--quota", arg})

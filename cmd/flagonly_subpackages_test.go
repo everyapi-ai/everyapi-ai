@@ -4,14 +4,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/everyapi-ai/everyapi-ai/cmd/checkin"
-	"github.com/everyapi-ai/everyapi-ai/cmd/events"
-	logcmd "github.com/everyapi-ai/everyapi-ai/cmd/log"
-	"github.com/everyapi-ai/everyapi-ai/cmd/perf"
-	"github.com/everyapi-ai/everyapi-ai/cmd/report"
-	"github.com/everyapi-ai/everyapi-ai/cmd/subscription"
-	"github.com/everyapi-ai/everyapi-ai/cmd/upstream"
-	"github.com/everyapi-ai/everyapi-ai/cmd/usage"
+	"github.com/everyapi-ai/everyapi-ai/v3/cmd/checkin"
+	"github.com/everyapi-ai/everyapi-ai/v3/cmd/events"
+	logcmd "github.com/everyapi-ai/everyapi-ai/v3/cmd/log"
+	"github.com/everyapi-ai/everyapi-ai/v3/cmd/perf"
+	"github.com/everyapi-ai/everyapi-ai/v3/cmd/report"
+	"github.com/everyapi-ai/everyapi-ai/v3/cmd/subscription"
+	"github.com/everyapi-ai/everyapi-ai/v3/cmd/upstream"
+	"github.com/everyapi-ai/everyapi-ai/v3/cmd/usage"
 )
 
 func TestFlagOnlySubpackagesRejectPositionalsBeforeSideEffects(t *testing.T) {

@@ -1,19 +1,11 @@
-// Package tools is the registry of third-party CLIs that `everyapi use`
-// knows how to point at EveryAPI. Adding a tool here is a single map
-// entry — no changes elsewhere.
+// Package tools is the registry of third-party CLIs that `everyapi use` knows how to point at EveryAPI. Adding a tool here is a single map entry — no changes elsewhere.
 //
 // Each entry describes:
 //   - ExecName: the binary that gets exec'd (looked up in $PATH)
-//   - Env: the environment variables to set so the tool talks to the
-//     EveryAPI gateway. URLs are computed at runtime by appending the
-//     tool-specific suffix to the user's configured API base, so a
-//     local-dev base (http://localhost:8787) works without per-tool
-//     env edits.
+//   - Env: the environment variables to set so the tool talks to the EveryAPI gateway. URLs are computed at runtime by appending the tool-specific suffix to the user's configured API base, so a local-dev base (http://localhost:8787) works without per-tool env edits.
 //   - InstallHint: copy printed when ExecName isn't on PATH
 //
-// The env-var conventions are read straight off each tool's docs (see
-// the comment on the entry). When upstream renames a variable we
-// update one line here.
+// The env-var conventions are read straight off each tool's docs (see the comment on the entry). When upstream renames a variable we update one line here.
 package tools
 
 import (
@@ -27,162 +19,66 @@ type Tool struct {
 	Name        string
 	ExecName    string
 	InstallHint string
-	// DefaultArgs are used only when the caller supplied no tool arguments.
-	// Keep these compile-time literals: they reach exec directly, without a
-	// shell. An explicit argument list always wins.
+	// DefaultArgs are used only when the caller supplied no tool arguments. Keep these compile-time literals: they reach exec directly, without a shell. An explicit argument list always wins.
 	DefaultArgs []string
 
-	// Native launches a client that owns its own authentication and upstream
-	// routing. Use must not resolve or expose an EveryAPI relay key for it.
+	// Native launches a client that owns its own authentication and upstream routing. Use must not resolve or expose an EveryAPI relay key for it.
 	Native bool
 
-	// InstallCmd is the shell command 'everyapi use' offers to run
-	// on the user's behalf when ExecName isn't on $PATH. Executed
-	// via `sh -c` on Unix and `cmd /C` on Windows; an empty value
-	// disables the auto-install prompt and the user falls back to
-	// reading InstallHint and running the installer themselves.
-	// For tools whose canonical installer is Unix-only (e.g. a
-	// `curl | bash` script), InstallCmdUnixOnly should be true so
-	// Windows users see the hint instead of a guaranteed-to-fail
-	// shell pipeline.
+	// InstallCmd is the shell command 'everyapi use' offers to run on the user's behalf when ExecName isn't on $PATH. Executed via `sh -c` on Unix and `cmd /C` on Windows; an empty value disables the auto-install prompt and the user falls back to reading InstallHint and running the installer themselves. For tools whose canonical installer is Unix-only (e.g. a `curl | bash` script), InstallCmdUnixOnly should be true so Windows users see the hint instead of a guaranteed-to-fail shell pipeline.
 	//
-	// SECURITY INVARIANT: this string MUST be a compile-time literal
-	// embedded in the Registry below. It is passed verbatim to `sh
-	// -c` / `cmd /C` with no escaping — sourcing it from user input,
-	// env vars, config files, or any network response would be RCE.
-	// If you find yourself wanting to make this dynamic, design a
-	// per-tool installer function instead.
+	// SECURITY INVARIANT: this string MUST be a compile-time literal embedded in the Registry below. It is passed verbatim to `sh -c` / `cmd /C` with no escaping — sourcing it from user input, env vars, config files, or any network response would be RCE. If you find yourself wanting to make this dynamic, design a per-tool installer function instead.
 	InstallCmd string
-	// InstallCmdWindows overrides InstallCmd on Windows when the vendor
-	// publishes a separate native installer command. The first element is the
-	// executable and the rest are passed as argv directly, never through cmd.exe.
-	// It has the same security invariant as InstallCmd and every element must
-	// remain a compile-time literal.
+	// InstallCmdWindows overrides InstallCmd on Windows when the vendor publishes a separate native installer command. The first element is the executable and the rest are passed as argv directly, never through cmd.exe. It has the same security invariant as InstallCmd and every element must remain a compile-time literal.
 	InstallCmdWindows []string
-	// InstallCmdUnixOnly gates InstallCmd off on Windows when the
-	// command relies on a POSIX-only pipeline (curl | bash, etc.).
-	// Doubles as the "this installer is less reversible than `npm
-	// install -g`" signal: prompt callers default to N when this is
-	// true, so a single press of Enter never runs a remote shell
-	// script on the user's machine.
+	// InstallCmdUnixOnly gates InstallCmd off on Windows when the command relies on a POSIX-only pipeline (curl | bash, etc.). Doubles as the "this installer is less reversible than `npm install -g`" signal: prompt callers default to N when this is true, so a single press of Enter never runs a remote shell script on the user's machine.
 	InstallCmdUnixOnly bool
 
-	// ExtraBinDirs lists installer-specific directories to search for
-	// ExecName when $PATH misses, as $HOME-relative paths ("" segments
-	// and absolute paths are ignored). The npm-global fallback in
-	// resolveExecDirs only covers `npm install -g` tools; an installer
-	// that writes somewhere else — Antigravity's install.sh drops `agy`
-	// into ~/.local/bin — needs its own candidates, or a user whose
-	// shell adds that dir in an rc file everyapi never sources stays
-	// permanently "not installed" and loops on reinstall offers.
+	// ExtraBinDirs lists installer-specific directories to search for ExecName when $PATH misses, as $HOME-relative paths ("" segments and absolute paths are ignored). The npm-global fallback in resolveExecDirs only covers `npm install -g` tools; an installer that writes somewhere else — Antigravity's install.sh drops `agy` into ~/.local/bin — needs its own candidates, or a user whose shell adds that dir in an rc file everyapi never sources stays permanently "not installed" and loops on reinstall offers.
 	//
-	// Same contract as InstallCmd: compile-time literals only. These
-	// paths are joined onto the user's home dir and stat'd, never
-	// executed as shell text, but keeping them static preserves the
-	// "no user input reaches tool resolution" property.
+	// Same contract as InstallCmd: compile-time literals only. These paths are joined onto the user's home dir and stat'd, never executed as shell text, but keeping them static preserves the "no user input reaches tool resolution" property.
 	ExtraBinDirs []string
-	// WindowsLocalAppDataBinDirs lists installer-owned directories beneath
-	// %LOCALAPPDATA%. It closes the same install-then-resolve loop as
-	// ExtraBinDirs for Windows installers that use the platform convention.
+	// WindowsLocalAppDataBinDirs lists installer-owned directories beneath %LOCALAPPDATA%. It closes the same install-then-resolve loop as ExtraBinDirs for Windows installers that use the platform convention.
 	WindowsLocalAppDataBinDirs []string
 
-	// YoloFlag is the tool-specific "skip every confirmation"
-	// argument the user might want to pass — claude's
-	// --dangerously-skip-permissions, codex's
-	// --dangerously-bypass-approvals-and-sandbox, gemini's --yolo.
-	// 'everyapi use' offers the flag via a TTY confirm prompt
-	// before exec so the user can opt in without having to
-	// remember the exact string. Empty for tools where no such
-	// blanket-bypass flag exists.
+	// YoloFlag is the tool-specific "skip every confirmation" argument the user might want to pass — claude's --dangerously-skip-permissions, codex's --dangerously-bypass-approvals-and-sandbox, gemini's --yolo. 'everyapi use' offers the flag via a TTY confirm prompt before exec so the user can opt in without having to remember the exact string. Empty for tools where no such blanket-bypass flag exists.
 	YoloFlag string
-	// YoloLabel is the human-readable name shown in the prompt:
-	// "Enable <YoloLabel>? [y/N]". Should be short and reflect
-	// what the user gets — "skip permission prompts (claude)" /
-	// "bypass approvals + sandbox (codex)" / "yolo mode (gemini)".
+	// YoloLabel is the human-readable name shown in the prompt: "Enable <YoloLabel>? [y/N]". Should be short and reflect what the user gets — "skip permission prompts (claude)" / "bypass approvals + sandbox (codex)" / "yolo mode (gemini)".
 	YoloLabel string
-	// YoloEnv is the env-var form of the blanket-bypass switch, for
-	// tools whose "skip every confirmation" mode is toggled by an
-	// environment variable rather than an argv flag — hermes reads
-	// HERMES_YOLO_MODE=1 and exposes no equivalent command-line flag.
-	// When set and the user opts in at the prompt, 'everyapi use'
-	// puts this var = "1" in the tool's env instead of (or in
-	// addition to) prepending YoloFlag. A tool may set YoloFlag,
-	// YoloEnv, or both; empty when the tool has no blanket-bypass
-	// switch at all.
+	// YoloEnv is the env-var form of the blanket-bypass switch, for tools whose "skip every confirmation" mode is toggled by an environment variable rather than an argv flag — hermes reads HERMES_YOLO_MODE=1 and exposes no equivalent command-line flag. When set and the user opts in at the prompt, 'everyapi use' puts this var = "1" in the tool's env instead of (or in addition to) prepending YoloFlag. A tool may set YoloFlag, YoloEnv, or both; empty when the tool has no blanket-bypass switch at all.
 	YoloEnv string
 
-	// FlagProbeArgs is an argv tail that makes this tool parse its
-	// command line, report the result through its exit code, and then do
-	// nothing else — codex's `exec --help` prints usage and exits 0
-	// without starting a session, reading stdin, or firing hooks.
+	// FlagProbeArgs is an argv tail that makes this tool parse its command line, report the result through its exit code, and then do nothing else — codex's `exec --help` prints usage and exits 0 without starting a session, reading stdin, or firing hooks.
 	//
-	// It enables FlagProbe (see flagprobe.go), which runs the tool once
-	// with a candidate flag prepended to decide whether adding that flag
-	// would abort the launch. That question only has an empirical answer:
-	// the binary on $PATH may be a wrapper that prepends flags of its own,
-	// and a flag the tool declares non-repeatable then arrives twice.
+	// It enables FlagProbe (see flagprobe.go), which runs the tool once with a candidate flag prepended to decide whether adding that flag would abort the launch. That question only has an empirical answer: the binary on $PATH may be a wrapper that prepends flags of its own, and a flag the tool declares non-repeatable then arrives twice.
 	//
-	// SAFETY CONTRACT: these args must be observably inert — no session,
-	// no stdin read, no network, no writes, no hooks. They run on every
-	// launch of a tool that declares them. Same compile-time-literal rule
-	// as InstallCmd and ExtraBinDirs. Empty disables probing entirely,
-	// which means every flag EveryAPI wants to add is added unexamined.
+	// SAFETY CONTRACT: these args must be observably inert — no session, no stdin read, no network, no writes, no hooks. They run on every launch of a tool that declares them. Same compile-time-literal rule as InstallCmd and ExtraBinDirs. Empty disables probing entirely, which means every flag EveryAPI wants to add is added unexamined.
 	FlagProbeArgs []string
 
-	// ModelEnv names the env var the tool's prepareFn reads to pin the
-	// upstream model. Set only for tools that don't carry their own
-	// vendor-default model and therefore need EveryAPI to choose one —
-	// Hermes reads EVERYAPI_HERMES_MODEL, Qwen Code reads OPENAI_MODEL,
-	// Gemini, Aider, Goose, Crush, Cline, and OpenClaw use the same
-	// contract through their preparation hooks. When
-	// non-empty, 'everyapi use' offers a model picker (populated from
-	// the gateway's model catalog) before launch and honors a
-	// `--model <id>` flag. Empty for claude/codex/grok, whose own
-	// CLIs default the model and route it by name through the gateway.
+	// ModelEnv names the env var the tool's prepareFn reads to pin the upstream model. Set only for tools that don't carry their own vendor-default model and therefore need EveryAPI to choose one — Hermes reads EVERYAPI_HERMES_MODEL, Qwen Code reads OPENAI_MODEL, Gemini, Aider, Goose, Crush, Cline, and OpenClaw use the same contract through their preparation hooks. When non-empty, 'everyapi use' offers a model picker (populated from the gateway's model catalog) before launch and honors a `--model <id>` flag. Empty for claude/codex/grok, whose own CLIs default the model and route it by name through the gateway.
 	ModelEnv string
 
-	// RequiredEndpoint, when non-empty, is the relay endpoint type this
-	// client's wire protocol requires. `everyapi use` checks the live model
-	// catalog before launch so a client cannot enter its own retry loop when
-	// every available model explicitly lacks that protocol bridge.
+	// RequiredEndpoint, when non-empty, is the relay endpoint type this client's wire protocol requires. `everyapi use` checks the live model catalog before launch so a client cannot enter its own retry loop when every available model explicitly lacks that protocol bridge.
 	RequiredEndpoint string
-	// AlternativeEndpoint, when non-empty, is a second wire protocol the
-	// client can drive. Models supporting either endpoint are launchable.
+	// AlternativeEndpoint, when non-empty, is a second wire protocol the client can drive. Models supporting either endpoint are launchable.
 	AlternativeEndpoint string
 
-	// envFn builds the env vars from the resolved API base + access
-	// token. Returns a map[name]value to merge into os.Environ before
-	// exec. Implemented as a function (not a static map) because the
-	// per-tool URL suffix varies (some take a v1 prefix, some don't).
+	// envFn builds the env vars from the resolved API base + access token. Returns a map[name]value to merge into os.Environ before exec. Implemented as a function (not a static map) because the per-tool URL suffix varies (some take a v1 prefix, some don't).
 	envFn func(apiBase, token string) map[string]string
 
-	// prepareFn is an optional pre-exec hook for tools that need
-	// more than env vars — e.g. codex, whose router is pinned by
-	// `~/.codex/config.toml` (model_provider) and whose auth_mode is
-	// pinned by `~/.codex/auth.json` (apikey vs chatgpt). Returning
-	// a non-nil env map merges those vars on top of envFn's output
-	// (last write wins), letting the hook redirect CODEX_HOME at a
-	// generated config dir. Nil means the tool needs no pre-exec
-	// setup beyond env vars.
+	// prepareFn is an optional pre-exec hook for tools that need more than env vars — e.g. codex, whose router is pinned by `~/.codex/config.toml` (model_provider) and whose auth_mode is pinned by `~/.codex/auth.json` (apikey vs chatgpt). Returning a non-nil env map merges those vars on top of envFn's output (last write wins), letting the hook redirect CODEX_HOME at a generated config dir. Nil means the tool needs no pre-exec setup beyond env vars.
 	prepareFn        func(apiBase, token string) (map[string]string, error)
 	prepareCatalogFn func(apiBase, token string, models []Model, bootModel string) (map[string]string, error)
 
-	// transparentEnvFn supplies tool-specific placeholder credentials and
-	// CA wiring for the process-scoped connector. It must never
-	// receive or return the EveryAPI relay key. A nil function means this tool
-	// has not yet been verified with transparent mode.
+	// transparentEnvFn supplies tool-specific placeholder credentials and CA wiring for the process-scoped connector. It must never receive or return the EveryAPI relay key. A nil function means this tool has not yet been verified with transparent mode.
 	transparentEnvFn func(caPath string) (set map[string]string, unset []string)
 
-	// prepareTransparentFn is the transparent counterpart of prepareFn. It
-	// writes only public routing configuration and placeholder credentials;
-	// the real relay key remains inside the connector process.
+	// prepareTransparentFn is the transparent counterpart of prepareFn. It writes only public routing configuration and placeholder credentials; the real relay key remains inside the connector process.
 	prepareTransparentFn        func() (map[string]string, error)
 	prepareTransparentCatalogFn func(models []Model, bootModel string) (map[string]string, error)
 }
 
-// Model is the launch-safe subset of the relay model catalogue. Credentials
-// never enter this value; prepare hooks may persist it for a client's native
-// /model picker without writing the relay key alongside it.
+// Model is the launch-safe subset of the relay model catalogue. Credentials never enter this value; prepare hooks may persist it for a client's native /model picker without writing the relay key alongside it.
 type Model struct {
 	ID                     string
 	DisplayName            string
@@ -216,10 +112,7 @@ type openCodeConfig struct {
 	Model    string                      `json:"model,omitempty"`
 }
 
-// prepareOpenCodeWithModels uses OpenCode's documented custom-provider
-// contract through OPENCODE_CONFIG_CONTENT. The content carries only a fixed
-// environment reference; the relay key itself is supplied separately to the
-// child process and is never written to opencode.json or another config file.
+// prepareOpenCodeWithModels uses OpenCode's documented custom-provider contract through OPENCODE_CONFIG_CONTENT. The content carries only a fixed environment reference; the relay key itself is supplied separately to the child process and is never written to opencode.json or another config file.
 func prepareOpenCodeWithModels(apiBase, _ string, models []Model, bootModel string) (map[string]string, error) {
 	chatModels := make(map[string]openCodeModel, len(models))
 	responseModels := make(map[string]openCodeModel, len(models))
@@ -294,25 +187,12 @@ func (t *Tool) Env(apiBase, token string) map[string]string {
 	return t.envFn(apiBase, token)
 }
 
-// InstallPromptDefault picks the press-Enter default for the
-// "install <tool> now? [Y/n]" prompt. We default to Yes for routine
-// package-manager installs (npm install -g …) and No for installers
-// that pipe a remote shell script into bash — a single Enter
-// shouldn't ever run untrusted code fetched at install time.
-// InstallCmdUnixOnly marks the reviewed remote-script installers that need a
-// platform-specific Windows override, so it also gives this cohort the safer
-// default. If those concerns diverge, promote the prompt choice to its own
-// field.
+// InstallPromptDefault picks the press-Enter default for the "install <tool> now? [Y/n]" prompt. We default to Yes for routine package-manager installs (npm install -g …) and No for installers that pipe a remote shell script into bash — a single Enter shouldn't ever run untrusted code fetched at install time. InstallCmdUnixOnly marks the reviewed remote-script installers that need a platform-specific Windows override, so it also gives this cohort the safer default. If those concerns diverge, promote the prompt choice to its own field.
 func (t *Tool) InstallPromptDefault() bool {
 	return !t.InstallCmdUnixOnly
 }
 
-// Prepare runs the tool's optional pre-exec setup (e.g. codex's
-// CODEX_HOME / auth.json / config.toml). Returns env additions to
-// overlay on top of Env(). nil map + nil error means "no setup
-// needed". Errors abort the launch — failing to set up an isolated
-// config is preferable to falling back to the user's real ~/.codex
-// and silently going through ChatGPT auth.
+// Prepare runs the tool's optional pre-exec setup (e.g. codex's CODEX_HOME / auth.json / config.toml). Returns env additions to overlay on top of Env(). nil map + nil error means "no setup needed". Errors abort the launch — failing to set up an isolated config is preferable to falling back to the user's real ~/.codex and silently going through ChatGPT auth.
 func (t *Tool) Prepare(apiBase, token string) (map[string]string, error) {
 	return t.PrepareWithModels(apiBase, token, nil, "")
 }
@@ -328,9 +208,7 @@ func (t *Tool) PrepareWithModels(apiBase, token string, models []Model, bootMode
 	return t.prepareFn(apiBase, token)
 }
 
-// ignoreBootModel adapts a catalog hook that has no boot-model concept. The
-// ModelEnv tools pin their model through an env var their own prepare reads,
-// so the selection EveryAPI records for claude/codex is meaningless to them.
+// ignoreBootModel adapts a catalog hook that has no boot-model concept. The ModelEnv tools pin their model through an env var their own prepare reads, so the selection EveryAPI records for claude/codex is meaningless to them.
 func ignoreBootModel(fn func(apiBase, token string, models []Model) (map[string]string, error)) func(string, string, []Model, string) (map[string]string, error) {
 	return func(apiBase, token string, models []Model, _ string) (map[string]string, error) {
 		return fn(apiBase, token, models)
@@ -339,11 +217,7 @@ func ignoreBootModel(fn func(apiBase, token string, models []Model) (map[string]
 
 const transparentPlaceholderCredential = "everyapi-local-connector"
 
-// TransparentEnv returns the complete process proxy overlay and the ambient
-// variables that must be absent from the child environment. Keeping removals
-// explicit is important: setting a Base URL to an empty string is still
-// observably different from not setting it, and inherited real provider keys
-// must not bypass or leak through the connector.
+// TransparentEnv returns the complete process proxy overlay and the ambient variables that must be absent from the child environment. Keeping removals explicit is important: setting a Base URL to an empty string is still observably different from not setting it, and inherited real provider keys must not bypass or leak through the connector.
 func (t *Tool) TransparentEnv(proxyURL, caPath string) (map[string]string, []string, error) {
 	if t.transparentEnvFn == nil {
 		return nil, nil, fmt.Errorf("transparent mode is not supported for %s yet", t.Name)
@@ -358,8 +232,7 @@ func (t *Tool) TransparentEnv(proxyURL, caPath string) (map[string]string, []str
 		"HTTPS_PROXY": proxyURL,
 		"https_proxy": proxyURL,
 	}
-	// Do not inherit a corporate/plaintext proxy, a SOCKS fallback, or an
-	// exclusion that could make an official model origin bypass Connector.
+	// Do not inherit a corporate/plaintext proxy, a SOCKS fallback, or an exclusion that could make an official model origin bypass Connector.
 	unset := []string{"HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy", "EVERYAPI_RELAY_KEY"}
 	specific, specificUnset := t.transparentEnvFn(caPath)
 	for key, value := range specific {
@@ -369,8 +242,7 @@ func (t *Tool) TransparentEnv(proxyURL, caPath string) (map[string]string, []str
 	return set, unset, nil
 }
 
-// PrepareTransparent runs only setup that preserves the vendor's official
-// origin. It never accepts the gateway base URL or relay credential by design.
+// PrepareTransparent runs only setup that preserves the vendor's official origin. It never accepts the gateway base URL or relay credential by design.
 func (t *Tool) PrepareTransparent() (map[string]string, error) {
 	return t.PrepareTransparentWithModels(nil, "")
 }
@@ -399,9 +271,7 @@ func transparentClaudeEnv(caPath string) (map[string]string, []string) {
 			"NODE_EXTRA_CA_CERTS":                        caPath,
 			"ENABLE_TOOL_SEARCH":                         "1",
 			"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
-			// Advisor is an experimental account-bound server tool. Disable it
-			// when Claude runs through EveryAPI so rejected results cannot poison
-			// the session and fail every subsequent prompt.
+			// Advisor is an experimental account-bound server tool. Disable it when Claude runs through EveryAPI so rejected results cannot poison the session and fail every subsequent prompt.
 			"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1",
 		}, []string{
 			"ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY",
@@ -409,11 +279,7 @@ func transparentClaudeEnv(caPath string) (map[string]string, []string) {
 		}
 }
 
-// transparentStandaloneClaudeEnv is the transparent overlay for the plain
-// `everyapi use claude` tool. It layers ENABLE_PROMPT_CACHING_1H on top of the
-// shared transparentClaudeEnv so standalone Claude keeps the 1h prompt-cache
-// window its injected (non-transparent) path already sets (see the "claude"
-// Registry envFn).
+// transparentStandaloneClaudeEnv is the transparent overlay for the plain `everyapi use claude` tool. It layers ENABLE_PROMPT_CACHING_1H on top of the shared transparentClaudeEnv so standalone Claude keeps the 1h prompt-cache window its injected (non-transparent) path already sets (see the "claude" Registry envFn).
 func transparentStandaloneClaudeEnv(caPath string) (map[string]string, []string) {
 	set, unset := transparentClaudeEnv(caPath)
 	set["ENABLE_PROMPT_CACHING_1H"] = "1"
@@ -434,9 +300,7 @@ func transparentGeminiEnv(caPath string) (map[string]string, []string) {
 	}, []string{"GOOGLE_GEMINI_BASE_URL", "GOOGLE_API_KEY"}
 }
 
-// joinBase concatenates the API base and a tool-specific suffix,
-// avoiding double slashes. Centralized so adding a tool doesn't have
-// to reinvent the join logic.
+// joinBase concatenates the API base and a tool-specific suffix, avoiding double slashes. Centralized so adding a tool doesn't have to reinvent the join logic.
 func joinBase(base, suffix string) string {
 	base = strings.TrimRight(base, "/")
 	if suffix == "" {
@@ -448,13 +312,9 @@ func joinBase(base, suffix string) string {
 	return base + suffix
 }
 
-// Registry is the full set of supported tools, keyed by the name the
-// user types (`everyapi use <name>`). Names are lowercase.
+// Registry is the full set of supported tools, keyed by the name the user types (`everyapi use <name>`). Names are lowercase.
 var Registry = map[string]*Tool{
-	// Anthropic Claude Code: reads ANTHROPIC_BASE_URL and
-	// ANTHROPIC_AUTH_TOKEN. The CLI sends the raw base URL — no
-	// /v1 suffix — because Anthropic's official client appends its
-	// own version path. Verified in Anthropic SDK source.
+	// Anthropic Claude Code: reads ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN. The CLI sends the raw base URL — no /v1 suffix — because Anthropic's official client appends its own version path. Verified in Anthropic SDK source.
 	"claude": {
 		Name:        "claude",
 		ExecName:    "claude",
@@ -465,8 +325,7 @@ var Registry = map[string]*Tool{
 			"irm https://claude.ai/install.ps1 | iex",
 		},
 		InstallCmdUnixOnly: true,
-		// claude.ai/install.sh hands off to `<binary> install`, which links the
-		// launcher into ~/.local/bin — the same off-PATH cohort gemini hits.
+		// claude.ai/install.sh hands off to `<binary> install`, which links the launcher into ~/.local/bin — the same off-PATH cohort gemini hits.
 		ExtraBinDirs:     []string{".local/bin"},
 		YoloFlag:         "--dangerously-skip-permissions",
 		YoloLabel:        "skip all permission prompts (--dangerously-skip-permissions)",
@@ -476,31 +335,18 @@ var Registry = map[string]*Tool{
 			return map[string]string{
 				"ANTHROPIC_BASE_URL":   joinBase(apiBase, ""),
 				"ANTHROPIC_AUTH_TOKEN": token,
-				// Preserve Claude Code's deferred MCP ToolSearch behavior when
-				// the CLI is pointed at the EveryAPI gateway.
+				// Preserve Claude Code's deferred MCP ToolSearch behavior when the CLI is pointed at the EveryAPI gateway.
 				"ENABLE_TOOL_SEARCH":                         "1",
 				"ENABLE_PROMPT_CACHING_1H":                   "1",
 				"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
 				"CLAUDE_CODE_DISABLE_ADVISOR_TOOL":           "1",
-				// Clear any ambient ANTHROPIC_API_KEY so the user's real key is
-				// never forwarded to the gateway and can't shadow the
-				// relay token.
+				// Clear any ambient ANTHROPIC_API_KEY so the user's real key is never forwarded to the gateway and can't shadow the relay token.
 				"ANTHROPIC_API_KEY": "",
 			}
 		},
 	},
 
-	// OpenAI Codex CLI: unlike claude/gemini, codex does NOT read
-	// OPENAI_BASE_URL at runtime — its router is pinned to whatever
-	// `model_provider` is set in ~/.codex/config.toml, and auth_mode
-	// is pinned in ~/.codex/auth.json (defaults to "chatgpt" on a
-	// fresh install, which then redirects to the ChatGPT login page
-	// regardless of OPENAI_API_KEY). To make `everyapi use codex`
-	// actually route through the gateway we redirect CODEX_HOME at
-	// a generated config dir (see codex.go) where we write our own
-	// auth.json (apikey mode) + config.toml (everyapi provider).
-	// The OPENAI_API_KEY env var is still set as belt-and-suspenders
-	// — config.toml's env_key points back at it.
+	// OpenAI Codex CLI: unlike claude/gemini, codex does NOT read OPENAI_BASE_URL at runtime — its router is pinned to whatever `model_provider` is set in ~/.codex/config.toml, and auth_mode is pinned in ~/.codex/auth.json (defaults to "chatgpt" on a fresh install, which then redirects to the ChatGPT login page regardless of OPENAI_API_KEY). To make `everyapi use codex` actually route through the gateway we redirect CODEX_HOME at a generated config dir (see codex.go) where we write our own auth.json (apikey mode) + config.toml (everyapi provider). The OPENAI_API_KEY env var is still set as belt-and-suspenders — config.toml's env_key points back at it.
 	"codex": {
 		Name:        "codex",
 		ExecName:    "codex",
@@ -508,13 +354,7 @@ var Registry = map[string]*Tool{
 		InstallCmd:  "npm install -g @openai/codex",
 		YoloFlag:    "--dangerously-bypass-approvals-and-sandbox",
 		YoloLabel:   "bypass approvals + sandbox (--dangerously-bypass-approvals-and-sandbox)",
-		// `exec --help` parses the full command line, prints usage, and
-		// exits — no session, no stdin, no hooks. Codex needs the probe
-		// more than any other tool here: its parser declares both
-		// --dangerously-bypass-hook-trust and
-		// --dangerously-bypass-approvals-and-sandbox non-repeatable, so a
-		// wrapper that injects either one turns EveryAPI's copy into a
-		// launch-aborting parse error.
+		// `exec --help` parses the full command line, prints usage, and exits — no session, no stdin, no hooks. Codex needs the probe more than any other tool here: its parser declares both --dangerously-bypass-hook-trust and --dangerously-bypass-approvals-and-sandbox non-repeatable, so a wrapper that injects either one turns EveryAPI's copy into a launch-aborting parse error.
 		FlagProbeArgs:               []string{"exec", "--help"},
 		RequiredEndpoint:            "openai-response",
 		transparentEnvFn:            transparentCodexEnv,
@@ -527,10 +367,7 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: prepareCodexWithModels,
 	},
 
-	// OpenCode supports custom OpenAI-compatible providers through its public
-	// config schema. OPENCODE_CONFIG_CONTENT keeps this configuration scoped to
-	// the launched process, while the apiKey field contains only an env
-	// reference so the relay key never enters JSON or a project opencode.json.
+	// OpenCode supports custom OpenAI-compatible providers through its public config schema. OPENCODE_CONFIG_CONTENT keeps this configuration scoped to the launched process, while the apiKey field contains only an env reference so the relay key never enters JSON or a project opencode.json.
 	"opencode": {
 		Name:                "opencode",
 		ExecName:            "opencode",
@@ -544,9 +381,7 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: prepareOpenCodeWithModels,
 	},
 
-	// Google's Gemini CLI supports API-key auth and a custom Gemini API origin
-	// through documented environment variables. prepareGemini overlays system
-	// settings so cached OAuth state cannot override the process-scoped key.
+	// Google's Gemini CLI supports API-key auth and a custom Gemini API origin through documented environment variables. prepareGemini overlays system settings so cached OAuth state cannot override the process-scoped key.
 	"gemini": {
 		Name:             "gemini",
 		ExecName:         "gemini",
@@ -565,29 +400,16 @@ var Registry = map[string]*Tool{
 		prepareFn: prepareGemini,
 	},
 
-	// Antigravity CLI launches the locally authenticated `agy` client. agy owns its Google
-	// OAuth credential and upstream routing, so never pass the EveryAPI relay
-	// key or transparent-connector environment into the child.
+	// Antigravity CLI launches the locally authenticated `agy` client. agy owns its Google OAuth credential and upstream routing, so never pass the EveryAPI relay key or transparent-connector environment into the child.
 	"antigravity": {
 		Name:     "antigravity",
 		ExecName: "agy",
-		// Deliberately platform-neutral: this string is what Windows users
-		// see (CanAutoInstall is false for them), and the docs page carries
-		// the correct per-platform command. Inlining the Unix pipeline here
-		// would hand PowerShell users a `curl` that resolves to
-		// Invoke-WebRequest and fails.
+		// Deliberately platform-neutral: this string is what Windows users see (CanAutoInstall is false for them), and the docs page carries the correct per-platform command. Inlining the Unix pipeline here would hand PowerShell users a `curl` that resolves to Invoke-WebRequest and fails.
 		InstallHint: "Install the Antigravity CLI (`agy`): https://antigravity.google/docs/cli/install " +
 			"— then sign in once before running `everyapi use antigravity`.",
-		// Antigravity's own installer, per the install docs above. It
-		// writes the binary to ~/.local/bin/agy — hence ExtraBinDirs, so
-		// the post-install re-check finds it even when the user's shell
-		// only puts that dir on $PATH from an rc file we never source.
+		// Antigravity's own installer, per the install docs above. It writes the binary to ~/.local/bin/agy — hence ExtraBinDirs, so the post-install re-check finds it even when the user's shell only puts that dir on $PATH from an rc file we never source.
 		//
-		// Windows uses a separate .cmd/.ps1 installer and registers agy
-		// under %LOCALAPPDATA%\agy\bin, so this pipeline is Unix-only.
-		// That directory is env-var-derived rather than $HOME-relative, so
-		// ExtraBinDirs cannot express it; Windows users whose PATH lacks it
-		// still fall back to the hint above.
+		// Windows uses a separate .cmd/.ps1 installer and registers agy under %LOCALAPPDATA%\agy\bin, so this pipeline is Unix-only. That directory is env-var-derived rather than $HOME-relative, so ExtraBinDirs cannot express it; Windows users whose PATH lacks it still fall back to the hint above.
 		InstallCmd:         "curl -fsSL https://antigravity.google/cli/install.sh | bash",
 		InstallCmdUnixOnly: true,
 		ExtraBinDirs:       []string{".local/bin"},
@@ -599,9 +421,7 @@ var Registry = map[string]*Tool{
 		},
 	},
 
-	// Aider routes OpenAI-compatible models through LiteLLM. Aider expects the
-	// model namespace `openai/<id>` while EveryAPI's catalogue returns bare ids;
-	// prepareAider performs that process-scoped translation.
+	// Aider routes OpenAI-compatible models through LiteLLM. Aider expects the model namespace `openai/<id>` while EveryAPI's catalogue returns bare ids; prepareAider performs that process-scoped translation.
 	"aider": {
 		Name:        "aider",
 		ExecName:    "aider",
@@ -627,8 +447,7 @@ var Registry = map[string]*Tool{
 		prepareFn: prepareAider,
 	},
 
-	// Goose's OpenAI provider accepts a custom endpoint entirely through
-	// environment variables, keeping the user's persistent Goose config intact.
+	// Goose's OpenAI provider accepts a custom endpoint entirely through environment variables, keeping the user's persistent Goose config intact.
 	"goose": {
 		Name:        "goose",
 		ExecName:    "goose",
@@ -651,9 +470,7 @@ var Registry = map[string]*Tool{
 		},
 	},
 
-	// Crush resolves `$ENV` references in its config. Generate a complete,
-	// process-scoped model catalogue and keep the relay credential only in the
-	// child environment.
+	// Crush resolves `$ENV` references in its config. Generate a complete, process-scoped model catalogue and keep the relay credential only in the child environment.
 	"crush": {
 		Name:             "crush",
 		ExecName:         "crush",
@@ -667,12 +484,7 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: ignoreBootModel(prepareCrushWithModels),
 	},
 
-	// Cline CLI supports an explicit provider-settings path. Redirect it to a
-	// lifecycle-bound data directory so EveryAPI never mutates ~/.cline. Use its
-	// overridable LM Studio provider for OpenAI-compatible Chat Completions. The
-	// gateway bridges OpenAI/Codex Responses models through that endpoint so
-	// Cline's provider-scoped /model picker can present one EveryAPI catalogue;
-	// future non-bridgeable Responses models retain an openai-native fallback.
+	// Cline CLI supports an explicit provider-settings path. Redirect it to a lifecycle-bound data directory so EveryAPI never mutates ~/.cline. Use its overridable LM Studio provider for OpenAI-compatible Chat Completions. The gateway bridges OpenAI/Codex Responses models through that endpoint so Cline's provider-scoped /model picker can present one EveryAPI catalogue; future non-bridgeable Responses models retain an openai-native fallback.
 	"cline": {
 		Name:                "cline",
 		ExecName:            "clite",
@@ -687,9 +499,7 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: ignoreBootModel(prepareClineWithModels),
 	},
 
-	// OpenClaw's local TUI embeds the agent runtime, so it does not need a
-	// separately managed gateway process. A generated config registers the live
-	// EveryAPI model catalogue and refers to the relay key through SecretRef.
+	// OpenClaw's local TUI embeds the agent runtime, so it does not need a separately managed gateway process. A generated config registers the live EveryAPI model catalogue and refers to the relay key through SecretRef.
 	"openclaw": {
 		Name:             "openclaw",
 		ExecName:         "openclaw",
@@ -704,9 +514,7 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: ignoreBootModel(prepareOpenClawWithModels),
 	},
 
-	// Continue accepts an explicit local assistant YAML and resolves local
-	// secrets from process.env. Keep both its config and session state in the
-	// lifecycle-bound CONTINUE_GLOBAL_DIR.
+	// Continue accepts an explicit local assistant YAML and resolves local secrets from process.env. Keep both its config and session state in the lifecycle-bound CONTINUE_GLOBAL_DIR.
 	"continue": {
 		Name:             "continue",
 		ExecName:         "cn",
@@ -720,9 +528,7 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: ignoreBootModel(prepareContinueWithModels),
 	},
 
-	// Open WebUI documents both the `open-webui serve` launcher and these
-	// semicolon-delimited OpenAI connection environment variables. Keep the
-	// gateway credential process-scoped and let the sidecar supervise the server.
+	// Open WebUI documents both the `open-webui serve` launcher and these semicolon-delimited OpenAI connection environment variables. Keep the gateway credential process-scoped and let the sidecar supervise the server.
 	"open-webui": {
 		Name:        "open-webui",
 		ExecName:    "open-webui",
@@ -746,9 +552,21 @@ var Registry = map[string]*Tool{
 		prepareFn: prepareOpenWebUI,
 	},
 
-	// Kilo CLI is an OpenCode fork with its own trusted
-	// KILO_CONFIG_CONTENT surface. Reuse the reviewed OpenCode provider shape
-	// while preventing project configuration from overriding the launch.
+	// DeepSeek Harness publishes the `dsh` binary from its official npm package. The preparation hook owns only the EveryAPI provider entry and credential; `dsh web` serves the official UI on its default loopback address.
+	"deepseek-harness": {
+		Name:             "deepseek-harness",
+		ExecName:         "dsh",
+		InstallHint:      "Install DeepSeek Harness: https://github.com/deepseek-ai/deepseek-harness#run",
+		InstallCmd:       "npm install -g @deepseek-ai/dsh",
+		DefaultArgs:      []string{"web"},
+		RequiredEndpoint: "openai",
+		envFn: func(_, _ string) map[string]string {
+			return map[string]string{}
+		},
+		prepareCatalogFn: ignoreBootModel(prepareDeepSeekHarnessWithModels),
+	},
+
+	// Kilo CLI is an OpenCode fork with its own trusted KILO_CONFIG_CONTENT surface. Reuse the reviewed OpenCode provider shape while preventing project configuration from overriding the launch.
 	"kilo": {
 		Name:                "kilo",
 		ExecName:            "kilo",
@@ -763,8 +581,7 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: ignoreBootModel(prepareKiloWithModels),
 	},
 
-	// Pi documents an overrideable agent directory and environment-backed
-	// credentials in models.json. Its isolated settings pin the selected model.
+	// Pi documents an overrideable agent directory and environment-backed credentials in models.json. Its isolated settings pin the selected model.
 	"pi": {
 		Name:                "pi",
 		ExecName:            "pi",
@@ -779,9 +596,7 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: ignoreBootModel(preparePiWithModels),
 	},
 
-	// Vibe's VIBE_HOME is an official profile boundary. A generated TOML file
-	// registers EveryAPI as a generic OpenAI-compatible provider and references
-	// the process environment for its credential.
+	// Vibe's VIBE_HOME is an official profile boundary. A generated TOML file registers EveryAPI as a generic OpenAI-compatible provider and references the process environment for its credential.
 	"vibe": {
 		Name:        "vibe",
 		ExecName:    "vibe",
@@ -801,9 +616,7 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: ignoreBootModel(prepareVibeWithModels),
 	},
 
-	// GitHub Copilot CLI exposes an official BYOK environment contract. Keep
-	// provider selection process-scoped and choose chat/completions versus
-	// Responses from the selected model's live EveryAPI capabilities.
+	// GitHub Copilot CLI exposes an official BYOK environment contract. Keep provider selection process-scoped and choose chat/completions versus Responses from the selected model's live EveryAPI capabilities.
 	"copilot": {
 		Name:                "copilot",
 		ExecName:            "copilot",
@@ -824,9 +637,7 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: ignoreBootModel(prepareCopilotWithModels),
 	},
 
-	// Factory Droid merges an explicit --settings file only for the current
-	// process. Generate one isolated custom model and refer to the credential
-	// through Droid's documented ${ENV_VAR} expansion.
+	// Factory Droid merges an explicit --settings file only for the current process. Generate one isolated custom model and refer to the credential through Droid's documented ${ENV_VAR} expansion.
 	"droid": {
 		Name:                "droid",
 		ExecName:            "droid",
@@ -841,9 +652,7 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: ignoreBootModel(prepareDroidWithModels),
 	},
 
-	// OpenHands CLI supports process-only LLM_* overrides when the explicit
-	// --override-with-envs switch is present. No persistent user settings are
-	// read or mutated for this launch.
+	// OpenHands CLI supports process-only LLM_* overrides when the explicit --override-with-envs switch is present. No persistent user settings are read or mutated for this launch.
 	"openhands": {
 		Name:        "openhands",
 		ExecName:    "openhands",
@@ -867,10 +676,7 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: ignoreBootModel(prepareOpenHandsWithModels),
 	},
 
-	// ForgeCode's Chat Completions and Responses-compatible providers read their
-	// endpoint and credential from the process environment. A temporary
-	// FORGE_CONFIG prevents its credential migration from writing the relay key
-	// into the user's profile.
+	// ForgeCode's Chat Completions and Responses-compatible providers read their endpoint and credential from the process environment. A temporary FORGE_CONFIG prevents its credential migration from writing the relay key into the user's profile.
 	"forge": {
 		Name:        "forge",
 		ExecName:    "forge",
@@ -895,8 +701,7 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: ignoreBootModel(prepareForgeWithModels),
 	},
 
-	// LLxprt accepts an explicit provider, Base URL, and model at CLI
-	// precedence. Its application roots are isolated by the preparation hook.
+	// LLxprt accepts an explicit provider, Base URL, and model at CLI precedence. Its application roots are isolated by the preparation hook.
 	"llxprt": {
 		Name:             "llxprt",
 		ExecName:         "llxprt",
@@ -910,9 +715,7 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: ignoreBootModel(prepareLLxprtWithModels),
 	},
 
-	// xAI Grok Build: GROK_MODELS_BASE_URL discovers the live catalogue and
-	// XAI_API_KEY supplies its bearer credential. prepareGrok uses a fresh auth
-	// path per launch so a cached xAI browser session cannot override that key.
+	// xAI Grok Build: GROK_MODELS_BASE_URL discovers the live catalogue and XAI_API_KEY supplies its bearer credential. prepareGrok uses a fresh auth path per launch so a cached xAI browser session cannot override that key.
 	"grok": {
 		Name:             "grok",
 		ExecName:         "grok",
@@ -932,9 +735,7 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: ignoreBootModel(prepareGrokWithModels),
 	},
 
-	// Alibaba Qwen Code supports OpenAI-compatible providers through the
-	// standard OPENAI_* environment variables. prepareQwenCode isolates its
-	// launch state; cmd/use pins the OpenAI protocol at CLI precedence.
+	// Alibaba Qwen Code supports OpenAI-compatible providers through the standard OPENAI_* environment variables. prepareQwenCode isolates its launch state; cmd/use pins the OpenAI protocol at CLI precedence.
 	"qwen-code": {
 		Name:             "qwen-code",
 		ExecName:         "qwen",
@@ -954,9 +755,7 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: ignoreBootModel(prepareQwenCodeWithModels),
 	},
 
-	// Moonshot Kimi Code can synthesize a temporary model entirely from the
-	// KIMI_MODEL_* environment family. Use its OpenAI-compatible provider so
-	// the selected EveryAPI catalogue model rides /v1/chat/completions.
+	// Moonshot Kimi Code can synthesize a temporary model entirely from the KIMI_MODEL_* environment family. Use its OpenAI-compatible provider so the selected EveryAPI catalogue model rides /v1/chat/completions.
 	"kimi-code": {
 		Name:             "kimi-code",
 		ExecName:         "kimi",
@@ -977,32 +776,19 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: ignoreBootModel(prepareKimiCodeWithModels),
 	},
 
-	// Nous Research Hermes Agent (Python CLI, binary `hermes`). Unlike
-	// claude/gemini, hermes does NOT read OPENAI_BASE_URL for its main
-	// model — config.yaml is the single source of truth for the
-	// endpoint, and OPENAI_API_KEY is only consulted when base_url's
-	// host is openai.com (so it never attaches for an EveryAPI host).
-	// So all routing goes through a generated config.yaml under an
-	// isolated HERMES_HOME (see hermes.go): provider=custom pins
-	// hermes at <apiBase>/v1, with the relay key inlined as
-	// model.api_key. envFn therefore sets nothing — HERMES_HOME comes
-	// from prepareFn. Yolo is env-based (HERMES_YOLO_MODE), not a flag.
+	// Nous Research Hermes Agent (Python CLI, binary `hermes`). Unlike claude/gemini, hermes does NOT read OPENAI_BASE_URL for its main model — config.yaml is the single source of truth for the endpoint, and OPENAI_API_KEY is only consulted when base_url's host is openai.com (so it never attaches for an EveryAPI host). So all routing goes through a generated config.yaml under an isolated HERMES_HOME (see hermes.go): provider=custom pins hermes at <apiBase>/v1, with the relay key inlined as model.api_key. envFn therefore sets nothing — HERMES_HOME comes from prepareFn. Yolo is env-based (HERMES_YOLO_MODE), not a flag.
 	"hermes": {
 		Name:        "hermes",
 		ExecName:    "hermes",
 		InstallHint: "Install Hermes Agent: https://github.com/NousResearch/hermes-agent (or: pip install hermes-agent)",
-		// Pin the third-party script to an immutable commit. Updating Hermes
-		// requires reviewing the new script and deliberately changing this SHA;
-		// never point an auto-executed installer at main/master/HEAD.
+		// Pin the third-party script to an immutable commit. Updating Hermes requires reviewing the new script and deliberately changing this SHA; never point an auto-executed installer at main/master/HEAD.
 		InstallCmd: "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/e444d165807f489b5c1ab8e4a612c8d09c2e67a2/scripts/install.sh | bash -s -- --non-interactive --skip-setup",
 		InstallCmdWindows: []string{
 			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
 			"$installer = [scriptblock]::Create((irm https://hermes-agent.nousresearch.com/install.ps1)); & $installer -NonInteractive",
 		},
 		InstallCmdUnixOnly: true,
-		// That script's get_command_link_dir() links the command into
-		// $HOME/.local/bin for the default non-root install (/usr/local/bin
-		// when run as root, which is already a conventional PATH entry).
+		// That script's get_command_link_dir() links the command into $HOME/.local/bin for the default non-root install (/usr/local/bin when run as root, which is already a conventional PATH entry).
 		ExtraBinDirs:               []string{".local/bin"},
 		WindowsLocalAppDataBinDirs: []string{"hermes/hermes-agent/bin"},
 		YoloEnv:                    "HERMES_YOLO_MODE",
@@ -1017,9 +803,7 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: ignoreBootModel(prepareHermesWithModels),
 	},
 
-	// LibreFang ships a first-party EveryAPI credential-process integration.
-	// It resolves the current relay key per request and owns its provider state,
-	// so launch it natively without copying a credential into the environment.
+	// LibreFang ships a first-party EveryAPI credential-process integration. It resolves the current relay key per request and owns its provider state, so launch it natively without copying a credential into the environment.
 	"librefang": {
 		Name:        "librefang",
 		ExecName:    "librefang",
@@ -1031,9 +815,7 @@ var Registry = map[string]*Tool{
 		},
 		InstallCmdUnixOnly: true,
 		ExtraBinDirs:       []string{".librefang/bin"},
-		// Keep the daemon attached to the EveryAPI supervisor. Plain `start`
-		// detaches a second process and exits, which makes Connect immediately
-		// lose the only trustworthy session signal and report zero connections.
+		// Keep the daemon attached to the EveryAPI supervisor. Plain `start` detaches a second process and exits, which makes Connect immediately lose the only trustworthy session signal and report zero connections.
 		DefaultArgs: []string{"start", "--foreground"},
 		Native:      true,
 		envFn: func(_, _ string) map[string]string {
@@ -1042,8 +824,7 @@ var Registry = map[string]*Tool{
 	},
 }
 
-// Lookup returns the tool entry for `name`, or an error listing the
-// supported names. cmd/use.go renders that error directly to the user.
+// Lookup returns the tool entry for `name`, or an error listing the supported names. cmd/use.go renders that error directly to the user.
 func Lookup(name string) (*Tool, error) {
 	t, ok := Registry[strings.ToLower(name)]
 	if !ok {
@@ -1052,14 +833,10 @@ func Lookup(name string) (*Tool, error) {
 	return t, nil
 }
 
-// Names returns the registered tool names in stable order. Used by
-// the no-arg `everyapi use` interactive picker and by Lookup's error
-// message.
+// Names returns the registered tool names in stable order. Used by the no-arg `everyapi use` interactive picker and by Lookup's error message.
 func Names() []string {
-	// Deterministic order matters for both the error message and the
-	// picker UX. Hand-coded to match the ordering most likely to
-	// reflect user demand.
+	// Deterministic order matters for both the error message and the picker UX. Hand-coded to match the ordering most likely to reflect user demand.
 	return []string{
-		"claude", "codex", "opencode", "gemini", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang", "open-webui",
+		"claude", "codex", "opencode", "gemini", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang", "open-webui", "deepseek-harness",
 	}
 }

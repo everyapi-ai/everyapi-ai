@@ -4,14 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// TestWriteKey covers the validation centralised in writeKey —
-// the actual disk roundtrip is config's responsibility, tested
-// there; we just make sure the dispatcher refuses garbage before
-// the file is touched.
+// TestWriteKey covers the validation centralised in writeKey — the actual disk roundtrip is config's responsibility, tested there; we just make sure the dispatcher refuses garbage before the file is touched.
 func TestWriteKey(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -59,8 +56,7 @@ func TestReadKey(t *testing.T) {
 	}
 }
 
-// TestLabelLanguage covers the "show what's actually active" path
-// the list command uses when no explicit preference is stored.
+// TestLabelLanguage covers the "show what's actually active" path the list command uses when no explicit preference is stored.
 func TestLabelLanguage(t *testing.T) {
 	i18n.SetLanguage(i18n.LangEn)
 	if got := labelLanguage(""); got != "(default: en)" {
@@ -71,9 +67,7 @@ func TestLabelLanguage(t *testing.T) {
 	}
 }
 
-// TestMenuLayout_WriteReadRoundTrip covers the menu_layout key: valid
-// values stick, invalid ones are rejected, and readKey reports the
-// effective layout (empty → grouped).
+// TestMenuLayout_WriteReadRoundTrip covers the menu_layout key: valid values stick, invalid ones are rejected, and readKey reports the effective layout (empty → grouped).
 func TestMenuLayout_WriteReadRoundTrip(t *testing.T) {
 	s := &config.Settings{}
 
@@ -162,11 +156,7 @@ func TestSafetyPreferencesWriteReadRoundTrip(t *testing.T) {
 	}
 }
 
-// The editor is the only surface most people ever see, and it used to ask two
-// hard-coded questions — so gateway_region, codex_hook_trust_bypass and
-// dangerous_mode existed in the file, in `settings set`, and in `settings
-// list`, but were invisible and unreachable there. Tie the two together: every
-// key writeKey accepts has to have a row.
+// The editor is the only surface most people ever see, and it used to ask two hard-coded questions — so gateway_region, codex_hook_trust_bypass and dangerous_mode existed in the file, in `settings set`, and in `settings list`, but were invisible and unreachable there. Tie the two together: every key writeKey accepts has to have a row.
 func TestSettingRowsCoverEverySettingsKey(t *testing.T) {
 	keys := []string{"language", "menu_layout", "gateway_region", "codex_hook_trust_bypass", "dangerous_mode"}
 	rows := settingRows()
@@ -195,8 +185,7 @@ func TestSettingRowsCoverEverySettingsKey(t *testing.T) {
 	}
 }
 
-// The relay key is not a settings.json key, so it carries no key field — but
-// it must still be offered, since it decides which models a launch can reach.
+// The relay key is not a settings.json key, so it carries no key field — but it must still be offered, since it decides which models a launch can reach.
 func TestSettingRowsOfferTheDefaultRelayKey(t *testing.T) {
 	var found int
 	for _, row := range settingRows() {
@@ -237,8 +226,7 @@ func TestLabelDefaultRelayKey(t *testing.T) {
 	})
 }
 
-// Renders every row the way the menu does, so a row whose value function
-// panics or returns an empty string fails here rather than on a user's screen.
+// Renders every row the way the menu does, so a row whose value function panics or returns an empty string fails here rather than on a user's screen.
 func TestEditorMenuRendersEveryRow(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	previous := i18n.Language()
@@ -264,8 +252,7 @@ func TestEditorMenuRendersEveryRow(t *testing.T) {
 	if len(lines) != 7 {
 		t.Fatalf("menu has %d lines, want 6 settings plus Done", len(lines))
 	}
-	// The value column has to show what is in effect, not the raw field: an
-	// unset tri-state reads "unset", not "false".
+	// The value column has to show what is in effect, not the raw field: an unset tri-state reads "unset", not "false".
 	if got := lines[2]; got != "Gateway region: cn" {
 		t.Errorf("gateway region rendered as %q", got)
 	}
@@ -281,10 +268,7 @@ func TestEditorMenuRendersEveryRow(t *testing.T) {
 	t.Log("interactive editor:\n  " + strings.Join(lines, "\n  "))
 }
 
-// Every row a person reads has to be a translated string. Three keys used to
-// render their raw identifier as the label — and their value as a bare Go
-// bool — so a zh session showed "dangerous_mode: true" in the middle of an
-// otherwise translated screen.
+// Every row a person reads has to be a translated string. Three keys used to render their raw identifier as the label — and their value as a bare Go bool — so a zh session showed "dangerous_mode: true" in the middle of an otherwise translated screen.
 func TestSettingRowLabelsAreTranslated(t *testing.T) {
 	previous := i18n.Language()
 	t.Cleanup(func() { i18n.SetLanguage(previous) })
@@ -301,8 +285,7 @@ func TestSettingRowLabelsAreTranslated(t *testing.T) {
 	}
 }
 
-// `settings get` / `set` are a scripting interface: those words are the ones
-// the CLI accepts back, so they must NOT follow the display language.
+// `settings get` / `set` are a scripting interface: those words are the ones the CLI accepts back, so they must NOT follow the display language.
 func TestMachineBoolStaysEnglish(t *testing.T) {
 	previous := i18n.Language()
 	t.Cleanup(func() { i18n.SetLanguage(previous) })

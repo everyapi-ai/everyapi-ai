@@ -6,16 +6,13 @@ import (
 
 	"github.com/muesli/termenv"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
-	"github.com/everyapi-ai/everyapi-ai/internal/styletest"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/styletest"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 )
 
-// roleLabel / userStatusLabel must translate the known enums and fall
-// back to the raw form for anything unexpected (so a future backend role
-// is visible, not silently blank). Force the Ascii profile so labels are
-// plain (no color escapes) regardless of the test host's TERM.
+// roleLabel / userStatusLabel must translate the known enums and fall back to the raw form for anything unexpected (so a future backend role is visible, not silently blank). Force the Ascii profile so labels are plain (no color escapes) regardless of the test host's TERM.
 func TestRoleAndStatusLabels(t *testing.T) {
 	styletest.WithColorProfile(t, termenv.Ascii)
 	i18n.SetLanguage("en")
@@ -38,8 +35,7 @@ func TestRoleAndStatusLabels(t *testing.T) {
 	}
 }
 
-// commaInt groups by threes, including the boundary cases that off-by-one
-// grouping bugs trip on.
+// commaInt groups by threes, including the boundary cases that off-by-one grouping bugs trip on.
 func TestCommaInt(t *testing.T) {
 	cases := map[int64]string{
 		0: "0", 5: "5", 99: "99", 100: "100", 999: "999",
@@ -53,8 +49,7 @@ func TestCommaInt(t *testing.T) {
 	}
 }
 
-// fmtQuota converts to USD when the divisor is known and falls back to a
-// grouped raw count when it isn't (perUnit==0).
+// fmtQuota converts to USD when the divisor is known and falls back to a grouped raw count when it isn't (perUnit==0).
 func TestFmtQuota(t *testing.T) {
 	if got := fmtQuota(9000000, 500000); got != "$18.00" {
 		t.Errorf("fmtQuota(9000000, 500000) = %q, want $18.00", got)
@@ -64,10 +59,7 @@ func TestFmtQuota(t *testing.T) {
 	}
 }
 
-// sanitize must neutralize attacker-influenceable backend strings before
-// they reach the operator's terminal: strip ANSI escape sequences and drop
-// control bytes, while leaving ordinary (incl. multi-byte UTF-8) text — and
-// tabs — intact so column widths are unchanged.
+// sanitize must neutralize attacker-influenceable backend strings before they reach the operator's terminal: strip ANSI escape sequences and drop control bytes, while leaving ordinary (incl. multi-byte UTF-8) text — and tabs — intact so column widths are unchanged.
 func TestSanitize(t *testing.T) {
 	cases := map[string]string{
 		"\x1b[31mX\x1b[0m":    "X",        // CSI color escapes stripped
@@ -88,8 +80,7 @@ func TestSanitize(t *testing.T) {
 	}
 }
 
-// padLeft / padName align by display width (CJK runes count as 2), which
-// is what keeps the table columns straight.
+// padLeft / padName align by display width (CJK runes count as 2), which is what keeps the table columns straight.
 func TestPad(t *testing.T) {
 	if got := padLeft("#1", 4); got != "  #1" {
 		t.Errorf("padLeft(#1,4) = %q, want '  #1'", got)
@@ -103,10 +94,7 @@ func TestPad(t *testing.T) {
 	}
 }
 
-// captureOut swaps cliout.Out for a buffer for the duration of the test and
-// returns what was written. Forces the Ascii color profile first so style.*
-// never injects its own escapes — then any ESC/BEL left in the output can
-// only have come from an unsanitized backend string.
+// captureOut swaps cliout.Out for a buffer for the duration of the test and returns what was written. Forces the Ascii color profile first so style.* never injects its own escapes — then any ESC/BEL left in the output can only have come from an unsanitized backend string.
 func captureOut(t *testing.T, fn func()) string {
 	t.Helper()
 	styletest.WithColorProfile(t, termenv.Ascii)
@@ -118,9 +106,7 @@ func captureOut(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
-// assertNoTerminalEscapes fails if the rendered admin output still carries
-// raw terminal control bytes — the injection the sanitize() wiring exists to
-// stop. (ESC drives CSI/OSC; BEL terminates an OSC title/clipboard write.)
+// assertNoTerminalEscapes fails if the rendered admin output still carries raw terminal control bytes — the injection the sanitize() wiring exists to stop. (ESC drives CSI/OSC; BEL terminates an OSC title/clipboard write.)
 func assertNoTerminalEscapes(t *testing.T, label, out string) {
 	t.Helper()
 	if strings.ContainsRune(out, 0x1b) {
@@ -131,10 +117,7 @@ func assertNoTerminalEscapes(t *testing.T, label, out string) {
 	}
 }
 
-// printUserRows / printUserDetail must sanitize the user-controlled backend
-// fields (username/display_name are settable by any user via PUT
-// /api/user/self) before they reach the admin's terminal, so `admin user
-// list/search/show` can't be turned into a terminal-escape injection.
+// printUserRows / printUserDetail must sanitize the user-controlled backend fields (username/display_name are settable by any user via PUT /api/user/self) before they reach the admin's terminal, so `admin user list/search/show` can't be turned into a terminal-escape injection.
 func TestPrintUserSanitizesEscapes(t *testing.T) {
 	i18n.SetLanguage("en")
 	u := api.AdminUserRow{

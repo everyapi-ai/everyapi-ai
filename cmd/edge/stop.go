@@ -4,8 +4,8 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 )
 
 func edgeStop(args []string) error {
@@ -31,10 +31,7 @@ func edgeStop(args []string) error {
 	if err != nil {
 		return err
 	}
-	// A registered-but-never-started node has no docker-compose.yml;
-	// `docker compose -f docker-compose.yml down` would abort with a
-	// cryptic "no configuration file provided". Treat it as a clean
-	// no-op instead.
+	// A registered-but-never-started node has no docker-compose.yml; `docker compose -f docker-compose.yml down` would abort with a cryptic "no configuration file provided". Treat it as a clean no-op instead.
 	if !composeFileExists(dir) {
 		cliout.Printf(i18n.T("edge.not_started"), nodeID)
 		return nil

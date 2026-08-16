@@ -9,8 +9,7 @@ import (
 
 const llxprtModelEnv = "EVERYAPI_LLXPRT_MODEL"
 
-// prepareLLxprtWithModels uses LLxprt's official runtime provider flags and
-// redirects all four application roots to one lifecycle-bound directory.
+// prepareLLxprtWithModels uses LLxprt's official runtime provider flags and redirects all four application roots to one lifecycle-bound directory.
 func prepareLLxprtWithModels(apiBase, _ string, models []Model) (map[string]string, error) {
 	selected := strings.TrimSpace(os.Getenv(llxprtModelEnv))
 	if selected == "" {

@@ -1,9 +1,4 @@
-// Package wallet wires `everyapi wallet …` — payment history,
-// payment methods, and redemption-key application. The existing
-// `everyapi wallet topup` command (which opens the dashboard top-up page
-// behind the §7-5 anti-phishing handshake) stays as-is for actual
-// money-in flows; wallet covers everything that's safe to do over
-// the API without a browser.
+// Package wallet wires `everyapi wallet …` — payment history, payment methods, and redemption-key application. The existing `everyapi wallet topup` command (which opens the dashboard top-up page behind the §7-5 anti-phishing handshake) stays as-is for actual money-in flows; wallet covers everything that's safe to do over the API without a browser.
 package wallet
 
 import (
@@ -17,18 +12,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
-	"github.com/everyapi-ai/everyapi-ai/internal/style"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliargs"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/style"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// styledRedeemed renders the wallet.redeemed line with the credited
-// quota bolded. The amount is **-marked in wallet.redeemed across every
-// locale; routing the formatted string through style.Emph bolds it on a
-// styled terminal and strips the markers when piped / NO_COLOR.
+// styledRedeemed renders the wallet.redeemed line with the credited quota bolded. The amount is **-marked in wallet.redeemed across every locale; routing the formatted string through style.Emph bolds it on a styled terminal and strips the markers when piped / NO_COLOR.
 func styledRedeemed(quota int64) string {
 	return style.Emph(fmt.Sprintf(i18n.T("wallet.redeemed"), quota))
 }
@@ -151,8 +143,7 @@ func runInfo(args []string) error {
 		for k := range info.Discount {
 			keys = append(keys, k)
 		}
-		// Tiers are numeric amount thresholds ("10","100","1000"); sort by
-		// value, not lexically, or "1000" would sort before "20".
+		// Tiers are numeric amount thresholds ("10","100","1000"); sort by value, not lexically, or "1000" would sort before "20".
 		sort.Slice(keys, func(i, j int) bool {
 			fi, _ := strconv.ParseFloat(keys[i], 64)
 			fj, _ := strconv.ParseFloat(keys[j], 64)
@@ -174,20 +165,13 @@ func runRedeem(args []string) error {
 	if len(args) == 0 {
 		return errors.New(i18n.T("wallet.usage_redeem"))
 	}
-	// Intercept help BEFORE treating args[0] as a key: fs.Parse below only
-	// sees args[1:], so without this `wallet redeem --help` would POST
-	// "--help" as a literal key and return "invalid redemption code".
+	// Intercept help BEFORE treating args[0] as a key: fs.Parse below only sees args[1:], so without this `wallet redeem --help` would POST "--help" as a literal key and return "invalid redemption code".
 	switch args[0] {
 	case "-h", "--help", "help":
 		cliout.Println(i18n.T("wallet.usage_redeem"))
 		return nil
 	}
-	// A redemption key is a transferable bearer secret: taking it as a
-	// positional arg writes it into shell history and exposes it via
-	// `ps` / `/proc/<pid>/cmdline`. Accept `-` to read the key from stdin
-	// (one line) so it never lands in argv — the secure invocation,
-	// mirroring `docker login --password-stdin`. The positional form stays
-	// for back-compat.
+	// A redemption key is a transferable bearer secret: taking it as a positional arg writes it into shell history and exposes it via `ps` / `/proc/<pid>/cmdline`. Accept `-` to read the key from stdin (one line) so it never lands in argv — the secure invocation, mirroring `docker login --password-stdin`. The positional form stays for back-compat.
 	var key string
 	if args[0] == "-" {
 		sc := bufio.NewScanner(os.Stdin)

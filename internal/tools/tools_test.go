@@ -14,12 +14,10 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// TestRegistry_HasExpectedTools pins the V1 supported set. New tools
-// can be added freely; removing one should be a deliberate spec
-// change that breaks this test.
+// TestRegistry_HasExpectedTools pins the V1 supported set. New tools can be added freely; removing one should be a deliberate spec change that breaks this test.
 func TestRegistry_HasExpectedTools(t *testing.T) {
 	want := []string{
-		"claude", "codex", "opencode", "gemini", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang", "open-webui",
+		"claude", "codex", "opencode", "gemini", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang", "open-webui", "deepseek-harness",
 	}
 	got := Names()
 	if len(got) != len(want) {
@@ -42,9 +40,7 @@ func TestClineUsesOfficialCLiteExecutable(t *testing.T) {
 	}
 }
 
-// TestEnv_Claude verifies the Anthropic env contract: no /v1 suffix
-// (their SDK appends its own version path), token in AUTH_TOKEN not
-// API_KEY (Claude Code's documented variable).
+// TestEnv_Claude verifies the Anthropic env contract: no /v1 suffix (their SDK appends its own version path), token in AUTH_TOKEN not API_KEY (Claude Code's documented variable).
 func TestEnv_Claude(t *testing.T) {
 	tool, err := Lookup("claude")
 	if err != nil {
@@ -66,9 +62,7 @@ func TestEnv_Claude(t *testing.T) {
 	if got := env["CLAUDE_CODE_DISABLE_ADVISOR_TOOL"]; got != "1" {
 		t.Errorf("CLAUDE_CODE_DISABLE_ADVISOR_TOOL = %q, want 1", got)
 	}
-	// ANTHROPIC_API_KEY must be present and empty: mergeEnv overlays it
-	// onto the child env to neutralise any ambient real Anthropic key so
-	// it can't leak to the gateway or shadow ANTHROPIC_AUTH_TOKEN.
+	// ANTHROPIC_API_KEY must be present and empty: mergeEnv overlays it onto the child env to neutralise any ambient real Anthropic key so it can't leak to the gateway or shadow ANTHROPIC_AUTH_TOKEN.
 	if got, ok := env["ANTHROPIC_API_KEY"]; !ok || got != "" {
 		t.Errorf("ANTHROPIC_API_KEY = %q (present=%v), want present and empty", got, ok)
 	}
@@ -86,10 +80,7 @@ func TestProviderNamesAreNotTools(t *testing.T) {
 	}
 }
 
-// TestEnv_Codex verifies codex's env contract: only OPENAI_API_KEY.
-// Codex does NOT honor OPENAI_BASE_URL at runtime — its router is
-// pinned to ~/.codex/config.toml's model_provider. The base_url is
-// injected via the prepareFn (CODEX_HOME → config.toml) instead.
+// TestEnv_Codex verifies codex's env contract: only OPENAI_API_KEY. Codex does NOT honor OPENAI_BASE_URL at runtime — its router is pinned to ~/.codex/config.toml's model_provider. The base_url is injected via the prepareFn (CODEX_HOME → config.toml) instead.
 func TestEnv_Codex(t *testing.T) {
 	tool, _ := Lookup("codex")
 	env := tool.Env("https://api.everyapi.ai", "my-token")
@@ -97,10 +88,7 @@ func TestEnv_Codex(t *testing.T) {
 		t.Errorf("OPENAI_API_KEY = %q", got)
 	}
 	if _, ok := env["OPENAI_BASE_URL"]; ok {
-		// If you're re-adding OPENAI_BASE_URL, double-check codex
-		// actually reads it — last time we checked, it doesn't,
-		// and setting it created confusing "the env is set but
-		// requests still hit api.openai.com" debug sessions.
+		// If you're re-adding OPENAI_BASE_URL, double-check codex actually reads it — last time we checked, it doesn't, and setting it created confusing "the env is set but requests still hit api.openai.com" debug sessions.
 		t.Error("codex env should not set OPENAI_BASE_URL (codex routes via config.toml model_provider, see prepareFn)")
 	}
 }
@@ -316,8 +304,7 @@ func TestLibreFangUsesItsOfficialCredentialProcessIntegration(t *testing.T) {
 	}
 }
 
-// TestEnv_Grok verifies Grok Build's documented environment contract and
-// keeps its browser-login state separate from EveryAPI's relay credential.
+// TestEnv_Grok verifies Grok Build's documented environment contract and keeps its browser-login state separate from EveryAPI's relay credential.
 func TestEnv_Grok(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	tool, err := Lookup("grok")
@@ -360,8 +347,7 @@ func TestEnv_Grok(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(wantHome, "auth.json"), []byte(`{"cached":"xai-oauth"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// Grok 1.0.3 no longer honors GROK_AUTH_PATH. Its cached OAuth session
-	// outranks XAI_API_KEY, so EveryAPI's dedicated home must begin without it.
+	// Grok 1.0.3 no longer honors GROK_AUTH_PATH. Its cached OAuth session outranks XAI_API_KEY, so EveryAPI's dedicated home must begin without it.
 	extra, err := tool.Prepare("https://api.everyapi.ai", "my-token")
 	if err != nil {
 		t.Fatal(err)
@@ -525,13 +511,7 @@ func TestEnv_KimiCode(t *testing.T) {
 	}
 }
 
-// TestEnv_Hermes verifies hermes' env contract: envFn sets NOTHING.
-// All routing (base_url + relay key) goes through the generated
-// config.yaml in prepareHermes; in particular OPENAI_BASE_URL /
-// OPENAI_API_KEY must NOT be set, since hermes ignores OPENAI_BASE_URL
-// for its main model and only honors OPENAI_API_KEY for openai.com
-// hosts — setting them would create confusing "env is set but nothing
-// routes" debug sessions. HERMES_HOME comes from prepareFn, not here.
+// TestEnv_Hermes verifies hermes' env contract: envFn sets NOTHING. All routing (base_url + relay key) goes through the generated config.yaml in prepareHermes; in particular OPENAI_BASE_URL / OPENAI_API_KEY must NOT be set, since hermes ignores OPENAI_BASE_URL for its main model and only honors OPENAI_API_KEY for openai.com hosts — setting them would create confusing "env is set but nothing routes" debug sessions. HERMES_HOME comes from prepareFn, not here.
 func TestEnv_Hermes(t *testing.T) {
 	tool, _ := Lookup("hermes")
 	env := tool.Env("https://api.everyapi.ai", "my-token")
@@ -663,8 +643,7 @@ func containsString(values []string, want string) bool {
 	return false
 }
 
-// TestLookup_Unknown returns an error listing supported names so the
-// CLI doesn't have to maintain a parallel list.
+// TestLookup_Unknown returns an error listing supported names so the CLI doesn't have to maintain a parallel list.
 func TestLookup_Unknown(t *testing.T) {
 	_, err := Lookup("vibes-cli")
 	if err == nil {
@@ -678,18 +657,14 @@ func TestLookup_Unknown(t *testing.T) {
 	}
 }
 
-// TestLookup_CaseInsensitive — users typing `everyapi use Claude`
-// shouldn't get a "not found" surprise.
+// TestLookup_CaseInsensitive — users typing `everyapi use Claude` shouldn't get a "not found" surprise.
 func TestLookup_CaseInsensitive(t *testing.T) {
 	if _, err := Lookup("Claude"); err != nil {
 		t.Errorf("Lookup(\"Claude\") error: %v", err)
 	}
 }
 
-// TestMergeEnv asserts the env-overlay semantics relied on by
-// syscall.Exec: keys in `set` override matching entries from the
-// parent env; non-matching parent entries pass through; keys in
-// `set` not present in the parent are appended.
+// TestMergeEnv asserts the env-overlay semantics relied on by syscall.Exec: keys in `set` override matching entries from the parent env; non-matching parent entries pass through; keys in `set` not present in the parent are appended.
 func TestMergeEnv(t *testing.T) {
 	t.Setenv("ANTHROPIC_BASE_URL", "https://old.example")
 	t.Setenv("UNRELATED_VAR", "keep-me")
@@ -712,8 +687,7 @@ func TestMergeEnv(t *testing.T) {
 	if got["ANTHROPIC_AUTH_TOKEN"] != "new-tok" {
 		t.Errorf("append missed: ANTHROPIC_AUTH_TOKEN=%q", got["ANTHROPIC_AUTH_TOKEN"])
 	}
-	// Sanity: no duplicate keys (a buggy overlay would emit both the
-	// parent and the override entries).
+	// Sanity: no duplicate keys (a buggy overlay would emit both the parent and the override entries).
 	seen := map[string]int{}
 	for _, kv := range merged {
 		if i := strings.IndexByte(kv, '='); i >= 0 {

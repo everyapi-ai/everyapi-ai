@@ -4,8 +4,8 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 )
 
 func edgeUpdate(args []string) error {
@@ -33,23 +33,11 @@ func edgeUpdate(args []string) error {
 		return err
 	}
 
-	// Re-render docker-compose.yml from persisted meta BEFORE pulling. A new
-	// CLI (shipped via `everyapi update`) can carry a changed compose
-	// template; without re-rendering, `edge update` would only pull images
-	// and leave the node on a stale compose — contradicting the generated
-	// file's own "re-render on update" note. meta.Mode was persisted by
-	// `edge start`; fall back to detection for legacy nodes predating it.
-	// Gateway + image overrides are seeded from meta too, so an `edge start
-	// --gateway / --agent-image / --ollama-image` survives a later `edge
-	// update` instead of reverting to the writeCompose defaults.
+	// Re-render docker-compose.yml from persisted meta BEFORE pulling. A new CLI (shipped via `everyapi update`) can carry a changed compose template; without re-rendering, `edge update` would only pull images and leave the node on a stale compose — contradicting the generated file's own "re-render on update" note. meta.Mode was persisted by `edge start`; fall back to detection for legacy nodes predating it. Gateway + image overrides are seeded from meta too, so an `edge start --gateway / --agent-image / --ollama-image` survives a later `edge update` instead of reverting to the writeCompose defaults.
 	mode := meta.Mode
 	persistMode := false
 	if mode == "" {
-		// Legacy node predating the persisted Mode field. Re-detect, then
-		// persist the result so a later transient nvidia-smi failure can't
-		// silently downgrade the node to CPU on every future update, and
-		// surface the resolved mode like `edge start` does so a fallback
-		// is visible.
+		// Legacy node predating the persisted Mode field. Re-detect, then persist the result so a later transient nvidia-smi failure can't silently downgrade the node to CPU on every future update, and surface the resolved mode like `edge start` does so a fallback is visible.
 		mode = resolveMode(ModeAuto)
 		persistMode = true
 		cliout.Printf(i18n.T("edge.start.mode"), mode, modeDescription(mode, true))
@@ -80,9 +68,7 @@ func edgeUpdate(args []string) error {
 		return fmt.Errorf(i18n.T("edge.update.pull_failed"), err)
 	}
 	cliout.Println(i18n.T("edge.update.up"))
-	// --remove-orphans for defense-in-depth: keep the running set in sync
-	// with the (possibly shrunk) compose file. Scoped to this node's -p
-	// project, so it only removes this node's stale containers.
+	// --remove-orphans for defense-in-depth: keep the running set in sync with the (possibly shrunk) compose file. Scoped to this node's -p project, so it only removes this node's stale containers.
 	if err := runComposeCmd(dir, projectFor(nodeID), "up", "-d", "--remove-orphans"); err != nil {
 		return fmt.Errorf(i18n.T("edge.update.up_failed"), err)
 	}

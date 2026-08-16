@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
-	"github.com/everyapi-ai/everyapi-ai/internal/style"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/style"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -162,12 +162,10 @@ func adminUserManage(args []string) error {
 	if *action == "" {
 		return errors.New("--action is required")
 	}
-	// `delete` here routes to the same irreversible deletion as `admin user
-	// delete`, so gate it behind the identical interactive confirmation.
+	// `delete` here routes to the same irreversible deletion as `admin user delete`, so gate it behind the identical interactive confirmation.
 	if *action == "delete" && !*yes {
 		if !cliprompt.IsInteractive() {
-			// Destructive + no TTY to confirm on: fail closed rather than
-			// silently deleting. Require explicit -y for non-interactive use.
+			// Destructive + no TTY to confirm on: fail closed rather than silently deleting. Require explicit -y for non-interactive use.
 			return errors.New(i18n.T("token.revoke_needs_confirm"))
 		}
 		ok, err := cliprompt.YesNo(
@@ -214,8 +212,7 @@ func adminUserDelete(args []string) error {
 	}
 	if !*yes {
 		if !cliprompt.IsInteractive() {
-			// Destructive + no TTY to confirm on: fail closed rather than
-			// silently deleting. Require explicit -y for non-interactive use.
+			// Destructive + no TTY to confirm on: fail closed rather than silently deleting. Require explicit -y for non-interactive use.
 			return errors.New(i18n.T("token.revoke_needs_confirm"))
 		}
 		ok, err := cliprompt.YesNo(
@@ -288,8 +285,7 @@ func adminChannelTest(args []string) error {
 		cliout.Println("  " + style.Dim(i18n.T("admin.channel.empty_result")))
 		return nil
 	}
-	// Backend test result is a free-form map; sort the keys for a stable
-	// order and align them into a dim-labelled column.
+	// Backend test result is a free-form map; sort the keys for a stable order and align them into a dim-labelled column.
 	keys := make([]string, 0, len(res))
 	w := 0
 	for k := range res {
@@ -323,10 +319,7 @@ func adminChannelTag(args []string) error {
 	if *enable == *disable {
 		return errors.New("pass exactly one of --enable / --disable")
 	}
-	// This mutates EVERY channel carrying the tag in one shot — confirm
-	// before firing (same gate as `admin user delete`). Non-interactive
-	// callers must pass -y so a scripted bulk change is explicit, not
-	// accidental.
+	// This mutates EVERY channel carrying the tag in one shot — confirm before firing (same gate as `admin user delete`). Non-interactive callers must pass -y so a scripted bulk change is explicit, not accidental.
 	if !*yes {
 		confirmKey := "admin.channel.tag_confirm_disable"
 		if *enable {
@@ -412,10 +405,7 @@ func adminLogTail(args []string) error {
 	cliout.Printf(i18n.T("admin.common.rows_total")+"\n", len(rows), total)
 	for _, r := range rows {
 		ts := time.Unix(r.CreatedAt, 0).Format("01-02 15:04:05")
-		// Per-request log lines keep the compact key=value shape (grep-
-		// friendly); quota stays in raw units — rounding tiny per-call
-		// amounts to USD cents would collapse them all to $0.00 — but
-		// gets thousands separators so it's not a wall of digits.
+		// Per-request log lines keep the compact key=value shape (grep- friendly); quota stays in raw units — rounding tiny per-call amounts to USD cents would collapse them all to $0.00 — but gets thousands separators so it's not a wall of digits.
 		cliout.Printf("  %s  uid=%s  model=%s  quota=%s  tokens=%d/%d  ch=#%d\n",
 			style.Dim(ts), sanitize(r.Username), sanitize(r.ModelName), commaInt(int64(r.Quota)), r.PromptTokens, r.CompletionTokens, r.ChannelID)
 		if r.Content != "" {
@@ -432,8 +422,7 @@ func parseWindow(s string, now time.Time) (int64, error) {
 	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
 		return n, nil
 	}
-	// Support a "d" (days) suffix on top of Go's h/m/s. ParseDuration
-	// rejects "d" so we strip + multiply manually.
+	// Support a "d" (days) suffix on top of Go's h/m/s. ParseDuration rejects "d" so we strip + multiply manually.
 	if len(s) > 1 && s[len(s)-1] == 'd' {
 		if n, err := strconv.Atoi(s[:len(s)-1]); err == nil {
 			if n < 0 || n > 36500 {
@@ -613,8 +602,7 @@ func adminAudit(args []string) error {
 	cliout.Printf(i18n.T("admin.common.rows_total")+"\n", len(rows), total)
 	for _, r := range rows {
 		when := time.Unix(r.CreatedAt, 0).Format("01-02 15:04:05")
-		// Label-free "·"-joined form (no English field tags): time ·
-		// action · actor (#id) · target. Values are backend strings.
+		// Label-free "·"-joined form (no English field tags): time · action · actor (#id) · target. Values are backend strings.
 		cliout.Printf("  %s · %s · %s (#%d) · %s/%s\n",
 			style.Dim(when), sanitize(r.Action), sanitize(r.ActorName), r.ActorID, sanitize(r.TargetType), sanitize(r.TargetID))
 		if r.Payload != "" {

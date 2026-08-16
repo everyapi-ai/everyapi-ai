@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 )
 
 func edgeStatus(args []string) error {
@@ -25,9 +25,7 @@ func edgeStatus(args []string) error {
 		return err
 	}
 
-	// Backend view first — even if docker is unavailable here, the
-	// dashboard may still see the node as online if it was started on
-	// a different machine.
+	// Backend view first — even if docker is unavailable here, the dashboard may still see the node as online if it was started on a different machine.
 	client, _, err := edgeClient()
 	if err != nil {
 		return err
@@ -54,9 +52,7 @@ func edgeStatus(args []string) error {
 			cliout.Printf(i18n.T("edge.status.hardware_line"), i18n.T("edge.field.hardware"),
 				cliout.Sanitize(remote.Hardware.GPUModel), max1(remote.Hardware.GPUCount), remote.Hardware.VRAMTotalGB)
 		}
-		// Live telemetry — only present when the agent has sent at
-		// least one heartbeat. Nil pointers mean "no live data" not
-		// "zero"; we render only when at least one field is reported.
+		// Live telemetry — only present when the agent has sent at least one heartbeat. Nil pointers mean "no live data" not "zero"; we render only when at least one field is reported.
 		if remote.GPUUtilPct != nil || remote.VRAMUsedGB != nil || remote.ActiveRequests != nil {
 			cliout.Printf("  %-12s", i18n.T("edge.field.live"))
 			sep := ""
@@ -75,8 +71,7 @@ func edgeStatus(args []string) error {
 		}
 	}
 
-	// Local docker view — only attempt if docker is on PATH; quietly
-	// skip otherwise (a seller's main machine could be cli-only).
+	// Local docker view — only attempt if docker is on PATH; quietly skip otherwise (a seller's main machine could be cli-only).
 	if err := ensureDocker(); err != nil {
 		cliout.Printf("%s", i18n.T("edge.status.docker_unavailable"))
 		return nil
@@ -85,10 +80,7 @@ func edgeStatus(args []string) error {
 	if err != nil {
 		return err
 	}
-	// Skip the local `compose ps` when the node was never started here
-	// (no docker-compose.yml) — otherwise compose aborts with "no
-	// configuration file provided" instead of cleanly reporting nothing
-	// is running locally. The backend view above is still printed.
+	// Skip the local `compose ps` when the node was never started here (no docker-compose.yml) — otherwise compose aborts with "no configuration file provided" instead of cleanly reporting nothing is running locally. The backend view above is still printed.
 	if !composeFileExists(dir) {
 		cliout.Printf(i18n.T("edge.not_started"), nodeID)
 		return nil

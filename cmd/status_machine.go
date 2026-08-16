@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -18,10 +18,7 @@ type statusMachineOutput struct {
 	Version  int    `json:"version"`
 	SignedIn bool   `json:"signed_in"`
 	Username string `json:"username,omitempty"`
-	// AvatarURL is the account's profile picture on the backend's own
-	// /api/avatar/:id proxy — same origin as APIBase, never a third-party host.
-	// Read from the credential cache so the default (network-free) status call
-	// still reports it; refreshed by the --include-balance path below.
+	// AvatarURL is the account's profile picture on the backend's own /api/avatar/:id proxy — same origin as APIBase, never a third-party host. Read from the credential cache so the default (network-free) status call still reports it; refreshed by the --include-balance path below.
 	AvatarURL  string   `json:"avatar_url,omitempty"`
 	APIBase    string   `json:"api_base,omitempty"`
 	ExpiresAt  string   `json:"expires_at,omitempty"`
@@ -53,8 +50,7 @@ func statusMachineRequested(args []string) bool {
 	return false
 }
 
-// statusMachine reports local account metadata by default. includeBalance is an
-// explicit opt-in to one secret-free account request for the desktop popover.
+// statusMachine reports local account metadata by default. includeBalance is an explicit opt-in to one secret-free account request for the desktop popover.
 func statusMachine(includeBalance bool) error {
 	unlock, err := acquireCredentialLock()
 	if err != nil {
@@ -104,9 +100,7 @@ func statusMachine(includeBalance bool) error {
 				return machineStatusError("invalid_credentials", fmt.Errorf("fetch user: %w", err))
 			}
 			quota = self.Quota
-			// This request already carries the current picture, so refresh the
-			// cache here rather than making the desktop wait for the next login.
-			// A save failure is non-fatal: reporting status is the primary job.
+			// This request already carries the current picture, so refresh the cache here rather than making the desktop wait for the next login. A save failure is non-fatal: reporting status is the primary job.
 			if self.AvatarURL != creds.AvatarURL {
 				creds.AvatarURL = self.AvatarURL
 				_ = config.Save(creds)

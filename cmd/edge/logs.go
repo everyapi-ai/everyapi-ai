@@ -3,8 +3,8 @@ package edge
 import (
 	"flag"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 )
 
 func edgeLogs(args []string) error {
@@ -32,9 +32,7 @@ func edgeLogs(args []string) error {
 	if err != nil {
 		return err
 	}
-	// No compose file => the node was never started, so there are no
-	// containers to tail. Bail cleanly rather than letting compose emit
-	// "no configuration file provided".
+	// No compose file => the node was never started, so there are no containers to tail. Bail cleanly rather than letting compose emit "no configuration file provided".
 	if !composeFileExists(dir) {
 		cliout.Printf(i18n.T("edge.not_started"), nodeID)
 		return nil

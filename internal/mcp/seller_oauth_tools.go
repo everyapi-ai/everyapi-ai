@@ -1,21 +1,8 @@
-// MCP tools wrapping the seller OAuth onboarding paths the CLI also
-// exposes (`everyapi seller add-oauth codex|claude`). Each provider is
-// two tools — start + finish — because the OAuth flow can't complete
-// in a single chat turn: the AI agent has to print a code/URL,
-// wait for the human to do something in a browser, then finish.
+// MCP tools wrapping the seller OAuth onboarding paths the CLI also exposes (`everyapi seller add-oauth codex|claude`). Each provider is two tools — start + finish — because the OAuth flow can't complete in a single chat turn: the AI agent has to print a code/URL, wait for the human to do something in a browser, then finish.
 //
-// Tool naming intentionally suffixes the provider name (rather than
-// taking it as an argument) so MCP clients that render a flat tool
-// list let users / models pick the right flow without a "which
-// provider?" branch in the description.
+// Tool naming intentionally suffixes the provider name (rather than taking it as an argument) so MCP clients that render a flat tool list let users / models pick the right flow without a "which provider?" branch in the description.
 //
-// Gemini's loopback flow has no MCP equivalent here: a `/callback`
-// listener bound to a random ephemeral port can't survive across
-// two tool calls (the listener is per-process state, but the
-// listener lifecycle would have to span pause-the-user time), and
-// running the listener inside the MCP server process would force
-// the AI agent into an awkward "I'll block this tool while a
-// browser callback happens" UX. Gemini stays CLI-only.
+// Gemini's loopback flow has no MCP equivalent here: a `/callback` listener bound to a random ephemeral port can't survive across two tool calls (the listener is per-process state, but the listener lifecycle would have to span pause-the-user time), and running the listener inside the MCP server process would force the AI agent into an awkward "I'll block this tool while a browser callback happens" UX. Gemini stays CLI-only.
 
 package mcp
 
@@ -26,7 +13,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 )
 

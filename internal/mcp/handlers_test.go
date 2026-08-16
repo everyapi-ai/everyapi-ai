@@ -12,12 +12,9 @@ import (
 	"testing"
 )
 
-// withCredentials writes a credentials.json pointed at `apiBase` into
-// XDG_CONFIG_HOME (redirected to a temp dir) so tool handlers find
-// it via config.Load(). Returns the path for sanity assertions.
+// withCredentials writes a credentials.json pointed at `apiBase` into XDG_CONFIG_HOME (redirected to a temp dir) so tool handlers find it via config.Load(). Returns the path for sanity assertions.
 //
-// Each test that needs credentials calls this once; t.TempDir() +
-// t.Setenv handle teardown.
+// Each test that needs credentials calls this once; t.TempDir() + t.Setenv handle teardown.
 func withCredentials(t *testing.T, apiBase, token string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -61,8 +58,7 @@ func TestHandleStatus_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("handleStatus: %v", err)
 	}
-	// We don't pin exact formatting; we DO pin the key facts: name,
-	// email, both USD numbers, requests, and the trimmed wallet URL.
+	// We don't pin exact formatting; we DO pin the key facts: name, email, both USD numbers, requests, and the trimmed wallet URL.
 	wants := []string{"alice", "a@example.com", "$24.68", "$11.34", "1234"}
 	for _, w := range wants {
 		if !strings.Contains(out, w) {
@@ -72,8 +68,7 @@ func TestHandleStatus_HappyPath(t *testing.T) {
 }
 
 func TestHandleStatus_NotLoggedIn(t *testing.T) {
-	// XDG_CONFIG_HOME set to a fresh empty dir → config.Load returns
-	// ErrNoCredentials → handler returns errNotLoggedIn.
+	// XDG_CONFIG_HOME set to a fresh empty dir → config.Load returns ErrNoCredentials → handler returns errNotLoggedIn.
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	_, err := handleStatus(context.Background(), nil)
 	if err == nil {
@@ -123,9 +118,7 @@ func TestHandleTopup_TrimsAPIPrefix(t *testing.T) {
 }
 
 func TestHandleTopup_PassesThroughLocalhost(t *testing.T) {
-	// Local-dev / self-hosted bases without an `api.` prefix should
-	// pass through unchanged — the trim heuristic is targeted at
-	// the production split, not a generic rewrite.
+	// Local-dev / self-hosted bases without an `api.` prefix should pass through unchanged — the trim heuristic is targeted at the production split, not a generic rewrite.
 	withCredentials(t, "http://localhost:8787", "tok")
 	out, err := handleTopup(context.Background(), nil)
 	if err != nil {
@@ -183,16 +176,10 @@ func TestHandleSellerList_Empty(t *testing.T) {
 
 // ---- everyapi_seller_withdraw ----------------------------------------
 //
-// Every test in this block passes `confirm: "yes"` because the
-// handler now refuses requests without it. The first test below
-// — TestHandleSellerWithdraw_RejectsMissingConfirm — proves the
-// guard's negative case so a regression that silently disables
-// the friction step gets caught.
+// Every test in this block passes `confirm: "yes"` because the handler now refuses requests without it. The first test below — TestHandleSellerWithdraw_RejectsMissingConfirm — proves the guard's negative case so a regression that silently disables the friction step gets caught.
 
 func TestHandleSellerWithdraw_RejectsMissingConfirm(t *testing.T) {
-	// No HTTP server: the guard must short-circuit before any
-	// network call. If the test fails with "connection refused"
-	// rather than the expected sentinel, the guard regressed.
+	// No HTTP server: the guard must short-circuit before any network call. If the test fails with "connection refused" rather than the expected sentinel, the guard regressed.
 	withCredentials(t, "http://no-server.invalid", "tok")
 
 	cases := []struct {
@@ -264,9 +251,7 @@ func TestHandleSellerWithdraw_ExplicitAmount(t *testing.T) {
 			transferred.Store(int64(body.Quota))
 			w.Write([]byte(`{"success":true}`))
 		default:
-			// /api/user/self should NOT be hit when an explicit
-			// amount is provided — the "look up pending balance"
-			// path is the default-all branch only.
+			// /api/user/self should NOT be hit when an explicit amount is provided — the "look up pending balance" path is the default-all branch only.
 			t.Errorf("unexpected request to %s when amount was explicit", r.URL.Path)
 			http.Error(w, "unexpected", 500)
 		}

@@ -19,9 +19,7 @@ const (
 	preparedArgvMarker              = "__EVERYAPI_PREPARED_ARGV_JSON"
 )
 
-// newPreparedHome creates a process-scoped client home. Live catalog and
-// loopback proxy configuration must not be shared between concurrent launches
-// using different relay keys or groups.
+// newPreparedHome creates a process-scoped client home. Live catalog and loopback proxy configuration must not be shared between concurrent launches using different relay keys or groups.
 func newPreparedHome(prefix string) (string, error) {
 	root, err := config.ConfigDir()
 	if err != nil {
@@ -38,9 +36,7 @@ func newPreparedHome(prefix string) (string, error) {
 	return home, nil
 }
 
-// TakePreparedArgs removes the internal settings-path marker before the child
-// receives its environment and returns the fixed argv prefix for tools whose
-// official runtime-config surface is a command-line option.
+// TakePreparedArgs removes the internal settings-path marker before the child receives its environment and returns the fixed argv prefix for tools whose official runtime-config surface is a command-line option.
 func TakePreparedArgs(env map[string]string) []string {
 	encoded := env[preparedArgvMarker]
 	delete(env, preparedArgvMarker)
@@ -63,8 +59,7 @@ func preparedHomeEnv(key, home string) map[string]string {
 	return map[string]string{key: home, preparedHomeMarker: home}
 }
 
-// TakePreparedCleanup removes the internal marker before the child receives
-// its environment and returns an idempotent cleanup for the generated home.
+// TakePreparedCleanup removes the internal marker before the child receives its environment and returns an idempotent cleanup for the generated home.
 func TakePreparedCleanup(env map[string]string) func() {
 	home := env[preparedHomeMarker]
 	delete(env, preparedHomeMarker)

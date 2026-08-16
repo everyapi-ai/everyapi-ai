@@ -5,9 +5,7 @@ import (
 	"testing"
 )
 
-// TestRunHelp verifies the usage block is non-empty and mentions every
-// declared subcommand. The Run dispatcher returns nil on help/--help/-h
-// after printing.
+// TestRunHelp verifies the usage block is non-empty and mentions every declared subcommand. The Run dispatcher returns nil on help/--help/-h after printing.
 func TestRunHelp(t *testing.T) {
 	for _, arg := range []string{"help", "--help", "-h"} {
 		if err := Run([]string{arg}); err != nil {
@@ -21,18 +19,14 @@ func TestRunHelp(t *testing.T) {
 	}
 }
 
-// TestRunUnknownSubcommand asserts the dispatcher rejects garbage with
-// a non-nil error, not a silent fall-through.
+// TestRunUnknownSubcommand asserts the dispatcher rejects garbage with a non-nil error, not a silent fall-through.
 func TestRunUnknownSubcommand(t *testing.T) {
 	if err := Run([]string{"flobnar"}); err == nil {
 		t.Fatal("expected error for unknown subcommand")
 	}
 }
 
-// TestRunNoArgs expects a usable error pointing at help. The exact
-// string can change; check it's a non-nil error and that the usage
-// text was emitted (we don't capture stdout here so the existence of
-// the error is enough — see TestRunHelp for the usage content check).
+// TestRunNoArgs expects a usable error pointing at help. The exact string can change; check it's a non-nil error and that the usage text was emitted (we don't capture stdout here so the existence of the error is enough — see TestRunHelp for the usage content check).
 func TestRunNoArgs(t *testing.T) {
 	if err := Run(nil); err == nil {
 		t.Fatal("expected error for empty args")

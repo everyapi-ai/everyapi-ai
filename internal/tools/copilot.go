@@ -14,10 +14,7 @@ const (
 	copilotDefaultMaxOutputTokens = 8192
 )
 
-// prepareCopilotWithModels selects the wire API for GitHub Copilot CLI's
-// documented BYOK environment contract. All provider state stays process
-// scoped; the relay credential itself is supplied by Tool.Env and never
-// written to Copilot's persistent settings.
+// prepareCopilotWithModels selects the wire API for GitHub Copilot CLI's documented BYOK environment contract. All provider state stays process scoped; the relay credential itself is supplied by Tool.Env and never written to Copilot's persistent settings.
 func prepareCopilotWithModels(_ string, _ string, models []Model) (map[string]string, error) {
 	selected := strings.TrimSpace(os.Getenv(copilotModelEnv))
 	if selected == "" {

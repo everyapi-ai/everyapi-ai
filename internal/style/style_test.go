@@ -7,8 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/style"
-	"github.com/everyapi-ai/everyapi-ai/internal/styletest"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/style"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/styletest"
 )
 
 func TestEmph_StyledVsPlain(t *testing.T) {
@@ -22,11 +22,7 @@ func TestEmph_StyledVsPlain(t *testing.T) {
 		t.Fatalf("markers must be consumed, got %q", got)
 	}
 
-	// Styling OFF (pipe / NO_COLOR / dumb): plain text, markers
-	// stripped. Bare SetColorProfile mid-test is fine — the cleanup
-	// registered by WithColorProfile above still wins on teardown and
-	// restores the original profile. A second WithColorProfile call
-	// would also work (LIFO cleanup), just reads more verbose.
+	// Styling OFF (pipe / NO_COLOR / dumb): plain text, markers stripped. Bare SetColorProfile mid-test is fine — the cleanup registered by WithColorProfile above still wins on teardown and restores the original profile. A second WithColorProfile call would also work (LIFO cleanup), just reads more verbose.
 	lipgloss.SetColorProfile(termenv.Ascii)
 	if got := style.Emph("Show current **quota**, usage"); got != "Show current quota, usage" {
 		t.Fatalf("want stripped plain text, got %q", got)
@@ -51,8 +47,7 @@ func TestBadge_StyledVsPlain(t *testing.T) {
 		t.Fatalf("badge must keep its text, got %q", got)
 	}
 
-	// Unstyled: plain text, no escapes — so piped/NO_COLOR output stays
-	// readable and column math (style.Width) still works.
+	// Unstyled: plain text, no escapes — so piped/NO_COLOR output stays readable and column math (style.Width) still works.
 	lipgloss.SetColorProfile(termenv.Ascii)
 	if got := style.Badge(" registered ", style.ToneRed); got != " registered " {
 		t.Fatalf("want plain text, got %q", got)
@@ -60,8 +55,7 @@ func TestBadge_StyledVsPlain(t *testing.T) {
 }
 
 func TestWidth_CJK(t *testing.T) {
-	// A wide CJK rune counts as 2 columns; this is why badge/back-row
-	// padding uses Width, not len.
+	// A wide CJK rune counts as 2 columns; this is why badge/back-row padding uses Width, not len.
 	if got := style.Width("未注册"); got != 6 {
 		t.Errorf("Width(未注册) = %d, want 6", got)
 	}

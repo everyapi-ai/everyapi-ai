@@ -18,8 +18,7 @@ func TestParseWindow(t *testing.T) {
 		{"30m", now.Add(-30 * time.Minute).Unix(), false},
 		{"1700000000", 1700000000, false},
 		{"banana", 0, true},
-		// "d" isn't a Go duration suffix, but parseWindow recognises
-		// it explicitly because the help text advertises it.
+		// "d" isn't a Go duration suffix, but parseWindow recognises it explicitly because the help text advertises it.
 		{"7d", now.Add(-7 * 24 * time.Hour).Unix(), false},
 		{"30d", now.Add(-30 * 24 * time.Hour).Unix(), false},
 	}

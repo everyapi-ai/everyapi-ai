@@ -10,16 +10,9 @@ import (
 	"time"
 )
 
-// TestLogToolExitTimesOutOnBlockingWrite guards the exit-path-can't-hang
-// property: logToolExit must return within ~useLogWriteTimeout even when
-// the underlying write blocks forever. This is the whole reason the write
-// runs on a timeout-guarded goroutine — on a stalled NFS/autofs home (the
-// shared-host environment this feature targets) the parent must abandon
-// the diagnostic, not wedge os.Exit and reproduce the very "session
-// vanished" hang it exists to explain.
+// TestLogToolExitTimesOutOnBlockingWrite guards the exit-path-can't-hang property: logToolExit must return within ~useLogWriteTimeout even when the underlying write blocks forever. This is the whole reason the write runs on a timeout-guarded goroutine — on a stalled NFS/autofs home (the shared-host environment this feature targets) the parent must abandon the diagnostic, not wedge os.Exit and reproduce the very "session vanished" hang it exists to explain.
 //
-// A FIFO with no reader makes OpenFile(O_RDWR) on use.log block
-// indefinitely, standing in for the stalled mount.
+// A FIFO with no reader makes OpenFile(O_RDWR) on use.log block indefinitely, standing in for the stalled mount.
 func TestLogToolExitTimesOutOnBlockingWrite(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
@@ -41,8 +34,7 @@ func TestLogToolExitTimesOutOnBlockingWrite(t *testing.T) {
 			elapsed, useLogWriteTimeout)
 	}
 
-	// Unblock the leaked writer goroutine so it can exit: opening a
-	// non-blocking reader lets its pending O_RDWR open complete.
+	// Unblock the leaked writer goroutine so it can exit: opening a non-blocking reader lets its pending O_RDWR open complete.
 	if r, err := os.OpenFile(fifo, os.O_RDONLY|syscall.O_NONBLOCK, 0); err == nil {
 		_ = r.Close()
 	}

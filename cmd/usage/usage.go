@@ -1,7 +1,4 @@
-// Package usage wires `everyapi stats usage` — day-by-day quota_data
-// rows for the caller. Backend caps the window at 30 days; we
-// default to the last 7 so a bare `everyapi stats usage` is one screen
-// of useful output.
+// Package usage wires `everyapi stats usage` — day-by-day quota_data rows for the caller. Backend caps the window at 30 days; we default to the last 7 so a bare `everyapi stats usage` is one screen of useful output.
 package usage
 
 import (
@@ -12,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliargs"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -49,10 +46,7 @@ func Run(args []string) error {
 	if err := cliargs.RejectPositionals(fs); err != nil {
 		return err
 	}
-	// --per-day / --per-model are mutually exclusive grouping selectors.
-	// --per-day defaults true (it IS the default render), so only a user
-	// who EXPLICITLY passes --per-day alongside --per-model conflicts;
-	// surface that instead of silently preferring --per-model.
+	// --per-day / --per-model are mutually exclusive grouping selectors. --per-day defaults true (it IS the default render), so only a user who EXPLICITLY passes --per-day alongside --per-model conflicts; surface that instead of silently preferring --per-model.
 	perDayExplicit := false
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "per-day" {
@@ -174,10 +168,7 @@ func renderPerModel(rows []api.QuotaDay) {
 	cliout.Printf("  total: quota=%d  calls=%d  tokens=%d\n", total.quota, total.count, total.tokens)
 }
 
-// parseWindow mirrors cmd/log.parseWindow — duplicated rather than
-// extracted so cmd/usage doesn't depend on cmd/log just for a six-
-// line helper. If a third caller appears, lift both into an
-// internal package.
+// parseWindow mirrors cmd/log.parseWindow — duplicated rather than extracted so cmd/usage doesn't depend on cmd/log just for a six- line helper. If a third caller appears, lift both into an internal package.
 func parseWindow(s string, now time.Time) (int64, error) {
 	if s == "" {
 		return 0, nil
@@ -185,9 +176,7 @@ func parseWindow(s string, now time.Time) (int64, error) {
 	if n, err := time.ParseDuration(s); err == nil {
 		return now.Add(-n).Unix(), nil
 	}
-	// Shorthand day windows: time.ParseDuration doesn't know the 'd'
-	// unit, so strip a trailing 'd' and multiply by 24h (mirrors
-	// cmd/log.parseWindow so `stats usage --since 7d` matches `stats log`).
+	// Shorthand day windows: time.ParseDuration doesn't know the 'd' unit, so strip a trailing 'd' and multiply by 24h (mirrors cmd/log.parseWindow so `stats usage --since 7d` matches `stats log`).
 	if strings.HasSuffix(s, "d") {
 		if n, err := strconv.Atoi(s[:len(s)-1]); err == nil {
 			if n < 0 || n > 36500 {
@@ -196,11 +185,7 @@ func parseWindow(s string, now time.Time) (int64, error) {
 			return now.Add(-time.Duration(n) * 24 * time.Hour).Unix(), nil
 		}
 	}
-	// Bare integer = absolute Unix seconds. strconv.ParseInt reports
-	// overflow, unlike the old hand-rolled digit loop which silently
-	// wrapped on out-of-range input. ParseInt also accepts a leading
-	// '-', so reject negative values — a negative Unix timestamp is
-	// never a valid window bound and would otherwise sail through.
+	// Bare integer = absolute Unix seconds. strconv.ParseInt reports overflow, unlike the old hand-rolled digit loop which silently wrapped on out-of-range input. ParseInt also accepts a leading '-', so reject negative values — a negative Unix timestamp is never a valid window bound and would otherwise sail through.
 	ts, err := strconv.ParseInt(s, 10, 64)
 	if err != nil || ts < 0 {
 		return 0, errors.New("--since/--until: must be a Go duration (e.g. 24h) or Unix-seconds integer")

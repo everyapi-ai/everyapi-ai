@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/tools"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/tools"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -138,8 +138,7 @@ func TestParseUseArgs(t *testing.T) {
 		{"eq form lets a tool-named group through", []string{"--channel=codex", "claude"}, "claude", "codex", false, false, nil, "", false, false},
 		{"eq form lets a preset-named group through", []string{"--channel=byteplus", "claude"}, "claude", "byteplus", false, false, nil, "", false, false},
 
-		// --model: pin the upstream model (hermes). Space + eq forms;
-		// a valueless --model is an error (omit it to get the picker).
+		// --model: pin the upstream model (hermes). Space + eq forms; a valueless --model is an error (omit it to get the picker).
 		{"model space value", []string{"hermes", "--model", "gpt-5.1"}, "hermes", "", false, false, nil, "gpt-5.1", false, false},
 		{"model eq value", []string{"hermes", "--model=gpt-5.1"}, "hermes", "", false, false, nil, "gpt-5.1", false, false},
 		{"model before tool", []string{"--model", "claude-sonnet-4-6", "hermes"}, "hermes", "", false, false, nil, "claude-sonnet-4-6", false, false},
@@ -150,11 +149,7 @@ func TestParseUseArgs(t *testing.T) {
 		{"model space value won't eat a not-yet-seen tool name", []string{"--model", "claude"}, "claude", "", false, false, nil, "", true, false},
 		{"model value after tool may be a tool-named id", []string{"hermes", "--model", "claude"}, "hermes", "", false, false, nil, "claude", false, false},
 
-		// `--` separator: end of everyapi's option parsing, everything
-		// after is forwarded raw to the tool. The documented escape
-		// hatch for tool flags that collide with everyapi's, e.g.
-		// claude's `--dangerously-skip-permissions` and codex's
-		// `--dangerously-bypass-approvals-and-sandbox`.
+		// `--` separator: end of everyapi's option parsing, everything after is forwarded raw to the tool. The documented escape hatch for tool flags that collide with everyapi's, e.g. claude's `--dangerously-skip-permissions` and codex's `--dangerously-bypass-approvals-and-sandbox`.
 		{"-- forwards a single flag", []string{"claude", "--", "--dangerously-skip-permissions"}, "claude", "", false, false, []string{"--dangerously-skip-permissions"}, "", false, false},
 		{"-- forwards multiple tokens verbatim", []string{"claude", "--", "--model", "opus", "prompt text"}, "claude", "", false, false, []string{"--model", "opus", "prompt text"}, "", false, false},
 		{"-- combined with --channel before tool", []string{"--channel", "team-a", "claude", "--", "--dangerously-skip-permissions"}, "claude", "team-a", false, false, []string{"--dangerously-skip-permissions"}, "", false, false},
@@ -191,11 +186,7 @@ func TestParseUseArgs(t *testing.T) {
 }
 
 func TestParseUseArgsWithTransparent(t *testing.T) {
-	// wantTransparent is the tri-state the parser reports: nil = the user said
-	// nothing (Use then applies the per-tool default), non-nil = an explicit
-	// request. "unset" and "explicitly false" are NOT interchangeable now that
-	// transparent is the default — unset falls back silently on a tool with no
-	// adapter, explicit-true errors there.
+	// wantTransparent is the tri-state the parser reports: nil = the user said nothing (Use then applies the per-tool default), non-nil = an explicit request. "unset" and "explicitly false" are NOT interchangeable now that transparent is the default — unset falls back silently on a tool with no adapter, explicit-true errors there.
 	cases := []struct {
 		name            string
 		args            []string
@@ -230,11 +221,7 @@ func TestParseUseArgsWithTransparent(t *testing.T) {
 	}
 }
 
-// TestParseUseArgsTransparentDoesNotEatValueTokens pins that a bare value
-// literally spelled "transparent" — a routing group, a --model value, or the
-// tool positional — is never mistaken for the --transparent flag. Only a
-// dash-prefixed token toggles the connector; a group named "transparent" must
-// still select that group (and keep the experimental MITM mode off).
+// TestParseUseArgsTransparentDoesNotEatValueTokens pins that a bare value literally spelled "transparent" — a routing group, a --model value, or the tool positional — is never mistaken for the --transparent flag. Only a dash-prefixed token toggles the connector; a group named "transparent" must still select that group (and keep the experimental MITM mode off).
 func TestParseUseArgsTransparentDoesNotEatValueTokens(t *testing.T) {
 	t.Run("channel value", func(t *testing.T) {
 		tool, group, pick, _, transparent, _, _, _, err := parseUseArgsWithTransparent(
@@ -274,9 +261,7 @@ func TestUseUsageDocumentsTransparentFlag(t *testing.T) {
 	if !strings.Contains(useUsage, "--transparent") {
 		t.Fatal("use help does not document --transparent")
 	}
-	// Transparent is the default now, so the help must say so and must offer
-	// the opt-out — a user whose tool breaks needs to find the escape hatch in
-	// `everyapi use --help`, not in the source.
+	// Transparent is the default now, so the help must say so and must offer the opt-out — a user whose tool breaks needs to find the escape hatch in `everyapi use --help`, not in the source.
 	if !strings.Contains(useUsage, "--transparent=false") {
 		t.Fatal("use help does not document the --transparent=false opt-out")
 	}
@@ -585,15 +570,7 @@ func TestToolAllowsAutomaticYoloRejectsKimiPromptMode(t *testing.T) {
 	}
 }
 
-// TestParseUseArgsAcceptsSanitizeWithTransparent checks only that the parser
-// accepts the two flags together. It deliberately does NOT stand in for the
-// removed TestUseRejectsSanitizeAndTransparentTogether: that gate lived in Use,
-// never in the parser, so a parser-level test passes identically with or
-// without the change and pins nothing about it. The real behavioral
-// replacement — that the two now compose into child -> connector -> sanitizer
-// -> gateway rather than erroring — is
-// TestUseWiresTheSanitizerAsTheConnectorUpstream, which drives Use end to end
-// and fails if Use stops pointing the connector at the sanitizer.
+// TestParseUseArgsAcceptsSanitizeWithTransparent checks only that the parser accepts the two flags together. It deliberately does NOT stand in for the removed TestUseRejectsSanitizeAndTransparentTogether: that gate lived in Use, never in the parser, so a parser-level test passes identically with or without the change and pins nothing about it. The real behavioral replacement — that the two now compose into child -> connector -> sanitizer -> gateway rather than erroring — is TestUseWiresTheSanitizerAsTheConnectorUpstream, which drives Use end to end and fails if Use stops pointing the connector at the sanitizer.
 func TestParseUseArgsAcceptsSanitizeWithTransparent(t *testing.T) {
 	tool, _, _, sanitize, transparent, _, _, _, err := parseUseArgsWithTransparent(
 		[]string{"claude", "--sanitize", "--transparent"})
@@ -618,8 +595,7 @@ func FuzzParseUseArgsDoesNotPanic(f *testing.F) {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, input string) {
-		// Fields deliberately leaves arbitrary Unicode and control bytes inside
-		// tokens while bounding argv growth for the fuzzer.
+		// Fields deliberately leaves arbitrary Unicode and control bytes inside tokens while bounding argv growth for the fuzzer.
 		args := strings.Fields(input)
 		if len(args) > 64 {
 			args = args[:64]
@@ -628,11 +604,7 @@ func FuzzParseUseArgsDoesNotPanic(f *testing.F) {
 	})
 }
 
-// TestResolveToolModel covers the non-interactive branches of the
-// model-precedence chain (flag > env > picker > default). The picker
-// branch needs a TTY + network and is exercised manually; here we pin
-// that the flag wins, a pre-set env is respected, and a tool without
-// ModelEnv is a clean no-op.
+// TestResolveToolModel covers the non-interactive branches of the model-precedence chain (flag > env > picker > default). The picker branch needs a TTY + network and is exercised manually; here we pin that the flag wins, a pre-set env is respected, and a tool without ModelEnv is a clean no-op.
 func TestResolveToolModel(t *testing.T) {
 	creds := &config.Credentials{APIBase: "https://api.everyapi.ai"}
 	hermes, err := tools.Lookup("hermes")
@@ -1161,9 +1133,7 @@ func TestCreateDefaultRelayKeyCreatesThenCaches(t *testing.T) {
 	}
 }
 
-// The gateway rejects a create that names the auto group without the tier
-// grant, so an account that cannot use it must still get its first key — the
-// rejected create retries once without a group.
+// The gateway rejects a create that names the auto group without the tier grant, so an account that cannot use it must still get its first key — the rejected create retries once without a group.
 func TestCreateDefaultRelayKeyRetriesWithoutGroupWhenAutoRejected(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
@@ -1245,8 +1215,7 @@ func TestWantsUseHelp(t *testing.T) {
 		{"--help shielded by --", []string{"claude", "--", "--help"}, false},
 		{"-h shielded by --", []string{"claude", "--", "-h"}, false},
 		{"help shielded by --", []string{"claude", "--", "help"}, false},
-		// The bug the helper exists to prevent: a routing group
-		// literally named "help" must not be intercepted.
+		// The bug the helper exists to prevent: a routing group literally named "help" must not be intercepted.
 		{"--group help (space form)", []string{"claude", "--group", "help"}, false},
 		{"--channel help (space form)", []string{"claude", "--channel", "help"}, false},
 		{"--group=help (eq form)", []string{"claude", "--group=help"}, false},
@@ -1358,15 +1327,9 @@ func TestToolInvocationNeedsEndpoint(t *testing.T) {
 	}
 }
 
-// TestTransparentTopologyReversesCreationOrder pins the direction of the launch
-// line. Hops are collected as they are built, each pointing at the previous one
-// as its upstream, so traffic runs the other way and the first hop built prints
-// last. Emitted in creation order the line stays plausible-looking while naming
-// the chain backwards.
+// TestTransparentTopologyReversesCreationOrder pins the direction of the launch line. Hops are collected as they are built, each pointing at the previous one as its upstream, so traffic runs the other way and the first hop built prints last. Emitted in creation order the line stays plausible-looking while naming the chain backwards.
 //
-// Launches currently build at most one hop, so the multi-hop cases here are
-// ahead of the code on purpose: they are what makes the invariant survive
-// someone adding a second hop later.
+// Launches currently build at most one hop, so the multi-hop cases here are ahead of the code on purpose: they are what makes the invariant survive someone adding a second hop later.
 func TestTransparentTopologyReversesCreationOrder(t *testing.T) {
 	const (
 		connector = "http://127.0.0.1:1000"
@@ -1397,9 +1360,7 @@ func TestTransparentTopologyReversesCreationOrder(t *testing.T) {
 
 func boolPtr(b bool) *bool { return &b }
 
-// fmtBoolPtr renders the parser's tri-state readably in failure messages, so an
-// "unset vs explicitly false" mismatch is obvious rather than printing as a
-// bare pointer address.
+// fmtBoolPtr renders the parser's tri-state readably in failure messages, so an "unset vs explicitly false" mismatch is obvious rather than printing as a bare pointer address.
 func fmtBoolPtr(b *bool) string {
 	if b == nil {
 		return "unset"
@@ -1410,10 +1371,7 @@ func fmtBoolPtr(b *bool) string {
 	return "false"
 }
 
-// TestSortLaunchModelsPutsTheChoiceFirst pins the ordering that decides what a
-// self-selecting client boots on. Plain alphabetical order made position 0 an
-// accident of the id: an account holding "ark-…" models had claude boot on one
-// purely because 'a' sorts before 'c'.
+// TestSortLaunchModelsPutsTheChoiceFirst pins the ordering that decides what a self-selecting client boots on. Plain alphabetical order made position 0 an accident of the id: an account holding "ark-…" models had claude boot on one purely because 'a' sorts before 'c'.
 func TestSortLaunchModelsPutsTheChoiceFirst(t *testing.T) {
 	claude := tools.Registry["claude"]
 	codex := tools.Registry["codex"]
@@ -1445,9 +1403,7 @@ func TestSortLaunchModelsPutsTheChoiceFirst(t *testing.T) {
 		t.Fatalf("a remembered model must sort first, got %v", got)
 	}
 
-	// grok is served a filtered catalogue and boots on its head too, so it gets
-	// the same native tier — without it an unrelated vendor's model sits in
-	// front of grok's own.
+	// grok is served a filtered catalogue and boots on its head too, so it gets the same native tier — without it an unrelated vendor's model sits in front of grok's own.
 	models = append(catalog(), tools.Model{ID: "grok-4"})
 	sortLaunchModels(tools.Registry["grok"], models, "")
 	if got := ids(models); got[0] != "grok-4" {
@@ -1463,22 +1419,15 @@ func TestSortLaunchModelsPutsTheChoiceFirst(t *testing.T) {
 	}
 }
 
-// TestSortSurvivesClaudeAliasing pins the load-bearing link between the two
-// halves of this feature. The chain is sortLaunchModels -> claudeCatalogModels
-// -> the catalogue proxy's /v1/models response, and the remembered model only
-// reaches claude at position 0 if the aliasing step preserves input order.
+// TestSortSurvivesClaudeAliasing pins the load-bearing link between the two halves of this feature. The chain is sortLaunchModels -> claudeCatalogModels -> the catalogue proxy's /v1/models response, and the remembered model only reaches claude at position 0 if the aliasing step preserves input order.
 //
-// It does today because claudeCatalogModels is a range-and-append. Nothing
-// asserted it, so adding e.g. a "claude-* first" pass inside that function
-// would silently break the guarantee with every other test still green.
+// It does today because claudeCatalogModels is a range-and-append. Nothing asserted it, so adding e.g. a "claude-* first" pass inside that function would silently break the guarantee with every other test still green.
 func TestSortSurvivesClaudeAliasing(t *testing.T) {
 	claude := tools.Registry["claude"]
 	models := []tools.Model{
 		{ID: "claude-opus-4-8"}, {ID: "ark-doubao-seed"}, {ID: "zzz-last"},
 	}
-	// A non-claude id is the interesting case: it is the one that gets
-	// republished under a synthetic alias, so its identity survives only in
-	// DisplayName.
+	// A non-claude id is the interesting case: it is the one that gets republished under a synthetic alias, so its identity survives only in DisplayName.
 	const chosen = "ark-doubao-seed"
 	sortLaunchModels(claude, models, chosen)
 
@@ -1495,11 +1444,7 @@ func TestSortSurvivesClaudeAliasing(t *testing.T) {
 	}
 }
 
-// TestResolveRememberedModel covers the precedence and, more importantly, that
-// every failure degrades to the catalogue default instead of aborting. claude
-// and codex ship a built-in default and launched fine before any of this
-// existed, so a catalogue blip or a non-interactive shell must not turn a
-// working launch into an error.
+// TestResolveRememberedModel covers the precedence and, more importantly, that every failure degrades to the catalogue default instead of aborting. claude and codex ship a built-in default and launched fine before any of this existed, so a catalogue blip or a non-interactive shell must not turn a working launch into an error.
 func TestResolveRememberedModel(t *testing.T) {
 	claude := tools.Registry["claude"]
 	catalog := []api.RelayModel{
@@ -1563,8 +1508,7 @@ func TestResolveRememberedModel(t *testing.T) {
 	t.Run("a bare --model still cannot prompt non-interactively", func(t *testing.T) {
 		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 		s := &config.Settings{ToolModels: map[string]string{"claude": "claude-sonnet-4-6"}}
-		// pickModel=true asks to re-choose, but there is nobody to ask; a
-		// scripted launch must keep the recorded model rather than block.
+		// pickModel=true asks to re-choose, but there is nobody to ask; a scripted launch must keep the recorded model rather than block.
 		got, err := resolveRememberedModel(claude, s, catalog, "", true, false)
 		if err != nil || got != "claude-sonnet-4-6" {
 			t.Fatalf("got (%q, %v)", got, err)
@@ -1572,11 +1516,7 @@ func TestResolveRememberedModel(t *testing.T) {
 	})
 
 	t.Run("a save that fails does not abort the launch", func(t *testing.T) {
-		// A plain FILE where the config directory should be, so SaveSettings's
-		// MkdirAll fails with ENOTDIR. Deliberately not a read-only directory:
-		// permission bits do not stop root, so that shape passes on a developer
-		// machine and then fails — or silently proves nothing — in a container
-		// CI running as root. ENOTDIR binds for every user.
+		// A plain FILE where the config directory should be, so SaveSettings's MkdirAll fails with ENOTDIR. Deliberately not a read-only directory: permission bits do not stop root, so that shape passes on a developer machine and then fails — or silently proves nothing — in a container CI running as root. ENOTDIR binds for every user.
 		root := filepath.Join(t.TempDir(), "config-home-is-a-file")
 		if err := os.WriteFile(root, nil, 0o600); err != nil {
 			t.Fatal(err)
@@ -1590,8 +1530,7 @@ func TestResolveRememberedModel(t *testing.T) {
 		if got != "claude-opus-4-8" {
 			t.Fatalf("got %q, want the selection to still apply to this launch", got)
 		}
-		// Proves the save really failed, so the test is exercising the
-		// degrade path rather than a chmod that silently did nothing.
+		// Proves the save really failed, so the test is exercising the degrade path rather than a chmod that silently did nothing.
 		reloaded, loadErr := config.LoadSettings()
 		if loadErr == nil && reloaded.ToolModel("claude") != "" {
 			t.Fatal("settings were writable after all; this case never reached the failure path")

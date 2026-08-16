@@ -1,5 +1,4 @@
-// Package demand wires `everyapi market demand …` — buyer-side
-// marketplace postings ("I want model X under price ceiling Y").
+// Package demand wires `everyapi market demand …` — buyer-side marketplace postings ("I want model X under price ceiling Y").
 package demand
 
 import (
@@ -11,10 +10,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliargs"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -108,8 +107,7 @@ func runList(args []string, mine bool) error {
 		return nil
 	}
 	cliout.Printf(i18n.T("common.rows_of_total")+"\n", len(rows), total)
-	// perUnit converts the stored quota-unit ceiling back to the USD/1M
-	// figure `submit --max-price` accepts. Fetched once (not per row).
+	// perUnit converts the stored quota-unit ceiling back to the USD/1M figure `submit --max-price` accepts. Fetched once (not per row).
 	perUnit := demandQuotaPerUnit(client)
 	for _, d := range rows {
 		when := time.Unix(d.CreatedAt, 0).Format("2006-01-02")
@@ -121,9 +119,7 @@ func runList(args []string, mine bool) error {
 	return nil
 }
 
-// demandQuotaPerUnit fetches the account's quota→USD divisor via a free
-// /api/status round-trip. Returns 0 when unavailable so callers fall
-// back to raw quota units rather than misrendering dollars.
+// demandQuotaPerUnit fetches the account's quota→USD divisor via a free /api/status round-trip. Returns 0 when unavailable so callers fall back to raw quota units rather than misrendering dollars.
 func demandQuotaPerUnit(client *api.Client) float64 {
 	if status, err := client.GetStatus(cliout.WithCtx()); err == nil && status.QuotaPerUnit > 0 {
 		return status.QuotaPerUnit
@@ -131,11 +127,7 @@ func demandQuotaPerUnit(client *api.Client) float64 {
 	return 0
 }
 
-// priceCeiling renders MaxPricePerMTokenUSDQuota. `submit --max-price`
-// takes the ceiling in USD/1M tokens and the backend stores it in quota
-// units, so divide by QuotaPerUnit to echo the figure the user typed.
-// Falls back to raw, clearly-labelled quota units when the divisor is
-// unavailable (so a $1 ceiling is never mislabelled as "$500000").
+// priceCeiling renders MaxPricePerMTokenUSDQuota. `submit --max-price` takes the ceiling in USD/1M tokens and the backend stores it in quota units, so divide by QuotaPerUnit to echo the figure the user typed. Falls back to raw, clearly-labelled quota units when the divisor is unavailable (so a $1 ceiling is never mislabelled as "$500000").
 func priceCeiling(quota int64, perUnit float64) string {
 	if perUnit > 0 {
 		return fmt.Sprintf("$%.2f/1M tok", float64(quota)/perUnit)
@@ -273,8 +265,7 @@ func runRemove(args []string) error {
 	}
 	if !*yes {
 		if !cliprompt.IsInteractive() {
-			// Destructive + no TTY to confirm on: fail closed rather than
-			// silently removing. Require explicit -y for non-interactive use.
+			// Destructive + no TTY to confirm on: fail closed rather than silently removing. Require explicit -y for non-interactive use.
 			return errors.New("refusing to remove without confirmation; pass -y to remove non-interactively")
 		}
 		ok, err := cliprompt.YesNo(

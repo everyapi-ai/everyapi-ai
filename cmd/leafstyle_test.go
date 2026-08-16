@@ -9,18 +9,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
-	"github.com/everyapi-ai/everyapi-ai/internal/styletest"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/styletest"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 	"github.com/muesli/termenv"
 )
 
-// TestTopupBoldsValues asserts the anti-phishing handshake values — the
-// jump URL and, most importantly, the verification phrase the user must
-// compare against the dashboard — render bold on a styled terminal and
-// strip to plain text when piped (so the phrase is still copy-pasteable
-// out of a redirected `everyapi topup`).
+// TestTopupBoldsValues asserts the anti-phishing handshake values — the jump URL and, most importantly, the verification phrase the user must compare against the dashboard — render bold on a styled terminal and strip to plain text when piped (so the phrase is still copy-pasteable out of a redirected `everyapi topup`).
 func TestTopupBoldsValues(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
@@ -50,8 +46,7 @@ func TestTopupBoldsValues(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Deterministic EOF on stdin so the confirm gate proceeds without a
-	// TTY (Topup treats EOF as "yes" for scripted invocations).
+	// Deterministic EOF on stdin so the confirm gate proceeds without a TTY (Topup treats EOF as "yes" for scripted invocations).
 	pr, pw, _ := os.Pipe()
 	_ = pw.Close()
 	origStdin := os.Stdin
@@ -85,8 +80,7 @@ func TestTopupBoldsValues(t *testing.T) {
 
 	t.Run("piped output is plain", func(t *testing.T) {
 		buf.Reset()
-		// Reset stdin pipe — the first run consumed it to EOF already,
-		// but a fresh closed pipe keeps the second run deterministic.
+		// Reset stdin pipe — the first run consumed it to EOF already, but a fresh closed pipe keeps the second run deterministic.
 		pr2, pw2, _ := os.Pipe()
 		_ = pw2.Close()
 		os.Stdin = pr2

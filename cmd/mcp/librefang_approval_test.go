@@ -4,25 +4,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/mcp"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/mcp"
 )
 
-// LibreFang namespaces every MCP tool as `mcp_<server>_<tool>` and does NOT
-// de-duplicate, so our already-`everyapi_`-prefixed names come out doubly
-// prefixed. This mirrors `format_mcp_tool_name` in
-// librefang-runtime-mcp/src/lib.rs (`mcp_{normalize(server)}_{normalize(tool)}`,
-// where normalize lowercases and maps `-` to `_`). The install snippet pins
-// the server name to "everyapi", so that half is constant here.
+// LibreFang namespaces every MCP tool as `mcp_<server>_<tool>` and does NOT de-duplicate, so our already-`everyapi_`-prefixed names come out doubly prefixed. This mirrors `format_mcp_tool_name` in librefang-runtime-mcp/src/lib.rs (`mcp_{normalize(server)}_{normalize(tool)}`, where normalize lowercases and maps `-` to `_`). The install snippet pins the server name to "everyapi", so that half is constant here.
 func namespaced(tool string) string {
 	return "mcp_everyapi_" + strings.ToLower(strings.ReplaceAll(tool, "-", "_"))
 }
 
-// libreFangGlobMatches implements the subset of LibreFang's `glob_matches`
-// (librefang-types/src/capability.rs) that our patterns actually use: exact
-// match, or a single trailing `*` prefix match. LibreFang's matcher has more
-// cases (leading `*`, path- and host-segment awareness), but a pattern
-// reaching them would be rejected earlier by `validate_tool_name`, which
-// permits only alphanumerics, `_`, and at most one `*`.
+// libreFangGlobMatches implements the subset of LibreFang's `glob_matches` (librefang-types/src/capability.rs) that our patterns actually use: exact match, or a single trailing `*` prefix match. LibreFang's matcher has more cases (leading `*`, path- and host-segment awareness), but a pattern reaching them would be rejected earlier by `validate_tool_name`, which permits only alphanumerics, `_`, and at most one `*`.
 func libreFangGlobMatches(pattern, value string) bool {
 	if pattern == value {
 		return true
@@ -33,9 +23,7 @@ func libreFangGlobMatches(pattern, value string) bool {
 	return false
 }
 
-// writeTools are the 8 tools that change state: they move money, upload a
-// plaintext upstream credential, rewrite deployment-wide settings, destroy an
-// edge registration, or mount a channel via OAuth.
+// writeTools are the 8 tools that change state: they move money, upload a plaintext upstream credential, rewrite deployment-wide settings, destroy an edge registration, or mount a channel via OAuth.
 var writeTools = []string{
 	"everyapi_seller_withdraw",
 	"everyapi_seller_add_key",
@@ -47,8 +35,7 @@ var writeTools = []string{
 	"everyapi_seller_add_oauth_claude_complete",
 }
 
-// readTools are the 7 that only report. `everyapi_topup` is a read despite the
-// name: it returns the wallet URL as a string and moves no money.
+// readTools are the 7 that only report. `everyapi_topup` is a read despite the name: it returns the wallet URL as a string and moves no money.
 var readTools = []string{
 	"everyapi_status",
 	"everyapi_topup",
@@ -59,12 +46,7 @@ var readTools = []string{
 	"everyapi_admin_marketplace_status",
 }
 
-// libreFangApprovalGlobs must stay byte-identical to the patterns published on
-// https://librefang.ai/integrations/mcp-a2a and pinned there by
-// crates/librefang-extensions/tests/everyapi_catalog_entry.rs. Two independent
-// docs telling a user two different approval configs is the failure this
-// guards: a user who follows one and then the other ends up with a config that
-// contradicts itself.
+// libreFangApprovalGlobs must stay byte-identical to the patterns published on https://librefang.ai/integrations/mcp-a2a and pinned there by crates/librefang-extensions/tests/everyapi_catalog_entry.rs. Two independent docs telling a user two different approval configs is the failure this guards: a user who follows one and then the other ends up with a config that contradicts itself.
 var libreFangApprovalGlobs = []string{
 	"mcp_everyapi_everyapi_seller_add_*",
 	"mcp_everyapi_everyapi_seller_withdraw",
@@ -72,11 +54,7 @@ var libreFangApprovalGlobs = []string{
 	"mcp_everyapi_everyapi_edge_remove",
 }
 
-// TestLibreFangApprovalGlobsGateWritesAndOnlyWrites is the substantive check on
-// the advice we print. Gating too little leaves a money-moving tool open;
-// gating too much (a blanket `mcp_everyapi_*`) stalls `everyapi_status` on an
-// approval prompt, which breaks the unattended "check the balance before an
-// expensive job" use case LibreFang's own page recommends.
+// TestLibreFangApprovalGlobsGateWritesAndOnlyWrites is the substantive check on the advice we print. Gating too little leaves a money-moving tool open; gating too much (a blanket `mcp_everyapi_*`) stalls `everyapi_status` on an approval prompt, which breaks the unattended "check the balance before an expensive job" use case LibreFang's own page recommends.
 func TestLibreFangApprovalGlobsGateWritesAndOnlyWrites(t *testing.T) {
 	gated := func(tool string) bool {
 		for _, p := range libreFangApprovalGlobs {
@@ -98,16 +76,13 @@ func TestLibreFangApprovalGlobsGateWritesAndOnlyWrites(t *testing.T) {
 		}
 	}
 
-	// A blanket pattern is the tempting shorthand and the reason this test
-	// exists; prove it would break the read path.
+	// A blanket pattern is the tempting shorthand and the reason this test exists; prove it would break the read path.
 	if !libreFangGlobMatches("mcp_everyapi_*", namespaced("everyapi_status")) {
 		t.Fatal("test's own glob semantics are wrong: mcp_everyapi_* must match a read tool")
 	}
 }
 
-// TestLibreFangPostInstallNotePrintsTheseGlobs ties the tested pattern set to
-// the text a user actually sees. Without it the constants above could stay
-// correct while the printed note drifted.
+// TestLibreFangPostInstallNotePrintsTheseGlobs ties the tested pattern set to the text a user actually sees. Without it the constants above could stay correct while the printed note drifted.
 func TestLibreFangPostInstallNotePrintsTheseGlobs(t *testing.T) {
 	c, err := lookupClient("librefang")
 	if err != nil {
@@ -119,9 +94,7 @@ func TestLibreFangPostInstallNotePrintsTheseGlobs(t *testing.T) {
 			t.Errorf("install text omits approval glob %q:\n%s", p, got)
 		}
 	}
-	// The blanket glob legitimately appears in prose as the thing NOT to do, so
-	// a bare substring check would misfire. Scan only lines that are entirely a
-	// quoted pattern — the paste-ready shape — and require each to be vetted.
+	// The blanket glob legitimately appears in prose as the thing NOT to do, so a bare substring check would misfire. Scan only lines that are entirely a quoted pattern — the paste-ready shape — and require each to be vetted.
 	for _, line := range strings.Split(got, "\n") {
 		trimmed := strings.TrimRight(strings.TrimSpace(line), ",")
 		if len(trimmed) < 2 || !strings.HasPrefix(trimmed, `"`) || !strings.HasSuffix(trimmed, `"`) {
@@ -144,10 +117,7 @@ func TestLibreFangPostInstallNotePrintsTheseGlobs(t *testing.T) {
 	}
 }
 
-// TestToolPartitionCoversEveryRegisteredTool keeps the read/write split honest
-// against the server's actual registry. A tool added to registerTools() without
-// being classified here would otherwise silently escape the coverage assertion
-// above — and if it is a write, escape the printed approval advice too.
+// TestToolPartitionCoversEveryRegisteredTool keeps the read/write split honest against the server's actual registry. A tool added to registerTools() without being classified here would otherwise silently escape the coverage assertion above — and if it is a write, escape the printed approval advice too.
 func TestToolPartitionCoversEveryRegisteredTool(t *testing.T) {
 	classified := map[string]bool{}
 	for _, n := range append(append([]string{}, readTools...), writeTools...) {

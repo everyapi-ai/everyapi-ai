@@ -1,10 +1,6 @@
-// Package settings wires `everyapi settings …` — the CLI's
-// preference surface, persisted alongside credentials in
-// ConfigDir. Settings are intentionally non-secret: language,
-// launcher layout, gateway region, and future CLI preferences.
+// Package settings wires `everyapi settings …` — the CLI's preference surface, persisted alongside credentials in ConfigDir. Settings are intentionally non-secret: language, launcher layout, gateway region, and future CLI preferences.
 //
-// File shape: clients/sdk/config/settings.go owns the Settings
-// struct + load/save. This package is the human-facing dispatcher.
+// File shape: clients/sdk/config/settings.go owns the Settings struct + load/save. This package is the human-facing dispatcher.
 package settings
 
 import (
@@ -16,18 +12,16 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/everyapi-ai/everyapi-ai/cmd/token"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/cmd/token"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
 func Run(args []string) error {
 	if len(args) == 0 {
-		// Bare 'everyapi settings' on a TTY → interactive editor.
-		// On a pipe/script → fall through to list so it's still
-		// useful as a status query.
+		// Bare 'everyapi settings' on a TTY → interactive editor. On a pipe/script → fall through to list so it's still useful as a status query.
 		if cliprompt.IsInteractive() {
 			return runInteractive()
 		}
@@ -113,13 +107,10 @@ func runSet(args []string) error {
 		return err
 	}
 	cliout.Println(i18n.T("settings.saved"))
-	// Apply immediately so the rest of the process (and the next
-	// invocation alike) speaks the new language.
+	// Apply immediately so the rest of the process (and the next invocation alike) speaks the new language.
 	if key == "language" {
 		i18n.SetLanguage(value)
-		// Export the resolved canonical tag (SetLanguage normalizes it),
-		// not the raw value — the SDK forwards EVERYAPI_LANG verbatim as
-		// Accept-Language, so the wire header must match what we resolved.
+		// Export the resolved canonical tag (SetLanguage normalizes it), not the raw value — the SDK forwards EVERYAPI_LANG verbatim as Accept-Language, so the wire header must match what we resolved.
 		_ = os.Setenv("EVERYAPI_LANG", i18n.Language())
 	}
 	return nil
@@ -161,18 +152,9 @@ func runReset(args []string) error {
 
 // --- interactive ----------------------------------------------------
 
-// settingRow is one line of the editor: its name, how to render the value in
-// effect, and how to change it. Rendering and dispatch read the same list, so
-// a preference cannot show up in one and not the other. The editor used to ask
-// two hard-coded questions in a fixed order, which left gateway_region,
-// codex_hook_trust_bypass and dangerous_mode reachable only through
-// `settings set`, and gave no way at all to see or change the default relay
-// key — the one setting that decides which models every launch can reach.
+// settingRow is one line of the editor: its name, how to render the value in effect, and how to change it. Rendering and dispatch read the same list, so a preference cannot show up in one and not the other. The editor used to ask two hard-coded questions in a fixed order, which left gateway_region, codex_hook_trust_bypass and dangerous_mode reachable only through `settings set`, and gave no way at all to see or change the default relay key — the one setting that decides which models every launch can reach.
 type settingRow struct {
-	// key is the settings.json key this row edits, and is empty for a row
-	// backed by something else (the relay key lives in credentials.json).
-	// TestSettingRowsCoverEverySettingsKey reads it to prove a new key cannot
-	// be added to the file without also appearing here.
+	// key is the settings.json key this row edits, and is empty for a row backed by something else (the relay key lives in credentials.json). TestSettingRowsCoverEverySettingsKey reads it to prove a new key cannot be added to the file without also appearing here.
 	key   string
 	label string
 	value func(*config.Settings) string
@@ -193,9 +175,7 @@ func settingRows() []settingRow {
 func runInteractive() error {
 	selected := 0
 	for {
-		// Reload every pass: an editor may have written the file (and the
-		// key editor writes credentials.json out from under us), so the menu
-		// must re-read rather than render a stale copy of what it just saved.
+		// Reload every pass: an editor may have written the file (and the key editor writes credentials.json out from under us), so the menu must re-read rather than render a stale copy of what it just saved.
 		s, err := config.LoadSettings()
 		if err != nil {
 			return err
@@ -209,8 +189,7 @@ func runInteractive() error {
 
 		idx, err := cliprompt.PickWithSelected(i18n.T("settings.menu_pick"), labels, selected)
 		if err != nil {
-			// Esc / Ctrl-C at the menu leaves everything as it stands; each
-			// editor persists its own change, so there is nothing pending.
+			// Esc / Ctrl-C at the menu leaves everything as it stands; each editor persists its own change, so there is nothing pending.
 			if errors.Is(err, cliprompt.ErrPickCancelled) {
 				return nil
 			}
@@ -221,8 +200,7 @@ func runInteractive() error {
 		}
 		selected = idx
 		if err := rows[idx].edit(s); err != nil {
-			// Esc inside an editor means "changed my mind about this one",
-			// not "quit" — go back to the menu with nothing written.
+			// Esc inside an editor means "changed my mind about this one", not "quit" — go back to the menu with nothing written.
 			if errors.Is(err, cliprompt.ErrPickCancelled) {
 				continue
 			}
@@ -231,11 +209,7 @@ func runInteractive() error {
 	}
 }
 
-// Build options from the live SupportedLanguages list (sorted en first by the
-// loader) so a dropped-in {lang}.toml shows up automatically. Each row is
-// "<code> — <native name>" — the native name comes from a small lookup table
-// because we'd otherwise need a "language.native_name" key in every locale
-// just for self-labelling.
+// Build options from the live SupportedLanguages list (sorted en first by the loader) so a dropped-in {lang}.toml shows up automatically. Each row is "<code> — <native name>" — the native name comes from a small lookup table because we'd otherwise need a "language.native_name" key in every locale just for self-labelling.
 func editLanguage(s *config.Settings) error {
 	langs := i18n.SupportedLanguages()
 	nativeName := map[string]string{
@@ -308,9 +282,7 @@ func editDangerousMode(s *config.Settings) error {
 	return editOptionalBool(s, i18n.T("settings.dangerous_mode_label"), s.DangerousMode, func(v *bool) { s.DangerousMode = v })
 }
 
-// editOptionalBool keeps the third state. These preferences distinguish "not
-// set" (ask on first interactive use) from an explicit false, so the editor
-// has to offer unset as a choice rather than collapsing it into off.
+// editOptionalBool keeps the third state. These preferences distinguish "not set" (ask on first interactive use) from an explicit false, so the editor has to offer unset as a choice rather than collapsing it into off.
 func editOptionalBool(s *config.Settings, label string, current *bool, apply func(*bool)) error {
 	opts := []string{i18n.T("settings.bool_on"), i18n.T("settings.bool_off"), i18n.T("settings.unset")}
 	cur := 2
@@ -337,10 +309,7 @@ func editOptionalBool(s *config.Settings, label string, current *bool, apply fun
 
 func boolPtr(v bool) *bool { return &v }
 
-// The default relay key lives in credentials.json, not settings.json — it is a
-// credential, and this file is world-readable preference state. The editor
-// shows which key is in effect and hands the change to the token picker, which
-// owns fetching the key material and persisting it.
+// The default relay key lives in credentials.json, not settings.json — it is a credential, and this file is world-readable preference state. The editor shows which key is in effect and hands the change to the token picker, which owns fetching the key material and persisting it.
 func labelDefaultRelayKey() string {
 	creds, err := config.Load()
 	if err != nil || creds == nil || creds.RelayKeyTokenID == 0 {
@@ -363,10 +332,7 @@ func saveAndReport(s *config.Settings) error {
 
 // --- key plumbing ---------------------------------------------------
 
-// readKey + writeKey centralise the "key string ↔ struct field"
-// mapping. Today there's one key; the dispatcher style still pays
-// off as a stable surface for `settings get` to enumerate when a
-// second key lands.
+// readKey + writeKey centralise the "key string ↔ struct field" mapping. Today there's one key; the dispatcher style still pays off as a stable surface for `settings get` to enumerate when a second key lands.
 func readKey(s *config.Settings, key string) (string, bool) {
 	switch key {
 	case "language":
@@ -386,11 +352,7 @@ func readKey(s *config.Settings, key string) (string, bool) {
 func writeKey(s *config.Settings, key, value string) error {
 	switch key {
 	case "language":
-		// Match case-insensitively and persist the canonical tag the locale
-		// list advertises (e.g. "zh-TW"), so `settings set language zh-TW` —
-		// or any case variant — is accepted and `settings get` echoes the
-		// canonical form. The old lowercase-then-exact compare wrongly
-		// rejected the only mixed-case tag, zh-TW.
+		// Match case-insensitively and persist the canonical tag the locale list advertises (e.g. "zh-TW"), so `settings set language zh-TW` — or any case variant — is accepted and `settings get` echoes the canonical form. The old lowercase-then-exact compare wrongly rejected the only mixed-case tag, zh-TW.
 		v := strings.TrimSpace(value)
 		supported := i18n.SupportedLanguages()
 		for _, sup := range supported {
@@ -399,9 +361,7 @@ func writeKey(s *config.Settings, key, value string) error {
 				return nil
 			}
 		}
-		// Build the supported-list dynamically so the message stays
-		// truthful when a locale is added or removed without anyone
-		// remembering to retranslate the static lang_invalid copy.
+		// Build the supported-list dynamically so the message stays truthful when a locale is added or removed without anyone remembering to retranslate the static lang_invalid copy.
 		return fmt.Errorf("%s: %s", i18n.T("settings.lang_invalid"), strings.Join(supported, ", "))
 	case "menu_layout":
 		v := strings.ToLower(strings.TrimSpace(value))
@@ -437,9 +397,7 @@ func writeKey(s *config.Settings, key, value string) error {
 	return fmt.Errorf(i18n.T("settings.unknown_key"), key)
 }
 
-// labelOptionalBool is the MACHINE form, and stays in English on purpose:
-// `settings get` is a scripting interface, and `settings set` accepts exactly
-// these words back. Display surfaces use displayOptionalBool instead.
+// labelOptionalBool is the MACHINE form, and stays in English on purpose: `settings get` is a scripting interface, and `settings set` accepts exactly these words back. Display surfaces use displayOptionalBool instead.
 func labelOptionalBool(value *bool) string {
 	if value == nil {
 		return "unset"
@@ -447,8 +405,7 @@ func labelOptionalBool(value *bool) string {
 	return strconv.FormatBool(*value)
 }
 
-// displayOptionalBool is the HUMAN form for the list and the editor, where
-// "true" next to a translated label was the only English left on the screen.
+// displayOptionalBool is the HUMAN form for the list and the editor, where "true" next to a translated label was the only English left on the screen.
 func displayOptionalBool(value *bool) string {
 	switch {
 	case value == nil:
@@ -460,9 +417,7 @@ func displayOptionalBool(value *bool) string {
 	}
 }
 
-// effectiveMenuLayout maps the stored value (possibly empty) to the
-// concrete layout the launcher uses, so `settings get` / `list` show
-// what's actually in effect rather than a blank.
+// effectiveMenuLayout maps the stored value (possibly empty) to the concrete layout the launcher uses, so `settings get` / `list` show what's actually in effect rather than a blank.
 func effectiveMenuLayout(v string) string {
 	if v == "nested" {
 		return "nested"
@@ -470,8 +425,7 @@ func effectiveMenuLayout(v string) string {
 	return "grouped"
 }
 
-// labelMenuLayout renders the layout for the settings list — the
-// localized human name, not the raw enum value.
+// labelMenuLayout renders the layout for the settings list — the localized human name, not the raw enum value.
 func labelMenuLayout(v string) string {
 	if effectiveMenuLayout(v) == "nested" {
 		return i18n.T("settings.menu_nested")
@@ -487,13 +441,10 @@ func labelGatewayRegion(v string) string {
 	return region
 }
 
-// labelLanguage renders an unset Language as "(default)" + the
-// detected fallback, so `settings list` is informative even when
-// no preference is on disk.
+// labelLanguage renders an unset Language as "(default)" + the detected fallback, so `settings list` is informative even when no preference is on disk.
 func labelLanguage(v string) string {
 	if v == "" {
-		// Surface the active runtime language so the user sees
-		// what we're actually using right now.
+		// Surface the active runtime language so the user sees what we're actually using right now.
 		live := i18n.Language()
 		return fmt.Sprintf(i18n.T("settings.default_label"), live)
 	}

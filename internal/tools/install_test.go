@@ -15,13 +15,10 @@ var desktopCLITools = []string{
 	"claude", "codex", "opencode", "aider", "goose", "crush", "cline",
 	"openclaw", "continue", "kilo", "pi", "vibe", "copilot", "droid",
 	"openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code",
-	"hermes", "librefang", "open-webui",
+	"hermes", "librefang", "open-webui", "deepseek-harness",
 }
 
-// TestEveryDesktopCLIHasAReviewedInstallerOnEveryPlatform is the contract for
-// the Connect catalogue: a visible CLI target must never pretend that opening
-// documentation installed it. Gemini and Antigravity are intentionally absent
-// because they are not desktop catalogue targets.
+// TestEveryDesktopCLIHasAReviewedInstallerOnEveryPlatform is the contract for the Connect catalogue: a visible CLI target must never pretend that opening documentation installed it. Gemini and Antigravity are intentionally absent because they are not desktop catalogue targets.
 func TestEveryDesktopCLIHasAReviewedInstallerOnEveryPlatform(t *testing.T) {
 	for _, name := range desktopCLITools {
 		tool, err := Lookup(name)
@@ -198,19 +195,13 @@ func TestRegistry_RemoteInstallScriptsAreImmutable(t *testing.T) {
 	}
 }
 
-// TestCanAutoInstall_ClaudeWindows verifies that claude's Unix-only
-// `curl | bash` installer is gated off on Windows. Without this gate
-// the install prompt would offer a command we know is going to fail —
-// the user is better served by the existing InstallHint message
-// pointing at the official Windows setup docs.
+// TestCanAutoInstall_ClaudeWindows verifies that claude's Unix-only `curl | bash` installer is gated off on Windows. Without this gate the install prompt would offer a command we know is going to fail — the user is better served by the existing InstallHint message pointing at the official Windows setup docs.
 func TestCanAutoInstall_ClaudeWindows(t *testing.T) {
 	tool, _ := Lookup("claude")
 	if !tool.InstallCmdUnixOnly {
 		t.Fatal("claude.InstallCmdUnixOnly should be true — curl|bash doesn't run on Windows")
 	}
-	// CanAutoInstall is platform-aware. We can only assert one side
-	// of the branch from the test harness — assert the side that
-	// matches the host OS, and assert the gating field for the other.
+	// CanAutoInstall is platform-aware. We can only assert one side of the branch from the test harness — assert the side that matches the host OS, and assert the gating field for the other.
 	if runtime.GOOS == "windows" {
 		if CanAutoInstall(tool) {
 			t.Error("CanAutoInstall(claude) = true on Windows, want false")
@@ -222,10 +213,7 @@ func TestCanAutoInstall_ClaudeWindows(t *testing.T) {
 	}
 }
 
-// TestCanAutoInstall_NpmCrossPlatform asserts the npm-based installers
-// stay available on every platform. npm itself is cross-platform, so
-// gating these would needlessly send Windows users back to the
-// install-hint URL when `npm install -g @openai/codex` would work.
+// TestCanAutoInstall_NpmCrossPlatform asserts the npm-based installers stay available on every platform. npm itself is cross-platform, so gating these would needlessly send Windows users back to the install-hint URL when `npm install -g @openai/codex` would work.
 func TestCanAutoInstall_NpmCrossPlatform(t *testing.T) {
 	for _, name := range []string{"codex", "gemini", "openclaw", "continue", "kilo", "pi", "copilot", "droid"} {
 		tool, _ := Lookup(name)
@@ -238,11 +226,7 @@ func TestCanAutoInstall_NpmCrossPlatform(t *testing.T) {
 	}
 }
 
-// TestCanAutoInstall_Empty makes sure a tool with no InstallCmd
-// (the default zero value) reports false — guards against a future
-// tool entry shipping with the field left blank, which would surface
-// as "no auto-install available" inside RunInstall instead of being
-// caught at the prompt site.
+// TestCanAutoInstall_Empty makes sure a tool with no InstallCmd (the default zero value) reports false — guards against a future tool entry shipping with the field left blank, which would surface as "no auto-install available" inside RunInstall instead of being caught at the prompt site.
 func TestCanAutoInstall_Empty(t *testing.T) {
 	tool := &Tool{Name: "blank", ExecName: "blank"}
 	if CanAutoInstall(tool) {
@@ -250,9 +234,7 @@ func TestCanAutoInstall_Empty(t *testing.T) {
 	}
 }
 
-// TestIsInstalled covers both branches with binaries every supported
-// platform ships: `sh` exists on Unix and `cmd` on Windows; a name
-// chosen to be vanishingly unlikely to land on disk does not.
+// TestIsInstalled covers both branches with binaries every supported platform ships: `sh` exists on Unix and `cmd` on Windows; a name chosen to be vanishingly unlikely to land on disk does not.
 func TestIsInstalled(t *testing.T) {
 	present := &Tool{Name: "_present", ExecName: "sh"}
 	if runtime.GOOS == "windows" {
@@ -267,10 +249,7 @@ func TestIsInstalled(t *testing.T) {
 	}
 }
 
-// TestInstallPromptDefault pins the Y/N default per installer flavor:
-// curl|bash (InstallCmdUnixOnly) defaults to No so a single press of
-// Enter never runs a remote shell script; routine npm installs
-// default to Yes so the common case stays one keystroke.
+// TestInstallPromptDefault pins the Y/N default per installer flavor: curl|bash (InstallCmdUnixOnly) defaults to No so a single press of Enter never runs a remote shell script; routine npm installs default to Yes so the common case stays one keystroke.
 func TestInstallPromptDefault(t *testing.T) {
 	cases := map[string]bool{
 		"claude":      false, // curl|bash → default No
@@ -290,16 +269,13 @@ func TestInstallPromptDefault(t *testing.T) {
 	}
 }
 
-// TestInstallerMissing covers the pre-install PATH probe that turns a
-// doomed `sh -c "npm install …"` (cryptic "npm: command not found") into
-// an actionable message. The probe targets the InstallCmd's leading word.
+// TestInstallerMissing covers the pre-install PATH probe that turns a doomed `sh -c "npm install …"` (cryptic "npm: command not found") into an actionable message. The probe targets the InstallCmd's leading word.
 func TestInstallerMissing(t *testing.T) {
 	// No InstallCmd → nothing to gate.
 	if got := InstallerMissing(&Tool{Name: "blank", ExecName: "blank"}); got != "" {
 		t.Errorf("InstallerMissing(no InstallCmd) = %q, want \"\"", got)
 	}
-	// Installer command present on PATH → "" (sh exists on Unix, cmd on
-	// Windows; both are guaranteed system binaries).
+	// Installer command present on PATH → "" (sh exists on Unix, cmd on Windows; both are guaranteed system binaries).
 	present := "sh"
 	if runtime.GOOS == "windows" {
 		present = "cmd"
@@ -316,10 +292,7 @@ func TestInstallerMissing(t *testing.T) {
 	}
 }
 
-// TestRunInstall_RejectsWhenNoCmd guards the contract that callers
-// must gate with CanAutoInstall — but the inner check exists so a
-// future caller that forgets the gate gets a plain error instead of
-// shelling out an empty command.
+// TestRunInstall_RejectsWhenNoCmd guards the contract that callers must gate with CanAutoInstall — but the inner check exists so a future caller that forgets the gate gets a plain error instead of shelling out an empty command.
 func TestRunInstall_RejectsWhenNoCmd(t *testing.T) {
 	tool := &Tool{Name: "noinstall", ExecName: "noinstall"}
 	err := RunInstall(tool)
@@ -328,11 +301,7 @@ func TestRunInstall_RejectsWhenNoCmd(t *testing.T) {
 	}
 }
 
-// TestRunInstall_CommandFailure asserts a non-zero exit from the
-// install command surfaces as a wrapped error (not nil, not a
-// misclassified ErrInstalledButNotOnPath). Uses `false` on Unix and
-// `cmd /C exit 1` semantics on Windows via the shell switch in
-// RunInstall.
+// TestRunInstall_CommandFailure asserts a non-zero exit from the install command surfaces as a wrapped error (not nil, not a misclassified ErrInstalledButNotOnPath). Uses `false` on Unix and `cmd /C exit 1` semantics on Windows via the shell switch in RunInstall.
 func TestRunInstall_CommandFailure(t *testing.T) {
 	tool := &Tool{
 		Name:       "fail",
@@ -352,13 +321,7 @@ func TestRunInstall_CommandFailure(t *testing.T) {
 	}
 }
 
-// TestRunInstall_PipelineFirstStageFailure pins the pipefail fix: for a
-// `curl … | bash`-style installer, a failure in the FIRST stage (curl)
-// must surface as an error rather than being masked by the pipeline's
-// aggregate exit code (bash's 0). Without pipefail this returned
-// ErrInstalledButNotOnPath — a wrong "installed but not on PATH"
-// diagnosis of a failed download. Requires bash (present wherever these
-// installers could run at all); skipped otherwise.
+// TestRunInstall_PipelineFirstStageFailure pins the pipefail fix: for a `curl … | bash`-style installer, a failure in the FIRST stage (curl) must surface as an error rather than being masked by the pipeline's aggregate exit code (bash's 0). Without pipefail this returned ErrInstalledButNotOnPath — a wrong "installed but not on PATH" diagnosis of a failed download. Requires bash (present wherever these installers could run at all); skipped otherwise.
 func TestRunInstall_PipelineFirstStageFailure(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix-only: pipeline + pipefail semantics")
@@ -381,13 +344,7 @@ func TestRunInstall_PipelineFirstStageFailure(t *testing.T) {
 	}
 }
 
-// TestRunInstall_InstalledButNotOnPath covers the post-install
-// LookPath re-check: when the install command exits 0 but the binary
-// still isn't findable (the classic `npm install -g` with npm's
-// global bin missing from PATH), the caller gets a typed
-// ErrInstalledButNotOnPath so cmd/use can render the localized "open
-// a new shell" message. `true` exits 0 on Unix; `cmd /C exit 0`
-// likewise on Windows.
+// TestRunInstall_InstalledButNotOnPath covers the post-install LookPath re-check: when the install command exits 0 but the binary still isn't findable (the classic `npm install -g` with npm's global bin missing from PATH), the caller gets a typed ErrInstalledButNotOnPath so cmd/use can render the localized "open a new shell" message. `true` exits 0 on Unix; `cmd /C exit 0` likewise on Windows.
 func TestRunInstall_InstalledButNotOnPath(t *testing.T) {
 	tool := &Tool{
 		Name:       "missing-after-install",
@@ -410,11 +367,7 @@ func TestRunInstall_InstalledButNotOnPath(t *testing.T) {
 	}
 }
 
-// TestErrInstalledButNotOnPath_MessageIsNotNpmSpecific pins that the
-// "searched" list and its prose stay accurate for non-npm tools. The
-// searched set now includes a tool's ExtraBinDirs, so a message naming
-// npm's global bin would be telling a gemini user to fix a directory
-// that was never involved.
+// TestErrInstalledButNotOnPath_MessageIsNotNpmSpecific pins that the "searched" list and its prose stay accurate for non-npm tools. The searched set now includes a tool's ExtraBinDirs, so a message naming npm's global bin would be telling a gemini user to fix a directory that was never involved.
 func TestErrInstalledButNotOnPath_MessageIsNotNpmSpecific(t *testing.T) {
 	err := &ErrInstalledButNotOnPath{
 		Tool: &Tool{Name: "geminiish", ExecName: "agy", ExtraBinDirs: []string{".local/bin"}},
@@ -429,10 +382,7 @@ func TestErrInstalledButNotOnPath_MessageIsNotNpmSpecific(t *testing.T) {
 	}
 }
 
-// TestRunInstall_ReportsExtraBinDirs pins that a failed post-install
-// re-check names the tool's own install directory. Without this the user
-// gets "not on PATH" with no concrete dir to add, which is the dead end
-// that made `use gemini` unrecoverable.
+// TestRunInstall_ReportsExtraBinDirs pins that a failed post-install re-check names the tool's own install directory. Without this the user gets "not on PATH" with no concrete dir to add, which is the dead end that made `use gemini` unrecoverable.
 func TestRunInstall_ReportsExtraBinDirs(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	if runtime.GOOS == "windows" {
@@ -459,19 +409,14 @@ func TestRunInstall_ReportsExtraBinDirs(t *testing.T) {
 	}
 }
 
-// TestRunInstall_HappyPath verifies the end-to-end success branch:
-// an install command that drops a binary into a tmp dir we then add
-// to PATH succeeds, RunInstall finds the binary via post-install
-// LookPath, and returns nil. Unix-only because the trivial executable
-// creation (`touch + chmod +x`) doesn't translate to cmd.exe.
+// TestRunInstall_HappyPath verifies the end-to-end success branch: an install command that drops a binary into a tmp dir we then add to PATH succeeds, RunInstall finds the binary via post-install LookPath, and returns nil. Unix-only because the trivial executable creation (`touch + chmod +x`) doesn't translate to cmd.exe.
 func TestRunInstall_HappyPath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix-only: relies on touch/chmod semantics for the fake installer")
 	}
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "fake-tool")
-	// Prepend the tmp dir to PATH so post-install LookPath finds the
-	// binary the installer "creates" below.
+	// Prepend the tmp dir to PATH so post-install LookPath finds the binary the installer "creates" below.
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	tool := &Tool{
 		Name:       "fake",
@@ -486,10 +431,7 @@ func TestRunInstall_HappyPath(t *testing.T) {
 	}
 }
 
-// TestErrInstalledButNotOnPath_ErrorMessage pins that the typed
-// error's English fallback still carries the ExecName — the cmd/use
-// layer renders a localized message, but library-level errors still
-// need to be debuggable when surfaced raw (logs, %v in stack traces).
+// TestErrInstalledButNotOnPath_ErrorMessage pins that the typed error's English fallback still carries the ExecName — the cmd/use layer renders a localized message, but library-level errors still need to be debuggable when surfaced raw (logs, %v in stack traces).
 func TestErrInstalledButNotOnPath_ErrorMessage(t *testing.T) {
 	err := &ErrInstalledButNotOnPath{Tool: &Tool{ExecName: "widget"}}
 	if msg := err.Error(); msg == "" {

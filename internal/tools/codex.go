@@ -33,26 +33,14 @@ type codexSessionIndexLine struct {
 
 const codexSessionIndexBaseline = ".session_index.baseline.jsonl"
 
-// prepareCodex generates an isolated CODEX_HOME under
-// ~/.config/everyapi/codex-home and seeds it with the two files codex
-// reads on startup:
+// prepareCodex generates an isolated CODEX_HOME under ~/.config/everyapi/codex-home and seeds it with the two files codex reads on startup:
 //
-//   - auth.json  →  pins auth_mode to "apikey" and stamps the relay
-//     key, so codex skips its ChatGPT device-login dance even when
-//     the user's real ~/.codex/auth.json is in chatgpt mode.
-//   - config.toml → defines an `everyapi` model_provider pointing at
-//     <apiBase>/v1 (wire_api = "responses" — the gateway exposes the
-//     full /v1/responses surface, see backend/internal/router/relay
-//     -router.go) and selects it as the default model_provider. Codex
-//     does NOT read OPENAI_BASE_URL on its own; this is how requests
-//     actually get routed through EveryAPI.
+//   - auth.json  →  pins auth_mode to "apikey" and stamps the relay key, so codex skips its ChatGPT device-login dance even when the user's real ~/.codex/auth.json is in chatgpt mode.
+//   - config.toml → defines an `everyapi` model_provider pointing at <apiBase>/v1 (wire_api = "responses" — the gateway exposes the full /v1/responses surface, see backend/internal/router/relay -router.go) and selects it as the default model_provider. Codex does NOT read OPENAI_BASE_URL on its own; this is how requests actually get routed through EveryAPI.
 //
-// Live-catalog launches use a process-scoped home so concurrent keys/groups
-// cannot overwrite auth or model metadata. Compatibility callers that do not
-// provide a catalog retain the legacy fixed home.
+// Live-catalog launches use a process-scoped home so concurrent keys/groups cannot overwrite auth or model metadata. Compatibility callers that do not provide a catalog retain the legacy fixed home.
 //
-// Returns the env additions to overlay on top of envFn — primarily
-// CODEX_HOME so codex sees our config dir instead of ~/.codex.
+// Returns the env additions to overlay on top of envFn — primarily CODEX_HOME so codex sees our config dir instead of ~/.codex.
 func prepareCodex(apiBase, token string) (map[string]string, error) {
 	return prepareCodexWithModels(apiBase, token, nil, "")
 }
@@ -70,9 +58,7 @@ func prepareCodexWithModels(apiBase, token string, models []Model, bootModel str
 	if err != nil {
 		return nil, err
 	}
-	// 0700 — auth.json carries a bearer token; treat the whole
-	// directory as secret. MkdirAll is a no-op when it already
-	// exists with the right permissions.
+	// 0700 — auth.json carries a bearer token; treat the whole directory as secret. MkdirAll is a no-op when it already exists with the right permissions.
 	if err := os.MkdirAll(codexHome, 0o700); err != nil {
 		return nil, fmt.Errorf("create codex-home: %w", err)
 	}
@@ -103,9 +89,7 @@ func prepareCodexWithModels(apiBase, token string, models []Model, bootModel str
 	return map[string]string{"CODEX_HOME": codexHome}, nil
 }
 
-// prepareCodexTransparent keeps Codex on its built-in OpenAI provider while
-// forcing API-key auth with a non-secret placeholder. Connector replaces that
-// placeholder only after decrypting a registered api.openai.com model route.
+// prepareCodexTransparent keeps Codex on its built-in OpenAI provider while forcing API-key auth with a non-secret placeholder. Connector replaces that placeholder only after decrypting a registered api.openai.com model route.
 func prepareCodexTransparent() (map[string]string, error) {
 	return prepareCodexTransparentWithModels(nil, "")
 }
@@ -151,12 +135,7 @@ func prepareCodexTransparentWithModels(models []Model, bootModel string) (map[st
 	return map[string]string{"CODEX_HOME": codexHome}, nil
 }
 
-// preparedCodexHomeEnv keeps per-launch credentials and model metadata in the
-// generated CODEX_HOME while joining Codex's durable state back to the legacy
-// persistent home. Codex stores rollout files below CODEX_HOME/sessions. Its
-// SQLite index deliberately stays in the generated home so each launch
-// backfills paths through its own live link instead of persisting paths through
-// a previous launch home that cleanup has already removed.
+// preparedCodexHomeEnv keeps per-launch credentials and model metadata in the generated CODEX_HOME while joining Codex's durable state back to the legacy persistent home. Codex stores rollout files below CODEX_HOME/sessions. Its SQLite index deliberately stays in the generated home so each launch backfills paths through its own live link instead of persisting paths through a previous launch home that cleanup has already removed.
 func preparedCodexHomeEnv(codexHome string) (env map[string]string, err error) {
 	defer func() {
 		if err != nil {
@@ -275,9 +254,7 @@ func mergeCodexSessionIndex(baseline, updated, current []byte) ([]byte, error) {
 		}
 		currentLine, existsNow := currentLatest[id]
 		if !existsNow {
-			// A concurrent deletion has no timestamp to compare with this
-			// update. Prefer the recoverable operation so cleanup order cannot
-			// silently discard a renamed session.
+			// A concurrent deletion has no timestamp to compare with this update. Prefer the recoverable operation so cleanup order cannot silently discard a renamed session.
 			changed[id] = line
 			continue
 		}
@@ -358,10 +335,7 @@ func writeCodexOfficialConfigTOMLWithCatalog(codexHome, catalogPath, bootModel s
 	if err := inheritPersistentCodexReasoningEffort(&defaults, codexHome, catalogPath); err != nil {
 		return err
 	}
-	// Same fresh-home problem as the injected path, and this is the one that
-	// matters more: transparent mode is the DEFAULT for codex, so seeding only
-	// the injected path would leave `everyapi use codex` — the plain command —
-	// still booting on whatever the catalogue happened to list first.
+	// Same fresh-home problem as the injected path, and this is the one that matters more: transparent mode is the DEFAULT for codex, so seeding only the injected path would leave `everyapi use codex` — the plain command — still booting on whatever the catalogue happened to list first.
 	if defaults.Model == "" {
 		defaults.Model = bootModel
 	}
@@ -376,10 +350,7 @@ func writeCodexOfficialConfigTOMLWithCatalog(codexHome, catalogPath, bootModel s
 	return writeFileAtomic(filepath.Join(codexHome, "config.toml"), body, 0o644)
 }
 
-// writeCodexAuthJSON atomically writes auth.json with apikey mode +
-// the relay key. Schema mirrors what codex itself emits for the
-// `codex login --api-key ...` path: OPENAI_API_KEY top-level (NOT
-// nested under tokens), tokens nulled out, auth_mode pinned.
+// writeCodexAuthJSON atomically writes auth.json with apikey mode + the relay key. Schema mirrors what codex itself emits for the `codex login --api-key ...` path: OPENAI_API_KEY top-level (NOT nested under tokens), tokens nulled out, auth_mode pinned.
 //
 // 0600 perms — same as how codex writes its own auth.json.
 func writeCodexAuthJSON(codexHome, token string) error {
@@ -395,16 +366,9 @@ func writeCodexAuthJSON(codexHome, token string) error {
 	return writeFileAtomic(filepath.Join(codexHome, "auth.json"), body, 0o600)
 }
 
-// writeCodexConfigTOML writes config.toml selecting the everyapi
-// model_provider as default. We do NOT copy the user's real
-// ~/.codex/config.toml — the user explicitly chose isolation, so
-// personality/theme/etc. start fresh. The EveryAPI-owned provider
-// configuration is regenerated on every `everyapi use codex` launch;
-// root-level model defaults are read from the existing config first.
+// writeCodexConfigTOML writes config.toml selecting the everyapi model_provider as default. We do NOT copy the user's real ~/.codex/config.toml — the user explicitly chose isolation, so personality/theme/etc. start fresh. The EveryAPI-owned provider configuration is regenerated on every `everyapi use codex` launch; root-level model defaults are read from the existing config first.
 //
-// wire_api = "responses" matches the backend's native /v1/responses
-// surface. requires_openai_auth = false because EveryAPI's relay key
-// is its own credential, not an OpenAI ChatGPT session token.
+// wire_api = "responses" matches the backend's native /v1/responses surface. requires_openai_auth = false because EveryAPI's relay key is its own credential, not an OpenAI ChatGPT session token.
 func writeCodexConfigTOML(codexHome, apiBase string) error {
 	return writeCodexConfigTOMLWithCatalog(codexHome, apiBase, "", "")
 }
@@ -418,13 +382,7 @@ func writeCodexConfigTOMLWithCatalog(codexHome, apiBase, catalogPath, bootModel 
 	if err := inheritPersistentCodexReasoningEffort(&defaults, codexHome, catalogPath); err != nil {
 		return err
 	}
-	// A live-catalog launch gets a process-scoped CODEX_HOME created fresh by
-	// os.MkdirTemp and removed on exit, so the read above finds nothing and
-	// "root-level model is preserved" cannot hold there — whatever codex
-	// recorded about its own model died with the previous home. The selection
-	// EveryAPI persisted is the only thing that survives across launches, and
-	// it arrives here already sorted to the head of the catalogue. A model the
-	// user set in a legacy fixed home still wins, so this only fills a gap.
+	// A live-catalog launch gets a process-scoped CODEX_HOME created fresh by os.MkdirTemp and removed on exit, so the read above finds nothing and "root-level model is preserved" cannot hold there — whatever codex recorded about its own model died with the previous home. The selection EveryAPI persisted is the only thing that survives across launches, and it arrives here already sorted to the head of the catalogue. A model the user set in a legacy fixed home still wins, so this only fills a gap.
 	if defaults.Model == "" {
 		defaults.Model = bootModel
 	}
@@ -432,12 +390,7 @@ func writeCodexConfigTOMLWithCatalog(codexHome, apiBase, catalogPath, bootModel 
 	if err != nil {
 		return err
 	}
-	// TOML built by string concat — small and shape-stable, not worth
-	// dragging in a TOML writer dep just for two stanzas. base_url is
-	// defensively escaped as a TOML basic string (mirroring hermes's
-	// yamlDoubleQuote) so a stray quote / newline in a user-supplied
-	// --api-base can't break out of the value or inject a key into the
-	// [model_providers.everyapi] stanza.
+	// TOML built by string concat — small and shape-stable, not worth dragging in a TOML writer dep just for two stanzas. base_url is defensively escaped as a TOML basic string (mirroring hermes's yamlDoubleQuote) so a stray quote / newline in a user-supplied --api-base can't break out of the value or inject a key into the [model_providers.everyapi] stanza.
 	var b strings.Builder
 	b.WriteString("# Auto-generated by `everyapi use codex`.\n")
 	b.WriteString("# EveryAPI regenerates the provider configuration on every launch.\n")
@@ -451,12 +404,9 @@ func writeCodexConfigTOMLWithCatalog(codexHome, apiBase, catalogPath, bootModel 
 	b.WriteString("name = \"EveryAPI\"\n")
 	b.WriteString("base_url = " + tomlBasicQuote(base) + "\n")
 	b.WriteString("env_key = \"OPENAI_API_KEY\"\n")
-	// Pin the routing surface: codex's WireApi default is Chat, which
-	// would hit /v1/chat/completions. We want the gateway's native
-	// /v1/responses surface (see the doc comment above).
+	// Pin the routing surface: codex's WireApi default is Chat, which would hit /v1/chat/completions. We want the gateway's native /v1/responses surface (see the doc comment above).
 	b.WriteString("wire_api = \"responses\"\n")
-	// EveryAPI's relay key is its own credential, not an OpenAI ChatGPT
-	// session token (already the codex default; written to match intent).
+	// EveryAPI's relay key is its own credential, not an OpenAI ChatGPT session token (already the codex default; written to match intent).
 	b.WriteString("requires_openai_auth = false\n")
 	return writeFileAtomic(filepath.Join(codexHome, "config.toml"), []byte(b.String()), 0o644)
 }
@@ -599,11 +549,7 @@ func encodeCodexUserDefaults(defaults codexUserDefaults) (string, error) {
 	return b.String(), nil
 }
 
-// tomlBasicQuote renders s as a TOML basic string, escaping the
-// characters that would otherwise terminate the string or inject
-// structure. The escape forms (\\, \", \n, \r, \t) are valid in both TOML
-// basic strings and YAML double-quoted scalars, so this mirrors hermes's
-// yamlDoubleQuote. Sufficient for base_url; not a general TOML serializer.
+// tomlBasicQuote renders s as a TOML basic string, escaping the characters that would otherwise terminate the string or inject structure. The escape forms (\\, \", \n, \r, \t) are valid in both TOML basic strings and YAML double-quoted scalars, so this mirrors hermes's yamlDoubleQuote. Sufficient for base_url; not a general TOML serializer.
 func tomlBasicQuote(s string) string {
 	r := strings.NewReplacer(
 		`\`, `\\`,
@@ -615,9 +561,7 @@ func tomlBasicQuote(s string) string {
 	return `"` + r.Replace(s) + `"`
 }
 
-// writeFileAtomic writes via tmp + rename so a concurrent codex read
-// never sees a half-written file. tmp lives in the same directory so
-// the rename is atomic (cross-FS renames degrade to copy+delete).
+// writeFileAtomic writes via tmp + rename so a concurrent codex read never sees a half-written file. tmp lives in the same directory so the rename is atomic (cross-FS renames degrade to copy+delete).
 func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")

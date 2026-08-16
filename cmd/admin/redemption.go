@@ -9,19 +9,16 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
-	"github.com/everyapi-ai/everyapi-ai/internal/style"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/style"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 )
 
 // --- admin redemption ---------------------------------------------
 //
-// CRUD over prepaid quota vouchers (/api/redemption, AdminAuth).
-// `create` MINTS quota and is the only verb that returns the plaintext
-// keys, so it prints them once; the two delete verbs are destructive
-// and confirm before firing.
+// CRUD over prepaid quota vouchers (/api/redemption, AdminAuth). `create` MINTS quota and is the only verb that returns the plaintext keys, so it prints them once; the two delete verbs are destructive and confirm before firing.
 
 func adminRedemption(args []string) error {
 	if len(args) == 0 {
@@ -244,9 +241,7 @@ func adminRedemptionUpdate(args []string) error {
 	if err != nil {
 		return err
 	}
-	// Read the current row first: the backend's update writes name /
-	// quota / expired_time wholesale, so omitted flags must carry the
-	// existing values forward rather than zeroing them.
+	// Read the current row first: the backend's update writes name / quota / expired_time wholesale, so omitted flags must carry the existing values forward rather than zeroing them.
 	cur, err := client.AdminGetRedemption(cliout.WithCtx(), id)
 	if err != nil {
 		return classifyErr(err)
@@ -322,8 +317,7 @@ func adminRedemptionDelete(args []string) error {
 	}
 	if !*yes {
 		if !cliprompt.IsInteractive() {
-			// Destructive + no TTY to confirm on: fail closed rather than
-			// silently deleting. Require explicit -y for non-interactive use.
+			// Destructive + no TTY to confirm on: fail closed rather than silently deleting. Require explicit -y for non-interactive use.
 			return errors.New(i18n.T("token.revoke_needs_confirm"))
 		}
 		ok, err := cliprompt.YesNo(bufio.NewReader(os.Stdin), fmt.Sprintf(i18n.T("admin.redemption.delete_confirm"), id), false)
@@ -357,8 +351,7 @@ func adminRedemptionClearInvalid(args []string) error {
 	}
 	if !*yes {
 		if !cliprompt.IsInteractive() {
-			// Destructive + no TTY to confirm on: fail closed rather than
-			// silently deleting. Require explicit -y for non-interactive use.
+			// Destructive + no TTY to confirm on: fail closed rather than silently deleting. Require explicit -y for non-interactive use.
 			return errors.New(i18n.T("token.revoke_needs_confirm"))
 		}
 		ok, err := cliprompt.YesNo(bufio.NewReader(os.Stdin), i18n.T("admin.redemption.clear_confirm"), false)

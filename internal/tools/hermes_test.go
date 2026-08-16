@@ -8,10 +8,7 @@ import (
 	"testing"
 )
 
-// hermesTestHome redirects ConfigDir() at a fresh tmp dir for one test
-// by hijacking XDG_CONFIG_HOME (which the SDK's ConfigDir honors
-// first). Returns the resolved HERMES_HOME prepareHermes should
-// produce so the test can assert paths without re-computing the join.
+// hermesTestHome redirects ConfigDir() at a fresh tmp dir for one test by hijacking XDG_CONFIG_HOME (which the SDK's ConfigDir honors first). Returns the resolved HERMES_HOME prepareHermes should produce so the test can assert paths without re-computing the join.
 func hermesTestHome(t *testing.T) (xdg, wantHermesHome string) {
 	t.Helper()
 	xdg = t.TempDir()
@@ -20,10 +17,7 @@ func hermesTestHome(t *testing.T) (xdg, wantHermesHome string) {
 	return xdg, filepath.Join(xdg, "everyapi", "hermes-home")
 }
 
-// TestPrepareHermes_WritesConfig is the smoke test: if it breaks,
-// `everyapi use hermes` won't route through the gateway. Verifies the
-// custom-provider config.yaml lands in HERMES_HOME with base_url, the
-// inline relay key, and the default model.
+// TestPrepareHermes_WritesConfig is the smoke test: if it breaks, `everyapi use hermes` won't route through the gateway. Verifies the custom-provider config.yaml lands in HERMES_HOME with base_url, the inline relay key, and the default model.
 func TestPrepareHermes_WritesConfig(t *testing.T) {
 	_, hermesHome := hermesTestHome(t)
 
@@ -65,8 +59,7 @@ func TestPrepareHermesRequiresResolvedModel(t *testing.T) {
 	}
 }
 
-// TestPrepareHermes_ModelOverride verifies EVERYAPI_HERMES_MODEL
-// changes the boot model without touching anything else.
+// TestPrepareHermes_ModelOverride verifies EVERYAPI_HERMES_MODEL changes the boot model without touching anything else.
 func TestPrepareHermes_ModelOverride(t *testing.T) {
 	_, hermesHome := hermesTestHome(t)
 	t.Setenv(hermesModelEnv, "gpt-5.1")
@@ -87,10 +80,7 @@ func TestPrepareHermes_ModelOverride(t *testing.T) {
 	}
 }
 
-// TestPrepareHermes_ModelEscaped guards against YAML injection through
-// EVERYAPI_HERMES_MODEL (user-supplied env): a model containing a quote
-// or newline must stay confined to the default: scalar and must not
-// inject a sibling key into the model map.
+// TestPrepareHermes_ModelEscaped guards against YAML injection through EVERYAPI_HERMES_MODEL (user-supplied env): a model containing a quote or newline must stay confined to the default: scalar and must not inject a sibling key into the model map.
 func TestPrepareHermes_ModelEscaped(t *testing.T) {
 	_, hermesHome := hermesTestHome(t)
 	// A value that, unescaped, would close the quote and add a key.
@@ -104,14 +94,11 @@ func TestPrepareHermes_ModelEscaped(t *testing.T) {
 		t.Fatalf("read config.yaml: %v", err)
 	}
 	cfg := string(cfgBody)
-	// The quote and newline must be backslash-escaped, keeping the whole
-	// payload confined to the default: scalar (one physical line).
+	// The quote and newline must be backslash-escaped, keeping the whole payload confined to the default: scalar (one physical line).
 	if !strings.Contains(cfg, `default: "evil\"\napi_mode: completions"`) {
 		t.Errorf("model not YAML-escaped\nFull config:\n%s", cfg)
 	}
-	// Structurally: the injected directive must not surface as its own
-	// line, and api_mode must appear exactly twice: once for the active model
-	// and once for the named custom provider used by Hermes' native picker.
+	// Structurally: the injected directive must not surface as its own line, and api_mode must appear exactly twice: once for the active model and once for the named custom provider used by Hermes' native picker.
 	var apiModeLines int
 	for _, line := range strings.Split(cfg, "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -127,9 +114,7 @@ func TestPrepareHermes_ModelEscaped(t *testing.T) {
 	}
 }
 
-// TestPrepareHermes_TrailingSlashBase pins the joinBase invariant for
-// hermes' config.yaml: a dev-style `http://localhost:8787/` must not
-// produce `http://localhost:8787//v1`.
+// TestPrepareHermes_TrailingSlashBase pins the joinBase invariant for hermes' config.yaml: a dev-style `http://localhost:8787/` must not produce `http://localhost:8787//v1`.
 func TestPrepareHermes_TrailingSlashBase(t *testing.T) {
 	_, hermesHome := hermesTestHome(t)
 	if _, err := prepareHermes("http://localhost:8787/", "tok"); err != nil {
@@ -148,10 +133,7 @@ func TestPrepareHermes_TrailingSlashBase(t *testing.T) {
 	}
 }
 
-// TestPrepareHermes_FilePerms guards the secret-bearing config.yaml:
-// it carries an inline relay key, so chmod 0600 (and 0700 on the
-// directory) is non-negotiable. Skipped on Windows where Unix perms
-// don't apply.
+// TestPrepareHermes_FilePerms guards the secret-bearing config.yaml: it carries an inline relay key, so chmod 0600 (and 0700 on the directory) is non-negotiable. Skipped on Windows where Unix perms don't apply.
 func TestPrepareHermes_FilePerms(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix permission bits not meaningful on Windows")
@@ -176,10 +158,7 @@ func TestPrepareHermes_FilePerms(t *testing.T) {
 	}
 }
 
-// TestPrepareHermes_Idempotent re-runs on the same directory and
-// verifies the new relay key wins on the second call (covers the
-// "user rotated keys / switched groups" case). The directory is reused
-// on purpose, so the rewrite-every-call contract matters.
+// TestPrepareHermes_Idempotent re-runs on the same directory and verifies the new relay key wins on the second call (covers the "user rotated keys / switched groups" case). The directory is reused on purpose, so the rewrite-every-call contract matters.
 func TestPrepareHermes_Idempotent(t *testing.T) {
 	_, hermesHome := hermesTestHome(t)
 	if _, err := prepareHermes("https://api.everyapi.ai", "first-key"); err != nil {
@@ -201,10 +180,7 @@ func TestPrepareHermes_Idempotent(t *testing.T) {
 	}
 }
 
-// TestHermesTool_PrepareWired makes sure the Registry entry actually
-// invokes prepareHermes — a refactor that drops prepareFn from the
-// hermes entry would leave the function existing-but-unused and the
-// CLI silently regressing (no config.yaml → first-run wizard / 401).
+// TestHermesTool_PrepareWired makes sure the Registry entry actually invokes prepareHermes — a refactor that drops prepareFn from the hermes entry would leave the function existing-but-unused and the CLI silently regressing (no config.yaml → first-run wizard / 401).
 func TestHermesTool_PrepareWired(t *testing.T) {
 	_, hermesHome := hermesTestHome(t)
 	tool, _ := Lookup("hermes")
@@ -217,9 +193,7 @@ func TestHermesTool_PrepareWired(t *testing.T) {
 	}
 }
 
-// TestHermesTool_ModelEnvWired pins that the Registry exposes the model
-// env var the picker drives — if this drops, `everyapi use hermes`
-// stops offering the model picker and silently snaps to the default.
+// TestHermesTool_ModelEnvWired pins that the Registry exposes the model env var the picker drives — if this drops, `everyapi use hermes` stops offering the model picker and silently snaps to the default.
 func TestHermesTool_ModelEnvWired(t *testing.T) {
 	tool, _ := Lookup("hermes")
 	if tool.ModelEnv != hermesModelEnv {
@@ -227,9 +201,7 @@ func TestHermesTool_ModelEnvWired(t *testing.T) {
 	}
 }
 
-// TestLastHermesModel round-trips through the writer: the model pinned
-// in config.yaml is exactly what LastHermesModel reads back, so the
-// picker can default the cursor to the previous choice.
+// TestLastHermesModel round-trips through the writer: the model pinned in config.yaml is exactly what LastHermesModel reads back, so the picker can default the cursor to the previous choice.
 func TestLastHermesModel(t *testing.T) {
 	hermesTestHome(t)
 

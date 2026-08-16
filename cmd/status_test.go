@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
-	"github.com/everyapi-ai/everyapi-ai/internal/styletest"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/styletest"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 	"github.com/muesli/termenv"
 )
@@ -201,21 +201,14 @@ func TestStatusMachineIncludesOAuthAccountBalance(t *testing.T) {
 	}
 }
 
-// TestStatusLazyMigratesRole covers the pre-Role credentials.json
-// recovery path: a credentials file written before the Role field
-// existed has Role=0, but the live GetSelf returns 100. Status
-// must rewrite the on-disk creds with the fresh Role so the help-
-// gating in main.go sees the user as admin on the next invocation.
+// TestStatusLazyMigratesRole covers the pre-Role credentials.json recovery path: a credentials file written before the Role field existed has Role=0, but the live GetSelf returns 100. Status must rewrite the on-disk creds with the fresh Role so the help- gating in main.go sees the user as admin on the next invocation.
 //
-// XDG_CONFIG_HOME is redirected to a temp dir so the test never
-// touches the developer's real ~/.config/everyapi.
+// XDG_CONFIG_HOME is redirected to a temp dir so the test never touches the developer's real ~/.config/everyapi.
 func TestStatusLazyMigratesRole(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 
-	// Fake the backend: /api/option (used by GetStatus's QuotaPerUnit
-	// probe) returns a tiny envelope; /api/user/self returns a role
-	// the on-disk creds doesn't yet have.
+	// Fake the backend: /api/option (used by GetStatus's QuotaPerUnit probe) returns a tiny envelope; /api/user/self returns a role the on-disk creds doesn't yet have.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/status":
@@ -237,9 +230,7 @@ func TestStatusLazyMigratesRole(t *testing.T) {
 				},
 			})
 		default:
-			// Other endpoints (jump-session, relaykey resolve) we
-			// don't care about for the lazy-migrate path — return
-			// a minimal success envelope so Status doesn't blow up.
+			// Other endpoints (jump-session, relaykey resolve) we don't care about for the lazy-migrate path — return a minimal success envelope so Status doesn't blow up.
 			_ = json.NewEncoder(w).Encode(map[string]any{"success": true})
 		}
 	}))
@@ -256,10 +247,7 @@ func TestStatusLazyMigratesRole(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := Status(nil); err != nil {
-		// Status's relay-probe path may error on the stub backend
-		// (it depends on resolveRelayKey returning ErrNoRelayKey
-		// which prints a benign warning, not an error). Either way,
-		// the role-migrate write happens before any relay step.
+		// Status's relay-probe path may error on the stub backend (it depends on resolveRelayKey returning ErrNoRelayKey which prints a benign warning, not an error). Either way, the role-migrate write happens before any relay step.
 		t.Logf("Status returned %v (acceptable if non-relay paths still completed)", err)
 	}
 
@@ -271,9 +259,7 @@ func TestStatusLazyMigratesRole(t *testing.T) {
 		t.Errorf("creds.Role after status = %d, want 100 (lazy migration didn't persist)", got.Role)
 	}
 
-	// File should still be 0600 — the rewrite must preserve perms.
-	// Windows has no POSIX permission bits (Stat reports 666 for any
-	// writable file), so the assertion only means something elsewhere.
+	// File should still be 0600 — the rewrite must preserve perms. Windows has no POSIX permission bits (Stat reports 666 for any writable file), so the assertion only means something elsewhere.
 	if runtime.GOOS != "windows" {
 		info, err := os.Stat(filepath.Join(tmp, "everyapi", "credentials.json"))
 		if err != nil {
@@ -285,9 +271,7 @@ func TestStatusLazyMigratesRole(t *testing.T) {
 	}
 }
 
-// styledQuota must bold both dollar amounts on a styled terminal and
-// strip the ** markers to clean plain text when output is piped /
-// NO_COLOR, so `everyapi status | grep` stays parseable.
+// styledQuota must bold both dollar amounts on a styled terminal and strip the ** markers to clean plain text when output is piped / NO_COLOR, so `everyapi status | grep` stays parseable.
 func TestStyledQuota(t *testing.T) {
 	orig := i18n.Language()
 	i18n.SetLanguage("en")
@@ -316,12 +300,7 @@ func TestStyledQuota(t *testing.T) {
 	})
 }
 
-// TestStatusBoldsValues drives the full Status() render against a fake
-// backend and asserts the value-emphasis contract: on a styled terminal
-// the username, both amounts, the request count, and the topup URL are
-// each wrapped in a bold span; when the profile is Ascii (piped /
-// NO_COLOR) the same output carries no escape codes and no stray ** —
-// so scripts parsing `everyapi status` are unaffected.
+// TestStatusBoldsValues drives the full Status() render against a fake backend and asserts the value-emphasis contract: on a styled terminal the username, both amounts, the request count, and the topup URL are each wrapped in a bold span; when the profile is Ascii (piped / NO_COLOR) the same output carries no escape codes and no stray ** — so scripts parsing `everyapi status` are unaffected.
 func TestStatusBoldsValues(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
@@ -388,8 +367,7 @@ func TestStatusBoldsValues(t *testing.T) {
 				t.Errorf("status output missing bold span %q\n--- output ---\n%s", w, out)
 			}
 		}
-		// The topup URL is deliberately NOT bolded — terminals style
-		// detected links themselves, and we keep emphasis off URLs.
+		// The topup URL is deliberately NOT bolded — terminals style detected links themselves, and we keep emphasis off URLs.
 		if strings.Contains(out, "/wallet\x1b[22m") {
 			t.Errorf("topup URL should not be bolded\n--- output ---\n%s", out)
 		}
@@ -413,9 +391,7 @@ func TestStatusBoldsValues(t *testing.T) {
 	})
 }
 
-// The desktop reads the picture from the network-free status call, so it has to
-// come out of the credential cache — and the balance path, which already
-// fetches /self, has to refresh that cache rather than leave it stale.
+// The desktop reads the picture from the network-free status call, so it has to come out of the credential cache — and the balance path, which already fetches /self, has to refresh that cache rather than leave it stale.
 func TestStatusMachineReportsAndRefreshesAvatarURL(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	const cached = "https://app.example/api/avatar/4?v=old"
@@ -488,8 +464,7 @@ func TestStatusMachineReportsAndRefreshesAvatarURL(t *testing.T) {
 	}
 }
 
-// An account with no picture must omit the field rather than emit an empty
-// string, so the desktop's strict protocol check treats absence as absence.
+// An account with no picture must omit the field rather than emit an empty string, so the desktop's strict protocol check treats absence as absence.
 func TestStatusMachineOmitsAvatarURLWhenUnset(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := config.Save(&config.Credentials{

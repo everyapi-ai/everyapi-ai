@@ -8,10 +8,7 @@ import (
 	"testing"
 )
 
-// writeFakeExec drops an executable-looking file named for `name` into
-// dir and returns its path. On Unix it's chmod 0755; on Windows it's a
-// `.cmd` shim (matching what npm writes), which findExecutable finds via
-// PATHEXT. Mode bits are ignored on Windows, which is fine.
+// writeFakeExec drops an executable-looking file named for `name` into dir and returns its path. On Unix it's chmod 0755; on Windows it's a `.cmd` shim (matching what npm writes), which findExecutable finds via PATHEXT. Mode bits are ignored on Windows, which is fine.
 func writeFakeExec(t *testing.T, dir, name string) string {
 	t.Helper()
 	fname := name
@@ -25,10 +22,7 @@ func writeFakeExec(t *testing.T, dir, name string) string {
 	return p
 }
 
-// assertResolvesInto fails unless got is a real file living directly in
-// dir. Avoids brittle exact-string equality: on Windows findExecutable
-// appends a PATHEXT extension whose case may differ from the file on
-// disk, so we assert by directory + stat-ability instead.
+// assertResolvesInto fails unless got is a real file living directly in dir. Avoids brittle exact-string equality: on Windows findExecutable appends a PATHEXT extension whose case may differ from the file on disk, so we assert by directory + stat-ability instead.
 func assertResolvesInto(t *testing.T, got, dir string) {
 	t.Helper()
 	if got == "" {
@@ -42,8 +36,7 @@ func assertResolvesInto(t *testing.T, got, dir string) {
 	}
 }
 
-// TestFindExecutable_FoundAndMissing checks the leaf lookup: an
-// executable present in the dir is found; an absent name isn't.
+// TestFindExecutable_FoundAndMissing checks the leaf lookup: an executable present in the dir is found; an absent name isn't.
 func TestFindExecutable_FoundAndMissing(t *testing.T) {
 	dir := t.TempDir()
 	writeFakeExec(t, dir, "widget")
@@ -56,8 +49,7 @@ func TestFindExecutable_FoundAndMissing(t *testing.T) {
 	if got, ok := findExecutable(dir, "not-there-zzz"); ok {
 		t.Errorf("findExecutable(not-there) = (%q, true), want not found", got)
 	}
-	// A non-executable file must NOT count as a hit on Unix (Windows keys
-	// off the extension, not the mode bit, so skip the assertion there).
+	// A non-executable file must NOT count as a hit on Unix (Windows keys off the extension, not the mode bit, so skip the assertion there).
 	if runtime.GOOS != "windows" {
 		plain := filepath.Join(dir, "plainfile")
 		if err := os.WriteFile(plain, []byte("data"), 0o644); err != nil {
@@ -69,8 +61,7 @@ func TestFindExecutable_FoundAndMissing(t *testing.T) {
 	}
 }
 
-// TestResolveExec_OnPath verifies the fast path: a tool whose ExecName is
-// a real system binary resolves via $PATH with no npm involvement.
+// TestResolveExec_OnPath verifies the fast path: a tool whose ExecName is a real system binary resolves via $PATH with no npm involvement.
 func TestResolveExec_OnPath(t *testing.T) {
 	tool := &Tool{Name: "shell", ExecName: "sh"}
 	if runtime.GOOS == "windows" {
@@ -156,18 +147,13 @@ func TestResolveExec_GrokFindsRealBinaryAfterCmuxWrapper(t *testing.T) {
 	}
 }
 
-// TestResolveExec_NpmFallbackViaEnvBinDir is the core regression guard:
-// a tool that ISN'T on $PATH but WAS globally npm-installed must still
-// resolve, via the version-manager bin dir exported in NVM_BIN. This is
-// the exact `everyapi use codex` wedge — npm's global bin missing from
-// $PATH — that previously looped forever on "not installed".
+// TestResolveExec_NpmFallbackViaEnvBinDir is the core regression guard: a tool that ISN'T on $PATH but WAS globally npm-installed must still resolve, via the version-manager bin dir exported in NVM_BIN. This is the exact `everyapi use codex` wedge — npm's global bin missing from $PATH — that previously looped forever on "not installed".
 func TestResolveExec_NpmFallbackViaEnvBinDir(t *testing.T) {
 	binDir := t.TempDir()
 	const exe = "everyapi-fake-codex-zzz" // vanishingly unlikely to be on real PATH
 	writeFakeExec(t, binDir, exe)
 
-	// Point NVM_BIN at our fake bin dir; clear the other prefix signals so
-	// nothing else can shadow the assertion.
+	// Point NVM_BIN at our fake bin dir; clear the other prefix signals so nothing else can shadow the assertion.
 	t.Setenv("NVM_BIN", binDir)
 	t.Setenv("VOLTA_HOME", "")
 	t.Setenv("FNM_MULTISHELL_PATH", "")
@@ -226,10 +212,7 @@ func TestResolveExec_NpmFallbackViaStableUserBinDirs(t *testing.T) {
 	}
 }
 
-// TestResolveExec_NonNpmToolSkipsNpmDirs pins that the npm-global search
-// is gated to npm installers: a curl|bash tool that isn't on $PATH must
-// NOT be "found" just because a same-named binary happens to sit in an
-// npm bin dir. Keeps the fallback from mis-resolving unrelated tools.
+// TestResolveExec_NonNpmToolSkipsNpmDirs pins that the npm-global search is gated to npm installers: a curl|bash tool that isn't on $PATH must NOT be "found" just because a same-named binary happens to sit in an npm bin dir. Keeps the fallback from mis-resolving unrelated tools.
 func TestResolveExec_NonNpmToolSkipsNpmDirs(t *testing.T) {
 	binDir := t.TempDir()
 	const exe = "everyapi-fake-curltool-zzz"
@@ -247,12 +230,7 @@ func TestResolveExec_NonNpmToolSkipsNpmDirs(t *testing.T) {
 	}
 }
 
-// TestResolveExec_ExtraBinDirs covers the curl|bash cohort the npm
-// fallback can't reach: Antigravity's installer writes `agy` into
-// ~/.local/bin, which is routinely absent from the $PATH everyapi
-// inherits (a GUI-launched terminal, or an rc file we never source).
-// Without ExtraBinDirs the post-install re-check misses and `use` loops
-// forever offering to reinstall.
+// TestResolveExec_ExtraBinDirs covers the curl|bash cohort the npm fallback can't reach: Antigravity's installer writes `agy` into ~/.local/bin, which is routinely absent from the $PATH everyapi inherits (a GUI-launched terminal, or an rc file we never source). Without ExtraBinDirs the post-install re-check misses and `use` loops forever offering to reinstall.
 func TestResolveExec_ExtraBinDirs(t *testing.T) {
 	home := t.TempDir()
 	binDir := filepath.Join(home, ".local", "bin")
@@ -284,9 +262,7 @@ func TestResolveExec_ExtraBinDirs(t *testing.T) {
 		t.Error("IsInstalled = false for a tool present in its ExtraBinDirs")
 	}
 
-	// An unregistered exec name has no entry to consult, so LookupExecName
-	// must miss: ExtraBinDirs is reached through the registry, never by
-	// scanning ~/.local/bin for whatever happens to be there.
+	// An unregistered exec name has no entry to consult, so LookupExecName must miss: ExtraBinDirs is reached through the registry, never by scanning ~/.local/bin for whatever happens to be there.
 	if p, _, ok := LookupExecName(exe); ok {
 		t.Errorf("LookupExecName(%q) = %q, want miss for an unregistered exec name", exe, p)
 	}
@@ -352,9 +328,7 @@ func TestWindowsLocalAppDataBinDirsRejectEscape(t *testing.T) {
 	}
 }
 
-// TestLookupExecName_MatchesExecNameNotRegistryKey pins the lookup key.
-// Gemini CLI and Antigravity are distinct registry entries and executable
-// names; the MCP helper must resolve the real `gemini` entry.
+// TestLookupExecName_MatchesExecNameNotRegistryKey pins the lookup key. Gemini CLI and Antigravity are distinct registry entries and executable names; the MCP helper must resolve the real `gemini` entry.
 func TestLookupExecName_MatchesExecNameNotRegistryKey(t *testing.T) {
 	if got := toolByExecName("agy"); got == nil {
 		t.Error(`toolByExecName("agy") = nil, want the antigravity entry`)
@@ -369,12 +343,7 @@ func TestLookupExecName_MatchesExecNameNotRegistryKey(t *testing.T) {
 	}
 }
 
-// TestToolByExecName_CoversWholeRegistry checks the baseline: every
-// shipped tool is reachable by its own ExecName. It cannot detect the
-// Registry-vs-Names() regression on its own — Names() and Registry list
-// the same tools today, so an implementation iterating either one passes
-// this. TestToolByExecName_ReachesEntriesMissingFromNames is the test
-// that actually pins that distinction.
+// TestToolByExecName_CoversWholeRegistry checks the baseline: every shipped tool is reachable by its own ExecName. It cannot detect the Registry-vs-Names() regression on its own — Names() and Registry list the same tools today, so an implementation iterating either one passes this. TestToolByExecName_ReachesEntriesMissingFromNames is the test that actually pins that distinction.
 func TestToolByExecName_CoversWholeRegistry(t *testing.T) {
 	for key, tool := range Registry {
 		got := toolByExecName(tool.ExecName)
@@ -388,9 +357,7 @@ func TestToolByExecName_CoversWholeRegistry(t *testing.T) {
 	}
 }
 
-// TestResolveExec_ExtraBinDirsRejectsAbsolute pins the $HOME-relative
-// contract: an absolute entry is ignored rather than searched, so the
-// resolved location always stays anchored under the user's home dir.
+// TestResolveExec_ExtraBinDirsRejectsAbsolute pins the $HOME-relative contract: an absolute entry is ignored rather than searched, so the resolved location always stays anchored under the user's home dir.
 func TestResolveExec_ExtraBinDirsRejectsAbsolute(t *testing.T) {
 	outside := t.TempDir()
 	const exe = "everyapi-fake-abs-zzz"
@@ -410,11 +377,7 @@ func TestResolveExec_ExtraBinDirsRejectsAbsolute(t *testing.T) {
 	}
 }
 
-// TestExtraBinDirsRejectsHomeEscape covers the other half of the
-// home-anchored contract. filepath.Join Cleans its result, so a relative
-// entry containing ".." resolves outside $HOME without ever tripping the
-// IsAbs check — "sub/../../x" doesn't even start with "..". Containment
-// has to be checked on the joined path, not the raw entry.
+// TestExtraBinDirsRejectsHomeEscape covers the other half of the home-anchored contract. filepath.Join Cleans its result, so a relative entry containing ".." resolves outside $HOME without ever tripping the IsAbs check — "sub/../../x" doesn't even start with "..". Containment has to be checked on the joined path, not the raw entry.
 func TestExtraBinDirsRejectsHomeEscape(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -443,11 +406,7 @@ func TestExtraBinDirsRejectsHomeEscape(t *testing.T) {
 	}
 }
 
-// TestToolByExecName_DeterministicOnDuplicates pins the tie-break. Registry
-// is a map, so without an explicit ordering the winner among entries that
-// share an ExecName varies per run — and with it, whose ExtraBinDirs get
-// searched. Several entries running one binary is a legitimate shape: the
-// retired provider presets all had ExecName "claude".
+// TestToolByExecName_DeterministicOnDuplicates pins the tie-break. Registry is a map, so without an explicit ordering the winner among entries that share an ExecName varies per run — and with it, whose ExtraBinDirs get searched. Several entries running one binary is a legitimate shape: the retired provider presets all had ExecName "claude".
 func TestToolByExecName_DeterministicOnDuplicates(t *testing.T) {
 	const exe = "everyapi-dup-exec-zzz"
 	for _, key := range []string{"zzz-dup-b", "zzz-dup-a", "zzz-dup-c"} {
@@ -470,11 +429,7 @@ func TestToolByExecName_DeterministicOnDuplicates(t *testing.T) {
 	}
 }
 
-// TestToolByExecName_ReachesEntriesMissingFromNames is the regression this
-// helper's Registry-over-Names() choice exists for. Iterating Names() would
-// skip a registered tool that nobody added to the picker ordering, silently
-// dropping its ExtraBinDirs; the two lists happen to agree today, so the
-// gap only shows up with an entry deliberately absent from Names().
+// TestToolByExecName_ReachesEntriesMissingFromNames is the regression this helper's Registry-over-Names() choice exists for. Iterating Names() would skip a registered tool that nobody added to the picker ordering, silently dropping its ExtraBinDirs; the two lists happen to agree today, so the gap only shows up with an entry deliberately absent from Names().
 func TestToolByExecName_ReachesEntriesMissingFromNames(t *testing.T) {
 	const key = "zzz-unlisted"
 	const exe = "everyapi-unlisted-exec-zzz"
@@ -491,12 +446,7 @@ func TestToolByExecName_ReachesEntriesMissingFromNames(t *testing.T) {
 	}
 }
 
-// TestCurlInstallersDeclareTheirOutputDir is the breadth check the
-// ExtraBinDirs mechanism needs to stay honest. Every curl|bash entry in
-// the Registry installs to a fixed directory rather than to $PATH, so
-// each one needs ExtraBinDirs or it keeps the reinstall loop this
-// mechanism was added to kill — the gemini fix alone left claude and
-// hermes broken. npm tools are exempt: npmEnvBinDirs already covers them.
+// TestCurlInstallersDeclareTheirOutputDir is the breadth check the ExtraBinDirs mechanism needs to stay honest. Every curl|bash entry in the Registry installs to a fixed directory rather than to $PATH, so each one needs ExtraBinDirs or it keeps the reinstall loop this mechanism was added to kill — the gemini fix alone left claude and hermes broken. npm tools are exempt: npmEnvBinDirs already covers them.
 func TestCurlInstallersDeclareTheirOutputDir(t *testing.T) {
 	for key, tool := range Registry {
 		if tool.InstallCmd == "" || installUsesNpm(tool) {
@@ -509,10 +459,7 @@ func TestCurlInstallersDeclareTheirOutputDir(t *testing.T) {
 	}
 }
 
-// TestNonNpmToolsResolveFromTheirInstallDir is the behavioral counterpart:
-// with the binary in the declared directory and $PATH unable to see it,
-// resolution must succeed for every non-npm tool — the exact post-install
-// re-check RunInstall performs.
+// TestNonNpmToolsResolveFromTheirInstallDir is the behavioral counterpart: with the binary in the declared directory and $PATH unable to see it, resolution must succeed for every non-npm tool — the exact post-install re-check RunInstall performs.
 func TestNonNpmToolsResolveFromTheirInstallDir(t *testing.T) {
 	for key, tool := range Registry {
 		if tool.InstallCmd == "" || installUsesNpm(tool) || len(tool.ExtraBinDirs) == 0 {
@@ -545,9 +492,7 @@ func TestNonNpmToolsResolveFromTheirInstallDir(t *testing.T) {
 	}
 }
 
-// TestGeminiAutoInstall pins the registry wiring that makes
-// `everyapi use gemini` self-install: without an InstallCmd,
-// CanAutoInstall is false and the user only ever sees the hint.
+// TestGeminiAutoInstall pins the registry wiring that makes `everyapi use gemini` self-install: without an InstallCmd, CanAutoInstall is false and the user only ever sees the hint.
 func TestGeminiAutoInstall(t *testing.T) {
 	tool, err := Lookup("gemini")
 	if err != nil {
@@ -567,8 +512,7 @@ func TestGeminiAutoInstall(t *testing.T) {
 	}
 }
 
-// TestBinSubdir pins the prefix→bin mapping that differs by platform:
-// <prefix>/bin on Unix, the prefix itself on Windows.
+// TestBinSubdir pins the prefix→bin mapping that differs by platform: <prefix>/bin on Unix, the prefix itself on Windows.
 func TestBinSubdir(t *testing.T) {
 	if got := binSubdir(""); got != "" {
 		t.Errorf("binSubdir(\"\") = %q, want empty", got)
@@ -583,9 +527,7 @@ func TestBinSubdir(t *testing.T) {
 	}
 }
 
-// TestDedupeStrings covers order-preserving de-duplication and that the
-// input slice isn't aliased into the output (a shared backing array
-// would let a later append corrupt the caller's data).
+// TestDedupeStrings covers order-preserving de-duplication and that the input slice isn't aliased into the output (a shared backing array would let a later append corrupt the caller's data).
 func TestDedupeStrings(t *testing.T) {
 	in := []string{"a", "b", "a", "c", "b"}
 	got := dedupeStrings(in)
@@ -600,8 +542,7 @@ func TestDedupeStrings(t *testing.T) {
 	}
 }
 
-// pathValue returns env's PATH value under whatever casing the key uses
-// ("Path" on Windows), or "" if absent.
+// pathValue returns env's PATH value under whatever casing the key uses ("Path" on Windows), or "" if absent.
 func pathValue(env map[string]string) (string, bool) {
 	for k, v := range env {
 		if strings.EqualFold(k, "PATH") {
@@ -611,18 +552,12 @@ func pathValue(env map[string]string) (string, bool) {
 	return "", false
 }
 
-// TestWithExecDirOnPath is the guard for the interpreter-not-found
-// regression: when a tool is resolved in a dir that ISN'T on $PATH, that
-// dir (holding the tool's co-located `node`/siblings) must be APPENDED
-// to the child's PATH — appended, not prepended, so it can't shadow a
-// node/npm the user already has first — and when it's already on $PATH
-// (even with a trailing separator), env is untouched.
+// TestWithExecDirOnPath is the guard for the interpreter-not-found regression: when a tool is resolved in a dir that ISN'T on $PATH, that dir (holding the tool's co-located `node`/siblings) must be APPENDED to the child's PATH — appended, not prepended, so it can't shadow a node/npm the user already has first — and when it's already on $PATH (even with a trailing separator), env is untouched.
 func TestWithExecDirOnPath(t *testing.T) {
 	dir := t.TempDir()
 	execPath := filepath.Join(dir, "gemini")
 
-	// dir NOT on PATH → appended last, existing entries keep priority,
-	// other vars preserved, input not mutated.
+	// dir NOT on PATH → appended last, existing entries keep priority, other vars preserved, input not mutated.
 	first := filepath.Join(dir, "..", "elsewhere")
 	t.Setenv("PATH", first)
 	env := map[string]string{"FOO": "bar"}
@@ -653,8 +588,7 @@ func TestWithExecDirOnPath(t *testing.T) {
 		t.Errorf("dir already on PATH: expected no PATH override, got %v", got2)
 	}
 
-	// dir on PATH with a trailing separator → still recognised (entries
-	// are Clean'd before comparing), so no override either.
+	// dir on PATH with a trailing separator → still recognised (entries are Clean'd before comparing), so no override either.
 	t.Setenv("PATH", dir+string(os.PathSeparator)+string(os.PathListSeparator)+"/x")
 	got3 := withExecDirOnPath(map[string]string{}, execPath)
 	if _, injected := pathValue(got3); injected {

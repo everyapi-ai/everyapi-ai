@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -77,9 +77,7 @@ func OverviewMachine(args []string) error {
 		return machineStatusError("unavailable", fmt.Errorf("lock credential cache: %w", err))
 	}
 	creds, err := config.Load()
-	// The loaded value owns all data needed below. Release the file lock before
-	// network I/O so the desktop's concurrent balance refresh does not wait for
-	// all four overview requests to finish.
+	// The loaded value owns all data needed below. Release the file lock before network I/O so the desktop's concurrent balance refresh does not wait for all four overview requests to finish.
 	unlock()
 	if err != nil {
 		return machineStatusError("invalid_credentials", err)

@@ -11,9 +11,7 @@ import (
 
 const forgeModelEnv = "EVERYAPI_FORGE_MODEL"
 
-// prepareForgeWithModels places Forge's global configuration in a
-// lifecycle-bound home. This also contains any credential migration Forge may
-// perform, so the relay key cannot escape into the user's persistent profile.
+// prepareForgeWithModels places Forge's global configuration in a lifecycle-bound home. This also contains any credential migration Forge may perform, so the relay key cannot escape into the user's persistent profile.
 func prepareForgeWithModels(_ string, _ string, models []Model) (map[string]string, error) {
 	selected := strings.TrimSpace(os.Getenv(forgeModelEnv))
 	if selected == "" {

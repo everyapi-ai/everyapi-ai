@@ -5,14 +5,9 @@ import (
 	"testing"
 )
 
-// TestProbeClient drives the three real branches of probeClient
-// against /bin/echo as a stand-in for the per-client binary. echo
-// is always-on-PATH and its argv is its stdout, so we can shape
-// the "registered" vs "not registered" outcome by what we pass.
+// TestProbeClient drives the three real branches of probeClient against /bin/echo as a stand-in for the per-client binary. echo is always-on-PATH and its argv is its stdout, so we can shape the "registered" vs "not registered" outcome by what we pass.
 //
-// The exec timeout path is harder to exercise cheaply — covered
-// by code review (5s ceiling, exec.CommandContext) rather than a
-// flaky sleep-based test.
+// The exec timeout path is harder to exercise cheaply — covered by code review (5s ceiling, exec.CommandContext) rather than a flaky sleep-based test.
 func TestProbeClient(t *testing.T) {
 	if _, err := exec.LookPath("echo"); err != nil {
 		t.Skip("/bin/echo not on PATH; can't run probe test")

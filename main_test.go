@@ -12,18 +12,14 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
-	"github.com/everyapi-ai/everyapi-ai/internal/style"
-	"github.com/everyapi-ai/everyapi-ai/internal/styletest"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/style"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/styletest"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// TestRenderUsageGatedByRole verifies the help-text renderer hides
-// the admin subcommand block from non-admin / unauthenticated users
-// and shows it for role >= 10 (RoleAdminUser). The check is purely
-// local — backend still enforces; this is a discoverability filter,
-// not a security boundary.
+// TestRenderUsageGatedByRole verifies the help-text renderer hides the admin subcommand block from non-admin / unauthenticated users and shows it for role >= 10 (RoleAdminUser). The check is purely local — backend still enforces; this is a discoverability filter, not a security boundary.
 func TestRenderUsageGatedByRole(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -65,9 +61,7 @@ func TestRenderUsageGatedByRole(t *testing.T) {
 	}
 }
 
-// withStdin swaps os.Stdin for a pipe preloaded with input for the
-// duration of the test. The sub-picker's non-TTY path reads os.Stdin
-// via fmt.Scanln, so this drives runSubPicker without a real terminal.
+// withStdin swaps os.Stdin for a pipe preloaded with input for the duration of the test. The sub-picker's non-TTY path reads os.Stdin via fmt.Scanln, so this drives runSubPicker without a real terminal.
 func withStdin(t *testing.T, input string) {
 	t.Helper()
 	r, w, err := os.Pipe()
@@ -83,11 +77,7 @@ func withStdin(t *testing.T, input string) {
 	t.Cleanup(func() { os.Stdin = old; r.Close() })
 }
 
-// TestSubPicker_BackRow locks the discoverability fix: every
-// sub-picker carries a trailing "back" row, and choosing it unwinds to
-// the parent menu (ErrPickCancelled — the same signal Esc raises)
-// WITHOUT dispatching any subcommand. Without the row a user who
-// doesn't know Esc is bound has no visible way out of the sub-menu.
+// TestSubPicker_BackRow locks the discoverability fix: every sub-picker carries a trailing "back" row, and choosing it unwinds to the parent menu (ErrPickCancelled — the same signal Esc raises) WITHOUT dispatching any subcommand. Without the row a user who doesn't know Esc is bound has no visible way out of the sub-menu.
 func TestSubPicker_BackRow(t *testing.T) {
 	newCmd := func(ran *bool) command {
 		return command{
@@ -102,8 +92,7 @@ func TestSubPicker_BackRow(t *testing.T) {
 
 	t.Run("back row unwinds without running a sub", func(t *testing.T) {
 		ran := false
-		// Number-entry path: back is the row after the two declared
-		// subs, so its 1-based selector is 3.
+		// Number-entry path: back is the row after the two declared subs, so its 1-based selector is 3.
 		withStdin(t, "3\n")
 		err := runSubPicker(newCmd(&ran))
 		if !errors.Is(err, cliprompt.ErrPickCancelled) {
@@ -116,9 +105,7 @@ func TestSubPicker_BackRow(t *testing.T) {
 
 	t.Run("picking a real sub still dispatches it", func(t *testing.T) {
 		ran := false
-		// Selector 1 == first declared sub (claim); the trailing EOF on
-		// the next loop read is expected and ignored — we only assert
-		// the index→args mapping survived adding the back row.
+		// Selector 1 == first declared sub (claim); the trailing EOF on the next loop read is expected and ignored — we only assert the index→args mapping survived adding the back row.
 		withStdin(t, "1\n")
 		_ = runSubPicker(newCmd(&ran))
 		if !ran {
@@ -172,10 +159,7 @@ func TestUseCommandDescriptionListsOpenCode(t *testing.T) {
 	}
 }
 
-// TestSubPicker_AuthUnwindsAfterCleanAction locks the login-lands-on-
-// logout fix: after an auth action returns cleanly, runSubPicker must
-// unwind to the root launcher (ErrPickCancelled) rather than re-render
-// the picker with the opposite (destructive) toggle under the cursor.
+// TestSubPicker_AuthUnwindsAfterCleanAction locks the login-lands-on- logout fix: after an auth action returns cleanly, runSubPicker must unwind to the root launcher (ErrPickCancelled) rather than re-render the picker with the opposite (destructive) toggle under the cursor.
 func TestSubPicker_AuthUnwindsAfterCleanAction(t *testing.T) {
 	newAuthCmd := func(calls *int, runErr error) command {
 		return command{
@@ -203,9 +187,7 @@ func TestSubPicker_AuthUnwindsAfterCleanAction(t *testing.T) {
 
 	t.Run("failed action keeps the user in the sub-picker", func(t *testing.T) {
 		calls := 0
-		// Pick login twice: a failed action must NOT pop to root, so the
-		// second selector still reaches the run func. The trailing EOF
-		// then unwinds the picker.
+		// Pick login twice: a failed action must NOT pop to root, so the second selector still reaches the run func. The trailing EOF then unwinds the picker.
 		withStdin(t, "1\n1\n")
 		_ = runSubPicker(newAuthCmd(&calls, errors.New("login failed: network")))
 		if calls != 2 {
@@ -221,12 +203,7 @@ func TestNameCell_BoldAfterPadding(t *testing.T) {
 		t.Fatalf("plain: want %q, got %q", "login   ", got)
 	}
 
-	// Styled profile: trailing pad stays plain spaces (alignment math
-	// never sees ANSI); the name carries the bold SGR. Bare
-	// SetColorProfile mid-test is fine — the cleanup registered by
-	// WithColorProfile above still wins on teardown and restores the
-	// original profile. A second WithColorProfile call would also work
-	// (LIFO cleanup), just reads more verbose.
+	// Styled profile: trailing pad stays plain spaces (alignment math never sees ANSI); the name carries the bold SGR. Bare SetColorProfile mid-test is fine — the cleanup registered by WithColorProfile above still wins on teardown and restores the original profile. A second WithColorProfile call would also work (LIFO cleanup), just reads more verbose.
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	got := nameCell("login", 8)
 	if !strings.HasSuffix(got, "   ") {
@@ -244,11 +221,7 @@ func TestRenderUsage_StripsMarkersWhenUnstyled(t *testing.T) {
 	}
 }
 
-// TestSessionRejected verifies the launcher entry probe: only a
-// definitive HTTP 401 from /api/user/self counts as "logged out".
-// A 5xx or any non-401 outcome must return false so a transient
-// backend hiccup can't wall the user behind a login screen, and
-// legacy credentials without a user_id skip the probe entirely.
+// TestSessionRejected verifies the launcher entry probe: only a definitive HTTP 401 from /api/user/self counts as "logged out". A 5xx or any non-401 outcome must return false so a transient backend hiccup can't wall the user behind a login screen, and legacy credentials without a user_id skip the probe entirely.
 func TestSessionRejected(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -313,11 +286,7 @@ func TestSessionRejected(t *testing.T) {
 		})
 	}
 
-	// A transport failure (here: a closed server → connection
-	// refused) is the design's core promise — "couldn't verify" must
-	// NOT read as "logged out", or a network blip walls the user
-	// behind a login that also needs the network. Same classification
-	// path as a timeout: a non-*APIError error → IsUnauthorized false.
+	// A transport failure (here: a closed server → connection refused) is the design's core promise — "couldn't verify" must NOT read as "logged out", or a network blip walls the user behind a login that also needs the network. Same classification path as a timeout: a non-*APIError error → IsUnauthorized false.
 	t.Run("connection refused → not rejected", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(
 			func(http.ResponseWriter, *http.Request) {}))
@@ -334,12 +303,7 @@ func TestSessionRejected(t *testing.T) {
 	})
 }
 
-// TestEveryCommandGrouped is the guard that keeps the launcher's
-// category map exhaustive: every registered top-level command must map
-// to a known group, and every group it maps to must be one the launcher
-// actually renders (launcherGroupOrder). A new command added to the
-// registry with no commandGroup entry fails here instead of silently
-// landing in the groupOf fallback bucket.
+// TestEveryCommandGrouped is the guard that keeps the launcher's category map exhaustive: every registered top-level command must map to a known group, and every group it maps to must be one the launcher actually renders (launcherGroupOrder). A new command added to the registry with no commandGroup entry fails here instead of silently landing in the groupOf fallback bucket.
 func TestEveryCommandGrouped(t *testing.T) {
 	known := map[string]bool{}
 	for _, g := range launcherGroupOrder {
@@ -367,18 +331,14 @@ func TestEveryCommandGrouped(t *testing.T) {
 	}
 }
 
-// TestLauncherSections_PartitionsInOrder verifies the logged-in section
-// list is built in launcherGroupOrder, non-empty, and that every
-// visible command lands in exactly one section (no drops, no dupes).
+// TestLauncherSections_PartitionsInOrder verifies the logged-in section list is built in launcherGroupOrder, non-empty, and that every visible command lands in exactly one section (no drops, no dupes).
 func TestLauncherSections_PartitionsInOrder(t *testing.T) {
 	visible, _ := launcherRows(true, true)
 	sections, _ := launcherSections(true, true)
 	if len(sections) == 0 {
 		t.Fatal("no sections for a logged-in admin")
 	}
-	// Section titles must appear in launcherGroupOrder order (titles are
-	// localized, so compare by re-deriving the key order via group sizes
-	// instead: assert the flattened command count matches visible).
+	// Section titles must appear in launcherGroupOrder order (titles are localized, so compare by re-deriving the key order via group sizes instead: assert the flattened command count matches visible).
 	total := 0
 	seen := map[string]int{}
 	for _, s := range sections {
@@ -400,10 +360,7 @@ func TestLauncherSections_PartitionsInOrder(t *testing.T) {
 	}
 }
 
-// TestUsageCommandList_ShowsEveryCommand locks the drift-proof help: the
-// generated list must include EVERY registered command (so a new command
-// can never be silently missing from `everyapi help`), and adminOnly
-// commands appear only for admins.
+// TestUsageCommandList_ShowsEveryCommand locks the drift-proof help: the generated list must include EVERY registered command (so a new command can never be silently missing from `everyapi help`), and adminOnly commands appear only for admins.
 func TestUsageCommandList_ShowsEveryCommand(t *testing.T) {
 	full := usageCommandList(true)
 	for _, c := range commands {
@@ -423,10 +380,7 @@ func TestUsageCommandList_ShowsEveryCommand(t *testing.T) {
 	}
 }
 
-// TestNamespaceDispatchers_Surface covers the network-free arms of the
-// namespace dispatchers introduced by the reorg: bare/help print usage
-// and return nil; an unknown subcommand errors and names the bad sub.
-// (Routing of real subs is verified end-to-end; here we pin the shape.)
+// TestNamespaceDispatchers_Surface covers the network-free arms of the namespace dispatchers introduced by the reorg: bare/help print usage and return nil; an unknown subcommand errors and names the bad sub. (Routing of real subs is verified end-to-end; here we pin the shape.)
 func TestNamespaceDispatchers_Surface(t *testing.T) {
 	for _, d := range []struct {
 		name string
@@ -447,10 +401,7 @@ func TestNamespaceDispatchers_Surface(t *testing.T) {
 	}
 }
 
-// TestBackRowLabel_AlignsToDescColumn locks the sub-picker back row's
-// two-column shape: the localized hint must start at the same display
-// column as command descriptions (maxName + 2 spaces), even though the
-// back word may be wide CJK — i.e. padding is by display width, not len.
+// TestBackRowLabel_AlignsToDescColumn locks the sub-picker back row's two-column shape: the localized hint must start at the same display column as command descriptions (maxName + 2 spaces), even though the back word may be wide CJK — i.e. padding is by display width, not len.
 func TestBackRowLabel_AlignsToDescColumn(t *testing.T) {
 	const maxName = 12
 	out := backRowLabel(maxName)
@@ -463,11 +414,7 @@ func TestBackRowLabel_AlignsToDescColumn(t *testing.T) {
 	}
 }
 
-// TestProxyMenuSubs_StartStopMutuallyExclusive locks the proxy
-// sub-menu's core rule: start and stop never appear together (a running
-// proxy can't be started, a stopped one can't be stopped) and configure
-// is always offered. Robust to whatever proxy.IsRunning reports in the
-// test environment — it only asserts the start/stop XOR, not which one.
+// TestProxyMenuSubs_StartStopMutuallyExclusive locks the proxy sub-menu's core rule: start and stop never appear together (a running proxy can't be started, a stopped one can't be stopped) and configure is always offered. Robust to whatever proxy.IsRunning reports in the test environment — it only asserts the start/stop XOR, not which one.
 func TestProxyMenuSubs_StartStopMutuallyExclusive(t *testing.T) {
 	subs := proxyMenuSubs()
 	if len(subs) != 2 {
@@ -485,11 +432,7 @@ func TestProxyMenuSubs_StartStopMutuallyExclusive(t *testing.T) {
 	}
 }
 
-// TestAuthMenuSubs_LoginLogoutMutuallyExclusive locks the auth
-// sub-menu's rule: it offers exactly one action — login when signed out,
-// logout when signed in — and status is never a row (it's the header,
-// see authHeader). Robust to whatever login state the test environment
-// happens to be in: it asserts the shape, not which branch.
+// TestAuthMenuSubs_LoginLogoutMutuallyExclusive locks the auth sub-menu's rule: it offers exactly one action — login when signed out, logout when signed in — and status is never a row (it's the header, see authHeader). Robust to whatever login state the test environment happens to be in: it asserts the shape, not which branch.
 func TestAuthMenuSubs_LoginLogoutMutuallyExclusive(t *testing.T) {
 	subs := authMenuSubs()
 	if len(subs) != 1 {
@@ -502,11 +445,7 @@ func TestAuthMenuSubs_LoginLogoutMutuallyExclusive(t *testing.T) {
 	}
 }
 
-// TestAuthMenuSubsFor pins the login-vs-logout decision: logout only
-// when a credential is present AND the session probe accepts it. An
-// expired/revoked token (present file, probe rejects) must offer login,
-// not logout — otherwise the menu contradicts the "session expired"
-// header and strands the user on a logout they don't need.
+// TestAuthMenuSubsFor pins the login-vs-logout decision: logout only when a credential is present AND the session probe accepts it. An expired/revoked token (present file, probe rejects) must offer login, not logout — otherwise the menu contradicts the "session expired" header and strands the user on a logout they don't need.
 func TestAuthMenuSubsFor(t *testing.T) {
 	creds := &config.Credentials{APIBase: "https://api.everyapi.ai", UserID: 1}
 	cases := []struct {

@@ -11,45 +11,29 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
-	"github.com/everyapi-ai/everyapi-ai/internal/style"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/style"
 )
 
-// ErrPickCancelled is returned by Pick when the user hits Ctrl-C
-// during the arrow-key picker. Callers can errors.Is-match on it to
-// suppress a generic "selection failed" wrapper and exit cleanly.
+// ErrPickCancelled is returned by Pick when the user hits Ctrl-C during the arrow-key picker. Callers can errors.Is-match on it to suppress a generic "selection failed" wrapper and exit cleanly.
 var ErrPickCancelled = errors.New("pick cancelled")
 
-// ErrPickUnavailable identifies an attempted selection of a visible but
-// disabled row. Callers can keep unavailable choices discoverable without
-// allowing scripted or interactive selection to bypass the availability rule.
+// ErrPickUnavailable identifies an attempted selection of a visible but disabled row. Callers can keep unavailable choices discoverable without allowing scripted or interactive selection to bypass the availability rule.
 var ErrPickUnavailable = errors.New("pick unavailable")
 
-// Pick renders an arrow-navigable list and returns the chosen index
-// (zero-based). Falls back to a number-entry prompt automatically
-// when either stdin or stdout isn't a TTY — keeps the CLI scriptable
-// in CI / piped contexts without each caller re-rolling the path.
+// Pick renders an arrow-navigable list and returns the chosen index (zero-based). Falls back to a number-entry prompt automatically when either stdin or stdout isn't a TTY — keeps the CLI scriptable in CI / piped contexts without each caller re-rolling the path.
 //
-// Interactive (TTY) path is delegated to charmbracelet/huh's Select;
-// the fallback prints a numbered list and reads one line.
+// Interactive (TTY) path is delegated to charmbracelet/huh's Select; the fallback prints a numbered list and reads one line.
 //
-// Picker always opens with the first row highlighted. Use
-// PickWithSelected when the caller wants to restore a previous
-// selection — typical for a loop that re-shows the same menu after
-// dispatching the chosen action.
+// Picker always opens with the first row highlighted. Use PickWithSelected when the caller wants to restore a previous selection — typical for a loop that re-shows the same menu after dispatching the chosen action.
 func Pick(prompt string, items []string) (int, error) {
 	return PickWithSelected(prompt, items, 0)
 }
 
-// PickWithSelected is the stateful variant of Pick: starts with row
-// `initial` highlighted instead of always row 0. The launcher uses
-// this so Esc-ing back into a menu restores the cursor to the row
-// the user just visited, rather than punting them back to the top.
+// PickWithSelected is the stateful variant of Pick: starts with row `initial` highlighted instead of always row 0. The launcher uses this so Esc-ing back into a menu restores the cursor to the row the user just visited, rather than punting them back to the top.
 //
-// Out-of-range initial values clamp to 0 — never returns an error
-// just because the caller passed a stale index after the items
-// slice shrank.
+// Out-of-range initial values clamp to 0 — never returns an error just because the caller passed a stale index after the items slice shrank.
 func PickWithSelected(prompt string, items []string, initial int) (int, error) {
 	if len(items) == 0 {
 		return -1, errors.New("nothing to pick from")
@@ -63,8 +47,7 @@ func PickWithSelected(prompt string, items []string, initial int) (int, error) {
 	return pickViaHuh(prompt, items, initial)
 }
 
-// PickWithDisabled renders all items but grays and rejects rows whose matching
-// disabled entry is true. The parallel slices must have the same length.
+// PickWithDisabled renders all items but grays and rejects rows whose matching disabled entry is true. The parallel slices must have the same length.
 func PickWithDisabled(prompt string, items []string, disabled []bool, initial int) (int, error) {
 	if len(items) != len(disabled) {
 		return -1, fmt.Errorf("PickWithDisabled: items (%d) and disabled (%d) must have equal length", len(items), len(disabled))
@@ -81,10 +64,7 @@ func PickWithDisabled(prompt string, items []string, disabled []bool, initial in
 	}
 	labels := disabledPickerLabels(items, disabled)
 	if firstAvailable < 0 {
-		// There is no valid cursor position, but hiding the rows would make an
-		// account with only unavailable models look like an empty catalogue.
-		// Render the same explicit gray labels, then fail without waiting for
-		// input so the caller can stop the launch.
+		// There is no valid cursor position, but hiding the rows would make an account with only unavailable models look like an empty catalogue. Render the same explicit gray labels, then fail without waiting for input so the caller can stop the launch.
 		cliout.Println(prompt)
 		for index, label := range labels {
 			cliout.Printf("  %d) %s\n", index+1, label)
@@ -117,8 +97,7 @@ func unavailableSelectionError(item string) error {
 	return unavailablePickerError{message: fmt.Sprintf(i18n.T("cliprompt.pick_unavailable_selection"), item)}
 }
 
-// unavailablePickerError keeps ErrPickUnavailable machine-detectable without
-// appending its internal sentinel text to the localized user-facing message.
+// unavailablePickerError keeps ErrPickUnavailable machine-detectable without appending its internal sentinel text to the localized user-facing message.
 type unavailablePickerError struct {
 	message string
 }
@@ -175,21 +154,14 @@ func pickViaHuhWithDisabled(prompt string, items, labels []string, disabled []bo
 	return selected, nil
 }
 
-// disabledSelectField keeps unavailable rows visible in huh's Select while
-// removing them from keyboard navigation. Huh does not expose disabled
-// options, so a validator alone would let the cursor stop on an unavailable
-// row and reject it only after Enter. This adapter forwards navigation until
-// the cursor reaches the next available row; the validator above remains the
-// final guard for non-navigation input and accessible mode.
+// disabledSelectField keeps unavailable rows visible in huh's Select while removing them from keyboard navigation. Huh does not expose disabled options, so a validator alone would let the cursor stop on an unavailable row and reject it only after Enter. This adapter forwards navigation until the cursor reaches the next available row; the validator above remains the final guard for non-navigation input and accessible mode.
 type disabledSelectField struct {
 	*huh.Select[int]
 	disabled []bool
 }
 
 func newDisabledSelectField(selectField *huh.Select[int], disabled []bool) *disabledSelectField {
-	// Forms install their keymap before running. Installing it here as well
-	// keeps the adapter independently driveable and makes its navigation
-	// contract straightforward to unit test.
+	// Forms install their keymap before running. Installing it here as well keeps the adapter independently driveable and makes its navigation contract straightforward to unit test.
 	selectField.WithKeyMap(huh.NewDefaultKeyMap())
 	return &disabledSelectField{
 		Select:   selectField,
@@ -207,17 +179,12 @@ func (f *disabledSelectField) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds := []tea.Cmd{cmd}
 	skip := disabledNavigationStep(msg, f.GetFiltering())
 	if skip.Type == tea.KeyNull {
-		// Filtering can rebuild the visible rows around a disabled match even
-		// though the triggering key was text rather than navigation. Search
-		// forward for an available match without treating j/k/g as movement.
+		// Filtering can rebuild the visible rows around a disabled match even though the triggering key was text rather than navigation. Search forward for an available match without treating j/k/g as movement.
 		skip = tea.KeyMsg{Type: tea.KeyDown}
 	}
 	f.skipDisabledRows(skip, &cmds)
 	if f.selectionDisabled() {
-		// A filter that matches only unavailable rows has no legal cursor
-		// position in huh. Clear that filter before rendering instead of
-		// leaving a gray row highlighted; the unfiltered catalogue still
-		// shows the unavailable entries for discoverability.
+		// A filter that matches only unavailable rows has no legal cursor position in huh. Clear that filter before rendering instead of leaving a gray row highlighted; the unfiltered catalogue still shows the unavailable entries for discoverability.
 		f.clearSelectFilter(&cmds)
 		f.skipDisabledRows(skip, &cmds)
 	}
@@ -233,9 +200,7 @@ func (f *disabledSelectField) skipDisabledRows(step tea.KeyMsg, cmds *[]tea.Cmd)
 }
 
 func (f *disabledSelectField) clearSelectFilter(cmds *[]tea.Cmd) {
-	// In filtering mode the first Esc accepts the query; the second clears
-	// it. Outside filtering mode one Esc is enough. These messages go only to
-	// the Select field, so they do not trigger the form-level cancel binding.
+	// In filtering mode the first Esc accepts the query; the second clears it. Outside filtering mode one Esc is enough. These messages go only to the Select field, so they do not trigger the form-level cancel binding.
 	escapes := 1
 	if f.GetFiltering() {
 		escapes = 2
@@ -274,16 +239,7 @@ func disabledNavigationStep(msg tea.Msg, filtering bool) tea.KeyMsg {
 	return tea.KeyMsg{Type: tea.KeyNull}
 }
 
-// readStdinLine reads one line from os.Stdin WITHOUT reading past the
-// newline. The numeric pickers are throwaway, per-call readers, so a
-// buffering bufio.Reader would read-ahead a whole chunk and then discard
-// the bytes after the newline — corrupting any caller that reads
-// os.Stdin again afterwards. That breaks scripted (piped) flows like
-// `proxy configure`, which runs PickMany and then reads further answers
-// (YesNo/Line) from its own reader. fmt.Scanln had this no-read-ahead
-// property but stopped at the first whitespace; reading byte-by-byte
-// keeps the whole line while leaving the rest of stdin intact. Returns
-// io.EOF (with any partial line) at end of stream.
+// readStdinLine reads one line from os.Stdin WITHOUT reading past the newline. The numeric pickers are throwaway, per-call readers, so a buffering bufio.Reader would read-ahead a whole chunk and then discard the bytes after the newline — corrupting any caller that reads os.Stdin again afterwards. That breaks scripted (piped) flows like `proxy configure`, which runs PickMany and then reads further answers (YesNo/Line) from its own reader. fmt.Scanln had this no-read-ahead property but stopped at the first whitespace; reading byte-by-byte keeps the whole line while leaving the rest of stdin intact. Returns io.EOF (with any partial line) at end of stream.
 func readStdinLine() (string, error) {
 	var b []byte
 	var one [1]byte
@@ -307,10 +263,7 @@ func pickByNumber(prompt string, items []string) (int, error) {
 		cliout.Printf("  %d) %s\n", i+1, n)
 	}
 	cliout.Printf("%s", i18n.T("cliprompt.pick_enter_name_number"))
-	// Read the whole line (not fmt.Scanln, which stops at the first
-	// whitespace) so multi-token answers survive. A non-empty line
-	// terminated by EOF (no trailing newline) still parses; only a
-	// genuinely empty EOF is a read failure.
+	// Read the whole line (not fmt.Scanln, which stops at the first whitespace) so multi-token answers survive. A non-empty line terminated by EOF (no trailing newline) still parses; only a genuinely empty EOF is a read failure.
 	choice, err := readStdinLine()
 	if err != nil && (err != io.EOF || choice == "") {
 		return -1, fmt.Errorf("read selection: %w", err)
@@ -324,16 +277,11 @@ func pickByNumber(prompt string, items []string) (int, error) {
 	return -1, fmt.Errorf("unknown selection %q", choice)
 }
 
-// pickViaHuh renders the arrow-key picker. huh's Select widget
-// handles ↑/↓ / j/k / 1..9 / Enter / Ctrl-C natively; we just map
-// the result back to an index.
+// pickViaHuh renders the arrow-key picker. huh's Select widget handles ↑/↓ / j/k / 1..9 / Enter / Ctrl-C natively; we just map the result back to an index.
 //
-// initial seeds the highlighted row — PickWithSelected uses this
-// to restore the cursor across re-entries of the same menu.
+// initial seeds the highlighted row — PickWithSelected uses this to restore the cursor across re-entries of the same menu.
 //
-// huh.ErrUserAborted is the sentinel huh returns on Ctrl-C; we
-// re-surface it as our package-local ErrPickCancelled so callers
-// don't have to import huh just to detect cancel.
+// huh.ErrUserAborted is the sentinel huh returns on Ctrl-C; we re-surface it as our package-local ErrPickCancelled so callers don't have to import huh just to detect cancel.
 func pickViaHuh(prompt string, items []string, initial int) (int, error) {
 	opts := make([]huh.Option[int], len(items))
 	for i, item := range items {
@@ -353,17 +301,9 @@ func pickViaHuh(prompt string, items []string, initial int) (int, error) {
 	return sel, nil
 }
 
-// PickMany renders a multi-select picker (space to toggle each row,
-// Enter to confirm). Labels are what the user sees in the picker;
-// values are the parallel slice of identifiers returned (and matched
-// against the preselected set on entry). The two slices MUST be the
-// same length; same-text labels and values can pass the same slice
-// twice when no separation is needed.
+// PickMany renders a multi-select picker (space to toggle each row, Enter to confirm). Labels are what the user sees in the picker; values are the parallel slice of identifiers returned (and matched against the preselected set on entry). The two slices MUST be the same length; same-text labels and values can pass the same slice twice when no separation is needed.
 //
-// Same TTY/non-TTY split as Pick: TTY → huh.MultiSelect with Esc
-// bound to cancel via runHuhField; non-TTY → degrades to a numeric
-// "comma-separated list" reader so scripted invocations stay
-// possible.
+// Same TTY/non-TTY split as Pick: TTY → huh.MultiSelect with Esc bound to cancel via runHuhField; non-TTY → degrades to a numeric "comma-separated list" reader so scripted invocations stay possible.
 func PickMany(prompt string, labels, values []string, preselected []string) ([]string, error) {
 	if len(labels) != len(values) {
 		return nil, fmt.Errorf("PickMany: labels (%d) and values (%d) must have equal length", len(labels), len(values))
@@ -378,8 +318,7 @@ func PickMany(prompt string, labels, values []string, preselected []string) ([]s
 	for i := range values {
 		opts[i] = huh.NewOption(labels[i], values[i])
 	}
-	// huh's MultiSelect mutates the slice we hand it; copy the
-	// caller's preselected set so we don't surprise them.
+	// huh's MultiSelect mutates the slice we hand it; copy the caller's preselected set so we don't surprise them.
 	selected := append([]string(nil), preselected...)
 	err := runHuhField(huh.NewMultiSelect[string]().
 		Title(prompt).
@@ -395,12 +334,7 @@ func PickMany(prompt string, labels, values []string, preselected []string) ([]s
 	return selected, nil
 }
 
-// pickManyByNumber is the non-TTY fallback for PickMany. Prints the
-// items as a numbered list with a [x] marker next to currently-
-// preselected rows, asks the user for a comma-separated index list
-// (or names), and returns the resulting checked set. Empty input
-// keeps the preselection as-is — matches the "no change" affordance
-// huh's Enter gives on the TTY path.
+// pickManyByNumber is the non-TTY fallback for PickMany. Prints the items as a numbered list with a [x] marker next to currently- preselected rows, asks the user for a comma-separated index list (or names), and returns the resulting checked set. Empty input keeps the preselection as-is — matches the "no change" affordance huh's Enter gives on the TTY path.
 func pickManyByNumber(prompt string, labels, values, preselected []string) ([]string, error) {
 	pre := map[string]bool{}
 	for _, v := range preselected {
@@ -415,16 +349,10 @@ func pickManyByNumber(prompt string, labels, values, preselected []string) ([]st
 		cliout.Printf("  [%s] %d) %s\n", marker, i+1, labels[i])
 	}
 	cliout.Printf("%s", i18n.T("cliprompt.pick_toggle_csv"))
-	// Read the whole line (not fmt.Scanln, which stops at the first
-	// whitespace and errors on the rest), so "1, 2, 3" / "1 2 3" parse
-	// the same as "1,2,3". A genuinely empty EOF means "no change"; a
-	// populated line is split on commas below and never dropped.
+	// Read the whole line (not fmt.Scanln, which stops at the first whitespace and errors on the rest), so "1, 2, 3" / "1 2 3" parse the same as "1,2,3". A genuinely empty EOF means "no change"; a populated line is split on commas below and never dropped.
 	line, err := readStdinLine()
 	if err != nil {
-		// EOF on empty stdin → no change (same shape as Pick). But a
-		// genuine (non-EOF) read error must be surfaced, not silently
-		// swallowed as "no change" — that's what the sibling pickByNumber
-		// does. EOF with bytes already read falls through to parsing.
+		// EOF on empty stdin → no change (same shape as Pick). But a genuine (non-EOF) read error must be surfaced, not silently swallowed as "no change" — that's what the sibling pickByNumber does. EOF with bytes already read falls through to parsing.
 		if err != io.EOF {
 			return nil, fmt.Errorf("read selection: %w", err)
 		}

@@ -8,9 +8,7 @@ import (
 	"testing"
 )
 
-// TestNodeDir + active pointer round-trip: write, read, clear.
-// Uses XDG env overrides to point at a tmp dir so we don't touch the
-// user's real ~/.local/share or ~/.config.
+// TestNodeDir + active pointer round-trip: write, read, clear. Uses XDG env overrides to point at a tmp dir so we don't touch the user's real ~/.local/share or ~/.config.
 func TestActiveNodePointerRoundTrip(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", filepath.Join(tmp, "data"))
@@ -102,9 +100,7 @@ func TestNodeMetaWriteReadRoundTrip(t *testing.T) {
 		t.Errorf("loadNodeMeta returned %+v", got)
 	}
 
-	// Permission check — node.json must be 0600 (token inside).
-	// Windows has no Unix permission bits; skip the assertion there
-	// like the other perm tests do.
+	// Permission check — node.json must be 0600 (token inside). Windows has no Unix permission bits; skip the assertion there like the other perm tests do.
 	if runtime.GOOS != "windows" {
 		dir, _ := nodeDir(42)
 		info, err := os.Stat(filepath.Join(dir, "node.json"))

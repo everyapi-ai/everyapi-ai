@@ -7,14 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 )
 
-// nodeMeta is what we persist alongside each node's workdir. The
-// registration_token is the secret bit — sha256 lives on the backend
-// after first connect, so this file is the only place the raw value
-// exists after `everyapi edge register`. File mode 0600 + parent dir
-// 0700; XDG-style location keeps it out of the cwd.
+// nodeMeta is what we persist alongside each node's workdir. The registration_token is the secret bit — sha256 lives on the backend after first connect, so this file is the only place the raw value exists after `everyapi edge register`. File mode 0600 + parent dir 0700; XDG-style location keeps it out of the cwd.
 type nodeMeta struct {
 	NodeID            int      `json:"node_id"`
 	NodeName          string   `json:"node_name"`
@@ -22,18 +18,12 @@ type nodeMeta struct {
 	Gateway           string   `json:"gateway"`
 	Mode              Mode     `json:"mode,omitempty"`
 	Workloads         []string `json:"workloads,omitempty"` // declared at register time; rendered into the compose env
-	// AgentImage / OllamaImage persist the operator's `edge start
-	// --agent-image / --ollama-image` overrides so a later `edge update`
-	// re-renders the same images instead of reverting to the writeCompose
-	// defaults. Empty means "use the default" — same semantics as the
-	// flags being omitted.
+	// AgentImage / OllamaImage persist the operator's `edge start --agent-image / --ollama-image` overrides so a later `edge update` re-renders the same images instead of reverting to the writeCompose defaults. Empty means "use the default" — same semantics as the flags being omitted.
 	AgentImage  string `json:"agent_image,omitempty"`
 	OllamaImage string `json:"ollama_image,omitempty"`
 }
 
-// dataRoot returns ~/.local/share/everyapi/edge (or the XDG override).
-// XDG_DATA_HOME wins if set so a sandboxed test can point at a temp
-// dir without monkeypatching the home dir.
+// dataRoot returns ~/.local/share/everyapi/edge (or the XDG override). XDG_DATA_HOME wins if set so a sandboxed test can point at a temp dir without monkeypatching the home dir.
 func dataRoot() (string, error) {
 	if x := os.Getenv("XDG_DATA_HOME"); x != "" {
 		return filepath.Join(x, "everyapi", "edge"), nil
@@ -45,9 +35,7 @@ func dataRoot() (string, error) {
 	return filepath.Join(home, ".local", "share", "everyapi", "edge"), nil
 }
 
-// configRoot returns ~/.config/everyapi/edge (or the XDG override).
-// Used for the `active` pointer file — small ephemeral state that
-// doesn't belong next to the per-node data directories.
+// configRoot returns ~/.config/everyapi/edge (or the XDG override). Used for the `active` pointer file — small ephemeral state that doesn't belong next to the per-node data directories.
 func configRoot() (string, error) {
 	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
 		return filepath.Join(x, "everyapi", "edge"), nil
@@ -67,14 +55,9 @@ func nodeDir(id int) (string, error) {
 	return filepath.Join(root, strconv.Itoa(id)), nil
 }
 
-// activeNodeID reads ~/.config/everyapi/edge/active and parses the
-// stored node id. Returns ErrNoActiveNode if the file is missing —
-// caller can render a helpful "register first" message.
+// activeNodeID reads ~/.config/everyapi/edge/active and parses the stored node id. Returns ErrNoActiveNode if the file is missing — caller can render a helpful "register first" message.
 //
-// errNoActiveNode is a sentinel (callers compare with errors.Is); its
-// message is translated lazily at render time via Error() so the
-// language picked at print time wins, not the one active at package
-// init.
+// errNoActiveNode is a sentinel (callers compare with errors.Is); its message is translated lazily at render time via Error() so the language picked at print time wins, not the one active at package init.
 type noActiveNodeErr struct{}
 
 func (noActiveNodeErr) Error() string { return i18n.T("edge.no_active_node") }
@@ -125,18 +108,14 @@ func clearActiveNodeID(id int) error {
 		return err
 	}
 	cur, _ := strconv.Atoi(strings.TrimSpace(string(b)))
-	// Only clear if the pointer matches — don't accidentally unset
-	// the active node when removing a sibling.
+	// Only clear if the pointer matches — don't accidentally unset the active node when removing a sibling.
 	if cur == id {
 		return os.Remove(path)
 	}
 	return nil
 }
 
-// resolveNodeID returns the node id from the explicit flag if non-zero,
-// else falls back to the active node. Centralises the "which node am
-// I operating on" decision so every subcommand handles missing-active
-// the same way.
+// resolveNodeID returns the node id from the explicit flag if non-zero, else falls back to the active node. Centralises the "which node am I operating on" decision so every subcommand handles missing-active the same way.
 func resolveNodeID(explicit int) (int, error) {
 	if explicit > 0 {
 		return explicit, nil

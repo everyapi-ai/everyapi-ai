@@ -1,9 +1,6 @@
-// Package checkin wires `everyapi checkin` — daily check-in for
-// quota grants. Three shapes:
+// Package checkin wires `everyapi checkin` — daily check-in for quota grants. Three shapes:
 //
-//	everyapi checkin                claim today's reward
-//	everyapi checkin status [...]   monthly history
-//	everyapi checkin makeup <date>  cover a missed day (no reward)
+//	everyapi checkin                claim today's reward everyapi checkin status [...]   monthly history everyapi checkin makeup <date>  cover a missed day (no reward)
 package checkin
 
 import (
@@ -12,9 +9,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliargs"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -30,22 +27,14 @@ func Run(args []string) error {
 		case "makeup":
 			return runMakeup(args[1:])
 		case "claim":
-			// Explicit alias for bare `everyapi checkin`. The bare
-			// form predates the explicit verb but the picker only
-			// shows declared subs, so a user landing on the picker
-			// would think `status` was all the command did. Adding
-			// `claim` surfaces the claim action in the picker too;
-			// bare-form invocation stays valid.
+			// Explicit alias for bare `everyapi checkin`. The bare form predates the explicit verb but the picker only shows declared subs, so a user landing on the picker would think `status` was all the command did. Adding `claim` surfaces the claim action in the picker too; bare-form invocation stays valid.
 			if len(args) > 1 && (args[1] == "help" || args[1] == "--help" || args[1] == "-h") {
 				cliout.Println(i18n.T("checkin.usage"))
 				return nil
 			}
 			return runCheckin()
 		default:
-			// An unknown subcommand must NOT silently fall through to a
-			// state-changing claim (e.g. `everyapi checkin staus` would
-			// quietly burn today's check-in). Surface it like the other
-			// subcommands do.
+			// An unknown subcommand must NOT silently fall through to a state-changing claim (e.g. `everyapi checkin staus` would quietly burn today's check-in). Surface it like the other subcommands do.
 			cliout.Println(i18n.T("checkin.usage"))
 			return fmt.Errorf(i18n.T("common.unknown_subcommand"), "checkin", args[0])
 		}
@@ -126,8 +115,7 @@ func runStatus(args []string) error {
 	cliout.Printf(i18n.T("checkin.month_days")+"\n", stat.Stats.CheckinCount)
 	for _, r := range stat.Stats.Records {
 		if r.IsMakeup {
-			// A made-up day pays nothing; printing "+0 quota" would read as a
-			// broken reward rather than as the deliberate trade-off it is.
+			// A made-up day pays nothing; printing "+0 quota" would read as a broken reward rather than as the deliberate trade-off it is.
 			cliout.Printf("  %s  %s\n", r.CheckinDate, i18n.T("checkin.makeup_marker"))
 			continue
 		}
@@ -142,8 +130,7 @@ func runMakeup(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	// Accept the date as a bare positional too — `everyapi checkin makeup
-	// 2026-08-01` is the shape a user reaches for first.
+	// Accept the date as a bare positional too — `everyapi checkin makeup 2026-08-01` is the shape a user reaches for first.
 	if *date == "" && fs.NArg() == 1 {
 		*date = fs.Arg(0)
 	} else if err := cliargs.RejectPositionals(fs); err != nil {

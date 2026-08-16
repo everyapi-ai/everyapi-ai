@@ -5,12 +5,7 @@ import (
 	"testing"
 )
 
-// TestSplitConfirmFlag pins the accepted confirm-skip spellings and the
-// any-order positional extraction. The accepted set is the union of what
-// the previous per-command flag.Bool("y")/flag.Bool("yes") registrations
-// matched — crucially including the single-dash `-yes` form, whose loss
-// would silently change `token revoke 5 -yes` from confirm-skip to a
-// fail-closed error in non-interactive use.
+// TestSplitConfirmFlag pins the accepted confirm-skip spellings and the any-order positional extraction. The accepted set is the union of what the previous per-command flag.Bool("y")/flag.Bool("yes") registrations matched — crucially including the single-dash `-yes` form, whose loss would silently change `token revoke 5 -yes` from confirm-skip to a fail-closed error in non-interactive use.
 func TestSplitConfirmFlag(t *testing.T) {
 	cases := []struct {
 		name    string

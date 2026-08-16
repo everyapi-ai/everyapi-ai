@@ -12,10 +12,7 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// prepareGrok keeps EveryAPI-launched Grok sessions and authentication apart
-// from the user's normal ~/.grok state. The persistent home preserves routed
-// sessions and preferences. Grok 1.0.3 requires an explicit API-key preference
-// for headless ACP launches even when XAI_API_KEY is present.
+// prepareGrok keeps EveryAPI-launched Grok sessions and authentication apart from the user's normal ~/.grok state. The persistent home preserves routed sessions and preferences. Grok 1.0.3 requires an explicit API-key preference for headless ACP launches even when XAI_API_KEY is present.
 func prepareGrok(_, _ string) (map[string]string, error) {
 	return prepareGrokWithModels("", "", nil)
 }

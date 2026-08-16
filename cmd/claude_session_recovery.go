@@ -33,9 +33,7 @@ type claudeSessionPollution struct {
 	FirstTimestamp   string
 	AffectedMessages int
 	SessionCWD       string
-	// SelfRecovered marks a transcript whose polluted burst is followed by a
-	// substantial clean tail: the session demonstrably recovered on its own,
-	// so forking at the first pollution would discard real work.
+	// SelfRecovered marks a transcript whose polluted burst is followed by a substantial clean tail: the session demonstrably recovered on its own, so forking at the first pollution would discard real work.
 	SelfRecovered bool
 }
 
@@ -43,14 +41,11 @@ type claudeSessionRecovery struct {
 	OriginalSessionID string
 	NewSessionID      string
 	Pollution         *claudeSessionPollution
-	// GuardOnly resumes the polluted session unchanged (it self-recovered
-	// with a substantial clean tail) and only arms the response guard.
+	// GuardOnly resumes the polluted session unchanged (it self-recovered with a substantial clean tail) and only arms the response guard.
 	GuardOnly bool
-	// Reused redirects the resume to the clean clone minted by an earlier
-	// recovery of the same session instead of creating another clone.
+	// Reused redirects the resume to the clean clone minted by an earlier recovery of the same session instead of creating another clone.
 	Reused bool
-	// CreatedClone marks that this launch minted CleanPath (and MarkerPath,
-	// when non-empty) so an abandoned launch can remove them again.
+	// CreatedClone marks that this launch minted CleanPath (and MarkerPath, when non-empty) so an abandoned launch can remove them again.
 	CreatedClone bool
 	CleanPath    string
 	MarkerPath   string
@@ -217,9 +212,7 @@ func detectClaudeSessionPollution(path string) (*claudeSessionPollution, error) 
 		return nil, nil
 	}
 
-	// A cluster confirmation implicates every contributing member, so the
-	// boundary starts at the EARLIEST member — not the trigger index — even
-	// when clean groups are interleaved inside the window.
+	// A cluster confirmation implicates every contributing member, so the boundary starts at the EARLIEST member — not the trigger index — even when clean groups are interleaved inside the window.
 	start := strongIndex
 	if clusterStart >= 0 && clusterStart < start {
 		start = clusterStart
@@ -258,9 +251,7 @@ func detectClaudeSessionPollution(path string) (*claudeSessionPollution, error) 
 			result.AffectedMessages++
 		}
 	}
-	// A polluted burst followed by a later user turn whose assistant output
-	// stayed entirely clean means the session recovered on its own; forking
-	// at the first pollution would silently discard that later work.
+	// A polluted burst followed by a later user turn whose assistant output stayed entirely clean means the session recovered on its own; forking at the first pollution would silently discard that later work.
 	tailClean := len(groups) - 1 - lastAffected
 	result.SelfRecovered = tailClean >= 3 &&
 		groups[len(groups)-1].userTurn > groups[lastAffected].userTurn
@@ -284,10 +275,7 @@ func recoverClaudeResumeFromDir(args []string, claudeDir, currentDir, newSession
 	if !ok {
 		return args, nil, nil
 	}
-	// Follow markers left by earlier recoveries of this session, so a
-	// replayed `--resume <original>` (shell history, muscle memory) reuses
-	// the existing clone chain instead of minting another full copy per
-	// launch. Bounded so a corrupt marker cycle can't loop forever.
+	// Follow markers left by earlier recoveries of this session, so a replayed `--resume <original>` (shell history, muscle memory) reuses the existing clone chain instead of minting another full copy per launch. Bounded so a corrupt marker cycle can't loop forever.
 	resumeID := originalSessionID
 	for hop := 0; hop < 8; hop++ {
 		next, ok := readClaudeRecoveryMarker(filepath.Dir(path), resumeID)
@@ -323,11 +311,7 @@ func recoverClaudeResumeFromDir(args []string, claudeDir, currentDir, newSession
 		return args, nil, nil
 	}
 	if pollution.SelfRecovered {
-		// The polluted burst is followed by substantial clean work under a
-		// later user turn: the session demonstrably recovered on its own.
-		// Truncating at the first pollution would silently discard that
-		// work, so resume the transcript unchanged and only arm the
-		// response guard against a recurrence.
+		// The polluted burst is followed by substantial clean work under a later user turn: the session demonstrably recovered on its own. Truncating at the first pollution would silently discard that work, so resume the transcript unchanged and only arm the response guard against a recurrence.
 		rewritten := args
 		reused := false
 		if resumeID != originalSessionID {
@@ -358,8 +342,7 @@ func recoverClaudeResumeFromDir(args []string, claudeDir, currentDir, newSession
 	if err != nil {
 		return args, nil, err
 	}
-	// Best-effort: losing the marker only costs clone reuse on a later
-	// launch, never correctness of this one.
+	// Best-effort: losing the marker only costs clone reuse on a later launch, never correctness of this one.
 	markerPath := writeClaudeRecoveryMarker(filepath.Dir(path), resumeID, newSessionID)
 	return rewritten, &claudeSessionRecovery{
 		OriginalSessionID: originalSessionID,
@@ -371,10 +354,7 @@ func recoverClaudeResumeFromDir(args []string, claudeDir, currentDir, newSession
 	}, nil
 }
 
-// discard removes the artifacts minted for an abandoned launch (guard
-// startup failure, yolo-prompt cancel, Prepare error) so it doesn't leave a
-// phantom resumable session in Claude Code's picker. A no-op unless this
-// recovery actually created a clone.
+// discard removes the artifacts minted for an abandoned launch (guard startup failure, yolo-prompt cancel, Prepare error) so it doesn't leave a phantom resumable session in Claude Code's picker. A no-op unless this recovery actually created a clone.
 func (r *claudeSessionRecovery) discard() {
 	if r == nil || !r.CreatedClone {
 		return
@@ -387,9 +367,7 @@ func (r *claudeSessionRecovery) discard() {
 	}
 }
 
-// claudeRecoveryMarkerPath names the sidecar that records where a polluted
-// session was recovered to. The dotfile prefix and non-.jsonl suffix keep it
-// out of Claude Code's session globs.
+// claudeRecoveryMarkerPath names the sidecar that records where a polluted session was recovered to. The dotfile prefix and non-.jsonl suffix keep it out of Claude Code's session globs.
 func claudeRecoveryMarkerPath(dir, sessionID string) string {
 	return filepath.Join(dir, "."+sessionID+".everyapi-recovery")
 }
@@ -406,8 +384,7 @@ func readClaudeRecoveryMarker(dir, sessionID string) (string, bool) {
 	return id, true
 }
 
-// writeClaudeRecoveryMarker records fromID → toID and returns the marker
-// path, or "" when the write failed (reuse is best-effort).
+// writeClaudeRecoveryMarker records fromID → toID and returns the marker path, or "" when the write failed (reuse is best-effort).
 func writeClaudeRecoveryMarker(dir, fromID, toID string) string {
 	path := claudeRecoveryMarkerPath(dir, fromID)
 	if err := os.WriteFile(path, []byte(toID+"\n"), 0o600); err != nil {
@@ -465,9 +442,7 @@ func sameClaudeWorkingDirectory(a, b string) bool {
 	return filepath.Clean(aAbs) == filepath.Clean(bAbs)
 }
 
-// cloneClaudeSessionPrefix preserves the complete JSONL prefix before the
-// first polluted record, changing only top-level sessionId fields. It writes a
-// private temporary file and publishes it with an atomic no-replace hard link.
+// cloneClaudeSessionPrefix preserves the complete JSONL prefix before the first polluted record, changing only top-level sessionId fields. It writes a private temporary file and publishes it with an atomic no-replace hard link.
 func cloneClaudeSessionPrefix(
 	sourcePath, originalSessionID, newSessionID string,
 	firstPollutedLine int,
@@ -566,11 +541,7 @@ func cloneClaudeSessionPrefix(
 		return "", fmt.Errorf("Claude transcript changed while cloning clean prefix")
 	}
 
-	// A session-scoped /goal can start before the first malformed response
-	// and complete later. Cutting only the clean prefix would resurrect that
-	// already-finished Stop hook on resume. Carry over only its minimal
-	// completion metadata (never assistant/user content or the evaluator's
-	// free-form reason), reparented onto the clean transcript chain.
+	// A session-scoped /goal can start before the first malformed response and complete later. Cutting only the clean prefix would resurrect that already-finished Stop hook on resume. Carry over only its minimal completion metadata (never assistant/user content or the evaluator's free-form reason), reparented onto the clean transcript chain.
 	if lastCleanUUID != "" {
 		for _, condition := range sortedClaudeGoalConditions(activeGoals) {
 			completion := completedGoals[condition]
@@ -794,14 +765,9 @@ func classifyClaudeAssistantGroup(group *claudeAssistantGroup) {
 	hasTerminalFailure := group.stopReason == "stop_sequence" &&
 		strings.Contains(cleaned, claudeTerminalToolParseFailure)
 	hasToolContext := group.stopReason == "tool_use" || group.stopReason == "stop_sequence"
-	// Token-agnostic shape signals (see everyapi-sdk/sanitizer): the flood
-	// word mutates faster than any word list can track, but "one short token,
-	// line after line" and "one short token back-to-back" are invariant
-	// across every observed variant.
+	// Token-agnostic shape signals (see everyapi-sdk/sanitizer): the flood word mutates faster than any word list can track, but "one short token, line after line" and "one short token back-to-back" are invariant across every observed variant.
 	loneTokens := sanitizer.StandaloneLineTokens(cleaned)
-	// Per-token maximum, not a sum across distinct tokens: two different
-	// labels alternating twice each ("yes\nno\nyes\nno") is ordinary output,
-	// while ONE token on 3+ lines is the flood shape.
+	// Per-token maximum, not a sum across distinct tokens: two different labels alternating twice each ("yes\nno\nyes\nno") is ordinary output, while ONE token on 3+ lines is the flood shape.
 	maxRepeat := 0
 	for _, n := range loneTokens {
 		if n > maxRepeat {
@@ -816,10 +782,7 @@ func classifyClaudeAssistantGroup(group *claudeAssistantGroup) {
 		hasToolContext && (maxRepeat >= 3 || tokenRun >= 5)
 }
 
-// claudeStandaloneClusterStart reports whether the window ending at `end`
-// confirms a standalone-flood-token cluster, and if so returns the index of
-// the EARLIEST contributing member so the caller can place the pollution
-// boundary before every implicated group (not just the trigger).
+// claudeStandaloneClusterStart reports whether the window ending at `end` confirms a standalone-flood-token cluster, and if so returns the index of the EARLIEST contributing member so the caller can place the pollution boundary before every implicated group (not just the trigger).
 func claudeStandaloneClusterStart(groups []claudeAssistantGroup, end int) (int, bool) {
 	if end < 0 || end >= len(groups) {
 		return -1, false
@@ -828,13 +791,7 @@ func claudeStandaloneClusterStart(groups []claudeAssistantGroup, end int) (int, 
 	if windowStart < 0 {
 		windowStart = 0
 	}
-	// Two passes. First find anchor tokens — tokens some single group already
-	// repeats (>= 2 lone lines): interjection paragraphs like a bare
-	// "Perfect." recur naturally across clean turns, so a token nobody
-	// repeats in-group must not accumulate into a false cluster. Then only
-	// anchored tokens count across the window, so a flood smeared thinly
-	// around one repeating group still pulls its one-line neighbors into the
-	// boundary.
+	// Two passes. First find anchor tokens — tokens some single group already repeats (>= 2 lone lines): interjection paragraphs like a bare "Perfect." recur naturally across clean turns, so a token nobody repeats in-group must not accumulate into a false cluster. Then only anchored tokens count across the window, so a flood smeared thinly around one repeating group still pulls its one-line neighbors into the boundary.
 	anchors := map[string]bool{}
 	for i := windowStart; i <= end; i++ {
 		group := &groups[i]
@@ -926,8 +883,7 @@ func stripClaudeMarkdownCode(text string) string {
 	fence := ""
 	for _, line := range strings.Split(text, "\n") {
 		trimmed := strings.TrimSpace(line)
-		// Only the marker that opened a fence can close it, so a ~~~ block
-		// quoting ``` lines (or vice versa) doesn't flip state mid-fence.
+		// Only the marker that opened a fence can close it, so a ~~~ block quoting ``` lines (or vice versa) doesn't flip state mid-fence.
 		if fence != "" {
 			if strings.HasPrefix(trimmed, fence) {
 				fence = ""

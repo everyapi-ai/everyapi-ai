@@ -1,15 +1,8 @@
 package mcp
 
-// Admin (operator-role) tools. Backend rejects non-admin callers
-// with 403 regardless, but the handlers ALSO check creds.IsAdmin
-// up-front so the AI agent gets a clear "admin role required"
-// message instead of a generic 401/403 envelope.
+// Admin (operator-role) tools. Backend rejects non-admin callers with 403 regardless, but the handlers ALSO check creds.IsAdmin up-front so the AI agent gets a clear "admin role required" message instead of a generic 401/403 envelope.
 //
-// V2 surface: marketplace_status (read) and marketplace_set (write,
-// confirm-gated). Marketplace on/off affects every seller AND every
-// buyer on the deployment, so the credential-leak threat model that
-// gated everyapi_seller_withdraw applies here at higher stakes — the
-// `confirm: "yes"` friction step is non-negotiable.
+// V2 surface: marketplace_status (read) and marketplace_set (write, confirm-gated). Marketplace on/off affects every seller AND every buyer on the deployment, so the credential-leak threat model that gated everyapi_seller_withdraw applies here at higher stakes — the `confirm: "yes"` friction step is non-negotiable.
 
 import (
 	"context"
@@ -20,29 +13,20 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/api"
 )
 
-// marketplaceOptionKey mirrors cmd/admin/marketplace.go. Kept as a
-// constant here too (rather than imported) so the mcp package's
-// dependency surface stays the SDK + config — no reach into cmd/.
+// marketplaceOptionKey mirrors cmd/admin/marketplace.go. Kept as a constant here too (rather than imported) so the mcp package's dependency surface stays the SDK + config — no reach into cmd/.
 const marketplaceOptionKey = "marketplace.enabled"
 
-// errNotAdmin is the canonical "you're not the right role" message,
-// shaped to give the AI agent enough context to surface the failure
-// to the human without retrying.
+// errNotAdmin is the canonical "you're not the right role" message, shaped to give the AI agent enough context to surface the failure to the human without retrying.
 var errNotAdmin = errors.New(
 	"admin role required — this tool needs operator privileges on the EveryAPI " +
 		"deployment. Skip the tool and tell the user it's restricted.",
 )
 
-// ensureAdmin gates the admin tools. The check is on the LOCAL
-// credentials cache rather than the backend's 403 because:
+// ensureAdmin gates the admin tools. The check is on the LOCAL credentials cache rather than the backend's 403 because:
 //   - it avoids a wasted round-trip for the common non-admin caller;
-//   - the user-facing error mentions the actual gate ("admin role
-//     required") rather than a generic auth-failure envelope.
+//   - the user-facing error mentions the actual gate ("admin role required") rather than a generic auth-failure envelope.
 //
-// A backend that disagreed with the local Role (e.g. a freshly-
-// promoted user whose last `everyapi auth login` was pre-promotion)
-// still gets the 403 from the API call below — the local check is
-// a cheap first line.
+// A backend that disagreed with the local Role (e.g. a freshly- promoted user whose last `everyapi auth login` was pre-promotion) still gets the 403 from the API call below — the local check is a cheap first line.
 func ensureAdmin() (*api.Client, error) {
 	creds, err := loadCreds()
 	if err != nil {
@@ -91,10 +75,7 @@ func handleAdminMarketplaceStatus(ctx context.Context, _ json.RawMessage) (strin
 
 // ---- everyapi_admin_marketplace_set ----------------------------------
 
-// Single set tool (boolean payload) instead of separate on/off tools.
-// Same surface as the everyapi_seller_withdraw confirm gate: a
-// credential-leaked process could otherwise flip the marketplace
-// silently and the AI is the only party in a position to refuse.
+// Single set tool (boolean payload) instead of separate on/off tools. Same surface as the everyapi_seller_withdraw confirm gate: a credential-leaked process could otherwise flip the marketplace silently and the AI is the only party in a position to refuse.
 
 type adminMarketplaceSetArgs struct {
 	Enabled *bool  `json:"enabled"`
@@ -150,12 +131,7 @@ func handleAdminMarketplaceSet(ctx context.Context, raw json.RawMessage) (string
 			"— surface the intent to the operator before retrying with confirm set.",
 			adminMarketplaceSetConfirmToken)
 	}
-	// `enabled` is required, but the server does not validate args against
-	// InputSchema — a non-pointer bool can't tell "omitted" from "false",
-	// and the absent case would default to CLOSING the marketplace
-	// deployment-wide (a destructive, wrong-direction write past the
-	// confirm gate). The *bool makes the omission explicit so we reject it
-	// loudly instead of silently closing. (See repo Rule 4.)
+	// `enabled` is required, but the server does not validate args against InputSchema — a non-pointer bool can't tell "omitted" from "false", and the absent case would default to CLOSING the marketplace deployment-wide (a destructive, wrong-direction write past the confirm gate). The *bool makes the omission explicit so we reject it loudly instead of silently closing. (See repo Rule 4.)
 	if args.Enabled == nil {
 		return "", fmt.Errorf("everyapi_admin_marketplace_set requires `enabled` (true to open / false to close the marketplace); it was omitted")
 	}

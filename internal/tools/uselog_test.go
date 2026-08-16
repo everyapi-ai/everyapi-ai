@@ -9,10 +9,7 @@ import (
 	"testing"
 )
 
-// TestLogToolExitWritesLine verifies a diagnostic line lands in
-// <config>/use.log with the pid, tool, and cause, and that a second call
-// appends rather than overwrites. Config dir is redirected via
-// XDG_CONFIG_HOME so the test never touches the real ~/.config/everyapi.
+// TestLogToolExitWritesLine verifies a diagnostic line lands in <config>/use.log with the pid, tool, and cause, and that a second call appends rather than overwrites. Config dir is redirected via XDG_CONFIG_HOME so the test never touches the real ~/.config/everyapi.
 func TestLogToolExitWritesLine(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
@@ -31,11 +28,7 @@ func TestLogToolExitWritesLine(t *testing.T) {
 	}
 }
 
-// TestLogToolExitRollKeepsTailAndWritesNewLine is the regression guard for
-// the roll path: crossing the cap must KEEP recent history (a tail, not a
-// wipe) AND land the new line. The old O_TRUNC roll failed both — it left
-// exactly one line — which defeated the whole correlate-a-mass-death
-// purpose.
+// TestLogToolExitRollKeepsTailAndWritesNewLine is the regression guard for the roll path: crossing the cap must KEEP recent history (a tail, not a wipe) AND land the new line. The old O_TRUNC roll failed both — it left exactly one line — which defeated the whole correlate-a-mass-death purpose.
 func TestLogToolExitRollKeepsTailAndWritesNewLine(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
@@ -44,8 +37,7 @@ func TestLogToolExitRollKeepsTailAndWritesNewLine(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Pre-fill just over the cap with uniquely-numbered lines so we can
-	// tell which survive the roll.
+	// Pre-fill just over the cap with uniquely-numbered lines so we can tell which survive the roll.
 	var b strings.Builder
 	for i := 0; b.Len() <= useExitLogMaxBytes; i++ {
 		fmt.Fprintf(&b, "2026-01-01T00:00:00.000Z pid=%d tool=filler line-%08d\n", i, i)
@@ -66,13 +58,11 @@ func TestLogToolExitRollKeepsTailAndWritesNewLine(t *testing.T) {
 	} else if info.Size() > useExitLogMaxBytes {
 		t.Errorf("use.log size %d did not roll below cap %d", info.Size(), useExitLogMaxBytes)
 	}
-	// 2. The NEW line is present (the #9 gap: a roll that truncated but
-	// dropped the write would still pass a size-only check).
+	// 2. The NEW line is present (the #9 gap: a roll that truncated but dropped the write would still pass a size-only check).
 	if !strings.Contains(text, "pid=777") || !strings.Contains(text, "signal 9") {
 		t.Errorf("rolled use.log lost the new line; got tail:\n%s", lastN(text, 300))
 	}
-	// 3. It's a TAIL, not a wipe: many prior lines survive, and they are
-	// the most recent ones (highest line-NNNN), not the oldest.
+	// 3. It's a TAIL, not a wipe: many prior lines survive, and they are the most recent ones (highest line-NNNN), not the oldest.
 	kept := nonEmptyLines(text)
 	if kept < 100 {
 		t.Errorf("roll kept only %d lines of %d — that's a wipe, not a tail", kept, totalLines)
@@ -90,10 +80,7 @@ func TestLogToolExitRollKeepsTailAndWritesNewLine(t *testing.T) {
 	}
 }
 
-// TestLogToolExitConcurrentWritesNoTear runs many concurrent writers (the
-// mass-death scenario) and asserts every line is intact and countable —
-// no interleaving mid-line, no lost lines. This is what the advisory lock
-// buys; the old code relied on an invalid PIPE_BUF-for-files assumption.
+// TestLogToolExitConcurrentWritesNoTear runs many concurrent writers (the mass-death scenario) and asserts every line is intact and countable — no interleaving mid-line, no lost lines. This is what the advisory lock buys; the old code relied on an invalid PIPE_BUF-for-files assumption.
 func TestLogToolExitConcurrentWritesNoTear(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
@@ -124,20 +111,16 @@ func TestLogToolExitConcurrentWritesNoTear(t *testing.T) {
 	}
 }
 
-// TestLogToolExitBestEffortOnBadConfigDir confirms a write to an
-// unresolvable/unwritable config dir is swallowed and never panics — the
-// diagnostic must not itself fail the launch.
+// TestLogToolExitBestEffortOnBadConfigDir confirms a write to an unresolvable/unwritable config dir is swallowed and never panics — the diagnostic must not itself fail the launch.
 func TestLogToolExitBestEffortOnBadConfigDir(t *testing.T) {
-	// Point the config dir at a path whose parent is a regular file, so
-	// MkdirAll fails; logToolExit must return cleanly.
+	// Point the config dir at a path whose parent is a regular file, so MkdirAll fails; logToolExit must return cleanly.
 	blocker := filepath.Join(t.TempDir(), "not-a-dir")
 	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("XDG_CONFIG_HOME", blocker) // ConfigDir joins "everyapi" under this file
 	logToolExit("claude", 1, "exit=0 (clean)")
-	// No assertion beyond "did not panic / did not hang" — the timeout in
-	// logToolExit bounds the latter.
+	// No assertion beyond "did not panic / did not hang" — the timeout in logToolExit bounds the latter.
 }
 
 func readUseLog(t *testing.T, cfgDir string) string {

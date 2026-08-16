@@ -7,9 +7,9 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliargs"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 )
 
 const marketplaceOptionKey = "marketplace.enabled"
@@ -61,10 +61,7 @@ func marketplaceSet(target bool) error {
 	if target {
 		targetStr = "true"
 	}
-	// Read-then-write so the operator's terminal shows whether this
-	// actually changed state (vs. re-affirmed the existing value).
-	// One extra GET round-trip is fine for a once-in-a-while ops
-	// command — there is no batch use case for this.
+	// Read-then-write so the operator's terminal shows whether this actually changed state (vs. re-affirmed the existing value). One extra GET round-trip is fine for a once-in-a-while ops command — there is no batch use case for this.
 	prev, _, err := client.GetOption(cliout.WithCtx(), marketplaceOptionKey)
 	if err != nil {
 		return classifyErr(err)
@@ -87,9 +84,7 @@ func prevOrUnset(prev string) string {
 	return prev
 }
 
-// adminClient mirrors cmd/seller's sellerClient — load creds, build
-// SDK client, hand both back. Same shape so a future helper
-// extraction is mechanical.
+// adminClient mirrors cmd/seller's sellerClient — load creds, build SDK client, hand both back. Same shape so a future helper extraction is mechanical.
 func adminClient() (*api.Client, *config.Credentials, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {

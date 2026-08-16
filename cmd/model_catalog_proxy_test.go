@@ -14,13 +14,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/tools"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/tools"
 )
 
-// startCatalogProxyForTest hosts the catalogue transform on its own listener —
-// the shape a launch takes when no sanitizer is running. Callers must have set
-// XDG_CONFIG_HOME already: the transform opens model-catalog.log, and without
-// isolation it appends to the developer's real ~/.config/everyapi.
+// startCatalogProxyForTest hosts the catalogue transform on its own listener — the shape a launch takes when no sanitizer is running. Callers must have set XDG_CONFIG_HOME already: the transform opens model-catalog.log, and without isolation it appends to the developer's real ~/.config/everyapi.
 func startCatalogProxyForTest(t *testing.T, upstream string, models []tools.Model, aliases map[string]string) string {
 	t.Helper()
 	logger, closeLog := loopbackProxyLogger("model-catalog.log")
@@ -118,11 +115,7 @@ func TestRewriteModelAliasOnlyChangesTopLevelModel(t *testing.T) {
 	}
 }
 
-// TestRewriteModelAliasForwardsWhatItCannotRewrite pins the passthrough half of
-// the scan-only rewrite. Dropping the whole-envelope Unmarshal means a body the
-// scanner cannot make sense of must reach the gateway untouched rather than
-// being rejected locally — and, just as importantly, must still arrive at all:
-// every early return has to put the drained body back on the request.
+// TestRewriteModelAliasForwardsWhatItCannotRewrite pins the passthrough half of the scan-only rewrite. Dropping the whole-envelope Unmarshal means a body the scanner cannot make sense of must reach the gateway untouched rather than being rejected locally — and, just as importantly, must still arrive at all: every early return has to put the drained body back on the request.
 func TestRewriteModelAliasForwardsWhatItCannotRewrite(t *testing.T) {
 	const alias = "claude-everyapi-glm"
 	for _, tc := range []struct {
@@ -157,12 +150,7 @@ func TestRewriteModelAliasForwardsWhatItCannotRewrite(t *testing.T) {
 	}
 }
 
-// TestRewriteModelAliasRewritesWithoutValidatingTheWholeBody records the one
-// behaviour change of the scan-only path: a body whose top-level model is
-// locatable is rewritten and forwarded even though its tail is malformed. The
-// whole-envelope Unmarshal used to turn this into a local 400. Rejecting it is
-// the gateway's call, and the gateway can only make it if the alias has already
-// been swapped for the real model id.
+// TestRewriteModelAliasRewritesWithoutValidatingTheWholeBody records the one behaviour change of the scan-only path: a body whose top-level model is locatable is rewritten and forwarded even though its tail is malformed. The whole-envelope Unmarshal used to turn this into a local 400. Rejecting it is the gateway's call, and the gateway can only make it if the alias has already been swapped for the real model id.
 func TestRewriteModelAliasRewritesWithoutValidatingTheWholeBody(t *testing.T) {
 	const alias = "claude-everyapi-glm"
 	truncated := `{"model":"` + alias + `","messages":[{"role":"user"`
@@ -183,10 +171,7 @@ func TestRewriteModelAliasRewritesWithoutValidatingTheWholeBody(t *testing.T) {
 	}
 }
 
-// TestModelCatalogProxyLogsUpstreamFailures covers the hop's only evidence of a
-// failure. It sits closest to the gateway on both launch paths, so it is the
-// first to see an outage, and it cannot log to stderr without corrupting the
-// launched tool's TUI — leaving the file as the sole record behind the 502.
+// TestModelCatalogProxyLogsUpstreamFailures covers the hop's only evidence of a failure. It sits closest to the gateway on both launch paths, so it is the first to see an outage, and it cannot log to stderr without corrupting the launched tool's TUI — leaving the file as the sole record behind the 502.
 func TestModelCatalogProxyLogsUpstreamFailures(t *testing.T) {
 	configRoot := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configRoot)
@@ -196,13 +181,7 @@ func TestModelCatalogProxyLogsUpstreamFailures(t *testing.T) {
 	deadURL := dead.URL
 	dead.Close()
 
-	// Not startCatalogProxyForTest: this test has to close the log itself,
-	// before reading the file back. Both are still registered for cleanup —
-	// closing early and releasing on abort are independent concerns, and the
-	// assertions below can fail (a port reused after dead.Close() answers with
-	// something other than a 502), which would otherwise strand the descriptor,
-	// the listener and the Serve goroutine for the rest of the run. Both
-	// closers are idempotent, so the explicit calls and the cleanup coexist.
+	// Not startCatalogProxyForTest: this test has to close the log itself, before reading the file back. Both are still registered for cleanup — closing early and releasing on abort are independent concerns, and the assertions below can fail (a port reused after dead.Close() answers with something other than a 502), which would otherwise strand the descriptor, the listener and the Serve goroutine for the rest of the run. Both closers are idempotent, so the explicit calls and the cleanup coexist.
 	logger, closeLog := loopbackProxyLogger("model-catalog.log")
 	t.Cleanup(closeLog)
 	proxyURL, stop, err := startModelCatalogProxy(deadURL, modelCatalogTransform([]tools.Model{{ID: "chat-ok"}}, nil, logger), logger)
@@ -229,8 +208,7 @@ func TestModelCatalogProxyLogsUpstreamFailures(t *testing.T) {
 	if !strings.Contains(string(written), "/v1/messages") {
 		t.Fatalf("log does not identify the failing request: %s", written)
 	}
-	// On the injected path this address is the tool's base URL, and the launch
-	// line no longer prints it — the log is the only place it appears.
+	// On the injected path this address is the tool's base URL, and the launch line no longer prints it — the log is the only place it appears.
 	if !strings.Contains(string(written), "listening on "+proxyURL) {
 		t.Fatalf("log does not record the address the proxy bound: %s", written)
 	}
@@ -304,12 +282,7 @@ func TestTransparentClaudeCatalogAliasReachesGatewayAsRealModel(t *testing.T) {
 	}
 }
 
-// TestModelCatalogTransformSkipsEncodedBodies covers the one shape the scan
-// cannot handle. A compressed body has no findable top-level "model", so the
-// alias would travel to the gateway unrewritten and come back as an id that
-// appears in no model list. Decompressing here is not worth owning, so the
-// limit is explicit: forward untouched and say so in the log, rather than
-// burning a full read on a body that cannot yield a match.
+// TestModelCatalogTransformSkipsEncodedBodies covers the one shape the scan cannot handle. A compressed body has no findable top-level "model", so the alias would travel to the gateway unrewritten and come back as an id that appears in no model list. Decompressing here is not worth owning, so the limit is explicit: forward untouched and say so in the log, rather than burning a full read on a body that cannot yield a match.
 func TestModelCatalogTransformSkipsEncodedBodies(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	logger, closeLog := loopbackProxyLogger("model-catalog.log")

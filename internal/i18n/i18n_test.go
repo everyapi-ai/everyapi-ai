@@ -64,9 +64,7 @@ func TestT_Translation(t *testing.T) {
 	})
 
 	t.Run("missing zh falls back to en", func(t *testing.T) {
-		// Inject an en-only fixture key + assert zh fallback. The
-		// loader is init-only so we mutate the live map directly —
-		// safe because tests run single-threaded and we clean up.
+		// Inject an en-only fixture key + assert zh fallback. The loader is init-only so we mutate the live map directly — safe because tests run single-threaded and we clean up.
 		locales[LangEn]["__test.en_only"] = "hello"
 		t.Cleanup(func() { delete(locales[LangEn], "__test.en_only") })
 
@@ -77,8 +75,7 @@ func TestT_Translation(t *testing.T) {
 	})
 
 	t.Run("unknown key returns the key itself", func(t *testing.T) {
-		// Loud fallback so a developer notices the unregistered
-		// string in code review / on first run.
+		// Loud fallback so a developer notices the unregistered string in code review / on first run.
 		if got := T("definitely.not.a.real.key"); got != "definitely.not.a.real.key" {
 			t.Errorf("unknown key fallback returned %q", got)
 		}
@@ -122,10 +119,7 @@ func TestDetectFromEnv(t *testing.T) {
 	})
 }
 
-// TestSupportedLanguages confirms the loader discovers every locale
-// file under embed and returns them sorted with en first. Sanity
-// check that the embed actually happened — a build that ships zero
-// locale files would silently return en for every T() call.
+// TestSupportedLanguages confirms the loader discovers every locale file under embed and returns them sorted with en first. Sanity check that the embed actually happened — a build that ships zero locale files would silently return en for every T() call.
 func TestSupportedLanguages(t *testing.T) {
 	langs := SupportedLanguages()
 	if len(langs) == 0 {
@@ -134,10 +128,7 @@ func TestSupportedLanguages(t *testing.T) {
 	if langs[0] != LangEn {
 		t.Errorf("first language = %q, want en (sort invariant)", langs[0])
 	}
-	// Every shipped locale must be reachable through the loader; a
-	// build that quietly dropped a {lang}.toml from the embed would
-	// otherwise show up only at runtime when a user picked the
-	// missing language.
+	// Every shipped locale must be reachable through the loader; a build that quietly dropped a {lang}.toml from the embed would otherwise show up only at runtime when a user picked the missing language.
 	seen := map[string]bool{}
 	for _, l := range langs {
 		seen[l] = true
@@ -149,20 +140,13 @@ func TestSupportedLanguages(t *testing.T) {
 	}
 }
 
-// localePlaceholderRe extracts printf verbs (%s %d %q %.2f %dh, plus
-// explicit-index forms like %[2]s) from a format string.
+// localePlaceholderRe extracts printf verbs (%s %d %q %.2f %dh, plus explicit-index forms like %[2]s) from a format string.
 var localePlaceholderRe = regexp.MustCompile(`%(\[\d+\])?[-#0-9.]*[a-zA-Z]`)
 
 // localePlaceholderIndexRe strips the explicit %[N] argument index.
 var localePlaceholderIndexRe = regexp.MustCompile(`\[\d+\]`)
 
-// localePlaceholders returns the SORTED MULTISET of printf verbs in s,
-// with explicit %[N] indices stripped. Both choices are deliberate:
-// reordering args via %[2]s is a legal, README-recommended way to fit a
-// language's word order, so the parity check compares which verbs appear
-// (and how many), not their position — otherwise a correctly-reordered
-// translation would spuriously fail. Literal %% is dropped first so it
-// isn't mistaken for a verb.
+// localePlaceholders returns the SORTED MULTISET of printf verbs in s, with explicit %[N] indices stripped. Both choices are deliberate: reordering args via %[2]s is a legal, README-recommended way to fit a language's word order, so the parity check compares which verbs appear (and how many), not their position — otherwise a correctly-reordered translation would spuriously fail. Literal %% is dropped first so it isn't mistaken for a verb.
 func localePlaceholders(s string) []string {
 	s = strings.ReplaceAll(s, "%%", "")
 	raw := localePlaceholderRe.FindAllString(s, -1)
@@ -174,21 +158,9 @@ func localePlaceholders(s string) []string {
 	return out
 }
 
-// TestLocaleParity is the dev-time guard against locale drift: every
-// shipped locale must carry the SAME key set as en, with the same
-// format placeholders (count + order) per key. Runtime still degrades
-// gracefully — T() falls back to en for a missing key — but that
-// fallback is exactly what let the secondary locales silently drift 54
-// keys behind before this test existed. Rule: add a key to en.toml →
-// add it to every locale, with identical %-verbs in identical order
-// (Go's printf is positional, so reordering verbs silently corrupts
-// output unless done via explicit %[N] indices — which the placeholder
-// check tolerates by comparing the index-stripped multiset).
+// TestLocaleParity is the dev-time guard against locale drift: every shipped locale must carry the SAME key set as en, with the same format placeholders (count + order) per key. Runtime still degrades gracefully — T() falls back to en for a missing key — but that fallback is exactly what let the secondary locales silently drift 54 keys behind before this test existed. Rule: add a key to en.toml → add it to every locale, with identical %-verbs in identical order (Go's printf is positional, so reordering verbs silently corrupts output unless done via explicit %[N] indices — which the placeholder check tolerates by comparing the index-stripped multiset).
 //
-// Do NOT add t.Parallel() here: TestT_Translation mutates the shared
-// package-level `locales` map (it injects an en-only fixture key), and
-// a parallel run could observe that key and report it missing from
-// every other locale.
+// Do NOT add t.Parallel() here: TestT_Translation mutates the shared package-level `locales` map (it injects an en-only fixture key), and a parallel run could observe that key and report it missing from every other locale.
 func TestLocaleParity(t *testing.T) {
 	en, ok := locales[LangEn]
 	if !ok {
@@ -216,13 +188,7 @@ func TestLocaleParity(t *testing.T) {
 	}
 }
 
-// TestInstallDiagnosticsAreNotNpmSpecific guards the two install-failure
-// strings that any tool can reach. Resolution used to search only npm's
-// global bin, so both messages named npm; they now also render for the
-// curl|bash installers (gemini/claude/hermes), where telling the user to
-// fix "npm's global bin directory" points at a directory that was never
-// involved. Every locale has to stay neutral, not just en — these are the
-// strings cmd/use actually prints, unlike the Go-side Error() text.
+// TestInstallDiagnosticsAreNotNpmSpecific guards the two install-failure strings that any tool can reach. Resolution used to search only npm's global bin, so both messages named npm; they now also render for the curl|bash installers (gemini/claude/hermes), where telling the user to fix "npm's global bin directory" points at a directory that was never involved. Every locale has to stay neutral, not just en — these are the strings cmd/use actually prints, unlike the Go-side Error() text.
 func TestInstallDiagnosticsAreNotNpmSpecific(t *testing.T) {
 	keys := []string{"use.installed_not_on_path_dirs", "use.installer_missing"}
 	for lang, tbl := range locales {
@@ -240,11 +206,7 @@ func TestInstallDiagnosticsAreNotNpmSpecific(t *testing.T) {
 	}
 }
 
-// TestLocaleMarkersBalanced ensures every locale value has an even
-// number of ** emphasis markers. An unclosed marker would bold the rest
-// of the string on a styled terminal, or leave a stray ** when piped.
-// Presence of markers is NOT required (locales are marked incrementally),
-// only balance.
+// TestLocaleMarkersBalanced ensures every locale value has an even number of ** emphasis markers. An unclosed marker would bold the rest of the string on a styled terminal, or leave a stray ** when piped. Presence of markers is NOT required (locales are marked incrementally), only balance.
 func TestLocaleMarkersBalanced(t *testing.T) {
 	for lang, tbl := range locales {
 		for key, val := range tbl {
@@ -261,9 +223,7 @@ func TestLocalePlaceholders(t *testing.T) {
 		want []string
 	}{
 		{"%s contains %d", []string{"%d", "%s"}},
-		// Explicit-index reordering must yield the same multiset as the
-		// un-indexed source — reordering args for grammar is legal and
-		// must not trip the parity check.
+		// Explicit-index reordering must yield the same multiset as the un-indexed source — reordering args for grammar is legal and must not trip the parity check.
 		{"%[2]s 含 %[1]d 個", []string{"%d", "%s"}},
 		{"%d%% done", []string{"%d"}}, // literal %% is not a verb
 		{"100%% complete", nil},

@@ -2,11 +2,7 @@ package cliprompt
 
 import "testing"
 
-// TestOpenBrowserRejectsUntrustedURL pins the guard that stops a
-// server-controlled verification_uri from being handed to open/xdg-open
-// as an option flag or a non-http target. Only the rejection path is
-// asserted — it returns before any exec, so it's deterministic; the
-// happy path would actually shell out to a browser launcher.
+// TestOpenBrowserRejectsUntrustedURL pins the guard that stops a server-controlled verification_uri from being handed to open/xdg-open as an option flag or a non-http target. Only the rejection path is asserted — it returns before any exec, so it's deterministic; the happy path would actually shell out to a browser launcher.
 func TestOpenBrowserRejectsUntrustedURL(t *testing.T) {
 	bad := []string{
 		"-a",                  // leading dash → option injection into open

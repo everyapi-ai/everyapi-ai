@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 

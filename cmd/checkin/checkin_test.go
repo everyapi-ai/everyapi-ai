@@ -12,9 +12,7 @@ func TestClaimHelpDoesNotAuthenticateOrClaim(t *testing.T) {
 	}
 }
 
-// A bare `checkin makeup` must fail on the missing date rather than reach the
-// network — and above all must not fall through to the claim path, which would
-// silently burn today's real check-in.
+// A bare `checkin makeup` must fail on the missing date rather than reach the network — and above all must not fall through to the claim path, which would silently burn today's real check-in.
 func TestMakeupWithoutADateFailsBeforeAuthenticating(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	err := Run([]string{"makeup"})
@@ -26,8 +24,7 @@ func TestMakeupWithoutADateFailsBeforeAuthenticating(t *testing.T) {
 	}
 }
 
-// The date is accepted as a bare positional as well as via --date; neither form
-// may be swallowed by the positional rejector.
+// The date is accepted as a bare positional as well as via --date; neither form may be swallowed by the positional rejector.
 func TestMakeupAcceptsTheDateAsAPositional(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for _, args := range [][]string{
@@ -35,8 +32,7 @@ func TestMakeupAcceptsTheDateAsAPositional(t *testing.T) {
 		{"makeup", "--date", "2026-08-01"},
 	} {
 		err := Run(args)
-		// No credentials in this temp home, so the call stops at the auth gate
-		// — which proves the date parsed and the command reached the client.
+		// No credentials in this temp home, so the call stops at the auth gate — which proves the date parsed and the command reached the client.
 		if err == nil {
 			t.Fatalf("%v: expected the not-logged-in error", args)
 		}

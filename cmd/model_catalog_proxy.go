@@ -17,25 +17,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/tools"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/tools"
 )
 
-// modelCatalogTransform keeps dynamic client pickers honest. Requests other
-// than model discovery pass through to next unchanged; /v1/models is answered
-// from the protocol-filtered launch snapshot so media/embedding models cannot
-// appear in a coding client's /model picker.
+// modelCatalogTransform keeps dynamic client pickers honest. Requests other than model discovery pass through to next unchanged; /v1/models is answered from the protocol-filtered launch snapshot so media/embedding models cannot appear in a coding client's /model picker.
 //
-// It is a handler decorator rather than a proxy so that the SAME implementation
-// can run on whichever socket the launch already has: hosted on the sanitizer's
-// listener when one is running, or on its own (startModelCatalogProxy) when it
-// is the only transform. Filtering a catalogue and rewriting a model id are
-// content transforms, not transport, and giving each one its own loopback hop
-// made the chain grow a port, a log file and a failure point per transform.
+// It is a handler decorator rather than a proxy so that the SAME implementation can run on whichever socket the launch already has: hosted on the sanitizer's listener when one is running, or on its own (startModelCatalogProxy) when it is the only transform. Filtering a catalogue and rewriting a model id are content transforms, not transport, and giving each one its own loopback hop made the chain grow a port, a log file and a failure point per transform.
 //
-// Failures log to ~/.config/everyapi/model-catalog.log via the caller's logger.
-// Like the connector and the sanitizer it MUST NOT log to stderr, which is
-// shared with the launched tool's TUI — and without the file the user's only
-// evidence is an opaque error with no way to tell which transform produced it.
+// Failures log to ~/.config/everyapi/model-catalog.log via the caller's logger. Like the connector and the sanitizer it MUST NOT log to stderr, which is shared with the launched tool's TUI — and without the file the user's only evidence is an opaque error with no way to tell which transform produced it.
 func modelCatalogTransform(models []tools.Model, aliases map[string]string, logger *log.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -44,15 +33,7 @@ func modelCatalogTransform(models []tools.Model, aliases map[string]string, logg
 				return
 			}
 			if len(aliases) > 0 && strings.HasPrefix(r.URL.Path, "/v1/messages") {
-				// A content-encoded body defeats the scan: the bytes are
-				// compressed, so no top-level "model" is findable and the
-				// synthetic alias travels to the gateway unrewritten, coming
-				// back as "model claude-everyapi-… not found" — an id that
-				// appears in no model list. Decompressing here would mean
-				// owning gzip/deflate/br round-tripping for a shape no
-				// supported client currently sends, so the limit stands and is
-				// recorded instead: without this line the upstream error has no
-				// local explanation at all.
+				// A content-encoded body defeats the scan: the bytes are compressed, so no top-level "model" is findable and the synthetic alias travels to the gateway unrewritten, coming back as "model claude-everyapi-… not found" — an id that appears in no model list. Decompressing here would mean owning gzip/deflate/br round-tripping for a shape no supported client currently sends, so the limit stands and is recorded instead: without this line the upstream error has no local explanation at all.
 				if enc := r.Header.Get("Content-Encoding"); enc != "" && !strings.EqualFold(strings.TrimSpace(enc), "identity") {
 					logger.Printf("model catalog: %s body is %s-encoded; alias rewrite skipped, a synthetic model id will reach the gateway as-is", r.URL.Path, enc)
 					next.ServeHTTP(w, r)
@@ -73,9 +54,7 @@ func modelCatalogTransform(models []tools.Model, aliases map[string]string, logg
 	}
 }
 
-// startModelCatalogProxy hosts transform on its own loopback listener, relaying
-// whatever it passes through to upstreamBase. This is the launch path where no
-// sanitizer is running, so the catalogue has no other socket to live on.
+// startModelCatalogProxy hosts transform on its own loopback listener, relaying whatever it passes through to upstreamBase. This is the launch path where no sanitizer is running, so the catalogue has no other socket to live on.
 func startModelCatalogProxy(upstreamBase string, transform func(http.Handler) http.Handler, logger *log.Logger) (string, func(), error) {
 	target, err := url.Parse(upstreamBase)
 	if err != nil || target.Scheme == "" || target.Host == "" {
@@ -84,9 +63,7 @@ func startModelCatalogProxy(upstreamBase string, transform func(http.Handler) ht
 	reverse := httputil.NewSingleHostReverseProxy(target)
 	reverse.ErrorLog = logger
 	reverse.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		// Method and path only. r.URL.String() would carry query-string
-		// credentials into the log — a real shape here, which is why the
-		// connector strips them before relaying (stripClientQueryCredentials).
+		// Method and path only. r.URL.String() would carry query-string credentials into the log — a real shape here, which is why the connector strips them before relaying (stripClientQueryCredentials).
 		logger.Printf("model catalog: relay %s %s to %s failed: %v", r.Method, r.URL.Path, target.Host, err)
 		http.Error(w, "model catalog upstream unavailable", http.StatusBadGateway)
 	}
@@ -99,17 +76,9 @@ func startModelCatalogProxy(upstreamBase string, transform func(http.Handler) ht
 	if err != nil {
 		return "", nil, fmt.Errorf("bind model catalog proxy: %w", err)
 	}
-	// Record the address, mirroring what the sanitizer logs when it binds. On
-	// the injected path this listener's address is what the tool gets as its
-	// base URL, and the launch line deliberately no longer prints it — without
-	// this line the port the tool is actually talking to appears nowhere at all.
+	// Record the address, mirroring what the sanitizer logs when it binds. On the injected path this listener's address is what the tool gets as its base URL, and the launch line deliberately no longer prints it — without this line the port the tool is actually talking to appears nowhere at all.
 	logger.Printf("model catalog: listening on http://%s → %s", listener.Addr(), upstreamBase)
-	// ErrorLog too, not just the reverse proxy's. net/http writes panics
-	// recovered per-connection and superfluous-WriteHeader warnings through
-	// the Server's own logger, and a nil one falls back to log.Default() —
-	// which is stderr, the stream the launched tool's TUI owns. A panic in the
-	// composed handler would otherwise dump a goroutine trace into the middle
-	// of the tool's rendered UI while this hop's log file stayed empty.
+	// ErrorLog too, not just the reverse proxy's. net/http writes panics recovered per-connection and superfluous-WriteHeader warnings through the Server's own logger, and a nil one falls back to log.Default() — which is stderr, the stream the launched tool's TUI owns. A panic in the composed handler would otherwise dump a goroutine trace into the middle of the tool's rendered UI while this hop's log file stayed empty.
 	server := &http.Server{
 		Handler:           transform(reverse),
 		ErrorLog:          logger,
@@ -196,18 +165,9 @@ const maxAliasRewriteBody = 64 << 20
 
 var errAliasRequestTooLarge = errors.New("request body exceeds 64 MiB alias-rewrite limit")
 
-// rewriteModelAlias swaps a synthetic claude-everyapi-* alias back to the real
-// upstream model id. It scans for the top-level "model" string directly instead
-// of unmarshalling the whole envelope: every /v1/messages body passes through
-// here, coding-agent bodies routinely run to megabytes, and the only field that
-// matters is one short string. topLevelStringValueRange already had to locate
-// that exact range to perform the splice, so the full parse was pure overhead.
+// rewriteModelAlias swaps a synthetic claude-everyapi-* alias back to the real upstream model id. It scans for the top-level "model" string directly instead of unmarshalling the whole envelope: every /v1/messages body passes through here, coding-agent bodies routinely run to megabytes, and the only field that matters is one short string. topLevelStringValueRange already had to locate that exact range to perform the splice, so the full parse was pure overhead.
 //
-// Consequence: a body this scan cannot make sense of is now forwarded rather
-// than rejected locally with a 400. That is deliberate — validating JSON is the
-// gateway's job, not a loopback hop's, and an alias that survives unrewritten
-// comes back as a clear upstream "model not found" instead of a proxy error the
-// user cannot place. The size limit stays; it guards this process's memory.
+// Consequence: a body this scan cannot make sense of is now forwarded rather than rejected locally with a 400. That is deliberate — validating JSON is the gateway's job, not a loopback hop's, and an alias that survives unrewritten comes back as a clear upstream "model not found" instead of a proxy error the user cannot place. The size limit stays; it guards this process's memory.
 func rewriteModelAlias(r *http.Request, aliases map[string]string) error {
 	if r.Body == nil || r.Method == http.MethodGet || r.Method == http.MethodHead {
 		return nil
@@ -220,8 +180,7 @@ func rewriteModelAlias(r *http.Request, aliases map[string]string) error {
 	if len(body) > maxAliasRewriteBody {
 		return errAliasRequestTooLarge
 	}
-	// Every early return has to put the consumed body back, or the request
-	// reaches the reverse proxy with an empty (already drained) reader.
+	// Every early return has to put the consumed body back, or the request reaches the reverse proxy with an empty (already drained) reader.
 	restore := func() {
 		r.Body = io.NopCloser(bytes.NewReader(body))
 		r.ContentLength = int64(len(body))

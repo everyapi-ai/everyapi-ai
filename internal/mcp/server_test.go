@@ -9,8 +9,7 @@ import (
 	"testing"
 )
 
-// fakeHandler returns whatever text is passed at construction time —
-// keeps protocol tests independent of the real api/config layers.
+// fakeHandler returns whatever text is passed at construction time — keeps protocol tests independent of the real api/config layers.
 func fakeHandler(text string) ToolHandler {
 	return func(_ context.Context, _ json.RawMessage) (string, error) {
 		return text, nil
@@ -27,9 +26,7 @@ type fakeErr struct{ msg string }
 
 func (e *fakeErr) Error() string { return e.msg }
 
-// runWithTools is a test driver: pipe `input` lines through serve(),
-// capture stdout, parse each response. Goroutine + done-channel
-// because serve() blocks on stdin EOF.
+// runWithTools is a test driver: pipe `input` lines through serve(), capture stdout, parse each response. Goroutine + done-channel because serve() blocks on stdin EOF.
 func runWithTools(t *testing.T, input string, tools []Tool) []json.RawMessage {
 	t.Helper()
 	in := strings.NewReader(input)
@@ -56,8 +53,7 @@ func runWithTools(t *testing.T, input string, tools []Tool) []json.RawMessage {
 	return resps
 }
 
-// decodeResp pulls the JSON-RPC envelope so individual tests can
-// assert on result vs error without re-parsing the same shape.
+// decodeResp pulls the JSON-RPC envelope so individual tests can assert on result vs error without re-parsing the same shape.
 func decodeResp(t *testing.T, raw json.RawMessage) jsonRPCResponse {
 	t.Helper()
 	var r struct {
@@ -139,16 +135,13 @@ func TestServe_ToolsListIncludesV0Set(t *testing.T) {
 	if len(body.Tools) != 2 {
 		t.Fatalf("want 2 tools, got %d", len(body.Tools))
 	}
-	// Stable alphabetical ordering — tests downstream UX of MCP
-	// clients that just iterate the slice.
+	// Stable alphabetical ordering — tests downstream UX of MCP clients that just iterate the slice.
 	if body.Tools[0].Name != "a_two" || body.Tools[1].Name != "z_one" {
 		t.Errorf("tools not sorted: %+v", body.Tools)
 	}
 }
 
-// TestRegisterTools_HasFullSet pins the registered tool set so
-// adding / removing a tool is a deliberate spec change that breaks
-// this test. Doesn't invoke handlers — just checks the registry.
+// TestRegisterTools_HasFullSet pins the registered tool set so adding / removing a tool is a deliberate spec change that breaks this test. Doesn't invoke handlers — just checks the registry.
 func TestRegisterTools_HasV0Set(t *testing.T) {
 	got := registerTools()
 	want := map[string]bool{
@@ -234,9 +227,7 @@ func TestServe_ToolsCall_HandlerErrorBecomesIsError(t *testing.T) {
 	input := `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"fail","arguments":{}}}` + "\n"
 	resps := runWithTools(t, input, tools)
 	r := decodeResp(t, resps[0])
-	// Handler errors become tool-result errors, NOT JSON-RPC errors.
-	// AI client sees isError=true with the text; protocol layer
-	// stays happy.
+	// Handler errors become tool-result errors, NOT JSON-RPC errors. AI client sees isError=true with the text; protocol layer stays happy.
 	if r.Error != nil {
 		t.Fatalf("unexpected JSON-RPC error: %+v", r.Error)
 	}
@@ -281,9 +272,7 @@ func TestServe_UnknownMethod(t *testing.T) {
 	}
 }
 
-// TestServe_Ping pins the MCP `ping` utility method: the receiver MUST
-// reply with an empty result, NOT a method-not-found error (a strict
-// host would treat the error as a dead server and tear down the session).
+// TestServe_Ping pins the MCP `ping` utility method: the receiver MUST reply with an empty result, NOT a method-not-found error (a strict host would treat the error as a dead server and tear down the session).
 func TestServe_Ping(t *testing.T) {
 	input := `{"jsonrpc":"2.0","id":9,"method":"ping"}` + "\n"
 	resps := runWithTools(t, input, nil)
@@ -309,9 +298,7 @@ func TestServe_Ping(t *testing.T) {
 // ---- notifications --------------------------------------------------
 
 func TestServe_NotificationDropped(t *testing.T) {
-	// Notification = no `id`. Per JSON-RPC 2.0 §4.1, server MUST
-	// NOT reply. We verify by sending a notification then a real
-	// request and confirming only one reply comes back.
+	// Notification = no `id`. Per JSON-RPC 2.0 §4.1, server MUST NOT reply. We verify by sending a notification then a real request and confirming only one reply comes back.
 	input := strings.Join([]string{
 		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
 		`{"jsonrpc":"2.0","id":7,"method":"initialize"}`,
@@ -383,10 +370,7 @@ func fakePanicHandler(msg string) ToolHandler {
 }
 
 func TestServe_ToolsCall_HandlerPanicBecomesIsError(t *testing.T) {
-	// A panicking handler must NOT unwind out of the serial dispatch
-	// loop and kill the long-lived server. It should surface as an
-	// isError tool result, and the server must keep serving the next
-	// request.
+	// A panicking handler must NOT unwind out of the serial dispatch loop and kill the long-lived server. It should surface as an isError tool result, and the server must keep serving the next request.
 	tools := []Tool{
 		{Name: "boom", Description: "boom", InputSchema: emptyObjectSchema, Handler: fakePanicHandler("kaboom")},
 		{Name: "echo", Description: "echo", InputSchema: emptyObjectSchema, Handler: fakeHandler("ok")},
@@ -433,10 +417,7 @@ func TestServe_ToolsCall_HandlerPanicBecomesIsError(t *testing.T) {
 // ---- F2: oversized line degrades to a per-request error ------------
 
 func TestServe_OversizedLine_DegradesPerRequest(t *testing.T) {
-	// A single message larger than the 1MB cap must NOT terminate the
-	// session (the old bufio.Scanner path returned bufio.ErrTooLong and
-	// the process exited). It should yield one per-request error and the
-	// server must keep serving the following message.
+	// A single message larger than the 1MB cap must NOT terminate the session (the old bufio.Scanner path returned bufio.ErrTooLong and the process exited). It should yield one per-request error and the server must keep serving the following message.
 	huge := strings.Repeat("x", (1<<20)+1024) // > maxMessageBytes
 	input := huge + "\n" +
 		`{"jsonrpc":"2.0","id":9,"method":"initialize"}` + "\n"
@@ -462,10 +443,7 @@ func TestServe_OversizedLine_DegradesPerRequest(t *testing.T) {
 // ---- F3: notification-ness is decided by method, not id ------------
 
 func TestServe_RequestMethodWithoutID_NotExecuted(t *testing.T) {
-	// A side-effecting tools/call framed WITHOUT an id must NOT run the
-	// handler (the result/error envelope would otherwise be silently
-	// dropped). It should be refused with an invalid-request error, and
-	// the handler must never fire.
+	// A side-effecting tools/call framed WITHOUT an id must NOT run the handler (the result/error envelope would otherwise be silently dropped). It should be refused with an invalid-request error, and the handler must never fire.
 	var called bool
 	tools := []Tool{
 		{
@@ -502,8 +480,7 @@ func TestServe_RequestMethodWithoutID_NotExecuted(t *testing.T) {
 }
 
 func TestServe_NotificationMethodWithoutID_RunsAndDrops(t *testing.T) {
-	// Genuine notifications/* methods still run for side effects and are
-	// dropped (no reply). Verified via a following real request.
+	// Genuine notifications/* methods still run for side effects and are dropped (no reply). Verified via a following real request.
 	input := strings.Join([]string{
 		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
 		`{"jsonrpc":"2.0","id":12,"method":"initialize"}`,

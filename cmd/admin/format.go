@@ -1,11 +1,6 @@
 package admin
 
-// format.go centralizes the human-readable rendering shared by the admin
-// list/detail views: the backend hands back raw enum integers (role,
-// status) and raw quota counts, which are meaningless in a console dump,
-// so these helpers map them to localized labels, convert quota to USD
-// (the same divisor `everyapi auth status` uses), and pad columns by
-// display width so CJK labels still line up.
+// format.go centralizes the human-readable rendering shared by the admin list/detail views: the backend hands back raw enum integers (role, status) and raw quota counts, which are meaningless in a console dump, so these helpers map them to localized labels, convert quota to USD (the same divisor `everyapi auth status` uses), and pad columns by display width so CJK labels still line up.
 
 import (
 	"fmt"
@@ -14,22 +9,17 @@ import (
 
 	"github.com/everyapi-ai/everyapi-sdk/api"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
-	"github.com/everyapi-ai/everyapi-ai/internal/style"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/style"
 )
 
-// sanitize neutralizes an untrusted backend string before it is printed to
-// the operator's terminal — see cliout.Sanitize for the full rationale and
-// behavior. Kept as a package-local alias so the many call sites below stay
-// terse. Apply any trusted style.* wrapping AFTER sanitizing, never before.
+// sanitize neutralizes an untrusted backend string before it is printed to the operator's terminal — see cliout.Sanitize for the full rationale and behavior. Kept as a package-local alias so the many call sites below stay terse. Apply any trusted style.* wrapping AFTER sanitizing, never before.
 func sanitize(s string) string {
 	return cliout.Sanitize(s)
 }
 
-// roleLabel maps the backend role enum (common.RoleX: 0/1/10/100) to a
-// localized word; unknown values fall back to the raw form so nothing is
-// silently hidden.
+// roleLabel maps the backend role enum (common.RoleX: 0/1/10/100) to a localized word; unknown values fall back to the raw form so nothing is silently hidden.
 func roleLabel(role int) string {
 	switch role {
 	case 100:
@@ -57,9 +47,7 @@ func userStatusLabel(status int) string {
 	}
 }
 
-// quotaPerUnit fetches the backend's quota→USD divisor once, best-effort:
-// 0 means "unavailable", and fmtQuota then falls back to the raw count so
-// a transient /api/status hiccup never blanks the listing.
+// quotaPerUnit fetches the backend's quota→USD divisor once, best-effort: 0 means "unavailable", and fmtQuota then falls back to the raw count so a transient /api/status hiccup never blanks the listing.
 func quotaPerUnit(c *api.Client) float64 {
 	st, err := c.GetStatus(cliout.WithCtx())
 	if err != nil || st.QuotaPerUnit <= 0 {
@@ -68,8 +56,7 @@ func quotaPerUnit(c *api.Client) float64 {
 	return st.QuotaPerUnit
 }
 
-// fmtQuota renders a raw quota integer as USD when perUnit is known,
-// otherwise as a thousands-separated raw count.
+// fmtQuota renders a raw quota integer as USD when perUnit is known, otherwise as a thousands-separated raw count.
 func fmtQuota(raw int64, perUnit float64) string {
 	if perUnit > 0 {
 		return fmt.Sprintf("$%.2f", float64(raw)/perUnit)
@@ -82,8 +69,7 @@ func quotaUsed(quota, used int64, perUnit float64) string {
 	return fmt.Sprintf("%s %s %s", fmtQuota(quota, perUnit), i18n.T("admin.user.used"), fmtQuota(used, perUnit))
 }
 
-// commaInt groups an integer with thousands separators (9000000 →
-// 9,000,000) for the raw-quota fallback.
+// commaInt groups an integer with thousands separators (9000000 → 9,000,000) for the raw-quota fallback.
 func commaInt(n int64) string {
 	s := strconv.FormatInt(n, 10)
 	neg := strings.HasPrefix(s, "-")
@@ -103,18 +89,13 @@ func commaInt(n int64) string {
 	return b.String()
 }
 
-// tcol is one column of a printTable: a header plus whether it
-// right-aligns (numbers read better flush-right).
+// tcol is one column of a printTable: a header plus whether it right-aligns (numbers read better flush-right).
 type tcol struct {
 	header string
 	right  bool
 }
 
-// printTable renders an aligned table: a header row, then each row's cells
-// padded to the widest cell in their column (display width, CJK-safe), with
-// two-space gutters. trailing[i], when non-empty, is appended after the
-// fixed columns for row i — used for the often-empty, often-long email so
-// it never widens every row.
+// printTable renders an aligned table: a header row, then each row's cells padded to the widest cell in their column (display width, CJK-safe), with two-space gutters. trailing[i], when non-empty, is appended after the fixed columns for row i — used for the often-empty, often-long email so it never widens every row.
 func printTable(cols []tcol, rows [][]string, trailing []string) {
 	w := make([]int, len(cols))
 	for i, c := range cols {
@@ -159,9 +140,7 @@ func printTable(cols []tcol, rows [][]string, trailing []string) {
 	}
 }
 
-// printUserRows renders a user listing as an aligned table. withQuota is
-// off for search (its rows carry no quota), so it drops the quota/used
-// columns and skips the extra /api/status round-trip.
+// printUserRows renders a user listing as an aligned table. withQuota is off for search (its rows carry no quota), so it drops the quota/used columns and skips the extra /api/status round-trip.
 func printUserRows(rows []api.AdminUserRow, perUnit float64, withQuota bool) {
 	cols := []tcol{
 		{"ID", true},
@@ -188,9 +167,7 @@ func printUserRows(rows []api.AdminUserRow, perUnit float64, withQuota bool) {
 	printTable(cols, cells, trailing)
 }
 
-// detail accumulates "label: value" rows for a single-record view. Build
-// it with add (which skips empty values), then hand it to printDetail —
-// shared by every admin detail view so they align and read identically.
+// detail accumulates "label: value" rows for a single-record view. Build it with add (which skips empty values), then hand it to printDetail — shared by every admin detail view so they align and read identically.
 type detail struct {
 	rows []struct{ label, val string }
 }
@@ -202,8 +179,7 @@ func (d *detail) add(labelKey, val string) {
 	}
 }
 
-// printDetail prints "<title> #<id>" then the accumulated rows as aligned
-// "label: value" pairs, label column padded by display width (CJK-safe).
+// printDetail prints "<title> #<id>" then the accumulated rows as aligned "label: value" pairs, label column padded by display width (CJK-safe).
 func printDetail(titleKey string, id int, d detail) {
 	w := 0
 	for _, r := range d.rows {
@@ -213,21 +189,16 @@ func printDetail(titleKey string, id int, d detail) {
 	}
 	cliout.Printf("%s #%d\n", style.Bold(i18n.T(titleKey)), id)
 	for _, r := range d.rows {
-		// Dim the label column (same de-emphasis as table headers); the
-		// value keeps whatever tint roleLabel/statusLabel gave it.
+		// Dim the label column (same de-emphasis as table headers); the value keeps whatever tint roleLabel/statusLabel gave it.
 		cliout.Printf("  %s  %s\n", style.Dim(padName(r.label+":", w+1)), r.val)
 	}
 }
 
-// okText / mutedText tint a localized message: green for a successful
-// mutation, gray for a no-op / cancellation. The whole template is
-// wrapped, so any %-verb inside is filled by the caller's Printf after
-// the color codes — and both are TTY-aware (plain when unstyled).
+// okText / mutedText tint a localized message: green for a successful mutation, gray for a no-op / cancellation. The whole template is wrapped, so any %-verb inside is filled by the caller's Printf after the color codes — and both are TTY-aware (plain when unstyled).
 func okText(key string) string    { return style.Color(i18n.T(key), style.ToneGreen) }
 func mutedText(key string) string { return style.Color(i18n.T(key), style.ToneGray) }
 
-// boolState tints a marketplace.enabled flag value: true → green, false →
-// gray, anything else (e.g. "<unset>") dimmed.
+// boolState tints a marketplace.enabled flag value: true → green, false → gray, anything else (e.g. "<unset>") dimmed.
 func boolState(s string) string {
 	switch s {
 	case "true":
@@ -252,8 +223,7 @@ func printUserDetail(u *api.AdminUserRow, perUnit float64) {
 	printDetail("admin.user.detail_title", u.ID, d)
 }
 
-// padName right-pads s to w display columns (CJK-aware) for the one
-// variable-width column the user list aligns on.
+// padName right-pads s to w display columns (CJK-aware) for the one variable-width column the user list aligns on.
 func padName(s string, w int) string {
 	if d := w - style.Width(s); d > 0 {
 		return s + strings.Repeat(" ", d)
@@ -261,8 +231,7 @@ func padName(s string, w int) string {
 	return s
 }
 
-// padLeft left-pads s to w display columns (right-alignment) for numeric
-// columns so decimal points and ids line up.
+// padLeft left-pads s to w display columns (right-alignment) for numeric columns so decimal points and ids line up.
 func padLeft(s string, w int) string {
 	if d := w - style.Width(s); d > 0 {
 		return strings.Repeat(" ", d) + s

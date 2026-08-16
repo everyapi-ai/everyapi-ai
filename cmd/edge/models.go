@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 )
 
 func edgeModels(args []string) error {
@@ -17,9 +17,7 @@ func edgeModels(args []string) error {
 		fmt.Println(i18n.T("edge.models.usage"))
 		return nil
 	}
-	// No args + TTY → sub-sub picker. Otherwise keep the original
-	// usage-error so scripted callers see the documented failure
-	// rather than a silent prompt hang.
+	// No args + TTY → sub-sub picker. Otherwise keep the original usage-error so scripted callers see the documented failure rather than a silent prompt hang.
 	if len(args) == 0 {
 		if !cliprompt.IsInteractive() {
 			return errors.New(i18n.T("edge.models.usage"))
@@ -72,14 +70,7 @@ func edgeModels(args []string) error {
 	}
 }
 
-// resolveModelArg pulls the model name out of rest, or prompts for it on
-// a TTY when missing. The model is the first non-flag token, tolerating
-// flags BEFORE it (`pull --node 5 mistral`) as well as after
-// (`pull mistral --node 5`) — Go's stdlib flag stops at the first
-// positional, so without this a flag-first invocation would drop the
-// model. --node is the only flag and takes one value, so a `--node`/
-// `-node` token is skipped together with the value that follows it; the
-// surviving flags are returned for the caller's fs.Parse.
+// resolveModelArg pulls the model name out of rest, or prompts for it on a TTY when missing. The model is the first non-flag token, tolerating flags BEFORE it (`pull --node 5 mistral`) as well as after (`pull mistral --node 5`) — Go's stdlib flag stops at the first positional, so without this a flag-first invocation would drop the model. --node is the only flag and takes one value, so a `--node`/ `-node` token is skipped together with the value that follows it; the surviving flags are returned for the caller's fs.Parse.
 func resolveModelArg(op string, rest []string) (string, []string, error) {
 	for i := 0; i < len(rest); i++ {
 		a := rest[i]
@@ -104,9 +95,7 @@ func resolveModelArg(op string, rest []string) (string, []string, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	// Reject an empty response (bare Enter) or a leading-dash value before
-	// it reaches `docker compose exec ollama ollama pull/rm <model>`, where
-	// it would otherwise produce an opaque in-container usage error.
+	// Reject an empty response (bare Enter) or a leading-dash value before it reaches `docker compose exec ollama ollama pull/rm <model>`, where it would otherwise produce an opaque in-container usage error.
 	name := strings.TrimSpace(v)
 	if name == "" || strings.HasPrefix(name, "-") {
 		return "", nil, fmt.Errorf(i18n.T("edge.models.usage_op"), op)
@@ -114,10 +103,7 @@ func resolveModelArg(op string, rest []string) (string, []string, error) {
 	return name, rest, nil
 }
 
-// execOllama runs `docker compose exec ollama ollama <args...>` against
-// the resolved node's workdir. macOS mode has no ollama container in
-// compose (ollama is host-native), so we report a friendlier error
-// pointing the operator at the native CLI.
+// execOllama runs `docker compose exec ollama ollama <args...>` against the resolved node's workdir. macOS mode has no ollama container in compose (ollama is host-native), so we report a friendlier error pointing the operator at the native CLI.
 func execOllama(explicitNode int, ollamaArgs ...string) error {
 	nodeID, err := resolveNodeID(explicitNode)
 	if err != nil {
@@ -138,11 +124,7 @@ func execOllama(explicitNode int, ollamaArgs ...string) error {
 	if err != nil {
 		return err
 	}
-	// -T disables pseudo-TTY allocation. `docker compose exec` allocates a
-	// TTY by default and aborts with "the input device is not a TTY" when
-	// stdin isn't a terminal (systemd/cron/CI, `</dev/null`). These ollama
-	// subcommands (list/pull/rm) are non-interactive and read no stdin, so
-	// running headless must work on an unattended supplier host.
+	// -T disables pseudo-TTY allocation. `docker compose exec` allocates a TTY by default and aborts with "the input device is not a TTY" when stdin isn't a terminal (systemd/cron/CI, `</dev/null`). These ollama subcommands (list/pull/rm) are non-interactive and read no stdin, so running headless must work on an unattended supplier host.
 	composeArgs := append([]string{"exec", "-T", "ollama", "ollama"}, ollamaArgs...)
 	return runComposeCmd(dir, projectFor(nodeID), composeArgs...)
 }

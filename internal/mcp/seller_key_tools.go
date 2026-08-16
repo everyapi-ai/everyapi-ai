@@ -1,18 +1,11 @@
 package mcp
 
-// Plain-API-key seller onboarding tools — the MCP counterpart of
-// `everyapi seller add-key` / `everyapi seller setup`. There is no
-// separate "setup wizard" tool: in MCP the AI agent IS the wizard —
-// it checks eligibility, collects name / type / key / models from
-// the user in conversation, then calls everyapi_seller_add_key once.
+// Plain-API-key seller onboarding tools — the MCP counterpart of `everyapi seller add-key` / `everyapi seller setup`. There is no separate "setup wizard" tool: in MCP the AI agent IS the wizard — it checks eligibility, collects name / type / key / models from the user in conversation, then calls everyapi_seller_add_key once.
 //
 //   - everyapi_seller_eligibility — read-only mount-gate checklist
 //   - everyapi_seller_add_key     — mount a channel with plain API key(s)
 //
-// The key arrives as a tool argument in plaintext. That matches the
-// CLI's --key flag (the credential has to reach the backend either
-// way); the tool description tells the agent to only pass a key the
-// user explicitly provided in this conversation.
+// The key arrives as a tool argument in plaintext. That matches the CLI's --key flag (the credential has to reach the backend either way); the tool description tells the agent to only pass a key the user explicitly provided in this conversation.
 
 import (
 	"context"
@@ -20,8 +13,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/sellertype"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/sellertype"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 )
 
@@ -63,10 +56,7 @@ func handleSellerEligibility(ctx context.Context, _ json.RawMessage) (string, er
 	return strings.TrimRight(b.String(), "\n"), nil
 }
 
-// eligibilityChecklist renders the gate-by-gate [x]/[ ] view shared
-// by the eligibility tool and the add-key pre-check failure message.
-// English-only — the CLI's localized twin is renderEligibility in
-// cmd/seller.
+// eligibilityChecklist renders the gate-by-gate [x]/[ ] view shared by the eligibility tool and the add-key pre-check failure message. English-only — the CLI's localized twin is renderEligibility in cmd/seller.
 func eligibilityChecklist(e *api.SellerEligibility) string {
 	mark := func(ok bool) string {
 		if ok {
@@ -167,11 +157,7 @@ func handleSellerAddKey(ctx context.Context, raw json.RawMessage) (string, error
 
 	client := api.ForCredentials(creds)
 
-	// Eligibility pre-check, same reasoning as the CLI: failing the
-	// gate AFTER the user handed over a real API key is the worst
-	// ordering. A failed eligibility QUERY (transport error, not a
-	// failed gate) is non-fatal — fall through to the create call,
-	// which re-checks every gate server-side.
+	// Eligibility pre-check, same reasoning as the CLI: failing the gate AFTER the user handed over a real API key is the worst ordering. A failed eligibility QUERY (transport error, not a failed gate) is non-fatal — fall through to the create call, which re-checks every gate server-side.
 	if elig, eErr := client.GetSellerEligibility(ctx); eErr == nil && !elig.Eligible {
 		return "", fmt.Errorf("not eligible to mount seller channels yet:\n%s\nFix the unchecked gates, or see %s/seller/channels",
 			strings.TrimRight(eligibilityChecklist(elig), "\n"), api.WebOriginFromBase(creds.APIBase))
@@ -198,10 +184,7 @@ func handleSellerAddKey(ctx context.Context, raw json.RawMessage) (string, error
 		id, cliout.Sanitize(args.Name), sellertype.Label(kindSlug), pool, api.WebOriginFromBase(creds.APIBase)), nil
 }
 
-// validateAddKeyArgs enforces the same hard requirements as the CLI
-// flag parser: all four core fields present, no blank key entries,
-// and key_remarks never longer than keys (an over-long remark list is
-// a typo worth failing loudly on, not silently truncating).
+// validateAddKeyArgs enforces the same hard requirements as the CLI flag parser: all four core fields present, no blank key entries, and key_remarks never longer than keys (an over-long remark list is a typo worth failing loudly on, not silently truncating).
 func validateAddKeyArgs(args *sellerAddKeyArgs) error {
 	var missing []string
 	if strings.TrimSpace(args.Name) == "" {
@@ -228,11 +211,7 @@ func validateAddKeyArgs(args *sellerAddKeyArgs) error {
 		return fmt.Errorf("key_remarks has %d entries but keys has %d — remarks are index-aligned with keys and may not exceed them",
 			len(args.KeyRemarks), len(args.Keys))
 	}
-	// Duplicate key value is a typo. The backend's SetMultiKeySet silently
-	// keeps the first occurrence ("first wins"), so a pasted-twice credential
-	// would mount a channel that LOOKS like an N-key pool but carries one
-	// credential twice in storage and only one in routing state. Mirror the
-	// CLI's parseAddKeyArgs check and surface it before submit.
+	// Duplicate key value is a typo. The backend's SetMultiKeySet silently keeps the first occurrence ("first wins"), so a pasted-twice credential would mount a channel that LOOKS like an N-key pool but carries one credential twice in storage and only one in routing state. Mirror the CLI's parseAddKeyArgs check and surface it before submit.
 	if len(args.Keys) > 1 {
 		seen := make(map[string]bool, len(args.Keys))
 		for _, k := range args.Keys {

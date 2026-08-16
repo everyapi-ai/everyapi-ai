@@ -10,9 +10,7 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// prepareGemini pins non-interactive auth to GEMINI_API_KEY through an
-// EveryAPI-owned system-settings overlay. It preserves the user's ~/.gemini
-// directory, including MCP servers, skills, extensions and sessions.
+// prepareGemini pins non-interactive auth to GEMINI_API_KEY through an EveryAPI-owned system-settings overlay. It preserves the user's ~/.gemini directory, including MCP servers, skills, extensions and sessions.
 func prepareGemini(_, _ string) (map[string]string, error) {
 	settings, err := loadGeminiSystemSettings(geminiSystemSettingsPath())
 	if err != nil {

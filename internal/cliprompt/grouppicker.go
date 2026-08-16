@@ -9,29 +9,17 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// MenuGroup is one category in the grouped launcher: a Title header and
-// the pre-formatted command rows under it (each Label is already the
-// aligned "name  description" string the flat picker used).
+// MenuGroup is one category in the grouped launcher: a Title header and the pre-formatted command rows under it (each Label is already the aligned "name  description" string the flat picker used).
 type MenuGroup struct {
 	Title  string
 	Labels []string
 }
 
-// PickGrouped renders every group on one screen under dim, unselectable
-// category headers and lets the user arrow through the commands (the
-// cursor skips headers). It returns the FLAT index of the chosen
-// command — i.e. its position across all groups' Labels concatenated in
-// order — so callers can index a parallel command slice built the same
-// way. ErrPickCancelled is returned on Esc / Ctrl-C.
+// PickGrouped renders every group on one screen under dim, unselectable category headers and lets the user arrow through the commands (the cursor skips headers). It returns the FLAT index of the chosen command — i.e. its position across all groups' Labels concatenated in order — so callers can index a parallel command slice built the same way. ErrPickCancelled is returned on Esc / Ctrl-C.
 //
-// initial is the flat index to start the cursor on (clamped). This is
-// the single-screen counterpart to PickWithSelected; the nested layout
-// reuses PickWithSelected directly instead.
+// initial is the flat index to start the cursor on (clamped). This is the single-screen counterpart to PickWithSelected; the nested layout reuses PickWithSelected directly instead.
 func PickGrouped(title string, groups []MenuGroup, initial int) (int, error) {
-	// Non-TTY (CI / piped): the bubbletea model can't drive a real
-	// terminal, so degrade to the numbered prompt over the flattened
-	// label list — same fallback contract as PickWithSelected. The
-	// returned index is the flat command index, matching the TTY path.
+	// Non-TTY (CI / piped): the bubbletea model can't drive a real terminal, so degrade to the numbered prompt over the flattened label list — same fallback contract as PickWithSelected. The returned index is the flat command index, matching the TTY path.
 	if !isInteractive() {
 		var flat []string
 		for _, g := range groups {
@@ -41,19 +29,12 @@ func PickGrouped(title string, groups []MenuGroup, initial int) (int, error) {
 	}
 	m := newGroupModel(title, groups, initial)
 	if len(m.selectable) == 0 {
-		// Every group was empty — nothing to pick. Match the non-TTY
-		// pickByNumber path (which errors on an empty list) instead of
-		// running the model and returning a bogus flat index 0 that the
-		// caller would dereference into an empty command slice.
+		// Every group was empty — nothing to pick. Match the non-TTY pickByNumber path (which errors on an empty list) instead of running the model and returning a bogus flat index 0 that the caller would dereference into an empty command slice.
 		return -1, errors.New("nothing to pick from")
 	}
 	res, err := tea.NewProgram(m).Run()
 	if err != nil {
-		// Ctrl-C / kill surfaces as a bubbletea sentinel rather than
-		// setting the model's canceled flag. Map it to the package's
-		// cancel contract (as the huh-based pickers do with
-		// huh.ErrUserAborted) so the launcher treats it as a clean
-		// back-out instead of a fatal error.
+		// Ctrl-C / kill surfaces as a bubbletea sentinel rather than setting the model's canceled flag. Map it to the package's cancel contract (as the huh-based pickers do with huh.ErrUserAborted) so the launcher treats it as a clean back-out instead of a fatal error.
 		if errors.Is(err, tea.ErrInterrupted) || errors.Is(err, tea.ErrProgramKilled) {
 			return -1, ErrPickCancelled
 		}
@@ -66,8 +47,7 @@ func PickGrouped(title string, groups []MenuGroup, initial int) (int, error) {
 	return final.chosen, nil
 }
 
-// gpRow is one rendered line: either a group header (selectable=false)
-// or a command row carrying its flat item index.
+// gpRow is one rendered line: either a group header (selectable=false) or a command row carrying its flat item index.
 type gpRow struct {
 	header  bool
 	text    string
@@ -77,18 +57,13 @@ type gpRow struct {
 type groupModel struct {
 	title string
 	rows  []gpRow
-	// selectable holds the indices into rows that are command rows, in
-	// order; cur is an index into selectable (the highlighted command).
+	// selectable holds the indices into rows that are command rows, in order; cur is an index into selectable (the highlighted command).
 	selectable []int
 	cur        int
 	height     int // terminal height (0 until first WindowSizeMsg)
 	chosen     int // flat item index picked
 	canceled   bool
-	// done is set the moment we quit. View() then renders nothing, so
-	// bubbletea's final inline frame ERASES the menu instead of leaving
-	// it on screen — otherwise the launcher menu would stay visible
-	// stacked above whatever the chosen command renders next (e.g. a
-	// sub-picker).
+	// done is set the moment we quit. View() then renders nothing, so bubbletea's final inline frame ERASES the menu instead of leaving it on screen — otherwise the launcher menu would stay visible stacked above whatever the chosen command renders next (e.g. a sub-picker).
 	done bool
 }
 
@@ -147,11 +122,7 @@ func (m groupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// gpTheme reuses huh's default theme (the same one every other cliprompt
-// picker renders with) so the grouped launcher looks identical to the
-// rest of the CLI instead of inventing its own palette. Colors resolve
-// against the terminal at render time. gpHintStyle is the one extra
-// style — a faint footer, since huh's own help line is suppressed here.
+// gpTheme reuses huh's default theme (the same one every other cliprompt picker renders with) so the grouped launcher looks identical to the rest of the CLI instead of inventing its own palette. Colors resolve against the terminal at render time. gpHintStyle is the one extra style — a faint footer, since huh's own help line is suppressed here.
 var (
 	gpTheme     = huh.ThemeCharm()
 	gpHintStyle = lipgloss.NewStyle().Faint(true)
@@ -159,8 +130,7 @@ var (
 
 func (m groupModel) View() string {
 	if m.done {
-		// Final frame after quit: render nothing so bubbletea erases the
-		// menu instead of leaving it stacked above the next screen.
+		// Final frame after quit: render nothing so bubbletea erases the menu instead of leaving it stacked above the next screen.
 		return ""
 	}
 	var b strings.Builder
@@ -169,9 +139,7 @@ func (m groupModel) View() string {
 		b.WriteString("\n\n")
 	}
 
-	// Reserve rows for the title (2 lines) and the help footer (2
-	// lines); the rest is the scroll window. Fall back to showing
-	// everything when we don't know the height yet.
+	// Reserve rows for the title (2 lines) and the help footer (2 lines); the rest is the scroll window. Fall back to showing everything when we don't know the height yet.
 	window := len(m.rows)
 	if m.height > 0 {
 		window = m.height - 4
@@ -201,9 +169,7 @@ func (m groupModel) View() string {
 			// Category title, styled like a huh group title (flush-left).
 			b.WriteString(gpTheme.Group.Title.Render(r.text))
 		case i == curRow:
-			// huh's selector ("> ", themed) + the selected-option color,
-			// matching every other picker. The selector is 2 cols wide,
-			// so it lines up with the non-cursor "  " indent.
+			// huh's selector ("> ", themed) + the selected-option color, matching every other picker. The selector is 2 cols wide, so it lines up with the non-cursor "  " indent.
 			b.WriteString(gpTheme.Focused.SelectSelector.String() + gpTheme.Focused.SelectedOption.Render(r.text))
 		default:
 			b.WriteString("  " + gpTheme.Focused.UnselectedOption.Render(r.text))
@@ -217,12 +183,7 @@ func (m groupModel) View() string {
 	return b.String()
 }
 
-// scrollTop returns the first rows[] line to display so curRow stays
-// visible within a window of the given size. Stateless — derived purely
-// from the cursor each render, so no scroll offset is persisted. The
-// cursor sits at the window's bottom edge once the list scrolls; the
-// command's own category header naturally stays in view above it
-// (window is always >= 3, so the row directly above the cursor shows).
+// scrollTop returns the first rows[] line to display so curRow stays visible within a window of the given size. Stateless — derived purely from the cursor each render, so no scroll offset is persisted. The cursor sits at the window's bottom edge once the list scrolls; the command's own category header naturally stays in view above it (window is always >= 3, so the row directly above the cursor shows).
 func (m groupModel) scrollTop(curRow, window int) int {
 	if window >= len(m.rows) || curRow < window {
 		return 0
@@ -237,6 +198,5 @@ func (m groupModel) scrollTop(curRow, window int) int {
 // menuNavHint is overridable so the launcher can localize the footer.
 var menuNavHint = func() string { return "↑/↓ select · enter confirm · esc back" }
 
-// SetMenuNavHint lets the caller install a localized nav-hint footer
-// for PickGrouped. Pass the already-translated string.
+// SetMenuNavHint lets the caller install a localized nav-hint footer for PickGrouped. Pass the already-translated string.
 func SetMenuNavHint(s string) { menuNavHint = func() string { return s } }

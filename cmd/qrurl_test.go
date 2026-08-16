@@ -34,10 +34,7 @@ func TestBuildVerificationURLWithCode(t *testing.T) {
 			"", "USR-789",
 			"",
 		},
-		// A `?code=` already on the URL would be the server's choice;
-		// we Set rather than Add so we don't end up with two of them.
-		// Test pins that contract — without it a future Add refactor
-		// would silently double up.
+		// A `?code=` already on the URL would be the server's choice; we Set rather than Add so we don't end up with two of them. Test pins that contract — without it a future Add refactor would silently double up.
 		{
 			"replaces existing code param",
 			"https://app.everyapi.ai/cli/auth?code=OLD", "NEW",

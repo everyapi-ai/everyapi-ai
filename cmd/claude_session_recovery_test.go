@@ -48,9 +48,7 @@ func TestDetectClaudeSessionPollutionBacktracksToFirstHint(t *testing.T) {
 	}
 }
 
-// Mirrors the 2026-07-22 incident shape: a flood of standalone simplified 课
-// (the classifier's word list previously only carried traditional 課) at a
-// tool_use boundary must classify as pollution on its own.
+// Mirrors the 2026-07-22 incident shape: a flood of standalone simplified 课 (the classifier's word list previously only carried traditional 課) at a tool_use boundary must classify as pollution on its own.
 func TestDetectClaudeSessionPollutionCatchesSimplifiedCJKFlood(t *testing.T) {
 	path := writeClaudeTranscript(t,
 		`{"type":"user","uuid":"u1","timestamp":"2026-07-22T06:00:00Z","message":{"role":"user","content":"拆了重跑验证"}}`,
@@ -69,8 +67,7 @@ func TestDetectClaudeSessionPollutionCatchesSimplifiedCJKFlood(t *testing.T) {
 	}
 }
 
-// A flood of a token absent from every word list ("程") must still classify
-// as pollution via the token-agnostic shape signal.
+// A flood of a token absent from every word list ("程") must still classify as pollution via the token-agnostic shape signal.
 func TestDetectClaudeSessionPollutionCatchesNovelTokenFlood(t *testing.T) {
 	path := writeClaudeTranscript(t,
 		`{"type":"user","uuid":"u1","timestamp":"2026-07-22T06:00:00Z","message":{"role":"user","content":"continue"}}`,
@@ -90,10 +87,7 @@ func TestDetectClaudeSessionPollutionCatchesNovelTokenFlood(t *testing.T) {
 }
 
 func TestDetectClaudeSessionPollutionClusterBoundaryCoversEarliestMember(t *testing.T) {
-	// The cluster confirms only via msg_first_bad (2 tokens) + msg_last_bad
-	// (1 token), separated by two clean groups. The boundary must land on
-	// msg_first_bad, not the trigger, or the polluted member stays in the
-	// "clean" clone.
+	// The cluster confirms only via msg_first_bad (2 tokens) + msg_last_bad (1 token), separated by two clean groups. The boundary must land on msg_first_bad, not the trigger, or the polluted member stays in the "clean" clone.
 	path := writeClaudeTranscript(t,
 		`{"type":"user","origin":{"kind":"human"},"promptSource":"typed","message":{"role":"user","content":"Continue the task."}}`,
 		`{"type":"assistant","timestamp":"2026-07-13T03:00:00Z","message":{"id":"msg_first_bad","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"course\ncourse"}]}}`,
@@ -144,9 +138,7 @@ func TestDetectClaudeSessionPollutionCatchesBareToolXML(t *testing.T) {
 	}
 }
 
-// A clean agentic run whose turns each open with a lone interjection
-// paragraph ("Perfect.") must NOT cluster into a false pollution: no single
-// group repeats the token, so it never becomes an anchor.
+// A clean agentic run whose turns each open with a lone interjection paragraph ("Perfect.") must NOT cluster into a false pollution: no single group repeats the token, so it never becomes an anchor.
 func TestDetectClaudeSessionPollutionIgnoresRecurringInterjections(t *testing.T) {
 	path := writeClaudeTranscript(t,
 		`{"type":"user","origin":{"kind":"human"},"promptSource":"typed","message":{"role":"user","content":"Continue the task."}}`,

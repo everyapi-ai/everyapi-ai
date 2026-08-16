@@ -11,8 +11,7 @@ import (
 
 const probeFlag = "--dangerously-bypass-hook-trust"
 
-// writeProbeScript installs an executable shell script under a fresh dir and
-// puts that dir first on $PATH, so ResolveExec finds it as `name`.
+// writeProbeScript installs an executable shell script under a fresh dir and puts that dir first on $PATH, so ResolveExec finds it as `name`.
 func writeProbeScript(t *testing.T, name, body string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -23,9 +22,7 @@ func writeProbeScript(t *testing.T, name, body string) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-// wrapperScript models the real hazard: a shim on $PATH that PREPENDS the
-// flag itself before the tool parses argv (cmux does this for codex), plus a
-// parser that rejects a repeated flag the way codex's clap does.
+// wrapperScript models the real hazard: a shim on $PATH that PREPENDS the flag itself before the tool parses argv (cmux does this for codex), plus a parser that rejects a repeated flag the way codex's clap does.
 const wrapperScript = `#!/bin/sh
 # The wrapper always injects its own copy, exactly like cmux-codex-wrapper.
 set -- ` + probeFlag + ` "$@"
@@ -40,15 +37,12 @@ fi
 exit 0
 `
 
-// plainScript is a tool with no wrapper: it accepts the flag once and would
-// accept EveryAPI's copy fine.
+// plainScript is a tool with no wrapper: it accepts the flag once and would accept EveryAPI's copy fine.
 const plainScript = `#!/bin/sh
 exit 0
 `
 
-// TestFlagProbeRejectsFlagAWrapperAlreadyInjects is the regression guard for
-// the launch-aborting duplicate. The flag never appears in the args EveryAPI
-// knows about, so containsFlag cannot see it; only executing the binary can.
+// TestFlagProbeRejectsFlagAWrapperAlreadyInjects is the regression guard for the launch-aborting duplicate. The flag never appears in the args EveryAPI knows about, so containsFlag cannot see it; only executing the binary can.
 func TestFlagProbeRejectsFlagAWrapperAlreadyInjects(t *testing.T) {
 	writeProbeScript(t, "faketool", wrapperScript)
 	tool := &Tool{Name: "faketool", ExecName: "faketool", FlagProbeArgs: []string{"exec", "--help"}}
@@ -59,9 +53,7 @@ func TestFlagProbeRejectsFlagAWrapperAlreadyInjects(t *testing.T) {
 	}
 }
 
-// TestFlagProbeAcceptsFlagOnUnwrappedTool guards the other direction: the
-// probe must not become a blanket "never add the flag". A normal install has
-// no wrapper and must still get the flag the user opted into.
+// TestFlagProbeAcceptsFlagOnUnwrappedTool guards the other direction: the probe must not become a blanket "never add the flag". A normal install has no wrapper and must still get the flag the user opted into.
 func TestFlagProbeAcceptsFlagOnUnwrappedTool(t *testing.T) {
 	writeProbeScript(t, "faketool", plainScript)
 	tool := &Tool{Name: "faketool", ExecName: "faketool", FlagProbeArgs: []string{"exec", "--help"}}
@@ -71,9 +63,7 @@ func TestFlagProbeAcceptsFlagOnUnwrappedTool(t *testing.T) {
 	}
 }
 
-// TestFlagProbeAcceptsWhenBaselineAlsoFails pins the attribution rule. A tool
-// that fails its own probe argv (old version, no `exec` subcommand) proves
-// nothing about the flag, so the preference must survive.
+// TestFlagProbeAcceptsWhenBaselineAlsoFails pins the attribution rule. A tool that fails its own probe argv (old version, no `exec` subcommand) proves nothing about the flag, so the preference must survive.
 func TestFlagProbeAcceptsWhenBaselineAlsoFails(t *testing.T) {
 	writeProbeScript(t, "faketool", "#!/bin/sh\nexit 1\n")
 	tool := &Tool{Name: "faketool", ExecName: "faketool", FlagProbeArgs: []string{"exec", "--help"}}
@@ -84,8 +74,7 @@ func TestFlagProbeAcceptsWhenBaselineAlsoFails(t *testing.T) {
 	}
 }
 
-// TestFlagProbeAcceptsWithoutProbeArgs covers every tool that has not opted
-// in: no FlagProbeArgs means no probing and no behavior change.
+// TestFlagProbeAcceptsWithoutProbeArgs covers every tool that has not opted in: no FlagProbeArgs means no probing and no behavior change.
 func TestFlagProbeAcceptsWithoutProbeArgs(t *testing.T) {
 	writeProbeScript(t, "faketool", wrapperScript)
 	tool := &Tool{Name: "faketool", ExecName: "faketool"}
@@ -95,9 +84,7 @@ func TestFlagProbeAcceptsWithoutProbeArgs(t *testing.T) {
 	}
 }
 
-// TestFlagProbeAcceptsWhenExecutableMissing keeps a resolution failure from
-// silently rewriting argv. Exec reports the missing tool; the probe stays out
-// of it.
+// TestFlagProbeAcceptsWhenExecutableMissing keeps a resolution failure from silently rewriting argv. Exec reports the missing tool; the probe stays out of it.
 func TestFlagProbeAcceptsWhenExecutableMissing(t *testing.T) {
 	tool := &Tool{
 		Name:          "everyapi-absent-tool-zzz",
@@ -109,9 +96,7 @@ func TestFlagProbeAcceptsWhenExecutableMissing(t *testing.T) {
 	}
 }
 
-// TestFlagProbeRunsBaselineOnce guards the cost: the control run is shared
-// across flags, so probing both of codex's non-repeatable flags costs three
-// launches, not four.
+// TestFlagProbeRunsBaselineOnce guards the cost: the control run is shared across flags, so probing both of codex's non-repeatable flags costs three launches, not four.
 func TestFlagProbeRunsBaselineOnce(t *testing.T) {
 	counter := filepath.Join(t.TempDir(), "runs")
 	writeProbeScript(t, "faketool", "#!/bin/sh\necho x >> "+counter+"\n"+wrapperScript[len("#!/bin/sh\n"):])
@@ -131,8 +116,7 @@ func TestFlagProbeRunsBaselineOnce(t *testing.T) {
 	}
 }
 
-// TestCodexDeclaresFlagProbeArgs pins the registry wiring: codex is the tool
-// whose parser rejects repeated bypass flags, so it must carry probe args.
+// TestCodexDeclaresFlagProbeArgs pins the registry wiring: codex is the tool whose parser rejects repeated bypass flags, so it must carry probe args.
 func TestCodexDeclaresFlagProbeArgs(t *testing.T) {
 	codex, err := Lookup("codex")
 	if err != nil {

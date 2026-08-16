@@ -1,15 +1,9 @@
 package mcp
 
-// Edge BYO-GPU tools — surface the read-and-delete slice of the
-// /api/seller/edge/nodes API to the AI agent. Start / stop / logs /
-// register stay CLI-only on purpose:
+// Edge BYO-GPU tools — surface the read-and-delete slice of the /api/seller/edge/nodes API to the AI agent. Start / stop / logs / register stay CLI-only on purpose:
 //
-//   - start / stop / logs run docker-compose against a local workdir
-//     the MCP server process doesn't have a useful view of (the AI
-//     client spawns mcp via stdio, not in the user's shell).
-//   - register mints a single-use registration token that's shown
-//     ONCE. Surfacing one-shot secrets through an AI chat is a UX
-//     and security regression — type it at a real terminal.
+//   - start / stop / logs run docker-compose against a local workdir the MCP server process doesn't have a useful view of (the AI client spawns mcp via stdio, not in the user's shell).
+//   - register mints a single-use registration token that's shown ONCE. Surfacing one-shot secrets through an AI chat is a UX and security regression — type it at a real terminal.
 
 import (
 	"context"
@@ -18,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 )
 
@@ -41,11 +35,7 @@ func handleEdgeList(ctx context.Context, _ json.RawMessage) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Login base, NOT ForCredentials: edge is supplier-side and its node
-	// liveness is gateway-local (the node holds its reverse-WS to the login
-	// gateway — register.go dials gatewayURLFromAPIBase(creds.APIBase)). Must
-	// match cmd/edge/client.go so CLI and MCP query the same fleet from the
-	// same base; region is a buyer-path preference and does not apply here.
+	// Login base, NOT ForCredentials: edge is supplier-side and its node liveness is gateway-local (the node holds its reverse-WS to the login gateway — register.go dials gatewayURLFromAPIBase(creds.APIBase)). Must match cmd/edge/client.go so CLI and MCP query the same fleet from the same base; region is a buyer-path preference and does not apply here.
 	client := api.New(creds.APIBase, creds.AccessToken).WithUserID(creds.UserID)
 	nodes, err := client.ListEdgeNodes(ctx)
 	if err != nil {
@@ -156,10 +146,7 @@ func handleEdgeStatus(ctx context.Context, raw json.RawMessage) (string, error) 
 	if node.Location != nil && (node.Location.CountryISO2 != "" || node.Location.Region != "") {
 		fmt.Fprintf(&b, "  location:  %s/%s\n", cliout.Sanitize(node.Location.CountryISO2), cliout.Sanitize(node.Location.Region))
 	}
-	// Live telemetry — nil pointers mean "no heartbeat yet" or
-	// "offline"; only render if the agent actually reported. A 0%
-	// util reading IS meaningful for an idle online node, so we
-	// gate display on the pointer rather than the value.
+	// Live telemetry — nil pointers mean "no heartbeat yet" or "offline"; only render if the agent actually reported. A 0% util reading IS meaningful for an idle online node, so we gate display on the pointer rather than the value.
 	if node.GPUUtilPct != nil || node.VRAMUsedGB != nil || node.ActiveRequests != nil {
 		fmt.Fprintf(&b, "  live:      ")
 		sep := ""
@@ -181,10 +168,7 @@ func handleEdgeStatus(ctx context.Context, raw json.RawMessage) (string, error) 
 
 // ---- everyapi_edge_remove --------------------------------------------
 
-// Same confirm-friction pattern as everyapi_seller_withdraw: a
-// destructive op authorised by the access token alone is one
-// credential leak away from a silent fleet wipe. Force the AI to
-// surface intent.
+// Same confirm-friction pattern as everyapi_seller_withdraw: a destructive op authorised by the access token alone is one credential leak away from a silent fleet wipe. Force the AI to surface intent.
 
 type edgeRemoveArgs struct {
 	NodeID  int    `json:"node_id"`
@@ -263,9 +247,7 @@ func pausedSuffix(paused bool) string {
 	return ""
 }
 
-// humanDuration is a coarse "Ns / Nm / Nh / Nd" so AI tool output
-// stays compact. Sub-second precision wouldn't survive the chat-
-// rendered roundtrip anyway and would just be noise.
+// humanDuration is a coarse "Ns / Nm / Nh / Nd" so AI tool output stays compact. Sub-second precision wouldn't survive the chat- rendered roundtrip anyway and would just be noise.
 func humanDuration(d time.Duration) string {
 	if d < 0 {
 		d = 0 // a future / clock-skewed last_seen would otherwise render "-3s"

@@ -9,9 +9,7 @@ import (
 	"testing"
 )
 
-// eligibilityJSON builds a /api/seller/eligibility response body.
-// `eligible` drives the headline; the gate booleans are arranged so
-// tests can assert specific checklist lines.
+// eligibilityJSON builds a /api/seller/eligibility response body. `eligible` drives the headline; the gate booleans are arranged so tests can assert specific checklist lines.
 func eligibilityJSON(eligible bool) string {
 	return `{"success":true,"data":{
 		"eligible":` + boolStr(eligible) + `,
@@ -89,9 +87,7 @@ func TestHandleSellerEligibility_NotLoggedIn(t *testing.T) {
 // ---- everyapi_seller_add_key --------------------------------------------
 
 func TestHandleSellerAddKey_ValidationShortCircuits(t *testing.T) {
-	// No HTTP server: validation must reject before any network call.
-	// "connection refused" instead of the expected message means a
-	// half-validated request escaped to the wire.
+	// No HTTP server: validation must reject before any network call. "connection refused" instead of the expected message means a half-validated request escaped to the wire.
 	withCredentials(t, "http://no-server.invalid", "tok")
 
 	cases := []struct {
@@ -171,8 +167,7 @@ func TestHandleSellerAddKey_HappyPath(t *testing.T) {
 	}
 }
 
-// The backend retired the integer type contract; an unknown or numeric
-// type is rejected locally with the choice list, never forwarded.
+// The backend retired the integer type contract; an unknown or numeric type is rejected locally with the choice list, never forwarded.
 func TestHandleSellerAddKey_UnknownTypeRejected(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/seller/channel" {
@@ -223,9 +218,7 @@ func TestHandleSellerAddKey_BlockedByEligibility(t *testing.T) {
 }
 
 func TestHandleSellerAddKey_EligibilityQueryErrorIsNonFatal(t *testing.T) {
-	// A broken eligibility endpoint must NOT block the mount — the
-	// backend re-checks every gate at submit. Only a failed GATE is
-	// a stop; a failed QUERY falls through.
+	// A broken eligibility endpoint must NOT block the mount — the backend re-checks every gate at submit. Only a failed GATE is a stop; a failed QUERY falls through.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/seller/eligibility":

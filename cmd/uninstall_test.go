@@ -13,12 +13,7 @@ func TestUninstallRejectsExtraArgsBeforePlanning(t *testing.T) {
 	}
 }
 
-// withIsolatedHome points HOME / XDG_CONFIG_HOME / XDG_DATA_HOME at a
-// tempdir for the duration of the test, returns the resolved
-// configDir + dataDir so callers can seed them and assert later. The
-// XDG vars override the HOME fallback in config.ConfigDir() and
-// uninstallDataDir(), so setting both gives us full control regardless
-// of how the helpers resolve paths.
+// withIsolatedHome points HOME / XDG_CONFIG_HOME / XDG_DATA_HOME at a tempdir for the duration of the test, returns the resolved configDir + dataDir so callers can seed them and assert later. The XDG vars override the HOME fallback in config.ConfigDir() and uninstallDataDir(), so setting both gives us full control regardless of how the helpers resolve paths.
 func withIsolatedHome(t *testing.T) (configDir, dataDir string) {
 	t.Helper()
 	tmp := t.TempDir()
@@ -29,10 +24,7 @@ func withIsolatedHome(t *testing.T) (configDir, dataDir string) {
 		filepath.Join(tmp, "data", "everyapi")
 }
 
-// seedTree creates dir + a single marker file inside, so subsequent
-// removal assertions have something concrete to compare against (an
-// empty dir is technically a successful create; the marker proves the
-// post-uninstall absence isn't a false positive from a no-op).
+// seedTree creates dir + a single marker file inside, so subsequent removal assertions have something concrete to compare against (an empty dir is technically a successful create; the marker proves the post-uninstall absence isn't a false positive from a no-op).
 func seedTree(t *testing.T, dir string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -43,10 +35,7 @@ func seedTree(t *testing.T, dir string) {
 	}
 }
 
-// stubBinaryRemover swaps binaryRemover for a recorder so the test
-// process's own executable can never be unlinked, even on an
-// accidentally-permissive test run. Records calls so the binary-removal
-// path is still observable.
+// stubBinaryRemover swaps binaryRemover for a recorder so the test process's own executable can never be unlinked, even on an accidentally-permissive test run. Records calls so the binary-removal path is still observable.
 func stubBinaryRemover(t *testing.T) *[]string {
 	t.Helper()
 	orig := binaryRemover
@@ -65,9 +54,7 @@ func TestUninstall_RemovesConfigAndData(t *testing.T) {
 	seedTree(t, dataDir)
 	_ = stubBinaryRemover(t)
 
-	// --keep-binary keeps the assertion focused on config/data wiping;
-	// the binary-removal hook is exercised by the dedicated subtest
-	// below to avoid coupling these two checks.
+	// --keep-binary keeps the assertion focused on config/data wiping; the binary-removal hook is exercised by the dedicated subtest below to avoid coupling these two checks.
 	if err := Uninstall([]string{"--yes", "--keep-binary"}); err != nil {
 		t.Fatalf("Uninstall: %v", err)
 	}
@@ -139,15 +126,11 @@ func TestUninstall_BinaryRemovalHookFires(t *testing.T) {
 	seedTree(t, dataDir)
 	calls := stubBinaryRemover(t)
 
-	// No --keep-binary this time. The stubbed remover records the path
-	// instead of actually unlinking, so the test process survives.
+	// No --keep-binary this time. The stubbed remover records the path instead of actually unlinking, so the test process survives.
 	if err := Uninstall([]string{"--yes"}); err != nil {
 		t.Fatalf("Uninstall: %v", err)
 	}
-	// Detection might land on brew (we run under Cellar/) in unusual
-	// CI setups, in which case the hook is intentionally skipped — the
-	// brew branch prints a hint instead. Assert one OR the other so
-	// the test doesn't go yellow on a tester's brew-installed Go.
+	// Detection might land on brew (we run under Cellar/) in unusual CI setups, in which case the hook is intentionally skipped — the brew branch prints a hint instead. Assert one OR the other so the test doesn't go yellow on a tester's brew-installed Go.
 	method := detectInstallMethod()
 	switch method {
 	case installMethodBrew:
@@ -155,16 +138,11 @@ func TestUninstall_BinaryRemovalHookFires(t *testing.T) {
 			t.Errorf("brew install method should not invoke binaryRemover, got %v", *calls)
 		}
 	default:
-		// Two calls: the binary itself, then the best-effort cleanup of
-		// the .old sibling install.ps1's upgrade-over-a-running-binary
-		// dance can leave behind.
+		// Two calls: the binary itself, then the best-effort cleanup of the .old sibling install.ps1's upgrade-over-a-running-binary dance can leave behind.
 		if len(*calls) != 2 {
 			t.Fatalf("expected binaryRemover calls for the binary and its .old for %s install, got %v", method, *calls)
 		}
-		// The path is whatever os.Executable() returned for the test
-		// binary — we don't pin its exact value (varies per test
-		// runner), only that the hook was invoked with a non-empty
-		// argument so the production path obviously gets called.
+		// The path is whatever os.Executable() returned for the test binary — we don't pin its exact value (varies per test runner), only that the hook was invoked with a non-empty argument so the production path obviously gets called.
 		if (*calls)[0] == "" {
 			t.Error("binaryRemover called with empty path")
 		}
@@ -174,10 +152,7 @@ func TestUninstall_BinaryRemovalHookFires(t *testing.T) {
 	}
 }
 
-// TestUninstall_MissingDirsAreNoOps confirms that running uninstall on
-// a clean machine (no config dir, no data dir, no creds) succeeds
-// silently — important because users may run this defensively to "make
-// sure nothing's left" without actually having an install.
+// TestUninstall_MissingDirsAreNoOps confirms that running uninstall on a clean machine (no config dir, no data dir, no creds) succeeds silently — important because users may run this defensively to "make sure nothing's left" without actually having an install.
 func TestUninstall_MissingDirsAreNoOps(t *testing.T) {
 	configDir, dataDir := withIsolatedHome(t)
 	_ = stubBinaryRemover(t)

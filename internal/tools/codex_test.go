@@ -11,24 +11,16 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// codexTestHome redirects ConfigDir() at a fresh tmp dir for one
-// test, by hijacking XDG_CONFIG_HOME (which the SDK's ConfigDir
-// honors first). Returns the resolved CODEX_HOME prepareCodex
-// should produce so the test can assert paths without re-computing
-// the join.
+// codexTestHome redirects ConfigDir() at a fresh tmp dir for one test, by hijacking XDG_CONFIG_HOME (which the SDK's ConfigDir honors first). Returns the resolved CODEX_HOME prepareCodex should produce so the test can assert paths without re-computing the join.
 func codexTestHome(t *testing.T) (xdg, wantCodexHome string) {
 	t.Helper()
 	xdg = t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdg)
-	// On non-Linux ConfigDir also checks HOME, but XDG_CONFIG_HOME
-	// wins when set — so this works cross-platform.
+	// On non-Linux ConfigDir also checks HOME, but XDG_CONFIG_HOME wins when set — so this works cross-platform.
 	return xdg, filepath.Join(xdg, "everyapi", "codex-home")
 }
 
-// TestPrepareCodex_WritesFiles verifies the apikey-mode auth.json
-// and the everyapi-provider config.toml both land in CODEX_HOME with
-// the expected schema. This is the smoke test: if it breaks,
-// `everyapi use codex` won't route through the gateway.
+// TestPrepareCodex_WritesFiles verifies the apikey-mode auth.json and the everyapi-provider config.toml both land in CODEX_HOME with the expected schema. This is the smoke test: if it breaks, `everyapi use codex` won't route through the gateway.
 func TestPrepareCodex_WritesFiles(t *testing.T) {
 	_, codexHome := codexTestHome(t)
 
@@ -70,9 +62,7 @@ func TestPrepareCodex_WritesFiles(t *testing.T) {
 		`[model_providers.everyapi]`,
 		`base_url = "https://api.everyapi.ai/v1"`,
 		`env_key = "OPENAI_API_KEY"`,
-		// Pins the routing surface: omitting wire_api falls back to
-		// codex's Chat default (/v1/chat/completions) instead of the
-		// gateway's native /v1/responses.
+		// Pins the routing surface: omitting wire_api falls back to codex's Chat default (/v1/chat/completions) instead of the gateway's native /v1/responses.
 		`wire_api = "responses"`,
 	} {
 		if !strings.Contains(cfg, want) {
@@ -227,10 +217,7 @@ func TestPrepareCodex_PreservesEscapedModelDefault(t *testing.T) {
 	}
 }
 
-// TestPrepareCodex_TrailingSlashBase pins the joinBase invariant for
-// codex's config.toml path: a dev-style `http://localhost:8787/` must
-// not produce `http://localhost:8787//v1`. Migrated from the codex
-// envFn test (envFn no longer touches base_url).
+// TestPrepareCodex_TrailingSlashBase pins the joinBase invariant for codex's config.toml path: a dev-style `http://localhost:8787/` must not produce `http://localhost:8787//v1`. Migrated from the codex envFn test (envFn no longer touches base_url).
 func TestPrepareCodex_TrailingSlashBase(t *testing.T) {
 	_, codexHome := codexTestHome(t)
 	if _, err := prepareCodex("http://localhost:8787/", "tok"); err != nil {
@@ -249,11 +236,7 @@ func TestPrepareCodex_TrailingSlashBase(t *testing.T) {
 	}
 }
 
-// TestPrepareCodex_FilePerms guards the secret-bearing files. auth.json
-// carries a relay key — chmod 0600 is non-negotiable. config.toml
-// holds no secret but inherits 0644 (readable to the user's tools
-// that might inspect it, like a debug helper). Skipped on Windows
-// where Unix perms don't apply.
+// TestPrepareCodex_FilePerms guards the secret-bearing files. auth.json carries a relay key — chmod 0600 is non-negotiable. config.toml holds no secret but inherits 0644 (readable to the user's tools that might inspect it, like a debug helper). Skipped on Windows where Unix perms don't apply.
 func TestPrepareCodex_FilePerms(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix permission bits not meaningful on Windows")
@@ -278,11 +261,7 @@ func TestPrepareCodex_FilePerms(t *testing.T) {
 	}
 }
 
-// TestPrepareCodex_Idempotent re-runs on the same directory and
-// verifies the new relay key wins on the second call (covers the
-// "user rotated keys / switched groups" case). The directory is
-// reused on purpose (preserves codex's session/cache state across
-// invocations), so the rewrite-every-call contract matters.
+// TestPrepareCodex_Idempotent re-runs on the same directory and verifies the new relay key wins on the second call (covers the "user rotated keys / switched groups" case). The directory is reused on purpose (preserves codex's session/cache state across invocations), so the rewrite-every-call contract matters.
 func TestPrepareCodex_Idempotent(t *testing.T) {
 	_, codexHome := codexTestHome(t)
 	if _, err := prepareCodex("https://api.everyapi.ai", "first-key"); err != nil {
@@ -304,11 +283,7 @@ func TestPrepareCodex_Idempotent(t *testing.T) {
 	}
 }
 
-// TestCodexTool_PrepareWired makes sure the Registry entry actually
-// invokes prepareCodex — a refactor that drops prepareFn from the
-// codex entry would leave the function existing-but-unused and the
-// CLI silently regressing to ChatGPT login. Catching that here is
-// cheaper than diagnosing it post-release.
+// TestCodexTool_PrepareWired makes sure the Registry entry actually invokes prepareCodex — a refactor that drops prepareFn from the codex entry would leave the function existing-but-unused and the CLI silently regressing to ChatGPT login. Catching that here is cheaper than diagnosing it post-release.
 func TestCodexTool_PrepareWired(t *testing.T) {
 	_, codexHome := codexTestHome(t)
 	tool, _ := Lookup("codex")
@@ -699,11 +674,7 @@ func TestPrepareCodexWithModelsCleansLaunchHomeWhenSessionStateSetupFails(t *tes
 	}
 }
 
-// TestClaudeTool_NoPrepare guards the negative case: claude
-// don't need pre-exec setup, so tool.Prepare must be a clean no-op
-// (nil map, nil err). A future regression that accidentally wires a
-// shared prepareFn would silently create unwanted ~/.config/everyapi
-// dirs for those flows.
+// TestClaudeTool_NoPrepare guards the negative case: claude don't need pre-exec setup, so tool.Prepare must be a clean no-op (nil map, nil err). A future regression that accidentally wires a shared prepareFn would silently create unwanted ~/.config/everyapi dirs for those flows.
 func TestClaudeTool_NoPrepare(t *testing.T) {
 	for _, name := range []string{"claude"} {
 		tool, _ := Lookup(name)
@@ -717,10 +688,7 @@ func TestClaudeTool_NoPrepare(t *testing.T) {
 	}
 }
 
-// stubCodexBundledCatalog replaces the bundled-metadata read, which otherwise
-// shells out to the real `codex` binary. CI has no codex on PATH, so any test
-// that passes a non-empty model list must stub this or it fails there while
-// passing on a developer machine that happens to have the CLI installed.
+// stubCodexBundledCatalog replaces the bundled-metadata read, which otherwise shells out to the real `codex` binary. CI has no codex on PATH, so any test that passes a non-empty model list must stub this or it fails there while passing on a developer machine that happens to have the CLI installed.
 func stubCodexBundledCatalog(t *testing.T) {
 	t.Helper()
 	original := codexBundledCatalog
@@ -730,13 +698,7 @@ func stubCodexBundledCatalog(t *testing.T) {
 	t.Cleanup(func() { codexBundledCatalog = original })
 }
 
-// TestPrepareCodex_SeedsBootModelIntoAFreshHome covers the gap the
-// "root-level model is preserved" contract cannot fill on the live-catalog
-// path. That path hands codex a process-scoped CODEX_HOME created by
-// os.MkdirTemp and deleted on exit, so there is never a previous config.toml
-// to preserve a model from — whatever codex recorded about its own model died
-// with the last home. The catalogue's first entry is the selection EveryAPI
-// persisted, so it seeds the boot model instead.
+// TestPrepareCodex_SeedsBootModelIntoAFreshHome covers the gap the "root-level model is preserved" contract cannot fill on the live-catalog path. That path hands codex a process-scoped CODEX_HOME created by os.MkdirTemp and deleted on exit, so there is never a previous config.toml to preserve a model from — whatever codex recorded about its own model died with the last home. The catalogue's first entry is the selection EveryAPI persisted, so it seeds the boot model instead.
 func TestPrepareCodex_SeedsBootModelIntoAFreshHome(t *testing.T) {
 	codexTestHome(t)
 	stubCodexBundledCatalog(t)
@@ -761,9 +723,7 @@ func TestPrepareCodex_SeedsBootModelIntoAFreshHome(t *testing.T) {
 	}
 }
 
-// TestPrepareCodex_BootModelDoesNotOverrideAUserChoice keeps the seeding
-// subordinate to the existing contract: a model the user set in a home that
-// survives is still preserved, and the seed only fills an empty field.
+// TestPrepareCodex_BootModelDoesNotOverrideAUserChoice keeps the seeding subordinate to the existing contract: a model the user set in a home that survives is still preserved, and the seed only fills an empty field.
 func TestPrepareCodex_BootModelDoesNotOverrideAUserChoice(t *testing.T) {
 	_, codexHome := codexTestHome(t)
 	if err := os.MkdirAll(codexHome, 0o700); err != nil {
@@ -773,8 +733,7 @@ func TestPrepareCodex_BootModelDoesNotOverrideAUserChoice(t *testing.T) {
 	if err := os.WriteFile(configPath, []byte("model = \"user-selected-model\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// No models → legacy fixed home, which is the shape that can carry a
-	// user's own config forward.
+	// No models → legacy fixed home, which is the shape that can carry a user's own config forward.
 	if _, err := prepareCodexWithModels("https://api.everyapi.ai", "tok", nil, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -787,10 +746,7 @@ func TestPrepareCodex_BootModelDoesNotOverrideAUserChoice(t *testing.T) {
 	}
 }
 
-// TestPrepareCodexTransparent_SeedsBootModelIntoAFreshHome is the same seeding
-// on the path codex actually takes by default. Transparent mode is the default
-// for codex, so covering only the injected path would leave plain
-// `everyapi use codex` still booting on whatever the catalogue listed first.
+// TestPrepareCodexTransparent_SeedsBootModelIntoAFreshHome is the same seeding on the path codex actually takes by default. Transparent mode is the default for codex, so covering only the injected path would leave plain `everyapi use codex` still booting on whatever the catalogue listed first.
 func TestPrepareCodexTransparent_SeedsBootModelIntoAFreshHome(t *testing.T) {
 	codexTestHome(t)
 	stubCodexBundledCatalog(t)
@@ -892,12 +848,7 @@ func TestPrepareCodex_InheritsReasoningEffortIntoFreshHome(t *testing.T) {
 	}
 }
 
-// TestPrepareCodex_DoesNotPinAModelTheUserNeverChose is the guard against
-// turning "EveryAPI has no preference" into "EveryAPI pinned position 0".
-// Seeding the boot model from the catalogue's first entry rather than from an
-// actual selection would silently override codex's own built-in default on
-// every launch — a worse outcome than the alphabetical-ordering bug this
-// branch set out to fix, and applied to users who never asked for a model.
+// TestPrepareCodex_DoesNotPinAModelTheUserNeverChose is the guard against turning "EveryAPI has no preference" into "EveryAPI pinned position 0". Seeding the boot model from the catalogue's first entry rather than from an actual selection would silently override codex's own built-in default on every launch — a worse outcome than the alphabetical-ordering bug this branch set out to fix, and applied to users who never asked for a model.
 func TestPrepareCodex_DoesNotPinAModelTheUserNeverChose(t *testing.T) {
 	models := []Model{{ID: "ark-doubao-seed"}, {ID: "gpt-5.1"}}
 	for _, tc := range []struct {
@@ -924,8 +875,7 @@ func TestPrepareCodex_DoesNotPinAModelTheUserNeverChose(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// A root-level `model = ` line, not model_provider or
-			// model_reasoning_effort or model_catalog_json.
+			// A root-level `model = ` line, not model_provider or model_reasoning_effort or model_catalog_json.
 			for _, line := range strings.Split(string(body), "\n") {
 				if strings.HasPrefix(strings.TrimSpace(line), "model = ") {
 					t.Fatalf("codex was pinned to a model with no selection behind it: %q\nFull config:\n%s", line, body)

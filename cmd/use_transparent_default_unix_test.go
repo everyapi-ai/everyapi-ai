@@ -18,25 +18,13 @@ import (
 const (
 	useDefaultCallerEnv = "EVERYAPI_TEST_USE_DEFAULT_CALLER" // runs Use()
 	useDefaultShimEnv   = "EVERYAPI_TEST_USE_DEFAULT_SHIM"   // stands in for `claude`
-	// An ambient NO_PROXY the user is assumed to have exported. Injected
-	// deliberately after the host's proxy vars are stripped, so the launch paths
-	// are tested against a known value rather than whatever the developer or CI
-	// runner happens to have set.
+	// An ambient NO_PROXY the user is assumed to have exported. Injected deliberately after the host's proxy vars are stripped, so the launch paths are tested against a known value rather than whatever the developer or CI runner happens to have set.
 	ambientNoProxy = ".corp.internal,10.0.0.0/8"
 )
 
-// TestUseDefaultsToTransparentForSupportedTool is the end-to-end pin for this
-// PR's headline behavior: a bare `everyapi use claude`, no flags, must launch
-// through the connector. Nothing else asserted it — the parser tests cover only
-// flag parsing and TestTransparentDefaultResolution covers only
-// Tool.SupportsTransparent, so the resolution inside Use (the code that actually
-// decides) could silently regress to the injected path.
+// TestUseDefaultsToTransparentForSupportedTool is the end-to-end pin for this PR's headline behavior: a bare `everyapi use claude`, no flags, must launch through the connector. Nothing else asserted it — the parser tests cover only flag parsing and TestTransparentDefaultResolution covers only Tool.SupportsTransparent, so the resolution inside Use (the code that actually decides) could silently regress to the injected path.
 //
-// The launched child's environment is the only honest evidence of which path
-// ran: transparent unsets ANTHROPIC_BASE_URL and points HTTPS_PROXY at the
-// loopback connector while withholding the relay key; the injected path does
-// the exact opposite. Asserting on the launch banner would only re-read our own
-// Printf.
+// The launched child's environment is the only honest evidence of which path ran: transparent unsets ANTHROPIC_BASE_URL and points HTTPS_PROXY at the loopback connector while withholding the relay key; the injected path does the exact opposite. Asserting on the launch banner would only re-read our own Printf.
 func TestUseDefaultsToTransparentForSupportedTool(t *testing.T) {
 	switch {
 	case os.Getenv(useDefaultShimEnv) == "1":
@@ -66,9 +54,7 @@ func TestUseDefaultsToTransparentForSupportedTool(t *testing.T) {
 	}{
 		{"bare invocation defaults to transparent", []string{"claude"}, true},
 		{"explicit opt-out uses the injected path", []string{"claude", "--transparent=false"}, false},
-		// --sanitize moves the catalogue onto the sanitizer's socket, so the
-		// injected base URL is the sanitizer's address and no catalogue proxy
-		// of its own gets started. Both facts have to leave NO_PROXY set.
+		// --sanitize moves the catalogue onto the sanitizer's socket, so the injected base URL is the sanitizer's address and no catalogue proxy of its own gets started. Both facts have to leave NO_PROXY set.
 		{"injected path with the transforms merged", []string{"claude", "--transparent=false", "--sanitize"}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -93,11 +79,7 @@ func TestUseDefaultsToTransparentForSupportedTool(t *testing.T) {
 			}
 
 			child := exec.Command(os.Args[0], "-test.run=^TestUseDefaultsToTransparentForSupportedTool$")
-			// Hermetic: strip the host's proxy variables. socksOnlyEgressVar
-			// reads them, so a developer or CI runner with a SOCKS proxy
-			// exported would send Use down the injected path and make the
-			// "bare invocation defaults to transparent" case pass for the wrong
-			// reason — or fail for a reason that has nothing to do with the code.
+			// Hermetic: strip the host's proxy variables. socksOnlyEgressVar reads them, so a developer or CI runner with a SOCKS proxy exported would send Use down the injected path and make the "bare invocation defaults to transparent" case pass for the wrong reason — or fail for a reason that has nothing to do with the code.
 			hostEnv := []string{}
 			for _, kv := range os.Environ() {
 				name, _, _ := strings.Cut(kv, "=")
@@ -140,9 +122,7 @@ func TestUseDefaultsToTransparentForSupportedTool(t *testing.T) {
 				if got["ANTHROPIC_AUTH_TOKEN"] == "sk-everyapi-test" {
 					t.Error("the real relay key reached the child under transparent mode")
 				}
-				// Transparent mode unsets NO_PROXY outright: the connector has
-				// to see every request, and an inherited exclusion could let a
-				// vendor origin bypass it entirely.
+				// Transparent mode unsets NO_PROXY outright: the connector has to see every request, and an inherited exclusion could let a vendor origin bypass it entirely.
 				if got["NO_PROXY"] != "" {
 					t.Errorf("NO_PROXY = %q, want it unset so nothing bypasses the connector", got["NO_PROXY"])
 				}
@@ -153,27 +133,15 @@ func TestUseDefaultsToTransparentForSupportedTool(t *testing.T) {
 				if got["ANTHROPIC_AUTH_TOKEN"] != "sk-everyapi-test" {
 					t.Errorf("ANTHROPIC_AUTH_TOKEN = %q, want the relay key on the injected path", got["ANTHROPIC_AUTH_TOKEN"])
 				}
-				// The base URL above is loopback, so an ambient corporate proxy
-				// must be excluded or the tool's requests never reach it. This
-				// has to hold however the launch arrived at a loopback base —
-				// keying it on which hop was started silently broke the moment
-				// the sanitizer could host the catalogue itself.
+				// The base URL above is loopback, so an ambient corporate proxy must be excluded or the tool's requests never reach it. This has to hold however the launch arrived at a loopback base — keying it on which hop was started silently broke the moment the sanitizer could host the catalogue itself.
 				//
-				// PREPENDED, not replaced. mergeEnvRemoving overlays this map
-				// onto os.Environ() by key, so assigning a bare loopback list
-				// discards the user's own exclusions and pushes the child's
-				// internal-host traffic back through the corporate proxy. The
-				// ambient value is injected above precisely so that a
-				// regression to a plain assignment fails here.
+				// PREPENDED, not replaced. mergeEnvRemoving overlays this map onto os.Environ() by key, so assigning a bare loopback list discards the user's own exclusions and pushes the child's internal-host traffic back through the corporate proxy. The ambient value is injected above precisely so that a regression to a plain assignment fails here.
 				wantNoProxy := "127.0.0.1,localhost," + ambientNoProxy
 				if got["NO_PROXY"] != wantNoProxy {
 					t.Errorf("NO_PROXY = %q, want %q — the loopback exemption must extend the user's value, not replace it",
 						got["NO_PROXY"], wantNoProxy)
 				}
-				// On this path the launch line prints the gateway while the tool
-				// is pointed at a loopback port, so the log is the only thing
-				// connecting the two. The transparent path gets the same record
-				// in connector.log.
+				// On this path the launch line prints the gateway while the tool is pointed at a loopback port, so the log is the only thing connecting the two. The transparent path gets the same record in connector.log.
 				logged, readErr := os.ReadFile(filepath.Join(configRoot, "everyapi", "model-catalog.log"))
 				if readErr != nil {
 					t.Fatalf("no catalogue log for an injected launch: %v", readErr)
@@ -187,21 +155,11 @@ func TestUseDefaultsToTransparentForSupportedTool(t *testing.T) {
 	}
 }
 
-// TestUseKeepsTheCatalogueWhenTheSanitizerFailsToStart covers the fallback the
-// merge introduced: the catalogue transform is built before a host is chosen,
-// so a sanitizer that cannot start must leave it running on its own listener
-// rather than taking it down as collateral. Losing the mask is what the user
-// asked for by continuing; losing the model filter has nothing to do with why
-// the sanitizer failed.
+// TestUseKeepsTheCatalogueWhenTheSanitizerFailsToStart covers the fallback the merge introduced: the catalogue transform is built before a host is chosen, so a sanitizer that cannot start must leave it running on its own listener rather than taking it down as collateral. Losing the mask is what the user asked for by continuing; losing the model filter has nothing to do with why the sanitizer failed.
 //
-// Nothing else exercises this branch. Changing the guard at the second host
-// site to skip the standalone proxy whenever a sanitizer was attempted leaves
-// the rest of the suite green, while a real user would silently get an
-// unfiltered /model picker and unrewritten claude-everyapi-* aliases.
+// Nothing else exercises this branch. Changing the guard at the second host site to skip the standalone proxy whenever a sanitizer was attempted leaves the rest of the suite green, while a real user would silently get an unfiltered /model picker and unrewritten claude-everyapi-* aliases.
 //
-// The failure is induced through the real code path: --sanitize makes
-// startInProcessSanitizer load sanitizer.json, and a malformed one is a hard
-// error rather than a fall-back-to-defaults.
+// The failure is induced through the real code path: --sanitize makes startInProcessSanitizer load sanitizer.json, and a malformed one is a hard error rather than a fall-back-to-defaults.
 func TestUseKeepsTheCatalogueWhenTheSanitizerFailsToStart(t *testing.T) {
 	switch {
 	case os.Getenv(useDefaultShimEnv) == "1":
@@ -233,8 +191,7 @@ func TestUseKeepsTheCatalogueWhenTheSanitizerFailsToStart(t *testing.T) {
 	if err := config.Save(&config.Credentials{APIBase: gateway.URL, RelayKey: "sk-everyapi-test"}); err != nil {
 		t.Fatal(err)
 	}
-	// Malformed on purpose: LoadFileConfig returns a parse error for this,
-	// which startInProcessSanitizer treats as fatal to the sanitizer.
+	// Malformed on purpose: LoadFileConfig returns a parse error for this, which startInProcessSanitizer treats as fatal to the sanitizer.
 	if err := os.WriteFile(filepath.Join(configRoot, "everyapi", "sanitizer.json"), []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -265,9 +222,7 @@ func TestUseKeepsTheCatalogueWhenTheSanitizerFailsToStart(t *testing.T) {
 		"EVERYAPI_TEST_USE_TEST_BINARY="+os.Args[0],
 		"XDG_CONFIG_HOME="+configRoot,
 		"PATH="+shimDir+string(os.PathListSeparator)+os.Getenv("PATH"),
-		// Lowercase here, uppercase in the table test above: x/net/http/httpproxy
-		// reads whichever spelling it finds first, so both have to be picked up
-		// as the ambient value to extend.
+		// Lowercase here, uppercase in the table test above: x/net/http/httpproxy reads whichever spelling it finds first, so both have to be picked up as the ambient value to extend.
 		"no_proxy="+ambientNoProxy,
 	)
 	out, err := child.CombinedOutput()

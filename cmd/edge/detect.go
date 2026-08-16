@@ -9,13 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 )
 
-// Mode is the inferred (or operator-overridden) hardware/OS profile.
-// It picks which docker-compose template variant to render and which
-// ollama image tag to pull. Values are lowercase strings so they round-
-// trip through the --mode flag without case wrangling.
+// Mode is the inferred (or operator-overridden) hardware/OS profile. It picks which docker-compose template variant to render and which ollama image tag to pull. Values are lowercase strings so they round- trip through the --mode flag without case wrangling.
 type Mode string
 
 const (
@@ -26,10 +23,7 @@ const (
 	ModeCPU    Mode = "cpu"    // fallback; chat throughput too low for prod
 )
 
-// detectMode probes the host for a usable GPU + OS pairing. Returns
-// the most specific mode first (nvidia > rocm > macos > cpu). Caller
-// can override via --mode if the detection is wrong (e.g. a CUDA-
-// capable machine without nvidia-container-toolkit installed yet).
+// detectMode probes the host for a usable GPU + OS pairing. Returns the most specific mode first (nvidia > rocm > macos > cpu). Caller can override via --mode if the detection is wrong (e.g. a CUDA- capable machine without nvidia-container-toolkit installed yet).
 func detectMode() Mode {
 	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
 		return ModeMacOS
@@ -43,14 +37,9 @@ func detectMode() Mode {
 	return ModeCPU
 }
 
-// nvidiaQueryOK runs `nvidia-smi -L` and returns true if the binary
-// reports at least one GPU. nvidia-smi being on PATH isn't enough —
-// machines with WSL2 + Windows driver shim leave the binary present
-// but failing. The -L flag is the cheapest sanity query.
+// nvidiaQueryOK runs `nvidia-smi -L` and returns true if the binary reports at least one GPU. nvidia-smi being on PATH isn't enough — machines with WSL2 + Windows driver shim leave the binary present but failing. The -L flag is the cheapest sanity query.
 func nvidiaQueryOK() bool {
-	// Bound the probe: a wedged driver (WSL2 shim, hung GPU) can make
-	// nvidia-smi block indefinitely, which would hang `edge start`. On
-	// timeout we treat it as "no usable GPU" and fall through to rocm/cpu.
+	// Bound the probe: a wedged driver (WSL2 shim, hung GPU) can make nvidia-smi block indefinitely, which would hang `edge start`. On timeout we treat it as "no usable GPU" and fall through to rocm/cpu.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "nvidia-smi", "-L")
@@ -67,9 +56,7 @@ func hasBinary(name string) bool {
 	return err == nil
 }
 
-// parseMode converts a user-supplied --mode flag to a Mode, treating
-// the empty string and "auto" the same. Returns an error for unknown
-// values so a typo doesn't silently fall back to CPU.
+// parseMode converts a user-supplied --mode flag to a Mode, treating the empty string and "auto" the same. Returns an error for unknown values so a typo doesn't silently fall back to CPU.
 func parseMode(s string) (Mode, error) {
 	switch s {
 	case "", "auto":
@@ -87,8 +74,7 @@ func parseMode(s string) (Mode, error) {
 	}
 }
 
-// resolveMode collapses ModeAuto into a concrete mode via detection.
-// Other modes pass through unchanged — operator override always wins.
+// resolveMode collapses ModeAuto into a concrete mode via detection. Other modes pass through unchanged — operator override always wins.
 func resolveMode(m Mode) Mode {
 	if m == "" || m == ModeAuto {
 		return detectMode()

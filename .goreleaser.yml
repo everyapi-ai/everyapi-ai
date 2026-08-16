@@ -1,13 +1,8 @@
 # GoReleaser config for the everyapi CLI.
 #
-# Triggered by `.github/workflows/cli-release.yml` on every `v*` tag.
-# Cross-compiles one binary (`everyapi`) per platform — the MCP server
-# lives in the same binary as the `everyapi mcp` subcommand, so there
-# is exactly one artifact to ship per OS/arch combo.
+# Triggered by `.github/workflows/cli-release.yml` on every `v*` tag. Cross-compiles one binary (`everyapi`) per platform — the MCP server lives in the same binary as the `everyapi mcp` subcommand, so there is exactly one artifact to ship per OS/arch combo.
 #
-# EVERYAPI_VERSION env var: bare semver (no `v` prefix) for ldflag
-# interpolation and brew formula version field. The workflow exports
-# it from `${TAG#v}` once.
+# EVERYAPI_VERSION env var: bare semver (no `v` prefix) for ldflag interpolation and brew formula version field. The workflow exports it from `${TAG#v}` once.
 
 version: 2
 project_name: everyapi
@@ -26,8 +21,8 @@ builds:
     goarch: [amd64, arm64]
     ldflags:
       - -s -w
-      - -X github.com/everyapi-ai/everyapi-ai/internal/version.Version={{ .Env.EVERYAPI_VERSION }}
-      - -X github.com/everyapi-ai/everyapi-ai/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/everyapi-ai/everyapi-ai/v3/internal/version.Version={{ .Env.EVERYAPI_VERSION }}
+      - -X github.com/everyapi-ai/everyapi-ai/v3/internal/version.Commit={{ .ShortCommit }}
 
 archives:
   - id: everyapi
@@ -45,28 +40,15 @@ archives:
 checksum:
   name_template: SHA256SUMS
 
-# Sigstore cosign keyless signing of the SHA256SUMS file. Pairs the
-# SHA-checksum trust with a cryptographic identity (the GitHub Actions
-# OIDC token of the workflow run that built the release), so a user
-# verifying a binary can answer not just "did this match the
-# checksum" but "was the checksum produced by the legitimate release
-# pipeline".
+# Sigstore cosign keyless signing of the SHA256SUMS file. Pairs the SHA-checksum trust with a cryptographic identity (the GitHub Actions OIDC token of the workflow run that built the release), so a user verifying a binary can answer not just "did this match the checksum" but "was the checksum produced by the legitimate release pipeline".
 #
 # Outputs alongside the existing release artefacts:
 #   - SHA256SUMS.sig    — cosign signature of the checksum file
 #   - SHA256SUMS.pem    — short-lived signing certificate (Fulcio)
 #
-# Verification: derive the certificate's subject identity from
-# SHA256SUMS.pem (the cert's SAN includes the workflow URL that signed
-# it) and feed it to `cosign verify-blob --certificate-identity ...
-# --certificate-oidc-issuer https://token.actions.githubusercontent.com
-# --cert SHA256SUMS.pem --signature SHA256SUMS.sig SHA256SUMS`. The
-# verify command isn't documented in the public README because the
-# build pipeline lives in a private repo and the OIDC identity that
-# pins the verification would leak that path.
+# Verification: derive the certificate's subject identity from SHA256SUMS.pem (the cert's SAN includes the workflow URL that signed it) and feed it to `cosign verify-blob --certificate-identity ... --certificate-oidc-issuer https://token.actions.githubusercontent.com --cert SHA256SUMS.pem --signature SHA256SUMS.sig SHA256SUMS`. The verify command isn't documented in the public README because the build pipeline lives in a private repo and the OIDC identity that pins the verification would leak that path.
 #
-# Requires `id-token: write` on the workflow job — set in
-# .github/workflows/cli-release.yml.
+# Requires `id-token: write` on the workflow job — set in .github/workflows/cli-release.yml.
 signs:
   - cmd: cosign
     signature: "${artifact}.sig"
@@ -83,17 +65,9 @@ signs:
 snapshot:
   version_template: "{{ .Env.EVERYAPI_VERSION }}-snapshot-{{ .ShortCommit }}"
 
-# Release notes generation. Default goreleaser behaviour dumps every
-# commit subject under a single "Changelog" heading, which produces a
-# noisy wall of `chore:` / `docs:` / merge entries. We bucket commits
-# by conventional-commit prefix and drop the housekeeping ones so the
-# GitHub Release body reads like a user-facing summary.
+# Release notes generation. Default goreleaser behaviour dumps every commit subject under a single "Changelog" heading, which produces a noisy wall of `chore:` / `docs:` / merge entries. We bucket commits by conventional-commit prefix and drop the housekeeping ones so the GitHub Release body reads like a user-facing summary.
 changelog:
-  # `abbrev: -1` strips the commit SHA prefix that goreleaser's
-  # default `git` use mode prepends to every line. The squash-merge
-  # subjects already carry the `(#PR)` suffix that GitHub auto-links
-  # in the rendered release body, so the hash adds noise without
-  # adding info anyone clicks on.
+  # `abbrev: -1` strips the commit SHA prefix that goreleaser's default `git` use mode prepends to every line. The squash-merge subjects already carry the `(#PR)` suffix that GitHub auto-links in the rendered release body, so the hash adds noise without adding info anyone clicks on.
   abbrev: -1
   filters:
     exclude:
@@ -130,20 +104,12 @@ changelog:
 
 release:
   github:
-    # Pin the Release target to the public CLI repo so `brew install`
-    # / direct `curl` download URLs work without org access. The
-    # mirror step (in cli-release.yml) must run BEFORE goreleaser so
-    # the v* tag exists on this repo when the Release is created;
-    # otherwise goreleaser creates the tag itself pointing at the
-    # mirror's stale HEAD.
+    # Pin the Release target to the public CLI repo so `brew install` / direct `curl` download URLs work without org access. The mirror step (in cli-release.yml) must run BEFORE goreleaser so the v* tag exists on this repo when the Release is created; otherwise goreleaser creates the tag itself pointing at the mirror's stale HEAD.
     owner: everyapi-ai
     name: everyapi-ai
   name_template: "{{ .Tag }}"
   mode: append
-  # Compare link + install one-liner under the auto-generated
-  # changelog. `{{ .PreviousTag }}` is goreleaser-builtin (the v*
-  # tag immediately before .Tag in chronological order). Render as
-  # plain markdown so it picks up GitHub's auto-link rendering.
+  # Compare link + install one-liner under the auto-generated changelog. `{{ .PreviousTag }}` is goreleaser-builtin (the v* tag immediately before .Tag in chronological order). Render as plain markdown so it picks up GitHub's auto-link rendering.
   footer: |
 
     ---
@@ -153,7 +119,7 @@ release:
     **Install / upgrade:**
     ```
     brew upgrade everyapi              # macOS / Linux (Homebrew)
-    go install github.com/everyapi-ai/everyapi-ai@{{ .Tag }}   # Go users
+    go install github.com/everyapi-ai/everyapi-ai/v3@{{ .Tag }}   # Go users
     everyapi update                    # already installed
     ```
 
@@ -171,10 +137,7 @@ brews:
     license: MIT
     install: |
       bin.install "everyapi"
-    # Two-pronged smoke test: the `version` subcommand verifies the
-    # CLI surface, and an `mcp` initialize handshake verifies the
-    # built-in MCP server speaks the protocol. Both run without
-    # credentials or network — safe in `brew test`'s sandbox.
+    # Two-pronged smoke test: the `version` subcommand verifies the CLI surface, and an `mcp` initialize handshake verifies the built-in MCP server speaks the protocol. Both run without credentials or network — safe in `brew test`'s sandbox.
     test: |
       assert_match "everyapi", shell_output("#{bin}/everyapi version")
       output = pipe_output("#{bin}/everyapi mcp",

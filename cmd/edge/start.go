@@ -4,8 +4,8 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 )
 
 func edgeStart(args []string) error {
@@ -22,10 +22,7 @@ func edgeStart(args []string) error {
 		return err
 	}
 
-	// Order matters: identity checks (login → active node → local
-	// metadata) before docker presence. A user who hasn't run
-	// 'register' first should hear about that, not about docker
-	// compose v2.
+	// Order matters: identity checks (login → active node → local metadata) before docker presence. A user who hasn't run 'register' first should hear about that, not about docker compose v2.
 	nodeID, err := resolveNodeID(*nodeFlag)
 	if err != nil {
 		return err
@@ -49,10 +46,7 @@ func edgeStart(args []string) error {
 	if gateway == "" {
 		gateway = meta.Gateway
 	}
-	// Resolve the effective images the same way as --gateway: an omitted
-	// flag keeps the persisted pin, so a bare `edge start` restart neither
-	// renders nor persists :latest over a pin set by an earlier
-	// `--agent-image` run (the silent reversion this persistence guards).
+	// Resolve the effective images the same way as --gateway: an omitted flag keeps the persisted pin, so a bare `edge start` restart neither renders nor persists :latest over a pin set by an earlier `--agent-image` run (the silent reversion this persistence guards).
 	agentImage := *agentImageFlag
 	if agentImage == "" {
 		agentImage = meta.AgentImage
@@ -84,10 +78,7 @@ func edgeStart(args []string) error {
 	cliout.Printf(i18n.T("edge.start.wrote"), composePath)
 
 	if resolved == ModeMacOS {
-		// Native ollama hint — don't BLOCK on it (advanced users may
-		// run ollama via brew + custom port / a non-default install
-		// path), but flag the dependency so a typical macOS user
-		// doesn't get a baffling 'connection refused' a step later.
+		// Native ollama hint — don't BLOCK on it (advanced users may run ollama via brew + custom port / a non-default install path), but flag the dependency so a typical macOS user doesn't get a baffling 'connection refused' a step later.
 		cliout.Printf("%s", i18n.T("edge.start.macos_hint"))
 		cliout.Printf("%s", i18n.T("edge.start.macos_hint_cmd"))
 	}
@@ -97,20 +88,12 @@ func edgeStart(args []string) error {
 		return fmt.Errorf(i18n.T("edge.start.pull_failed"), err)
 	}
 	cliout.Println(i18n.T("edge.start.up"))
-	// --remove-orphans so shrinking the service set (e.g. switching off an
-	// embedded-ollama mode to macos, which has no ollama service) tears
-	// down the now-stale container instead of leaking it (docker only
-	// warns about "orphan containers" otherwise). Scoped to this node's
-	// -p project, so it only touches this node's own containers.
+	// --remove-orphans so shrinking the service set (e.g. switching off an embedded-ollama mode to macos, which has no ollama service) tears down the now-stale container instead of leaking it (docker only warns about "orphan containers" otherwise). Scoped to this node's -p project, so it only touches this node's own containers.
 	if err := runComposeCmd(dir, projectFor(nodeID), "up", "-d", "--remove-orphans"); err != nil {
 		return fmt.Errorf(i18n.T("edge.start.up_failed"), err)
 	}
 
-	// Persist the resolved mode and operator overrides so `status` /
-	// `update` / `remove` re-render the same compose variant without
-	// re-detecting hardware or silently reverting gateway/image pins back
-	// to defaults. Best effort — a write failure here doesn't unwind the
-	// running containers, so we warn instead of fail.
+	// Persist the resolved mode and operator overrides so `status` / `update` / `remove` re-render the same compose variant without re-detecting hardware or silently reverting gateway/image pins back to defaults. Best effort — a write failure here doesn't unwind the running containers, so we warn instead of fail.
 	meta.Mode = resolved
 	meta.Gateway = gateway
 	meta.AgentImage = agentImage

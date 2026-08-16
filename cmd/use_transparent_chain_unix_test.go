@@ -18,7 +18,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -30,21 +30,9 @@ const (
 	realAliasedModel = "glm-4.7"
 )
 
-// TestUseWiresTheSanitizerAsTheConnectorUpstream pins the wiring that makes
-// --sanitize compose with transparent mode, and — since the transforms were
-// flattened onto one socket — that BOTH transforms compose there.
-// TestTransparentConnectorChainsThroughRecoveryGuard looks like it covers the
-// first part, but it hands startTransparentConnector the sanitizer address
-// itself and never calls Use, so it proves the chain works once wired, not that
-// Use wires it. Reverting the wiring leaves it green.
+// TestUseWiresTheSanitizerAsTheConnectorUpstream pins the wiring that makes --sanitize compose with transparent mode, and — since the transforms were flattened onto one socket — that BOTH transforms compose there. TestTransparentConnectorChainsThroughRecoveryGuard looks like it covers the first part, but it hands startTransparentConnector the sanitizer address itself and never calls Use, so it proves the chain works once wired, not that Use wires it. Reverting the wiring leaves it green.
 //
-// One request carries the evidence for both transforms. The child discovers the
-// catalogue the way a real client does (GET /v1/models), picks the synthetic
-// alias it finds there, and posts to it with an AWS key in the body. Reaching
-// the gateway as the REAL model id can only be the catalogue transform; reaching
-// it with the key redacted can only be the sanitizer. Both effects present while
-// connector.log records exactly three hops means one socket ran both — chain
-// them again and that count goes to four.
+// One request carries the evidence for both transforms. The child discovers the catalogue the way a real client does (GET /v1/models), picks the synthetic alias it finds there, and posts to it with an AWS key in the body. Reaching the gateway as the REAL model id can only be the catalogue transform; reaching it with the key redacted can only be the sanitizer. Both effects present while connector.log records exactly three hops means one socket ran both — chain them again and that count goes to four.
 func TestUseWiresTheSanitizerAsTheConnectorUpstream(t *testing.T) {
 	switch {
 	case os.Getenv(useChainShimEnv) == "1":
@@ -69,9 +57,7 @@ func TestUseWiresTheSanitizerAsTheConnectorUpstream(t *testing.T) {
 			_, _ = io.WriteString(w, "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
 			return
 		}
-		// glm-4.7 is the load-bearing entry: not being a claude-* id, the
-		// catalogue transform must republish it under a synthetic alias, which
-		// is what lets the child prove the transform ran.
+		// glm-4.7 is the load-bearing entry: not being a claude-* id, the catalogue transform must republish it under a synthetic alias, which is what lets the child prove the transform ran.
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": []any{
 			map[string]any{"id": "claude-test", "owned_by": "anthropic", "supported_endpoint_types": []string{"anthropic"}},
@@ -116,11 +102,7 @@ func TestUseWiresTheSanitizerAsTheConnectorUpstream(t *testing.T) {
 	assertLaunchLineReportsOnlyDestination(t, string(out), gateway.URL)
 	assertTopologyLogged(t, configRoot, gateway.URL)
 
-	// The sanitizer hosts the catalogue on this path, so startModelCatalogProxy
-	// never runs and its bind-address line is never written. Without a record
-	// emitted where the transform is BUILT, model-catalog.log would be a 0-byte
-	// file exactly when the catalogue is active — which is when a user chasing
-	// a wrong /model picker goes looking for it.
+	// The sanitizer hosts the catalogue on this path, so startModelCatalogProxy never runs and its bind-address line is never written. Without a record emitted where the transform is BUILT, model-catalog.log would be a 0-byte file exactly when the catalogue is active — which is when a user chasing a wrong /model picker goes looking for it.
 	catalogLogged, err := os.ReadFile(filepath.Join(configRoot, "everyapi", "model-catalog.log"))
 	if err != nil {
 		t.Fatalf("no catalogue log despite the catalogue being active: %v", err)
@@ -144,14 +126,9 @@ func TestUseWiresTheSanitizerAsTheConnectorUpstream(t *testing.T) {
 	}
 }
 
-// assertLaunchLineReportsOnlyDestination checks that the launch line reports the
-// destination and nothing else. The loopback hops are ephemeral ports that
-// change every launch; printing them weighted an implementation detail equally
-// with the answer to "where is my traffic going" and made a working launch read
-// as a complicated one.
+// assertLaunchLineReportsOnlyDestination checks that the launch line reports the destination and nothing else. The loopback hops are ephemeral ports that change every launch; printing them weighted an implementation detail equally with the answer to "where is my traffic going" and made a working launch read as a complicated one.
 //
-// Located by the gateway URL rather than by its wording, so the assertion does
-// not depend on which language the CLI resolved.
+// Located by the gateway URL rather than by its wording, so the assertion does not depend on which language the CLI resolved.
 func assertLaunchLineReportsOnlyDestination(t *testing.T, output, gatewayURL string) {
 	t.Helper()
 	var line string
@@ -164,30 +141,20 @@ func assertLaunchLineReportsOnlyDestination(t *testing.T, output, gatewayURL str
 	if line == "" {
 		t.Fatalf("no line naming the gateway in output:\n%s", output)
 	}
-	// The gateway is itself loopback under httptest, so remove it before
-	// looking for hop addresses — otherwise the test fixture trips the check
-	// that exists for the hops.
+	// The gateway is itself loopback under httptest, so remove it before looking for hop addresses — otherwise the test fixture trips the check that exists for the hops.
 	if rest := strings.ReplaceAll(line, gatewayURL, ""); strings.Contains(rest, "127.0.0.1:") {
 		t.Fatalf("launch line still exposes a loopback hop: %q", line)
 	}
-	// Compared against the rendered i18n string rather than a literal marker, so
-	// the assertion holds in whichever locale the CLI resolved. It is the same
-	// key the non-transparent launch prints: which transport carried the
-	// traffic is a detail of how this process reaches the gateway, not
-	// something the launch line reports.
+	// Compared against the rendered i18n string rather than a literal marker, so the assertion holds in whichever locale the CLI resolved. It is the same key the non-transparent launch prints: which transport carried the traffic is a detail of how this process reaches the gateway, not something the launch line reports.
 	//
-	// Exact match, not a substring: a mode marker appended to the line would
-	// still contain the base string, so only equality catches one coming back.
+	// Exact match, not a substring: a mode marker appended to the line would still contain the base string, so only equality catches one coming back.
 	want := fmt.Sprintf(i18n.T("use.launching"), "claude", gatewayURL)
 	if strings.TrimSpace(line) != want {
 		t.Fatalf("launch line = %q, want %q", line, want)
 	}
 }
 
-// assertTopologyLogged is the other half: the hops moved to connector.log
-// rather than being dropped. Without this the stdout assertion above would pass
-// just as well if the topology had stopped being recorded anywhere, which is
-// the difference between relocating diagnostics and losing them.
+// assertTopologyLogged is the other half: the hops moved to connector.log rather than being dropped. Without this the stdout assertion above would pass just as well if the topology had stopped being recorded anywhere, which is the difference between relocating diagnostics and losing them.
 func assertTopologyLogged(t *testing.T, configRoot, gatewayURL string) {
 	t.Helper()
 	written, err := os.ReadFile(filepath.Join(configRoot, "everyapi", "connector.log"))
@@ -204,10 +171,7 @@ func assertTopologyLogged(t *testing.T, configRoot, gatewayURL string) {
 	if logged == "" {
 		t.Fatalf("connector.log records no launch topology:\n%s", written)
 	}
-	// Split after " via ", not from "launch:". Slicing from "launch:" leaves the
-	// log timestamp and tool name glued onto the first hop, which makes hops[0]
-	// unable to equal hops[1] whatever the code does — the distinctness check
-	// below would be permanently dead.
+	// Split after " via ", not from "launch:". Slicing from "launch:" leaves the log timestamp and tool name glued onto the first hop, which makes hops[0] unable to equal hops[1] whatever the code does — the distinctness check below would be permanently dead.
 	const marker = " via "
 	via := strings.Index(logged, marker)
 	if via < 0 {
@@ -230,9 +194,7 @@ func assertTopologyLogged(t *testing.T, configRoot, gatewayURL string) {
 	}
 }
 
-// runChainShim stands in for `claude`: it talks to the connector exactly as the
-// real tool would — through HTTPS_PROXY, trusting NODE_EXTRA_CA_CERTS — and
-// sends a body carrying a secret the sanitizer is expected to mask.
+// runChainShim stands in for `claude`: it talks to the connector exactly as the real tool would — through HTTPS_PROXY, trusting NODE_EXTRA_CA_CERTS — and sends a body carrying a secret the sanitizer is expected to mask.
 func runChainShim(t *testing.T) {
 	t.Helper()
 	proxy := os.Getenv("HTTPS_PROXY")
@@ -257,9 +219,7 @@ func runChainShim(t *testing.T) {
 		TLSClientConfig: &tls.Config{RootCAs: roots},
 	}}
 
-	// Discover the catalogue the way a real client's /model picker does, and use
-	// whatever it advertises. Hardcoding the alias would let the test pass with
-	// the catalogue transform disabled.
+	// Discover the catalogue the way a real client's /model picker does, and use whatever it advertises. Hardcoding the alias would let the test pass with the catalogue transform disabled.
 	alias := discoverAliasedModel(t, client)
 
 	body := `{"model":"` + alias + `","messages":[{"role":"user","content":"my key is ` + awsKeyFixture + `"}]}`
@@ -273,9 +233,7 @@ func runChainShim(t *testing.T) {
 	_ = resp.Body.Close()
 }
 
-// discoverAliasedModel returns the synthetic id the catalogue transform
-// publishes for realAliasedModel. Its absence means the transform never ran:
-// the gateway serves the real id, and only the transform rewrites it.
+// discoverAliasedModel returns the synthetic id the catalogue transform publishes for realAliasedModel. Its absence means the transform never ran: the gateway serves the real id, and only the transform rewrites it.
 func discoverAliasedModel(t *testing.T, client *http.Client) string {
 	t.Helper()
 	resp, err := client.Get("https://api.anthropic.com/v1/models")

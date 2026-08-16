@@ -5,11 +5,7 @@ import (
 	"testing"
 )
 
-// TestAuth_NonRoutingPaths covers the dispatcher arms that don't invoke
-// a network-touching subcommand: help/empty print usage and return nil,
-// an unknown subcommand returns an error naming the bad sub. The
-// login/logout/status routing is exercised by their own tests; calling
-// them here would hit credentials / the network.
+// TestAuth_NonRoutingPaths covers the dispatcher arms that don't invoke a network-touching subcommand: help/empty print usage and return nil, an unknown subcommand returns an error naming the bad sub. The login/logout/status routing is exercised by their own tests; calling them here would hit credentials / the network.
 func TestAuth_NonRoutingPaths(t *testing.T) {
 	for _, args := range [][]string{nil, {"help"}, {"--help"}, {"-h"}} {
 		if err := Auth(args); err != nil {

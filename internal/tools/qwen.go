@@ -10,10 +10,7 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// prepareQwenCode isolates Qwen Code from the user's normal ~/.qwen profile
-// without overwriting preferences saved inside the EveryAPI-specific profile.
-// Routing and authentication are pinned through environment variables and the
-// higher-precedence --auth-type argument; the relay credential is never written.
+// prepareQwenCode isolates Qwen Code from the user's normal ~/.qwen profile without overwriting preferences saved inside the EveryAPI-specific profile. Routing and authentication are pinned through environment variables and the higher-precedence --auth-type argument; the relay credential is never written.
 func prepareQwenCode(_, _ string) (map[string]string, error) {
 	return prepareQwenCodeWithModels("", "", nil)
 }

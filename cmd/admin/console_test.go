@@ -6,10 +6,7 @@ import (
 	"testing"
 )
 
-// TestConsoleAreas_Shape locks the console's structure: the seven areas
-// in display order, with log/audit as leaves (single no-arg action, run
-// directly) and the rest carrying a non-empty action set whose rows all
-// have a collect func.
+// TestConsoleAreas_Shape locks the console's structure: the seven areas in display order, with log/audit as leaves (single no-arg action, run directly) and the rest carrying a non-empty action set whose rows all have a collect func.
 func TestConsoleAreas_Shape(t *testing.T) {
 	areas := consoleAreas()
 	wantOrder := []string{"marketplace", "user", "channel", "log", "abuse", "audit", "redemption"}
@@ -38,11 +35,7 @@ func TestConsoleAreas_Shape(t *testing.T) {
 	}
 }
 
-// TestConsoleCollect_Args drives the text-prompt collect funcs with canned
-// stdin and asserts the assembled argv — the contract that what the picker
-// gathers is exactly what `everyapi admin …` would receive. Choice-based
-// actions (manage/tag/status) read os.Stdin via cliprompt.Pick and are
-// covered by TestConsoleAreas_Shape's wiring check instead.
+// TestConsoleCollect_Args drives the text-prompt collect funcs with canned stdin and asserts the assembled argv — the contract that what the picker gathers is exactly what `everyapi admin …` would receive. Choice-based actions (manage/tag/status) read os.Stdin via cliprompt.Pick and are covered by TestConsoleAreas_Shape's wiring check instead.
 func TestConsoleCollect_Args(t *testing.T) {
 	rdr := func(s string) *bufio.Reader { return bufio.NewReader(strings.NewReader(s)) }
 	cases := []struct {
@@ -74,8 +67,7 @@ func TestConsoleCollect_Args(t *testing.T) {
 	}
 }
 
-// TestPromptID_RejectsNonPositive re-prompts past a bad value rather than
-// aborting, so a typo doesn't kick the operator out of the action.
+// TestPromptID_RejectsNonPositive re-prompts past a bad value rather than aborting, so a typo doesn't kick the operator out of the action.
 func TestPromptID_RejectsNonPositive(t *testing.T) {
 	got, err := promptID(bufio.NewReader(strings.NewReader("abc\n0\n12\n")), "admin.prompt.id")
 	if err != nil {

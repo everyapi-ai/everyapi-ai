@@ -5,15 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
-	"github.com/everyapi-ai/everyapi-ai/internal/tools"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/tools"
 )
 
-// InstallTool is the desktop-only half of the install/launch split. The tool
-// name resolves through the compile-time registry, and RunInstall executes only
-// that entry's fixed InstallCmd. It never calls Use or starts the installed
-// client.
+// InstallTool is the desktop-only half of the install/launch split. The tool name resolves through the compile-time registry, and RunInstall executes only that entry's fixed InstallCmd. It never calls Use or starts the installed client.
 func InstallTool(args []string) error {
 	if len(args) != 1 {
 		return errors.New("desktop-install-tool requires exactly one tool")

@@ -8,16 +8,14 @@ import (
 	"io"
 	"strings"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
 const loginMachineProtocolVersion = 1
 
-// loginMachineEvent is the complete renderer-facing login contract. It cannot
-// represent a credential, refresh token, device code, or relay key, so those
-// values cannot accidentally cross the CLI/desktop boundary through stdout.
+// loginMachineEvent is the complete renderer-facing login contract. It cannot represent a credential, refresh token, device code, or relay key, so those values cannot accidentally cross the CLI/desktop boundary through stdout.
 type loginMachineEvent struct {
 	Version         int    `json:"version"`
 	Type            string `json:"type"`
@@ -32,9 +30,7 @@ type loginMachineError struct {
 	err  error
 }
 
-// Error intentionally omits the wrapped message. Gateway errors can contain
-// attacker-controlled text or secret-shaped values; machine consumers need a
-// stable code, not an untrusted diagnostic payload.
+// Error intentionally omits the wrapped message. Gateway errors can contain attacker-controlled text or secret-shaped values; machine consumers need a stable code, not an untrusted diagnostic payload.
 func (e *loginMachineError) Error() string { return "EVERYAPI_LOGIN_ERROR:" + e.code }
 
 func (e *loginMachineError) Unwrap() error { return e.err }
@@ -50,9 +46,7 @@ type loginMachineClient interface {
 	OAuth2PollUntilDone(context.Context, string, string, int) (*api.OAuth2Token, error)
 }
 
-// loginMachineRequested is deliberately narrow: it is used only to silence
-// flag.FlagSet's human usage text when the caller explicitly selected the
-// machine protocol. Login still validates the parsed value authoritatively.
+// loginMachineRequested is deliberately narrow: it is used only to silence flag.FlagSet's human usage text when the caller explicitly selected the machine protocol. Login still validates the parsed value authoritatively.
 func loginMachineRequested(args []string) bool {
 	for i, arg := range args {
 		if arg == "--format=json-lines" || arg == "-format=json-lines" {
@@ -69,8 +63,7 @@ func resolveMachineLoginAPIBase(apiBaseOverride string) string {
 	if strings.TrimSpace(apiBaseOverride) != "" {
 		return config.ResolveAPIBase(apiBaseOverride)
 	}
-	// Unlike the interactive login resolver, this never opens a region picker
-	// or reads stdin. Existing settings/credentials still select the gateway.
+	// Unlike the interactive login resolver, this never opens a region picker or reads stdin. Existing settings/credentials still select the gateway.
 	return config.ResolveAPIBase("")
 }
 
@@ -131,9 +124,7 @@ func runLoginMachine(ctx context.Context, apiBase string, client loginMachineCli
 			return failLoginMachine(out, "credential_store", saveErr)
 		}
 		username = cliout.Sanitize(res.Username)
-		// Match interactive login's eager cache fill. Relay-key lookup remains
-		// non-fatal: authentication succeeded and the next credential request
-		// can retry a transient failure or report that the account has no key.
+		// Match interactive login's eager cache fill. Relay-key lookup remains non-fatal: authentication succeeded and the next credential request can retry a transient failure or report that the account has no key.
 		_, _ = api.ResolveRelayKey(ctx, creds, "")
 	}
 

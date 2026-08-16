@@ -40,8 +40,7 @@ func TestClientConfigPathHonorsGeminiCLIHome(t *testing.T) {
 }
 
 func TestClientConfigPathHonorsLibrefangHome(t *testing.T) {
-	// LIBREFANG_HOME relocates the daemon's data dir; the default
-	// ~/.librefang/config.toml hint would then name a file nothing reads.
+	// LIBREFANG_HOME relocates the daemon's data dir; the default ~/.librefang/config.toml hint would then name a file nothing reads.
 	home := filepath.Join(t.TempDir(), "managed-librefang")
 	t.Setenv("LIBREFANG_HOME", home)
 	if got, want := clientConfigPath(mcpClients["librefang"]), filepath.Join(home, "config.toml"); got != want {
@@ -50,10 +49,7 @@ func TestClientConfigPathHonorsLibrefangHome(t *testing.T) {
 }
 
 func TestLookupClient(t *testing.T) {
-	// Every registered client must resolve, and its argv builders must
-	// match its mode: shell-out targets need both, ManualOnly targets must
-	// have neither (install/uninstall return before calling them, and a
-	// non-nil builder would signal a shell-out path that doesn't exist).
+	// Every registered client must resolve, and its argv builders must match its mode: shell-out targets need both, ManualOnly targets must have neither (install/uninstall return before calling them, and a non-nil builder would signal a shell-out path that doesn't exist).
 	for _, name := range clientNames() {
 		t.Run(name, func(t *testing.T) {
 			c, err := lookupClient(name)
@@ -90,9 +86,7 @@ func TestLookupClient(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for unknown client")
 		}
-		// Error must list every supported name so the user has a
-		// recoverable path. If we add a client and forget to extend
-		// clientNames(), this assertion catches it.
+		// Error must list every supported name so the user has a recoverable path. If we add a client and forget to extend clientNames(), this assertion catches it.
 		for _, name := range clientNames() {
 			if !strings.Contains(err.Error(), name) {
 				t.Errorf("error %q does not mention %q", err, name)
@@ -102,10 +96,7 @@ func TestLookupClient(t *testing.T) {
 }
 
 func TestClientAddArgv(t *testing.T) {
-	// The codex CLI requires a `--` separator before the launched
-	// command; claude and gemini take it positionally. Lock that down:
-	// regressions here mean `everyapi mcp install <client>` silently
-	// registers the wrong thing.
+	// The codex CLI requires a `--` separator before the launched command; claude and gemini take it positionally. Lock that down: regressions here mean `everyapi mcp install <client>` silently registers the wrong thing.
 	cases := []struct {
 		client string
 		want   []string
@@ -135,8 +126,7 @@ func TestClientRemoveArgv(t *testing.T) {
 	}{
 		{"claude", []string{"mcp", "remove", "everyapi"}},
 		{"codex", []string{"mcp", "remove", "everyapi"}},
-		// Gemini defaults removal to project scope, while install writes user
-		// scope. Omitting this flag reports success but leaves the registration.
+		// Gemini defaults removal to project scope, while install writes user scope. Omitting this flag reports success but leaves the registration.
 		{"gemini", []string{"mcp", "remove", "--scope", "user", "everyapi"}},
 	}
 	for _, tc := range cases {
@@ -149,11 +139,7 @@ func TestClientRemoveArgv(t *testing.T) {
 }
 
 func TestClientNamesOrder(t *testing.T) {
-	// Preferred order is locked: claude, codex, gemini. The install
-	// usage text and the unknown-client error both depend on this
-	// ordering being stable. librefang is not in the preferred slice,
-	// so it lands in the alphabetical `extras` tail — which is the
-	// documented behaviour for additions.
+	// Preferred order is locked: claude, codex, gemini. The install usage text and the unknown-client error both depend on this ordering being stable. librefang is not in the preferred slice, so it lands in the alphabetical `extras` tail — which is the documented behaviour for additions.
 	want := []string{"claude", "codex", "gemini", "librefang"}
 	got := clientNames()
 	if !reflect.DeepEqual(got, want) {
@@ -162,9 +148,7 @@ func TestClientNamesOrder(t *testing.T) {
 }
 
 func TestClientConfigPath(t *testing.T) {
-	// ConfigPath is read by install.go's PATH-miss error message —
-	// must be populated for every client so the user knows where to
-	// paste ManualSnippet.
+	// ConfigPath is read by install.go's PATH-miss error message — must be populated for every client so the user knows where to paste ManualSnippet.
 	want := map[string]string{
 		"claude":    "~/.claude.json",
 		"codex":     "~/.codex/config.toml",
@@ -180,16 +164,11 @@ func TestClientConfigPath(t *testing.T) {
 }
 
 func TestClientManualSnippet(t *testing.T) {
-	// The snippet is what the user pastes into ConfigPath when the
-	// client CLI isn't on PATH. Two regressions to guard against:
-	//   1. The snippet doesn't parse in its target language (e.g. an
-	//      earlier version embedded `// path` JSON-illegal comments).
-	//   2. A client's snippet uses the wrong language (codex with
-	//      JSON, or claude/gemini with TOML).
+	// The snippet is what the user pastes into ConfigPath when the client CLI isn't on PATH. Two regressions to guard against:
+	//   1. The snippet doesn't parse in its target language (e.g. an earlier version embedded `// path` JSON-illegal comments).
+	//   2. A client's snippet uses the wrong language (codex with JSON, or claude/gemini with TOML).
 
-	// JSON clients: parse with encoding/json. If the snippet isn't
-	// valid JSON, gemini's strict parser will reject what we tell the
-	// user to paste — so we mirror that strictness here.
+	// JSON clients: parse with encoding/json. If the snippet isn't valid JSON, gemini's strict parser will reject what we tell the user to paste — so we mirror that strictness here.
 	for _, name := range []string{"claude", "gemini"} {
 		t.Run(name+"/parses-as-json", func(t *testing.T) {
 			c, _ := lookupClient(name)
@@ -212,10 +191,7 @@ func TestClientManualSnippet(t *testing.T) {
 		})
 	}
 
-	// codex: stdlib has no TOML parser and we don't pull in a dep just
-	// for this. Settle for structural assertions on the section
-	// header and key/value lines — enough to catch a copy-paste of a
-	// JSON template into the codex slot.
+	// codex: stdlib has no TOML parser and we don't pull in a dep just for this. Settle for structural assertions on the section header and key/value lines — enough to catch a copy-paste of a JSON template into the codex slot.
 	t.Run("codex/structure", func(t *testing.T) {
 		c, _ := lookupClient("codex")
 		for _, frag := range []string{"[mcp_servers.everyapi]", `command = "everyapi"`, `args = ["mcp"]`} {
@@ -238,14 +214,7 @@ func TestClientManualSnippet(t *testing.T) {
 		})
 	}
 
-	// librefang: unlike codex, this snippet IS the whole deliverable — it is
-	// never verified by a successful shell-out, because there is no shell-out.
-	// So decode it for real (BurntSushi is already a direct dependency) into
-	// the shape librefang's McpServerConfigEntry deserializes, and assert every
-	// field the daemon reads. A structural substring check would pass on TOML
-	// that parses into the wrong shape — e.g. command/args hoisted to the top
-	// level instead of nested under [transport], which is the exact mistake in
-	// librefang's own published example.
+	// librefang: unlike codex, this snippet IS the whole deliverable — it is never verified by a successful shell-out, because there is no shell-out. So decode it for real (BurntSushi is already a direct dependency) into the shape librefang's McpServerConfigEntry deserializes, and assert every field the daemon reads. A structural substring check would pass on TOML that parses into the wrong shape — e.g. command/args hoisted to the top level instead of nested under [transport], which is the exact mistake in librefang's own published example.
 	t.Run("librefang/parses-as-mcp-servers-entry", func(t *testing.T) {
 		c, _ := lookupClient("librefang")
 		var got struct {
@@ -270,9 +239,7 @@ func TestClientManualSnippet(t *testing.T) {
 		if e.Name != "everyapi" {
 			t.Errorf("name = %q, want \"everyapi\"", e.Name)
 		}
-		// transport is a nested table, NOT top-level command/args keys —
-		// librefang's McpServerConfigEntry has no top-level command field, so
-		// the flat form silently registers a server that can never start.
+		// transport is a nested table, NOT top-level command/args keys — librefang's McpServerConfigEntry has no top-level command field, so the flat form silently registers a server that can never start.
 		if e.Transport.Type != "stdio" {
 			t.Errorf("transport.type = %q, want \"stdio\"", e.Transport.Type)
 		}
@@ -285,16 +252,13 @@ func TestClientManualSnippet(t *testing.T) {
 		if e.TimeoutSecs <= 0 {
 			t.Errorf("timeout_secs = %d, want a positive value", e.TimeoutSecs)
 		}
-		// env is a list of strings ("KEY=value" or a bare "KEY" pulled from the
-		// daemon's environment), not a table. Empty is correct: the daemon
-		// passes HOME through, so `everyapi mcp` finds its own credentials.
+		// env is a list of strings ("KEY=value" or a bare "KEY" pulled from the daemon's environment), not a table. Empty is correct: the daemon passes HOME through, so `everyapi mcp` finds its own credentials.
 		if len(e.Env) != 0 {
 			t.Errorf("env = %v, want empty (credentials come from HOME)", e.Env)
 		}
 	})
 
-	// The JSON shape belongs to claude/gemini; a copy-paste into the
-	// librefang slot would parse as TOML-invalid, but assert the intent too.
+	// The JSON shape belongs to claude/gemini; a copy-paste into the librefang slot would parse as TOML-invalid, but assert the intent too.
 	t.Run("librefang/no-json-leak", func(t *testing.T) {
 		c, _ := lookupClient("librefang")
 		if strings.Contains(c.ManualSnippet, `"mcpServers"`) {

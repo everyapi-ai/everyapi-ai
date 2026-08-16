@@ -12,16 +12,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/credentiallock"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/credentiallock"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
 func acquireCredentialLock() (func(), error) { return credentiallock.Acquire() }
 
-// credentialProtocolVersion is incremented only for incompatible output-shape
-// changes. Consumers must reject versions they do not understand.
+// credentialProtocolVersion is incremented only for incompatible output-shape changes. Consumers must reject versions they do not understand.
 const credentialProtocolVersion = 1
 
 type credentialOutput struct {
@@ -39,8 +38,7 @@ type credentialOutputModel struct {
 	ChatCompletionsBridge  bool     `json:"chat_completions_bridge,omitempty"`
 }
 
-// credentialError keeps machine failures stable while allowing the existing
-// top-level CLI error renderer to add localized human-facing framing.
+// credentialError keeps machine failures stable while allowing the existing top-level CLI error renderer to add localized human-facing framing.
 type credentialError struct {
 	code string
 	err  error
@@ -56,9 +54,7 @@ func machineCredentialError(code string, err error) error {
 	return &credentialError{code: code, err: err}
 }
 
-// Credential implements the non-interactive credential-process contract used
-// by local integrations. It never prompts and writes exactly one JSON object
-// to stdout on success.
+// Credential implements the non-interactive credential-process contract used by local integrations. It never prompts and writes exactly one JSON object to stdout on success.
 func Credential(args []string) error {
 	fs := flag.NewFlagSet("auth credential", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -85,9 +81,7 @@ func Credential(args []string) error {
 		}
 	}()
 
-	// Load only after taking the cross-process lock. OAuth refresh tokens rotate
-	// on use, so every contender must observe the credentials saved by the
-	// previous process before deciding whether another refresh is needed.
+	// Load only after taking the cross-process lock. OAuth refresh tokens rotate on use, so every contender must observe the credentials saved by the previous process before deciding whether another refresh is needed.
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
 		return machineCredentialError("not_logged_in", err)
@@ -109,9 +103,7 @@ func Credential(args []string) error {
 	if err != nil {
 		var cacheErr *api.ErrCacheSave
 		if key != "" && errors.As(err, &cacheErr) {
-			// The freshly rotated key is usable for this invocation even though
-			// the cache write failed. Keep stdout valid and leave a key-free
-			// diagnostic on stderr.
+			// The freshly rotated key is usable for this invocation even though the cache write failed. Keep stdout valid and leave a key-free diagnostic on stderr.
 			fmt.Fprintf(os.Stderr, "Warning: EveryAPI could not cache the refreshed relay key: %v\n", cacheErr)
 		} else if errors.Is(err, api.ErrNoRelayKey) {
 			return machineCredentialError("no_relay_key", err)
@@ -133,9 +125,7 @@ func Credential(args []string) error {
 	if creds.RelayKeyExpiresAt > 0 {
 		out.ExpiresAt = time.Unix(creds.RelayKeyExpiresAt, 0).UTC().Format(time.RFC3339)
 	}
-	// The key and any rotated refresh token are persisted now. Do not hold the
-	// credential-file lock across the optional model-directory network call;
-	// login/logout and ordinary credential consumers have a bounded wait.
+	// The key and any rotated refresh token are persisted now. Do not hold the credential-file lock across the optional model-directory network call; login/logout and ordinary credential consumers have a bounded wait.
 	unlock()
 	locked = false
 	if *includeModels {

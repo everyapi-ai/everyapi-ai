@@ -1,5 +1,4 @@
-// Package notify wires `everyapi inbox notify …` — in-app notifications:
-// list, unread count, mark one read, mark all read.
+// Package notify wires `everyapi inbox notify …` — in-app notifications: list, unread count, mark one read, mark all read.
 package notify
 
 import (
@@ -9,9 +8,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliargs"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -103,8 +102,7 @@ func runList(args []string) error {
 		}
 		cliout.Printf("  %s [#%d] %s  %s\n", marker, n.ID, when, title)
 		if n.Body != "" {
-			// Sanitize before truncating so the rune slice can't split a
-			// multi-byte escape sequence and re-arm a partial control byte.
+			// Sanitize before truncating so the rune slice can't split a multi-byte escape sequence and re-arm a partial control byte.
 			body := cliout.Sanitize(n.Body)
 			if r := []rune(body); len(r) > 120 {
 				body = string(r[:120]) + "…"

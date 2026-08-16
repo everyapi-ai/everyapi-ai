@@ -1,5 +1,4 @@
-// Package dispute wires `everyapi market dispute …` — open / list /
-// inspect marketplace disputes.
+// Package dispute wires `everyapi market dispute …` — open / list / inspect marketplace disputes.
 package dispute
 
 import (
@@ -9,9 +8,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/everyapi-ai/everyapi-ai/internal/cliargs"
-	"github.com/everyapi-ai/everyapi-ai/internal/cliout"
-	"github.com/everyapi-ai/everyapi-ai/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliargs"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -120,17 +119,11 @@ func runList(args []string) error {
 	cliout.Printf(i18n.T("common.rows_of_total")+"\n", len(rows), total)
 	for _, d := range rows {
 		when := time.Unix(d.OpenedAt, 0).Format("2006-01-02")
-		// Describe the OTHER party relative to me, and which side I'm on.
-		// The list mixes disputes I opened with disputes filed against me;
-		// the old code always printed "vs uid=<counterparty>", which on a
-		// dispute filed against me is my OWN id.
+		// Describe the OTHER party relative to me, and which side I'm on. The list mixes disputes I opened with disputes filed against me; the old code always printed "vs uid=<counterparty>", which on a dispute filed against me is my OWN id.
 		var side string
 		switch {
 		case me == 0:
-			// creds.UserID is unset (e.g. an OAuth2 login that never recorded
-			// it, or pre-UserID credentials.json) — "me" matches nothing, so
-			// show both parties neutrally instead of guessing a direction that
-			// would mislabel the user's own disputes as filed against them.
+			// creds.UserID is unset (e.g. an OAuth2 login that never recorded it, or pre-UserID credentials.json) — "me" matches nothing, so show both parties neutrally instead of guessing a direction that would mislabel the user's own disputes as filed against them.
 			if d.CounterpartyUserID != 0 {
 				side = fmt.Sprintf("opener uid=%d vs uid=%d", d.OpenerUserID, d.CounterpartyUserID)
 			} else {
