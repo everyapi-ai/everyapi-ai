@@ -107,7 +107,7 @@ release:
     # Pin the Release target to the public CLI repo so `brew install` / direct `curl` download URLs work without org access. The mirror step (in cli-release.yml) must run BEFORE goreleaser so the v* tag exists on this repo when the Release is created; otherwise goreleaser creates the tag itself pointing at the mirror's stale HEAD.
     owner: everyapi-ai
     name: everyapi-ai
-  name_template: "{{ .Tag }}"
+  name_template: "EveryAPI CLI {{ .Version }}"
   mode: append
   # Compare link + install one-liner under the auto-generated changelog. `{{ .PreviousTag }}` is goreleaser-builtin (the v* tag immediately before .Tag in chronological order). Render as plain markdown so it picks up GitHub's auto-link rendering.
   footer: |
