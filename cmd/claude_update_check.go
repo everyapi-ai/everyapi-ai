@@ -17,18 +17,24 @@ import (
 
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/tools"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
 const (
 	claudeUpdateCheckFilename  = "claude_update_check.json"
-	claudeLatestVersionURL     = "https://downloads.claude.ai/claude-code-releases/latest"
 	claudeUpdateCheckTimeout   = 2500 * time.Millisecond
 	claudeUpdateFailureBackoff = time.Hour
 	claudeUpdateNoticeCooldown = 12 * time.Hour
 )
 
+var claudeLatestVersionURLs = []string{
+	"https://downloads.claude.ai/claude-code-releases/latest",
+	"https://dl.everyapi.ai/claude-code/latest",
+}
+
 var claudeVersionPattern = regexp.MustCompile(`(?:^|[^0-9])v?([0-9]+\.[0-9]+\.[0-9]+)(?:[^0-9]|$)`)
+var errClaudeUpdateInterrupted = errors.New("Claude Code update interrupted")
 
 type claudeUpdateCheckCache struct {
 	CheckedAt          int64  `json:"checked_at,omitempty"`
@@ -44,6 +50,8 @@ var (
 	latestClaudeVersionFn     = latestClaudeVersion
 	claudeUpdatePromptFn      = promptClaudeUpdate
 	runClaudeUpdateFn         = runClaudeUpdate
+	claudeUpdateCommandFn     = runClaudeUpdateCommand
+	claudeMirrorUpdateFn      = runClaudeMirrorUpdate
 	claudeUpdateErrorFn       = reportClaudeUpdateError
 )
 
@@ -104,14 +112,39 @@ func promptClaudeUpdate(current, latest string) (bool, error) {
 }
 
 func runClaudeUpdate() error {
-	c := exec.Command("claude", "update")
+	officialErr := claudeUpdateCommandFn()
+	if officialErr == nil {
+		return nil
+	}
+	if errors.Is(officialErr, errClaudeUpdateInterrupted) {
+		return officialErr
+	}
+	if mirrorErr := claudeMirrorUpdateFn(); mirrorErr != nil {
+		return fmt.Errorf("official Claude Code update failed (%v); mirror fallback failed: %w", officialErr, mirrorErr)
+	}
+	return nil
+}
+
+func runClaudeUpdateCommand() error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	c := exec.CommandContext(ctx, "claude", "update")
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
-	interrupts := make(chan os.Signal, 1)
-	signal.Notify(interrupts, os.Interrupt)
-	defer signal.Stop(interrupts)
-	return c.Run()
+	err := c.Run()
+	if ctx.Err() != nil {
+		return fmt.Errorf("%w: %v", errClaudeUpdateInterrupted, err)
+	}
+	return err
+}
+
+func runClaudeMirrorUpdate() error {
+	tool, err := tools.Lookup("claude")
+	if err != nil {
+		return err
+	}
+	return tools.RunInstall(tool)
 }
 
 func installedClaudeVersion() (string, error) {
@@ -129,9 +162,21 @@ func installedClaudeVersion() (string, error) {
 }
 
 func latestClaudeVersion() (string, error) {
+	var failures []error
+	for _, url := range claudeLatestVersionURLs {
+		version, err := latestClaudeVersionFromURL(url)
+		if err == nil {
+			return version, nil
+		}
+		failures = append(failures, fmt.Errorf("%s: %w", url, err))
+	}
+	return "", fmt.Errorf("Claude Code latest-version lookup failed: %w", errors.Join(failures...))
+}
+
+func latestClaudeVersionFromURL(url string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), claudeUpdateCheckTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, claudeLatestVersionURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
 	}
@@ -141,7 +186,7 @@ func latestClaudeVersion() (string, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", errors.New("Claude Code latest-version endpoint returned " + resp.Status)
+		return "", errors.New("latest-version endpoint returned " + resp.Status)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 128))
 	if err != nil {
@@ -149,7 +194,7 @@ func latestClaudeVersion() (string, error) {
 	}
 	version := parseClaudeVersion(string(body))
 	if version == "" {
-		return "", errors.New("Claude Code latest-version endpoint returned an invalid version")
+		return "", errors.New("latest-version endpoint returned an invalid version")
 	}
 	return version, nil
 }

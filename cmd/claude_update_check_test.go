@@ -2,6 +2,12 @@ package cmd
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -45,6 +51,155 @@ func TestClaudeUpdatePromptable(t *testing.T) {
 				t.Errorf("claudeUpdatePromptable(%q, %q) = %v, want %v", tc.current, tc.latest, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestLatestClaudeVersionFallsBackToMirror(t *testing.T) {
+	officialCalls := 0
+	official := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		officialCalls++
+		http.Error(w, "blocked", http.StatusBadGateway)
+	}))
+	defer official.Close()
+	mirrorCalls := 0
+	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mirrorCalls++
+		_, _ = w.Write([]byte("2.1.233\n"))
+	}))
+	defer mirror.Close()
+
+	originalURLs := claudeLatestVersionURLs
+	claudeLatestVersionURLs = []string{official.URL, mirror.URL}
+	t.Cleanup(func() { claudeLatestVersionURLs = originalURLs })
+
+	version, err := latestClaudeVersion()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version != "2.1.233" {
+		t.Fatalf("latest version = %q, want 2.1.233", version)
+	}
+	if officialCalls != 1 || mirrorCalls != 1 {
+		t.Fatalf("calls = official %d, mirror %d; want 1 each", officialCalls, mirrorCalls)
+	}
+}
+
+func TestLatestClaudeVersionReportsAllSourcesInvalid(t *testing.T) {
+	invalid := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("not-a-version"))
+	}))
+	defer invalid.Close()
+
+	originalURLs := claudeLatestVersionURLs
+	claudeLatestVersionURLs = []string{invalid.URL, invalid.URL}
+	t.Cleanup(func() { claudeLatestVersionURLs = originalURLs })
+
+	if _, err := latestClaudeVersion(); err == nil || !strings.Contains(err.Error(), "invalid version") {
+		t.Fatalf("latestClaudeVersion() error = %v, want invalid-version error", err)
+	}
+}
+
+func TestRunClaudeUpdateFallsBackToReviewedInstaller(t *testing.T) {
+	originalCommand := claudeUpdateCommandFn
+	originalMirror := claudeMirrorUpdateFn
+	t.Cleanup(func() {
+		claudeUpdateCommandFn = originalCommand
+		claudeMirrorUpdateFn = originalMirror
+	})
+
+	commandCalls := 0
+	mirrorCalls := 0
+	claudeUpdateCommandFn = func() error {
+		commandCalls++
+		return errors.New("official download blocked")
+	}
+	claudeMirrorUpdateFn = func() error {
+		mirrorCalls++
+		return nil
+	}
+
+	if err := runClaudeUpdate(); err != nil {
+		t.Fatal(err)
+	}
+	if commandCalls != 1 || mirrorCalls != 1 {
+		t.Fatalf("calls = command %d, mirror %d; want 1 each", commandCalls, mirrorCalls)
+	}
+}
+
+func TestRunClaudeUpdateCombinesOfficialAndMirrorFailures(t *testing.T) {
+	originalCommand := claudeUpdateCommandFn
+	originalMirror := claudeMirrorUpdateFn
+	t.Cleanup(func() {
+		claudeUpdateCommandFn = originalCommand
+		claudeMirrorUpdateFn = originalMirror
+	})
+
+	claudeUpdateCommandFn = func() error { return errors.New("official failed") }
+	claudeMirrorUpdateFn = func() error { return errors.New("mirror failed") }
+	err := runClaudeUpdate()
+	if err == nil || !strings.Contains(err.Error(), "official failed") || !strings.Contains(err.Error(), "mirror failed") {
+		t.Fatalf("runClaudeUpdate() error = %v, want both failures", err)
+	}
+}
+
+func TestRunClaudeUpdateDoesNotFallbackAfterUserInterrupt(t *testing.T) {
+	originalCommand := claudeUpdateCommandFn
+	originalMirror := claudeMirrorUpdateFn
+	t.Cleanup(func() {
+		claudeUpdateCommandFn = originalCommand
+		claudeMirrorUpdateFn = originalMirror
+	})
+
+	claudeUpdateCommandFn = func() error { return errClaudeUpdateInterrupted }
+	claudeMirrorUpdateFn = func() error {
+		t.Fatal("user interrupt must not start a second installer")
+		return nil
+	}
+	if err := runClaudeUpdate(); !errors.Is(err, errClaudeUpdateInterrupted) {
+		t.Fatalf("runClaudeUpdate() error = %v, want interrupted", err)
+	}
+}
+
+func TestRunClaudeUpdateCommandCancelsAChildThatIgnoresInterrupt(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix signal contract")
+	}
+	bin := t.TempDir()
+	ready := filepath.Join(bin, "ready")
+	claude := filepath.Join(bin, "claude")
+	script := "#!/bin/sh\ntrap '' INT\nprintf ready >\"$FAKE_CLAUDE_READY\"\nexec sleep 30\n"
+	if err := os.WriteFile(claude, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("FAKE_CLAUDE_READY", ready)
+
+	done := make(chan error, 1)
+	go func() { done <- runClaudeUpdateCommand() }()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("fake Claude update did not start")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	process, err := os.FindProcess(os.Getpid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := process.Signal(os.Interrupt); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, errClaudeUpdateInterrupted) {
+			t.Fatalf("runClaudeUpdateCommand() error = %v, want interrupted", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("interrupted Claude update child was not cancelled")
 	}
 }
 

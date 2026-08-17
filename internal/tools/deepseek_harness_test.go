@@ -159,7 +159,7 @@ func TestDeepSeekHarnessRegistryUsesOfficialPackageAndWebLauncher(t *testing.T) 
 	if tool.ExecName != "dsh" {
 		t.Fatalf("ExecName = %q, want dsh", tool.ExecName)
 	}
-	if tool.InstallCmd != "npm install -g @deepseek-ai/dsh" {
+	if tool.InstallCmd != "npm install -g @deepseek-ai/dsh || npm install -g @deepseek-ai/dsh --registry=https://mirrors.cloud.tencent.com/npm/ || npm install -g @deepseek-ai/dsh --registry=https://registry.npmmirror.com" {
 		t.Fatalf("InstallCmd = %q", tool.InstallCmd)
 	}
 	if strings.Join(tool.DefaultArgs, " ") != "web" {

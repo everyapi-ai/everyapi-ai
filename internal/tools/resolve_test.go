@@ -504,7 +504,7 @@ func TestGeminiAutoInstall(t *testing.T) {
 	if runtime.GOOS != "windows" && !CanAutoInstall(tool) {
 		t.Error("CanAutoInstall(gemini) = false, want true so `use` can offer the install")
 	}
-	if tool.InstallCmd != "npm install -g @google/gemini-cli" {
+	if tool.InstallCmd != "npm install -g @google/gemini-cli || npm install -g @google/gemini-cli --registry=https://mirrors.cloud.tencent.com/npm/ || npm install -g @google/gemini-cli --registry=https://registry.npmmirror.com" {
 		t.Errorf("InstallCmd = %q", tool.InstallCmd)
 	}
 	if !tool.InstallPromptDefault() {

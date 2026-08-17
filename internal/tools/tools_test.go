@@ -315,7 +315,7 @@ func TestEnv_Grok(t *testing.T) {
 	if tool.ExecName != "grok" {
 		t.Errorf("ExecName = %q, want grok", tool.ExecName)
 	}
-	if tool.InstallCmd != "npm install -g @xai-official/grok" {
+	if tool.InstallCmd != "npm install -g @xai-official/grok || npm install -g @xai-official/grok --registry=https://mirrors.cloud.tencent.com/npm/ || npm install -g @xai-official/grok --registry=https://registry.npmmirror.com" {
 		t.Errorf("InstallCmd = %q", tool.InstallCmd)
 	}
 	if tool.YoloFlag != "--always-approve" {
@@ -449,7 +449,7 @@ func TestEnv_QwenCode(t *testing.T) {
 	if tool.ExecName != "qwen" {
 		t.Errorf("ExecName = %q, want qwen", tool.ExecName)
 	}
-	if tool.InstallCmd != "npm install -g @qwen-code/qwen-code@latest" {
+	if tool.InstallCmd != "npm install -g @qwen-code/qwen-code@latest || npm install -g @qwen-code/qwen-code@latest --registry=https://mirrors.cloud.tencent.com/npm/ || npm install -g @qwen-code/qwen-code@latest --registry=https://registry.npmmirror.com" {
 		t.Errorf("InstallCmd = %q", tool.InstallCmd)
 	}
 	if tool.YoloFlag != "--yolo" || tool.ModelEnv != "OPENAI_MODEL" || tool.RequiredEndpoint != "openai" {
@@ -492,7 +492,7 @@ func TestEnv_KimiCode(t *testing.T) {
 	if tool.ExecName != "kimi" {
 		t.Errorf("ExecName = %q, want kimi", tool.ExecName)
 	}
-	if tool.InstallCmd != "npm install -g @moonshot-ai/kimi-code" {
+	if tool.InstallCmd != "npm install -g @moonshot-ai/kimi-code || npm install -g @moonshot-ai/kimi-code --registry=https://mirrors.cloud.tencent.com/npm/ || npm install -g @moonshot-ai/kimi-code --registry=https://registry.npmmirror.com" {
 		t.Errorf("InstallCmd = %q", tool.InstallCmd)
 	}
 	if tool.YoloFlag != "--yolo" || tool.ModelEnv != "KIMI_MODEL_NAME" || tool.RequiredEndpoint != "openai" {

@@ -40,23 +40,23 @@ func TestNewDesktopInstallersUseOfficialCommandsAndDeterministicOutputs(t *testi
 		extraBinDir string
 	}{
 		"goose": {
-			unix:        "curl -fsSL https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash",
-			windows:     []string{"powershell", "-ExecutionPolicy", "ByPass", "-Command", "$env:CONFIGURE='false'; irm https://raw.githubusercontent.com/aaif-goose/goose/705f30df47fc819677b973c69efeff153c8fcdaa/download_cli.ps1 | iex"},
+			unix:        "curl -fsSL https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash || curl -fsSL https://dl.everyapi.ai/cli-mirrors/install.sh | bash -s -- goose",
+			windows:     []string{"powershell", "-ExecutionPolicy", "ByPass", "-Command", "& ([scriptblock]::Create((irm https://dl.everyapi.ai/cli-mirrors/install.ps1))) -Tool goose"},
 			extraBinDir: ".local/bin",
 		},
 		"vibe": {
-			unix:        "curl -LsSf https://mistral.ai/vibe/install.sh | bash",
-			windows:     []string{"powershell", "-ExecutionPolicy", "ByPass", "-Command", "irm https://astral.sh/uv/install.ps1 | iex; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install mistral-vibe"},
+			unix:        "curl -LsSf https://mistral.ai/vibe/install.sh | bash || (curl -fsSL https://dl.everyapi.ai/cli-mirrors/uv/install.sh | sh && UV_PYTHON_INSTALL_MIRROR=https://dl.everyapi.ai/cli-mirrors/python UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/ \"$HOME/.local/bin/uv\" tool install --python 3.12 mistral-vibe)",
+			windows:     []string{"powershell", "-ExecutionPolicy", "ByPass", "-Command", "irm https://dl.everyapi.ai/cli-mirrors/uv/install.ps1 | iex; $env:UV_PYTHON_INSTALL_MIRROR='https://dl.everyapi.ai/cli-mirrors/python'; $env:UV_DEFAULT_INDEX='https://mirrors.aliyun.com/pypi/simple/'; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install --python 3.12 mistral-vibe"},
 			extraBinDir: ".local/bin",
 		},
 		"librefang": {
-			unix:        "curl -fsSL https://librefang.ai/install.sh | LIBREFANG_AUTO_START=0 sh",
-			windows:     []string{"powershell", "-ExecutionPolicy", "ByPass", "-Command", "$env:LIBREFANG_AUTO_START='0'; irm https://librefang.ai/install.ps1 | iex"},
+			unix:        "curl -fsSL https://librefang.ai/install.sh | LIBREFANG_AUTO_START=0 sh || curl -fsSL https://dl.everyapi.ai/cli-mirrors/install.sh | bash -s -- librefang",
+			windows:     []string{"powershell", "-ExecutionPolicy", "ByPass", "-Command", "& ([scriptblock]::Create((irm https://dl.everyapi.ai/cli-mirrors/install.ps1))) -Tool librefang"},
 			extraBinDir: ".librefang/bin",
 		},
 		"open-webui": {
-			unix:        "curl -LsSf https://astral.sh/uv/install.sh | sh && \"$HOME/.local/bin/uv\" tool install --python 3.11 open-webui",
-			windows:     []string{"powershell", "-ExecutionPolicy", "ByPass", "-Command", "irm https://astral.sh/uv/install.ps1 | iex; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install --python 3.11 open-webui"},
+			unix:        "(curl -LsSf https://astral.sh/uv/install.sh | sh && \"$HOME/.local/bin/uv\" tool install --python 3.11 open-webui) || (curl -fsSL https://dl.everyapi.ai/cli-mirrors/uv/install.sh | sh && UV_PYTHON_INSTALL_MIRROR=https://dl.everyapi.ai/cli-mirrors/python UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/ \"$HOME/.local/bin/uv\" tool install --python 3.11 open-webui)",
+			windows:     []string{"powershell", "-ExecutionPolicy", "ByPass", "-Command", "irm https://dl.everyapi.ai/cli-mirrors/uv/install.ps1 | iex; $env:UV_PYTHON_INSTALL_MIRROR='https://dl.everyapi.ai/cli-mirrors/python'; $env:UV_DEFAULT_INDEX='https://mirrors.aliyun.com/pypi/simple/'; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install --python 3.11 open-webui"},
 			extraBinDir: ".local/bin",
 		},
 	}
@@ -81,19 +81,19 @@ func TestExistingUnixInstallersHaveReviewedWindowsCommands(t *testing.T) {
 	cases := map[string][]string{
 		"claude": {
 			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
-			"irm https://claude.ai/install.ps1 | iex",
+			"irm https://dl.everyapi.ai/claude-code/install.ps1 | iex",
 		},
 		"openhands": {
 			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
-			"irm https://astral.sh/uv/install.ps1 | iex; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install openhands --python 3.12",
+			"irm https://dl.everyapi.ai/cli-mirrors/uv/install.ps1 | iex; $env:UV_PYTHON_INSTALL_MIRROR='https://dl.everyapi.ai/cli-mirrors/python'; $env:UV_DEFAULT_INDEX='https://mirrors.aliyun.com/pypi/simple/'; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install openhands --python 3.12",
 		},
 		"forge": {
 			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
-			"$bash = @(\"$env:ProgramFiles\\Git\\bin\\bash.exe\", \"${env:ProgramFiles(x86)}\\Git\\bin\\bash.exe\", \"$env:LOCALAPPDATA\\Programs\\Git\\bin\\bash.exe\") | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | Select-Object -First 1; if (-not $bash) { throw 'ForgeCode installer requires Git for Windows (Git Bash).' }; & $bash -lc 'curl -fsSL https://forgecode.dev/cli | sh'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+			"& ([scriptblock]::Create((irm https://dl.everyapi.ai/cli-mirrors/install.ps1))) -Tool forge",
 		},
 		"hermes": {
 			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
-			"$installer = [scriptblock]::Create((irm https://hermes-agent.nousresearch.com/install.ps1)); & $installer -NonInteractive",
+			"& ([scriptblock]::Create((irm https://dl.everyapi.ai/cli-mirrors/hermes/install.ps1))) -NonInteractive",
 		},
 	}
 	for name, want := range cases {
@@ -104,6 +104,133 @@ func TestExistingUnixInstallersHaveReviewedWindowsCommands(t *testing.T) {
 	}
 }
 
+func TestClaudeInstallerUsesTheChinaMirrorFallback(t *testing.T) {
+	tool, err := Lookup("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantUnix := "curl -fsSL https://claude.ai/install.sh | bash || curl -fsSL https://dl.everyapi.ai/claude-code/install.sh | bash"
+	if tool.InstallCmd != wantUnix {
+		t.Errorf("claude InstallCmd = %q, want %q", tool.InstallCmd, wantUnix)
+	}
+	wantWindows := []string{
+		"powershell", "-ExecutionPolicy", "ByPass", "-Command",
+		"irm https://dl.everyapi.ai/claude-code/install.ps1 | iex",
+	}
+	if !reflect.DeepEqual(tool.InstallCmdWindows, wantWindows) {
+		t.Errorf("claude InstallCmdWindows = %q, want %q", tool.InstallCmdWindows, wantWindows)
+	}
+}
+
+func TestNpmInstallersRetryThroughTheChinaRegistry(t *testing.T) {
+	npmTools := []string{
+		"codex", "opencode", "gemini", "crush", "cline", "openclaw",
+		"continue", "deepseek-harness", "kilo", "pi", "copilot", "droid",
+		"llxprt", "grok", "qwen-code", "kimi-code",
+	}
+	for _, name := range npmTools {
+		tool, err := Lookup(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(tool.InstallCmd, " || npm install ") {
+			t.Errorf("%s installer does not retry npm: %q", name, tool.InstallCmd)
+		}
+		tencent := "--registry=https://mirrors.cloud.tencent.com/npm/"
+		npmMirror := "--registry=https://registry.npmmirror.com"
+		if !strings.Contains(tool.InstallCmd, tencent) || !strings.Contains(tool.InstallCmd, npmMirror) {
+			t.Errorf("%s installer does not contain both China registry fallbacks: %q", name, tool.InstallCmd)
+		}
+		fallbackAt := strings.Index(tool.InstallCmd, " || ")
+		tencentAt := strings.Index(tool.InstallCmd, tencent)
+		npmMirrorAt := strings.Index(tool.InstallCmd, npmMirror)
+		if fallbackAt < 0 || tencentAt < fallbackAt || npmMirrorAt < tencentAt {
+			t.Errorf("%s must try official npm, Tencent, then npmmirror: %q", name, tool.InstallCmd)
+		}
+	}
+}
+
+func TestEveryRegisteredAutoInstallerHasAChinaReachablePath(t *testing.T) {
+	for name, tool := range Registry {
+		if strings.TrimSpace(tool.InstallCmd) == "" {
+			continue
+		}
+		if strings.Contains(tool.InstallCmd, "npm install") {
+			if !strings.Contains(tool.InstallCmd, " || npm install ") ||
+				!strings.Contains(tool.InstallCmd, "--registry=https://mirrors.cloud.tencent.com/npm/") ||
+				!strings.Contains(tool.InstallCmd, "--registry=https://registry.npmmirror.com") {
+				t.Errorf("%s npm installer has no failure-only China registry path: %q", name, tool.InstallCmd)
+			}
+		} else if !strings.Contains(tool.InstallCmd, "https://dl.everyapi.ai/") {
+			t.Errorf("%s remote installer has no EveryAPI download fallback: %q", name, tool.InstallCmd)
+		}
+		if len(tool.InstallCmdWindows) > 0 {
+			windows := strings.Join(tool.InstallCmdWindows, " ")
+			if !strings.Contains(windows, "https://dl.everyapi.ai/") && !strings.Contains(windows, "npm install") {
+				t.Errorf("%s Windows installer has no China-reachable path: %q", name, tool.InstallCmdWindows)
+			}
+		}
+	}
+}
+
+func TestDirectDownloadInstallersRetryThroughEveryAPIMirror(t *testing.T) {
+	for _, name := range []string{"antigravity", "goose", "crush", "openhands", "forge", "librefang"} {
+		tool, err := Lookup(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(tool.InstallCmd, "https://dl.everyapi.ai/cli-mirrors/install.sh") {
+			t.Errorf("%s Unix installer has no OSS binary fallback: %q", name, tool.InstallCmd)
+		}
+		if name == "openhands" {
+			continue // OpenHands publishes no Windows binary; its Windows fallback is the mirrored uv/PyPI path below.
+		}
+		if got := strings.Join(tool.InstallCmdWindows, " "); !strings.Contains(got, "https://dl.everyapi.ai/cli-mirrors/install.ps1") {
+			t.Errorf("%s Windows installer has no OSS binary fallback: %q", name, tool.InstallCmdWindows)
+		}
+	}
+}
+
+func TestPythonToolFallbacksUseMirroredUvAndAliyunPyPI(t *testing.T) {
+	for name, pythonVersion := range map[string]string{"aider": "3.12", "vibe": "3.12", "open-webui": "3.11"} {
+		tool, err := Lookup(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(tool.InstallCmd, "https://dl.everyapi.ai/cli-mirrors/uv/install.sh") {
+			t.Errorf("%s Unix installer has no mirrored uv fallback: %q", name, tool.InstallCmd)
+		}
+		if !strings.Contains(tool.InstallCmd, "https://mirrors.aliyun.com/pypi/simple/") {
+			t.Errorf("%s Unix installer has no Aliyun PyPI fallback: %q", name, tool.InstallCmd)
+		}
+		if !strings.Contains(tool.InstallCmd, "UV_PYTHON_INSTALL_MIRROR=https://dl.everyapi.ai/cli-mirrors/python") {
+			t.Errorf("%s Unix installer has no managed-Python mirror: %q", name, tool.InstallCmd)
+		}
+		if !strings.Contains(tool.InstallCmd, "--python "+pythonVersion) {
+			t.Errorf("%s Unix fallback may select an unmirrored Python version: %q", name, tool.InstallCmd)
+		}
+		if got := strings.Join(tool.InstallCmdWindows, " "); !strings.Contains(got, "https://dl.everyapi.ai/cli-mirrors/uv/install.ps1") || !strings.Contains(got, "https://mirrors.aliyun.com/pypi/simple/") {
+			t.Errorf("%s Windows installer lacks the mirrored uv/PyPI fallback: %q", name, tool.InstallCmdWindows)
+		}
+		if got := strings.Join(tool.InstallCmdWindows, " "); !strings.Contains(got, "UV_PYTHON_INSTALL_MIRROR") {
+			t.Errorf("%s Windows installer has no managed-Python mirror: %q", name, tool.InstallCmdWindows)
+		}
+		if got := strings.Join(tool.InstallCmdWindows, " "); !strings.Contains(got, "--python "+pythonVersion) {
+			t.Errorf("%s Windows fallback may select an unmirrored Python version: %q", name, tool.InstallCmdWindows)
+		}
+	}
+	openhands, _ := Lookup("openhands")
+	if got := strings.Join(openhands.InstallCmdWindows, " "); !strings.Contains(got, "https://dl.everyapi.ai/cli-mirrors/uv/install.ps1") || !strings.Contains(got, "https://mirrors.aliyun.com/pypi/simple/") {
+		t.Errorf("openhands Windows installer lacks the mirrored uv/PyPI fallback: %q", openhands.InstallCmdWindows)
+	}
+	if got := strings.Join(openhands.InstallCmdWindows, " "); !strings.Contains(got, "UV_PYTHON_INSTALL_MIRROR") {
+		t.Errorf("openhands Windows installer has no managed-Python mirror: %q", openhands.InstallCmdWindows)
+	}
+	if got := strings.Join(openhands.InstallCmdWindows, " "); !strings.Contains(got, "--python 3.12") {
+		t.Errorf("openhands Windows fallback may select an unmirrored Python version: %q", openhands.InstallCmdWindows)
+	}
+}
+
 func TestHermesInstallerSkipsPersistentSetup(t *testing.T) {
 	tool, _ := Lookup("hermes")
 	if !strings.Contains(tool.InstallCmd, "bash -s -- --non-interactive --skip-setup") {
@@ -111,6 +238,12 @@ func TestHermesInstallerSkipsPersistentSetup(t *testing.T) {
 	}
 	if got := strings.Join(tool.InstallCmdWindows, " "); !strings.Contains(got, "-NonInteractive") {
 		t.Fatalf("Hermes Windows installer is interactive: %q", tool.InstallCmdWindows)
+	}
+	if !strings.Contains(tool.InstallCmd, "https://dl.everyapi.ai/cli-mirrors/hermes/install.sh") {
+		t.Fatalf("Hermes Unix installer has no mirrored repository fallback: %q", tool.InstallCmd)
+	}
+	if got := strings.Join(tool.InstallCmdWindows, " "); !strings.Contains(got, "https://dl.everyapi.ai/cli-mirrors/hermes/install.ps1") {
+		t.Fatalf("Hermes Windows installer has no mirrored repository fallback: %q", tool.InstallCmdWindows)
 	}
 }
 
@@ -124,7 +257,7 @@ func TestAiderAutoInstall(t *testing.T) {
 	}
 	wantWindows := []string{
 		"powershell", "-ExecutionPolicy", "ByPass", "-Command",
-		"irm https://aider.chat/install.ps1 | iex",
+		"irm https://dl.everyapi.ai/cli-mirrors/uv/install.ps1 | iex; $env:UV_PYTHON_INSTALL_MIRROR='https://dl.everyapi.ai/cli-mirrors/python'; $env:UV_DEFAULT_INDEX='https://mirrors.aliyun.com/pypi/simple/'; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install --python 3.12 aider-chat",
 	}
 	if !reflect.DeepEqual(tool.InstallCmdWindows, wantWindows) {
 		t.Errorf("InstallCmdWindows = %q", tool.InstallCmdWindows)
@@ -171,7 +304,7 @@ func TestBuildInstallCommandKeepsWindowsArgvStructured(t *testing.T) {
 	command := buildInstallCommand(installCommandForOS(tool, "windows"), "windows")
 	want := []string{
 		"powershell", "-ExecutionPolicy", "ByPass", "-Command",
-		"irm https://aider.chat/install.ps1 | iex",
+		"irm https://dl.everyapi.ai/cli-mirrors/uv/install.ps1 | iex; $env:UV_PYTHON_INSTALL_MIRROR='https://dl.everyapi.ai/cli-mirrors/python'; $env:UV_DEFAULT_INDEX='https://mirrors.aliyun.com/pypi/simple/'; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install --python 3.12 aider-chat",
 	}
 	if !reflect.DeepEqual(command.Args, want) {
 		t.Fatalf("Windows installer argv = %q, want %q", command.Args, want)
@@ -195,21 +328,20 @@ func TestRegistry_RemoteInstallScriptsAreImmutable(t *testing.T) {
 	}
 }
 
-// TestCanAutoInstall_ClaudeWindows verifies that claude's Unix-only `curl | bash` installer is gated off on Windows. Without this gate the install prompt would offer a command we know is going to fail — the user is better served by the existing InstallHint message pointing at the official Windows setup docs.
-func TestCanAutoInstall_ClaudeWindows(t *testing.T) {
+// TestCanAutoInstall_ClaudeCrossPlatform verifies that Claude selects its shell
+// installer on Unix and its structured PowerShell installer on Windows.
+func TestCanAutoInstall_ClaudeCrossPlatform(t *testing.T) {
 	tool, _ := Lookup("claude")
 	if !tool.InstallCmdUnixOnly {
 		t.Fatal("claude.InstallCmdUnixOnly should be true — curl|bash doesn't run on Windows")
 	}
-	// CanAutoInstall is platform-aware. We can only assert one side of the branch from the test harness — assert the side that matches the host OS, and assert the gating field for the other.
-	if runtime.GOOS == "windows" {
-		if CanAutoInstall(tool) {
-			t.Error("CanAutoInstall(claude) = true on Windows, want false")
+	for _, goos := range []string{"darwin", "linux", "windows"} {
+		if command := installCommandForOS(tool, goos); command.empty() {
+			t.Errorf("installCommandForOS(claude, %q) is empty, want an installer", goos)
 		}
-	} else {
-		if !CanAutoInstall(tool) {
-			t.Error("CanAutoInstall(claude) = false on Unix, want true")
-		}
+	}
+	if !CanAutoInstall(tool) {
+		t.Errorf("CanAutoInstall(claude) = false on %s, want true", runtime.GOOS)
 	}
 }
 
