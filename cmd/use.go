@@ -563,7 +563,7 @@ func transparentTopology(connectorURL string, relayHops []string, gateway string
 
 // toolRemembersModel reports whether EveryAPI both prompts for and persists a boot model for this tool.
 //
-// Limited to the clients whose boot model EveryAPI can actually steer without a model-specific env var. claude reads the catalogue EveryAPI serves it and boots on the first entry. codex reads a root-level `model` from its isolated config.toml. opencode reads the selection from process-scoped OPENCODE_CONFIG_CONTENT. grok accepts the selected id through its documented --model argument, which managedBootModelArgs adds after selection.
+// Limited to the clients whose boot model EveryAPI can actually steer without a model-specific env var. codex reads a root-level `model` from its isolated config.toml. opencode reads the selection from process-scoped OPENCODE_CONFIG_CONTENT. claude and grok both accept the selected id through their documented --model argument, which managedBootModelArgs adds after selection — for claude the filtered catalogue alone is not enough, since it decides its own boot model and reads GET /v1/models only for its /model picker.
 func toolRemembersModel(t *tools.Tool) bool {
 	// Keyed on Name, not ExecName, because Name is what persistToolModel uses for the settings entry — and the two differ for three tools already (antigravity/agy, qwen-code/qwen, kimi-code/kimi), so mixing them invites a launch that qualifies under one field and stores under another.
 	return t.Name == "claude" || t.Name == "codex" || t.Name == "opencode" || t.Name == "grok"
@@ -669,8 +669,19 @@ func pickManagedModelForTool(t *tools.Tool, catalog []api.RelayModel, preferred 
 }
 
 // managedBootModelArgs applies a picker selection to clients whose model is steered through argv rather than an environment variable or generated process-scoped config. Raw Grok model flags are rejected before this point, so this is the only model argument that can reach the child.
+//
+// Claude Code is here because serving it a filtered catalogue does not, on its own, steer the model it boots on. It starts on its own built-in default and consults GET /v1/models for its /model picker, so sorting the selection to position 0 only changes what that picker shows. On an account whose relay key cannot route Claude Code's built-in default the very first request 403s with "该令牌无权访问模型 claude-opus-5" / "this token has no access to model …", which Claude Code surfaces as "Please run /login" — an instruction that cannot fix a model-permission error. Passing the selection through --model makes the remembered choice authoritative on that first request instead of a suggestion the client is free to ignore.
+//
+// The real upstream id is passed, not the synthetic claude-everyapi-* alias the catalogue publishes for non-claude ids: the alias only has meaning while the catalogue transform is hosted, and the gateway resolves the real id either way (rewriteModelAlias forwards ids it does not recognise untouched). A launch that ends up without the transform therefore still boots on the right model.
 func managedBootModelArgs(t *tools.Tool, args []string, bootModel string) []string {
-	if t == nil || t.Name != "grok" || bootModel == "" {
+	if t == nil || bootModel == "" {
+		return args
+	}
+	if t.Name != "grok" && t.Name != "claude" {
+		return args
+	}
+	// Metadata-only invocations take no model and must not grow one, and a caller-supplied --model stays authoritative rather than being duplicated. Grok gets both for free — managedBootPickerNeeded gates it on toolInvocationNeedsEndpoint and its raw model flags are rejected earlier — but Claude's picker is unconditional, so the guard has to live here.
+	if t.Name == "claude" && (!toolInvocationNeedsEndpoint(args) || containsFlag(args, "--model")) {
 		return args
 	}
 	return append([]string{"--model", bootModel}, args...)

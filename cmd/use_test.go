@@ -1715,3 +1715,54 @@ func TestManagedBootModelArgs(t *testing.T) {
 		t.Fatalf("managedBootModelArgs(opencode) = %v, want %v", got, want)
 	}
 }
+
+// Claude Code boots on its own built-in default unless told otherwise, so a remembered selection that only reorders the served catalogue leaves the first request naming a model the relay key may not be able to route.
+func TestManagedBootModelArgsClaude(t *testing.T) {
+	claude := tools.Registry["claude"]
+
+	t.Run("pins the remembered model", func(t *testing.T) {
+		got := managedBootModelArgs(claude, nil, "deepseek-v4-flash")
+		want := []string{"--model", "deepseek-v4-flash"}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("managedBootModelArgs(claude) = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("passes the real upstream id, not the catalogue alias", func(t *testing.T) {
+		// claudeCatalogModels republishes non-claude ids under a synthetic alias; the alias is only resolvable while the catalogue transform is hosted, so the boot argument must stay the real id.
+		_, aliases := claudeCatalogModels([]tools.Model{{ID: "deepseek-v4-flash"}})
+		got := managedBootModelArgs(claude, nil, "deepseek-v4-flash")
+		for _, arg := range got {
+			if _, isAlias := aliases[arg]; isAlias {
+				t.Fatalf("boot args %v carry a synthetic alias; want the real upstream id", got)
+			}
+		}
+	})
+
+	t.Run("keeps a caller-supplied --model authoritative", func(t *testing.T) {
+		for _, args := range [][]string{
+			{"--model", "claude-haiku-4-5"},
+			{"--model=claude-haiku-4-5"},
+		} {
+			got := managedBootModelArgs(claude, args, "deepseek-v4-flash")
+			if !reflect.DeepEqual(got, args) {
+				t.Fatalf("managedBootModelArgs(claude, %v) = %v, want it unchanged", args, got)
+			}
+		}
+	})
+
+	t.Run("leaves metadata-only invocations alone", func(t *testing.T) {
+		for _, args := range [][]string{{"--help"}, {"-h"}, {"help"}, {"--version"}, {"-v"}, {"version"}} {
+			got := managedBootModelArgs(claude, args, "deepseek-v4-flash")
+			if !reflect.DeepEqual(got, args) {
+				t.Fatalf("managedBootModelArgs(claude, %v) = %v, want it unchanged", args, got)
+			}
+		}
+	})
+
+	t.Run("no selection means no argument", func(t *testing.T) {
+		if got := managedBootModelArgs(claude, []string{"chat"}, ""); !reflect.DeepEqual(got, []string{"chat"}) {
+			t.Fatalf("managedBootModelArgs(claude) with no boot model = %v, want unchanged", got)
+		}
+	})
+}
