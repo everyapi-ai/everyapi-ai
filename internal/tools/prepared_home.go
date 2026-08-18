@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/procstate"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -19,20 +21,47 @@ const (
 	preparedArgvMarker              = "__EVERYAPI_PREPARED_ARGV_JSON"
 )
 
-// newPreparedHome creates a process-scoped client home. Live catalog and loopback proxy configuration must not be shared between concurrent launches using different relay keys or groups.
-func newPreparedHome(prefix string) (string, error) {
+const (
+	// preparedHomeOwnerFile records the PID of the `everyapi` process a prepared home belongs to, so a later launch can tell a home whose owner is still working from one orphaned by a hard kill.
+	preparedHomeOwnerFile = ".everyapi-owner"
+	// preparedHomeKeepFile marks a home the CLI deliberately left on disk for the user to salvage by hand. The sweep never touches a home carrying it, at any age.
+	preparedHomeKeepFile = ".everyapi-keep"
+	// preparedHomeReapPrefix renames a condemned home out of the way. Tool prefixes passed to newPreparedHome are exec names, so no live home can start with a dot and collide.
+	preparedHomeReapPrefix = ".reaping-"
+)
+
+// unownedPreparedHomeAge is how old a prepared home with no readable owner PID must be before the sweep reaps it. Two things produce one: a home created by a CLI build from before owner files existed, and a launch killed in the window between MkdirTemp and the owner write. Neither is distinguishable from a live session, so the floor has to outlast the longest such a session plausibly runs — a week is far past any real `everyapi use` sitting, and this rule only has to cover the upgrade window before every home carries an owner.
+const unownedPreparedHomeAge = 7 * 24 * time.Hour
+
+// abandonedPreparedHomeAge backstops PID reuse. A live-looking owner PID normally means the session is still working, but after a reboot the OS hands that same number to an unrelated process and the home would otherwise be pinned forever. Nothing keeps one `everyapi use` child alive for a month, so past this the "alive" answer is reuse rather than the owner.
+const abandonedPreparedHomeAge = 30 * 24 * time.Hour
+
+// preparedHomeRoot resolves the directory holding every process-scoped client home.
+func preparedHomeRoot() (string, error) {
 	root, err := config.ConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve everyapi config dir: %w", err)
 	}
-	root = filepath.Join(root, "sessions")
+	return filepath.Join(root, "sessions"), nil
+}
+
+// newPreparedHome creates a process-scoped client home. Live catalog and loopback proxy configuration must not be shared between concurrent launches using different relay keys or groups.
+func newPreparedHome(prefix string) (string, error) {
+	root, err := preparedHomeRoot()
+	if err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return "", fmt.Errorf("create prepared client home root: %w", err)
 	}
+	// Reclaim homes orphaned by an earlier launch that never got to run its cleanup. Runs before MkdirTemp so our own fresh home is never a sweep candidate. Best-effort; see sweepStalePreparedHomes.
+	sweepStalePreparedHomes(root)
 	home, err := os.MkdirTemp(root, prefix+"-")
 	if err != nil {
 		return "", fmt.Errorf("create prepared %s home: %w", prefix, err)
 	}
+	// Stamp ownership immediately: from here on, a hard kill leaves a home the next launch can identify as orphaned instead of one that has to age out. A failed write is not fatal — the home just falls back to the unowned age rule.
+	_ = os.WriteFile(filepath.Join(home, preparedHomeOwnerFile), []byte(strconv.Itoa(os.Getpid())), 0o600)
 	return home, nil
 }
 
@@ -68,11 +97,10 @@ func TakePreparedCleanup(env map[string]string) func() {
 	if home == "" {
 		return nil
 	}
-	root, err := config.ConfigDir()
+	root, err := preparedHomeRoot()
 	if err != nil {
 		return nil
 	}
-	root = filepath.Join(root, "sessions")
 	rel, err := filepath.Rel(root, home)
 	if err != nil || rel == "." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
 		return nil
@@ -82,6 +110,7 @@ func TakePreparedCleanup(env map[string]string) func() {
 		once.Do(func() {
 			if codexSessionIndex != "" {
 				if err := persistPreparedCodexSessionIndex(home, codexSessionIndex); err != nil {
+					keepPreparedHome(home)
 					fmt.Fprintf(os.Stderr,
 						"Warning: preserve Codex session names: %v\nTemporary state kept at %s\n",
 						err, home,
@@ -92,6 +121,13 @@ func TakePreparedCleanup(env map[string]string) func() {
 			removePreparedHomeAfterQuiet(home)
 		})
 	}
+}
+
+// keepPreparedHome marks a home the CLI is deliberately leaving behind so the user can recover state from it. Without the marker the next launch would see the owner PID gone and reap the very directory the warning above tells the user to go look at.
+func keepPreparedHome(home string) {
+	_ = os.WriteFile(filepath.Join(home, preparedHomeKeepFile), []byte(
+		"EveryAPI kept this session directory because it could not merge the launch's Codex session index back into the persistent Codex home. Nothing here is read again; delete the directory once you no longer need it.\n",
+	), 0o600)
 }
 
 func removePreparedHomeAfterQuiet(home string) {
@@ -114,4 +150,88 @@ func removePreparedHomeAfterQuiet(home string) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+// sweepStalePreparedHomes reclaims prepared client homes orphaned by an `everyapi` process that died without running its cleanup — SIGKILL, an OOM kill, a reboot. Without it the directory only grows: a normal exit (including the child dying on a signal) removes its own home through TakePreparedCleanup, but a hard-killed parent leaves a Codex home behind at tens of thousands of files apiece.
+//
+// Nothing reachable is lost. Every launch mints a fresh MkdirTemp home and no launch ever looks inside an older one, so an orphan's contents are already unreachable by the tool that wrote them; the state that outlives a session is linked out, not stored here (Codex's rollouts and archive are symlinks into the persistent codex-home — see preparedCodexHomeEnv — and RemoveAll deletes the link, not the target).
+//
+// Every error is ignored: a sweep failure must never block a launch.
+func sweepStalePreparedHomes(root string) {
+	condemned := condemnStalePreparedHomes(root, time.Now())
+	if len(condemned) == 0 {
+		return
+	}
+	// The rename is what makes a home unreachable and it is O(1); the recursive delete is not, and running it inline would stall every launch behind the whole backlog. Detached so the launch proceeds at once — the process outlives the child, and a delete cut short by an early exit leaves a .reaping- directory the next sweep finishes unconditionally.
+	go func() {
+		for _, path := range condemned {
+			_ = os.RemoveAll(path)
+		}
+	}()
+}
+
+// condemnStalePreparedHomes renames every reapable home under root out of the live namespace and returns the renamed paths. Split from the deletion so tests can drive the policy without racing a background goroutine.
+func condemnStalePreparedHomes(root string, now time.Time) []string {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil
+	}
+	var condemned []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.IsDir() {
+			continue
+		}
+		if strings.HasPrefix(name, preparedHomeReapPrefix) {
+			// An earlier sweep already condemned this one and exited before the delete finished. It is out of the live namespace by definition, so no age or owner check applies.
+			condemned = append(condemned, filepath.Join(root, name))
+			continue
+		}
+		home := filepath.Join(root, name)
+		if !preparedHomeIsStale(home, entry, now) {
+			continue
+		}
+		target := filepath.Join(root, preparedHomeReapPrefix+name)
+		if err := os.Rename(home, target); err != nil {
+			continue
+		}
+		condemned = append(condemned, target)
+	}
+	return condemned
+}
+
+// preparedHomeIsStale reports whether a prepared home has stopped belonging to a working launch. Keeping is the safe answer at every branch: reaping a live home breaks a running tool, while keeping a dead one costs one launch's worth of disk until the next sweep.
+func preparedHomeIsStale(home string, entry os.DirEntry, now time.Time) bool {
+	if _, err := os.Lstat(filepath.Join(home, preparedHomeKeepFile)); err == nil {
+		return false
+	}
+	info, err := entry.Info()
+	if err != nil {
+		return false
+	}
+	// A live session's own writes land in subdirectories and in SQLite files it opened at startup, so this ModTime tracks top-level entry churn rather than real idleness. It is only ever used as a floor next to the owner check, never as the primary signal.
+	age := now.Sub(info.ModTime())
+	owner, ok := readPreparedHomeOwner(home)
+	if !ok {
+		return age >= unownedPreparedHomeAge
+	}
+	if preparedHomeOwnerAlive(owner) {
+		return age >= abandonedPreparedHomeAge
+	}
+	return true
+}
+
+// preparedHomeOwnerAlive is procstate.Alive behind a seam, so the sweep's policy can be exercised for both answers without spawning and reaping real processes to manufacture them.
+var preparedHomeOwnerAlive = procstate.Alive
+
+func readPreparedHomeOwner(home string) (int, bool) {
+	body, err := os.ReadFile(filepath.Join(home, preparedHomeOwnerFile))
+	if err != nil {
+		return 0, false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(body)))
+	if err != nil || pid <= 0 {
+		return 0, false
+	}
+	return pid, true
 }

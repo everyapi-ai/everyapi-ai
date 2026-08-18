@@ -21,6 +21,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/procstate"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 	"github.com/everyapi-ai/everyapi-sdk/sanitizer"
 )
@@ -124,7 +125,7 @@ func proxyStart(args []string) error {
 
 	// Refuse to start if another instance is already running — checked BEFORE the port-conflict fallback and the --detach re-exec so a redundant `proxy start` (foreground or --detach) reports the clean "already running" message instead of auto-falling to an ephemeral port and spawning a doomed child that then times out unhealthy. A stale PID file (previous proxy died without cleanup) is cleared transparently; a live PID returns an error so the user knows. We use processAlive (not the health probe) here on purpose: refusing while *any* live process holds that recorded PID is the conservative choice against double-binding the port.
 	if pid, _, ok := readPIDFile(); ok {
-		if processAlive(pid) {
+		if procstate.Alive(pid) {
 			return fmt.Errorf("sanitizer proxy already running (pid=%d); use 'everyapi proxy stop' to stop it", pid)
 		}
 		// Stale; clear it before we claim ownership ourselves.
@@ -232,7 +233,7 @@ func proxyStop(args []string) error {
 			cliout.Println(i18n.T("proxy.stop_was_not_running"))
 			return nil
 		}
-	} else if !processAlive(pid) {
+	} else if !procstate.Alive(pid) {
 		_ = removePIDFile()
 		cliout.Println(i18n.T("proxy.stop_was_not_running"))
 		return nil
@@ -245,7 +246,7 @@ func proxyStop(args []string) error {
 	}
 	if err := terminateProcess(proc); err != nil {
 		// If the process is genuinely still alive, the signal failed for some other reason (permission denied, etc.). Do NOT remove the PID file — that would orphan a still-running detached proxy with no CLI handle. Leave the file and surface the error.
-		if processAlive(pid) {
+		if procstate.Alive(pid) {
 			return fmt.Errorf("signal pid %d: %w", pid, err)
 		}
 		// Process is gone (raced us between the probe and the signal). Clean up the stale file.
@@ -257,7 +258,7 @@ func proxyStop(args []string) error {
 	// Wait for the process to actually exit before reporting success. The server uses a 5s graceful-shutdown grace, so poll a hair longer (6s) — a 3s deadline expires mid-shutdown and falsely reports "still alive" for a proxy that is cleanly draining.
 	deadline := time.Now().Add(6 * time.Second)
 	for time.Now().Before(deadline) {
-		if !processAlive(pid) {
+		if !procstate.Alive(pid) {
 			_ = removePIDFile()
 			cliout.Println(i18n.T("proxy.stop_stopped"))
 			return nil
@@ -418,7 +419,7 @@ func proxyConfigure(args []string) error {
 	}
 	cliout.Printf(i18n.T("proxy.configure_saved")+"\n", cfgPath)
 	// Hint: if a proxy is running, it won't pick up the new config until restart. Detect that and tell the user.
-	if pid, _, ok := readPIDFile(); ok && processAlive(pid) {
+	if pid, _, ok := readPIDFile(); ok && procstate.Alive(pid) {
 		cliout.Println("")
 		cliout.Println(i18n.T("proxy.configure_restart_hint_1"))
 		cliout.Println(i18n.T("proxy.configure_restart_hint_2"))
@@ -452,7 +453,7 @@ func IsRunning() bool {
 		_ = removePIDFile()
 		return false
 	}
-	return processAlive(pid)
+	return procstate.Alive(pid)
 }
 
 // sanitizerHealthAt reports whether OUR sanitizer proxy answers at http://<listen>/__sanitizer/health — a 200 with the "ok" body that handleHealth serves. Anything else (network error, non-200, or a foreign service squatting a reused port) is "not our proxy". This mirrors cmd.sanitizerHealthy, replicated here because that helper is unexported in a different package.
@@ -528,26 +529,6 @@ func removePIDFile() error {
 		return err
 	}
 	return nil
-}
-
-// processAlive returns true if `pid` is a running process we can signal. os.FindProcess on Unix always succeeds — the real liveness check is Signal(0). We treat "operation not permitted" as alive (another user's PID; not us, but it IS alive — better to refuse to start a second instance than to overwrite their port).
-func processAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	if err := proc.Signal(syscall.Signal(0)); err != nil {
-		if strings.Contains(err.Error(), "process already finished") ||
-			strings.Contains(err.Error(), "no such process") {
-			return false
-		}
-		// Other errors (permission denied, etc.) → assume alive, don't overwrite.
-		return true
-	}
-	return true
 }
 
 // reexecDetached spawns ourselves in foreground mode without the --detach flag, redirecting stdout/stderr to ~/.config/everyapi/sanitizer.log and detaching from the calling terminal. Returns once the child reports healthy via /__sanitizer/health (so callers like `everyapi use` know the proxy is actually ready to take requests, not just spawned).

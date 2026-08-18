@@ -30,6 +30,8 @@ func Auth(args []string) error {
 		return DiagnosticChatMachine(args[1:])
 	case "overview":
 		return OverviewMachine(args[1:])
+	case "referral":
+		return ReferralMachine(args[1:])
 	default:
 		cliout.Println(i18n.T("auth.usage"))
 		return fmt.Errorf(i18n.T("auth.unknown_sub"), args[0])
