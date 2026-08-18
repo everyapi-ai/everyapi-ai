@@ -47,11 +47,17 @@ func prepareKiloWithModels(apiBase, _ string, models []Model) (map[string]string
 	}
 	config := prepared["OPENCODE_CONFIG_CONTENT"]
 	if config == "" {
+		if home := prepared[preparedHomeMarker]; home != "" {
+			removePreparedHomeAfterQuiet(home)
+		}
 		return nil, fmt.Errorf("Kilo provider config is empty")
 	}
-	home, err := newPreparedHome("kilo")
-	if err != nil {
-		return nil, err
+	home := prepared[preparedHomeMarker]
+	if home == "" {
+		home, err = newPreparedHome("kilo")
+		if err != nil {
+			return nil, err
+		}
 	}
 	env := preparedHomeEnv("KILO_CONFIG_DIR", home)
 	env["KILO_CONFIG_CONTENT"] = config

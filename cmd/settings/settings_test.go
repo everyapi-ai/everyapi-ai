@@ -132,6 +132,28 @@ func TestGatewayRegion_WriteReadRoundTrip(t *testing.T) {
 	}
 }
 
+func TestTerminalModeWriteReadRoundTrip(t *testing.T) {
+	s := &config.Settings{}
+	if value, ok := readKey(s, "terminal_mode"); !ok || value != "unset" {
+		t.Fatalf("readKey(terminal_mode) on empty = %q,%v; want unset,true", value, ok)
+	}
+	if err := writeKey(s, "terminal_mode", "  TMUX "); err != nil {
+		t.Fatalf("writeKey tmux: %v", err)
+	}
+	if s.TerminalMode != "tmux" {
+		t.Fatalf("TerminalMode = %q, want tmux", s.TerminalMode)
+	}
+	if value, _ := readKey(s, "terminal_mode"); value != "tmux" {
+		t.Fatalf("readKey(terminal_mode) = %q, want tmux", value)
+	}
+	if err := writeKey(s, "terminal_mode", "native"); err != nil {
+		t.Fatalf("writeKey native: %v", err)
+	}
+	if err := writeKey(s, "terminal_mode", "screen"); err == nil {
+		t.Fatal("writeKey accepted an invalid terminal_mode")
+	}
+}
+
 func TestSafetyPreferencesWriteReadRoundTrip(t *testing.T) {
 	s := &config.Settings{}
 	for _, key := range []string{"codex_hook_trust_bypass", "dangerous_mode"} {
@@ -158,7 +180,7 @@ func TestSafetyPreferencesWriteReadRoundTrip(t *testing.T) {
 
 // The editor is the only surface most people ever see, and it used to ask two hard-coded questions — so gateway_region, codex_hook_trust_bypass and dangerous_mode existed in the file, in `settings set`, and in `settings list`, but were invisible and unreachable there. Tie the two together: every key writeKey accepts has to have a row.
 func TestSettingRowsCoverEverySettingsKey(t *testing.T) {
-	keys := []string{"language", "menu_layout", "gateway_region", "codex_hook_trust_bypass", "dangerous_mode"}
+	keys := []string{"language", "menu_layout", "gateway_region", "terminal_mode", "codex_hook_trust_bypass", "dangerous_mode"}
 	rows := settingRows()
 	rowKeys := make(map[string]bool, len(rows))
 	for _, row := range rows {
@@ -238,6 +260,7 @@ func TestEditorMenuRendersEveryRow(t *testing.T) {
 		Language:      "zh",
 		MenuLayout:    "nested",
 		GatewayRegion: "cn",
+		TerminalMode:  config.TerminalModeTmux,
 		DangerousMode: &enabled,
 	}
 	var lines []string
@@ -249,20 +272,23 @@ func TestEditorMenuRendersEveryRow(t *testing.T) {
 		lines = append(lines, line)
 	}
 	lines = append(lines, i18n.T("settings.done"))
-	if len(lines) != 7 {
-		t.Fatalf("menu has %d lines, want 6 settings plus Done", len(lines))
+	if len(lines) != 8 {
+		t.Fatalf("menu has %d lines, want 7 settings plus Done", len(lines))
 	}
 	// The value column has to show what is in effect, not the raw field: an unset tri-state reads "unset", not "false".
 	if got := lines[2]; got != "Gateway region: cn" {
 		t.Errorf("gateway region rendered as %q", got)
 	}
-	if got := lines[3]; got != "Codex hook trust bypass: unset" {
+	if got := lines[3]; got != "Terminal mode: tmux session" {
+		t.Errorf("terminal mode rendered as %q", got)
+	}
+	if got := lines[4]; got != "Codex hook trust bypass: unset" {
 		t.Errorf("unset tri-state rendered as %q", got)
 	}
-	if got := lines[4]; got != "Dangerous mode: on" {
+	if got := lines[5]; got != "Dangerous mode: on" {
 		t.Errorf("set tri-state rendered as %q", got)
 	}
-	if got := lines[5]; got != "Default API key: not set" {
+	if got := lines[6]; got != "Default API key: not set" {
 		t.Errorf("relay key row rendered as %q", got)
 	}
 	t.Log("interactive editor:\n  " + strings.Join(lines, "\n  "))

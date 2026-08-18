@@ -273,6 +273,9 @@ unset = "non défini"
 default_key_label = "Clé API par défaut"
 default_key_none = "non défini"
 gateway_region_label = "Région de la passerelle"
+terminal_mode_label = "Mode de terminal"
+terminal_mode_native = "terminal natif"
+terminal_mode_tmux = "session tmux"
 codex_bypass_label = "Contourner la confiance des hooks Codex"
 dangerous_mode_label = "Mode dangereux"
 bool_on = "activé"
@@ -289,6 +292,7 @@ UTILISATION
 
 CLÉS
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
+  terminal_mode                            native | tmux
 
 Le fichier de paramètres est un JSON simple au chemin que
 'everyapi settings list' affiche. L'édition manuelle est OK ; le CLI
@@ -1345,6 +1349,11 @@ yolo_prompt = "Activer %s ? (saute toutes les confirmations de sécurité)"
 hook_trust_prompt = "Autoriser Codex à exécuter les hooks du dépôt sans vérification préalable ?"
 launching = "Lancement de %s contre %s"
 launching_via = "Lancement de %s contre %s → %s"
+tmux_launching = "Lancement dans la session tmux %s (détachez avec Ctrl-b d ; rattachez avec `tmux attach -t %s`)"
+tmux_not_found = "tmux n'est pas installé ; installez tmux ou exécutez `everyapi settings set terminal_mode native`"
+tmux_windows_unsupported = "le mode de terminal tmux n'est pas pris en charge sous Windows ; exécutez `everyapi settings set terminal_mode native`"
+tmux_unavailable_option = "(tmux n'est pas installé)"
+terminal_mode_prompt = "Comment EveryAPI doit-il lancer les outils de programmation ?"
 claude_inflated_resume = "Avertissement : cette session Claude a été créée avec un préfixe de schémas d’outils gonflé de %d tokens. Le correctif EveryAPI s’applique aux nouvelles sessions, mais --resume restaure l’ancien historique sans modification. Démarrez une nouvelle session Claude pour le supprimer."
 claude_polluted_resume_recovered = "Une corruption connue de la sortie Claude a été détectée dans la session %s à %s (%d messages assistant affectés). La session de récupération propre %s a été démarrée ; l’historique d’origine a été conservé intact."
 claude_polluted_resume_selfrecovered = "La session %s contient une corruption connue de la sortie Claude survenue par le passé (à %s), mais elle s’est rétablie d’elle-même ; elle est reprise telle quelle avec la protection des réponses activée."

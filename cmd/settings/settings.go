@@ -64,6 +64,7 @@ func runList(args []string) error {
 	cliout.Printf("  %s: %s\n", i18n.T("settings.lang_label"), labelLanguage(s.Language))
 	cliout.Printf("  %s: %s\n", i18n.T("settings.menu_label"), labelMenuLayout(s.MenuLayout))
 	cliout.Printf("  %s: %s\n", i18n.T("settings.gateway_region_label"), labelGatewayRegion(s.GatewayRegion))
+	cliout.Printf("  %s: %s\n", i18n.T("settings.terminal_mode_label"), labelTerminalMode(s.TerminalMode))
 	cliout.Printf("  %s: %s\n", i18n.T("settings.codex_bypass_label"), displayOptionalBool(s.CodexHookTrustBypass))
 	cliout.Printf("  %s: %s\n", i18n.T("settings.dangerous_mode_label"), displayOptionalBool(s.DangerousMode))
 	path, _ := config.SettingsPath()
@@ -166,6 +167,7 @@ func settingRows() []settingRow {
 		{"language", i18n.T("settings.lang_label"), func(s *config.Settings) string { return labelLanguage(s.Language) }, editLanguage},
 		{"menu_layout", i18n.T("settings.menu_label"), func(s *config.Settings) string { return labelMenuLayout(s.MenuLayout) }, editMenuLayout},
 		{"gateway_region", i18n.T("settings.gateway_region_label"), func(s *config.Settings) string { return labelGatewayRegion(s.GatewayRegion) }, editGatewayRegion},
+		{"terminal_mode", i18n.T("settings.terminal_mode_label"), func(s *config.Settings) string { return labelTerminalMode(s.TerminalMode) }, editTerminalMode},
 		{"codex_hook_trust_bypass", i18n.T("settings.codex_bypass_label"), func(s *config.Settings) string { return displayOptionalBool(s.CodexHookTrustBypass) }, editCodexHookTrustBypass},
 		{"dangerous_mode", i18n.T("settings.dangerous_mode_label"), func(s *config.Settings) string { return displayOptionalBool(s.DangerousMode) }, editDangerousMode},
 		{"", i18n.T("settings.default_key_label"), func(*config.Settings) string { return labelDefaultRelayKey() }, editDefaultRelayKey},
@@ -274,6 +276,21 @@ func editGatewayRegion(s *config.Settings) error {
 	return saveAndReport(s)
 }
 
+func editTerminalMode(s *config.Settings) error {
+	modes := []string{config.TerminalModeNative, config.TerminalModeTmux}
+	opts := []string{i18n.T("settings.terminal_mode_native"), i18n.T("settings.terminal_mode_tmux")}
+	cur := 0
+	if s.TerminalMode == config.TerminalModeTmux {
+		cur = 1
+	}
+	idx, err := cliprompt.PickWithSelected(i18n.T("settings.terminal_mode_label"), opts, cur)
+	if err != nil {
+		return err
+	}
+	s.TerminalMode = modes[idx]
+	return saveAndReport(s)
+}
+
 func editCodexHookTrustBypass(s *config.Settings) error {
 	return editOptionalBool(s, i18n.T("settings.codex_bypass_label"), s.CodexHookTrustBypass, func(v *bool) { s.CodexHookTrustBypass = v })
 }
@@ -341,6 +358,11 @@ func readKey(s *config.Settings, key string) (string, bool) {
 		return effectiveMenuLayout(s.MenuLayout), true
 	case "gateway_region":
 		return config.EffectiveGatewayRegion(s.GatewayRegion), true
+	case "terminal_mode":
+		if s.TerminalMode == "" {
+			return "unset", true
+		}
+		return s.TerminalMode, true
 	case "codex_hook_trust_bypass":
 		return labelOptionalBool(s.CodexHookTrustBypass), true
 	case "dangerous_mode":
@@ -382,6 +404,13 @@ func writeKey(s *config.Settings, key, value string) error {
 		default:
 			return errors.New("gateway_region must be global or cn")
 		}
+	case "terminal_mode":
+		v := strings.ToLower(strings.TrimSpace(value))
+		if v != config.TerminalModeNative && v != config.TerminalModeTmux {
+			return errors.New("terminal_mode must be native or tmux")
+		}
+		s.TerminalMode = v
+		return nil
 	case "codex_hook_trust_bypass", "dangerous_mode":
 		v, err := strconv.ParseBool(strings.TrimSpace(value))
 		if err != nil {
@@ -439,6 +468,17 @@ func labelGatewayRegion(v string) string {
 		return fmt.Sprintf(i18n.T("settings.default_label"), region)
 	}
 	return region
+}
+
+func labelTerminalMode(v string) string {
+	switch v {
+	case config.TerminalModeNative:
+		return i18n.T("settings.terminal_mode_native")
+	case config.TerminalModeTmux:
+		return i18n.T("settings.terminal_mode_tmux")
+	default:
+		return i18n.T("settings.unset")
+	}
 }
 
 // labelLanguage renders an unset Language as "(default)" + the detected fallback, so `settings list` is informative even when no preference is on disk.

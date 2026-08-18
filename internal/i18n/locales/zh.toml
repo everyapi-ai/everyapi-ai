@@ -258,6 +258,9 @@ unset = "未设置"
 default_key_label = "默认 API 密钥"
 default_key_none = "未设置"
 gateway_region_label = "网关区域"
+terminal_mode_label = "终端模式"
+terminal_mode_native = "原生终端"
+terminal_mode_tmux = "tmux 会话"
 codex_bypass_label = "Codex hook 信任绕过"
 dangerous_mode_label = "危险模式"
 bool_on = "开"
@@ -274,6 +277,7 @@ everyapi settings — 查看 / 修改 CLI 偏好
 
 KEY
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
+  terminal_mode                            native | tmux
 
 设置文件是 'everyapi settings list' 打印的路径上的纯 JSON。可手动编辑；
 CLI 下次启动时会重新读取。
@@ -1307,6 +1311,11 @@ yolo_prompt = "启用 %s？（将跳过所有安全确认）"
 hook_trust_prompt = "允许 Codex 不经逐项审查直接运行仓库 hooks？"
 launching = "正在启动 %s，目标 %s"
 launching_via = "正在启动 %s，目标 %s → %s"
+tmux_launching = "正在 tmux 会话 %s 中启动（按 Ctrl-b d 分离；运行 `tmux attach -t %s` 重新连接）"
+tmux_not_found = "未安装 tmux；请安装 tmux，或运行 `everyapi settings set terminal_mode native`"
+tmux_windows_unsupported = "Windows 不支持 tmux 终端模式；请运行 `everyapi settings set terminal_mode native`"
+tmux_unavailable_option = "（未安装 tmux）"
+terminal_mode_prompt = "EveryAPI 应如何启动编程工具？"
 claude_inflated_resume = "警告：这个 Claude 会话创建时注入了膨胀的 %d token 工具 schema 前缀。EveryAPI 的修复只对新会话生效，--resume 会原样恢复旧记录；要去掉它，请新开 Claude 会话。"
 claude_polluted_resume_recovered = "检测到 Claude 会话 %s 在 %s 出现已知输出污染（受影响的 assistant 消息 %d 条）。已启动清洁恢复会话 %s；原始记录保持不变。"
 claude_polluted_resume_selfrecovered = "会话 %s 曾出现已知输出污染（%s），但其后已自行恢复；将原样恢复该会话并启用响应守卫。"

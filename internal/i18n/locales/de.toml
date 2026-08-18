@@ -272,6 +272,9 @@ unset = "nicht gesetzt"
 default_key_label = "Standard-API-Schlüssel"
 default_key_none = "nicht gesetzt"
 gateway_region_label = "Gateway-Region"
+terminal_mode_label = "Terminalmodus"
+terminal_mode_native = "natives Terminal"
+terminal_mode_tmux = "tmux-Sitzung"
 codex_bypass_label = "Codex-Hook-Vertrauen umgehen"
 dangerous_mode_label = "Gefährlicher Modus"
 bool_on = "an"
@@ -288,6 +291,7 @@ VERWENDUNG
 
 SCHLÜSSEL
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
+  terminal_mode                            native | tmux
 
 Die Einstellungsdatei ist einfaches JSON unter dem Pfad, den
 'everyapi settings list' anzeigt. Manuelles Bearbeiten ist in Ordnung;
@@ -1340,6 +1344,11 @@ yolo_prompt = "%s aktivieren? (überspringt jede Sicherheitsabfrage)"
 hook_trust_prompt = "Codex erlauben, Repository-Hooks ohne vorherige Prüfung auszuführen?"
 launching = "Starte %s gegen %s"
 launching_via = "Starte %s gegen %s → %s"
+tmux_launching = "Start in tmux-Sitzung %s (mit Ctrl-b d trennen; mit `tmux attach -t %s` wieder verbinden)"
+tmux_not_found = "tmux ist nicht installiert; installiere tmux oder führe `everyapi settings set terminal_mode native` aus"
+tmux_windows_unsupported = "der tmux-Terminalmodus wird unter Windows nicht unterstützt; führe `everyapi settings set terminal_mode native` aus"
+tmux_unavailable_option = "(tmux ist nicht installiert)"
+terminal_mode_prompt = "Wie soll EveryAPI Coding-Tools starten?"
 claude_inflated_resume = "Warnung: Diese Claude-Sitzung wurde mit einem aufgeblähten Tool-Schema-Präfix von %d Token erstellt. Die EveryAPI-Korrektur gilt für neue Sitzungen, aber --resume stellt das alte Protokoll unverändert wieder her. Starten Sie eine neue Claude-Sitzung, um es zu entfernen."
 claude_polluted_resume_recovered = "Bekannte Claude-Ausgabebeschädigung in Sitzung %s um %s erkannt (%d betroffene Assistant-Nachrichten). Die bereinigte Wiederherstellungssitzung %s wurde gestartet; das ursprüngliche Protokoll blieb unverändert."
 claude_polluted_resume_selfrecovered = "Sitzung %s enthält eine frühere bekannte Claude-Ausgabebeschädigung (um %s), hat sich aber selbst erholt; sie wird unverändert fortgesetzt und der Antwortschutz aktiviert."

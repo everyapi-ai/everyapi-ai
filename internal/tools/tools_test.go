@@ -197,6 +197,46 @@ func TestEnv_OpenCodeUsesOfficialCompatibleProviderWithoutPersistingTheKey(t *te
 	}
 }
 
+func TestPrepareOpenCodeAddsProcessScopedTmuxInstructions(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("TMUX", "/tmp/tmux-501/default,1,0")
+	t.Setenv(TerminalModeEnvironment, "tmux")
+	t.Setenv(TmuxSessionEnvironment, "everyapi-123-456")
+	t.Setenv(TmuxAttachCommandEnvironment, "tmux attach -t everyapi-123-456")
+	tool, err := Lookup("opencode")
+	if err != nil {
+		t.Fatal(err)
+	}
+	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "token", []Model{{ID: "gpt-5", SupportedEndpointTypes: []string{"openai"}}}, "gpt-5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config struct {
+		Instructions []string `json:"instructions"`
+	}
+	if err := json.Unmarshal([]byte(extra["OPENCODE_CONFIG_CONTENT"]), &config); err != nil {
+		t.Fatal(err)
+	}
+	if len(config.Instructions) != 1 {
+		t.Fatalf("OpenCode instructions = %#v, want one process-scoped file", config.Instructions)
+	}
+	body, err := os.ReadFile(config.Instructions[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != TmuxAgentInstructions()+"\n" {
+		t.Fatalf("OpenCode tmux instructions = %q", body)
+	}
+	cleanup := TakePreparedCleanup(extra)
+	if cleanup == nil {
+		t.Fatal("OpenCode tmux instruction file has no lifecycle cleanup")
+	}
+	cleanup()
+	if _, err := os.Stat(config.Instructions[0]); !os.IsNotExist(err) {
+		t.Fatalf("OpenCode tmux instruction file remained after cleanup: %v", err)
+	}
+}
+
 // TestEnv_Gemini verifies Google's documented Gemini CLI environment contract.
 func TestEnv_Gemini(t *testing.T) {
 	tool, _ := Lookup("gemini")

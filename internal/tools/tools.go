@@ -11,6 +11,7 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -107,9 +108,10 @@ type openCodeProvider struct {
 }
 
 type openCodeConfig struct {
-	Schema   string                      `json:"$schema"`
-	Provider map[string]openCodeProvider `json:"provider"`
-	Model    string                      `json:"model,omitempty"`
+	Schema       string                      `json:"$schema"`
+	Provider     map[string]openCodeProvider `json:"provider"`
+	Model        string                      `json:"model,omitempty"`
+	Instructions []string                    `json:"instructions,omitempty"`
 }
 
 // prepareOpenCodeWithModels uses OpenCode's documented custom-provider contract through OPENCODE_CONFIG_CONTENT. The content carries only a fixed environment reference; the relay key itself is supplied separately to the child process and is never written to opencode.json or another config file.
@@ -167,11 +169,32 @@ func prepareOpenCodeWithModels(apiBase, _ string, models []Model, bootModel stri
 	if selected != "" {
 		config.Model = selected
 	}
+	preparedHome := ""
+	if instructions := TmuxAgentInstructions(); instructions != "" {
+		home, err := newPreparedHome("opencode")
+		if err != nil {
+			return nil, err
+		}
+		preparedHome = home
+		instructionsPath := filepath.Join(preparedHome, "tmux-context.md")
+		if err := writeFileAtomic(instructionsPath, []byte(instructions+"\n"), 0o600); err != nil {
+			removePreparedHomeAfterQuiet(preparedHome)
+			return nil, err
+		}
+		config.Instructions = []string{instructionsPath}
+	}
 	body, err := json.Marshal(config)
 	if err != nil {
+		if preparedHome != "" {
+			removePreparedHomeAfterQuiet(preparedHome)
+		}
 		return nil, fmt.Errorf("encode OpenCode provider config: %w", err)
 	}
-	return map[string]string{"OPENCODE_CONFIG_CONTENT": string(body)}, nil
+	env := map[string]string{"OPENCODE_CONFIG_CONTENT": string(body)}
+	if preparedHome != "" {
+		env[preparedHomeMarker] = preparedHome
+	}
+	return env, nil
 }
 
 func modelSupportsEndpoint(types []string, required string) bool {

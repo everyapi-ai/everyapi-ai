@@ -273,6 +273,14 @@ func TestUseUsageDocumentsTransparentFlag(t *testing.T) {
 	}
 }
 
+func TestUseUsageDocumentsTerminalMode(t *testing.T) {
+	for _, text := range []string{"terminal_mode", "native", "tmux", "non-interactive"} {
+		if !strings.Contains(useUsage, text) {
+			t.Errorf("use help does not document %q", text)
+		}
+	}
+}
+
 func TestUseUsageDocumentsGrok(t *testing.T) {
 	if !strings.Contains(useUsage, "grok") {
 		t.Fatal("use help does not list grok")
@@ -842,6 +850,39 @@ func TestForgeResponseOnlyModelReachesResponsesProvider(t *testing.T) {
 	}
 	if strings.Contains(string(body), "secret-relay-key") {
 		t.Fatal("Forge config persisted the relay credential")
+	}
+}
+
+func TestApplyTmuxAgentContextMergesClaudeSystemPrompt(t *testing.T) {
+	t.Setenv("TMUX", "/tmp/tmux-501/default,1,0")
+	t.Setenv(tools.TerminalModeEnvironment, "tmux")
+	t.Setenv(tools.TmuxSessionEnvironment, "everyapi-123-456")
+	t.Setenv(tools.TmuxAttachCommandEnvironment, "tmux attach -t everyapi-123-456")
+	claude, err := tools.Lookup("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := applyTmuxAgentContext(claude, []string{"--append-system-prompt", "User instructions", "resume"})
+	want := []string{"--append-system-prompt", "User instructions\n\n" + tools.TmuxAgentInstructions(), "resume"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Claude args = %#v, want %#v", got, want)
+	}
+	got = applyTmuxAgentContext(claude, []string{"--append-system-prompt=Inline instructions", "resume"})
+	want = []string{"--append-system-prompt=Inline instructions\n\n" + tools.TmuxAgentInstructions(), "resume"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Claude inline-prompt args = %#v, want %#v", got, want)
+	}
+	got = applyTmuxAgentContext(claude, []string{"resume"})
+	want = []string{"--append-system-prompt", tools.TmuxAgentInstructions(), "resume"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Claude args without user prompt = %#v, want %#v", got, want)
+	}
+	if got := applyTmuxAgentContext(claude, []string{"--help"}); !reflect.DeepEqual(got, []string{"--help"}) {
+		t.Fatalf("Claude help args = %#v, want unchanged", got)
+	}
+	t.Setenv("TMUX", "")
+	if got := applyTmuxAgentContext(claude, []string{"resume"}); !reflect.DeepEqual(got, []string{"resume"}) {
+		t.Fatalf("Claude native args = %#v, want unchanged", got)
 	}
 }
 

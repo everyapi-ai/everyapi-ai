@@ -379,8 +379,11 @@ $ everyapi settings                          # interactive picker: choose a lang
 $ everyapi settings list                     # show current settings
 $ everyapi settings set language zh          # set directly
 $ everyapi settings set language fr          # French likewise
+$ everyapi settings set terminal_mode tmux   # keep interactive tool launches in tmux
 $ everyapi settings reset                    # reset to default (en + LANG auto-detect)
 ```
+
+**Terminal mode**: the first interactive `everyapi use` asks whether launches should stay in the native terminal or run in tmux, then saves the choice as `terminal_mode`. Tmux mode restarts the complete `everyapi use` process inside a uniquely named session so its connector, sanitizer, temporary configuration, and target tool all survive a detach; the launch message prints the exact `tmux attach -t <session>` command. Every launched client can inspect `EVERYAPI_TERMINAL_MODE`, `EVERYAPI_TMUX_SESSION`, and `EVERYAPI_TMUX_ATTACH_COMMAND`; Codex, Claude Code, OpenCode, and Kilo also receive the same session context through their documented model-instruction surfaces, including a rule not to create a nested tmux session. Other clients retain the environment contract without an injected user message, so tmux mode never changes their interactive, resume, or headless semantics. A launch that is already inside tmux is not nested, and non-interactive launches always remain native. If tmux is unavailable, the first-run picker disables that option; an existing tmux preference fails with installation/switch-back guidance instead of silently changing behavior.
 
 **Auto-detect**: if you haven't explicitly set anything, the CLI reads env vars in the order `EVERYAPI_LANG > LC_ALL > LC_MESSAGES > LANG` on startup. A system locale of `zh_CN.UTF-8` / `ja_JP.UTF-8` / `fr_FR.UTF-8` etc. takes effect immediately — zero config.
 

@@ -78,6 +78,8 @@ enable dangerous mode (and, for Codex, whether to bypass hook trust review).
 Your choices are saved in settings.json and reused without prompting. The
 prompt defaults to Yes, but no dangerous option is enabled before you confirm.
 
+Terminal preference: the first interactive launch asks whether to use the native terminal or a persistent tmux session, then saves 'terminal_mode' in settings.json. Tmux launches expose the session name and attach command to every client; Codex, Claude Code, OpenCode, and Kilo also receive proactive model context. A non-interactive launch always uses the native terminal. Change it later with 'everyapi settings set terminal_mode native|tmux'.
+
 EXAMPLES
   everyapi use claude                  (transparent by default)
   everyapi use claude --transparent=false
@@ -112,6 +114,11 @@ EXAMPLES
 //
 // Flags may appear before or after the tool name; a value attached with `=` (`--channel=byteplus`) is always explicit. Space form (`--channel team-a`) consumes the next token as the value unless it's another flag or a known tool name — so `everyapi use claude --channel` opens the picker while `--channel team-a claude` is explicit. A group literally named like a registered tool needs the `=` form when it appears before the tool positional. A bare `--` ends everyapi's option parsing; everything after is forwarded raw to the tool — use it for tool flags like claude's `--dangerously-skip-permissions` or codex's `--dangerously-bypass-*`.
 func Use(args []string) error {
+	var err error
+	args, err = consumeTmuxUseArgs(args)
+	if err != nil {
+		return err
+	}
 	if wantsUseHelp(args) {
 		cliout.Println(useUsage)
 		return nil
@@ -119,6 +126,9 @@ func Use(args []string) error {
 
 	toolName, group, pickGroup, sanitize, transparentFlag, extraArgs, model, pickModel, err := parseUseArgsWithTransparent(args)
 	if err != nil {
+		return err
+	}
+	if err := maybeRelaunchUseInTerminal(args); err != nil {
 		return err
 	}
 
@@ -136,7 +146,6 @@ func Use(args []string) error {
 	if creds.OAuthClientID != "" && (group != "" || pickGroup) {
 		return errors.New(i18n.T("use.relay_key_mode_group"))
 	}
-
 	if toolName == "" {
 		toolName, err = interactivePicker()
 		if err != nil {
@@ -488,6 +497,7 @@ func Use(args []string) error {
 		return fmt.Errorf("prepare %s: %w", t.ExecName, err)
 	}
 	extraArgs = append(tools.TakePreparedArgs(extraEnv), extraArgs...)
+	extraArgs = applyTmuxAgentContext(t, extraArgs)
 	preparedCleanup := tools.TakePreparedCleanup(extraEnv)
 	if preparedCleanup != nil {
 		defer preparedCleanup()
@@ -527,6 +537,48 @@ func Use(args []string) error {
 		return tools.ExecWithOptions(t, tools.ExecOptions{Env: env, Args: extraArgs, Cleanup: cleanup})
 	}
 	return tools.Exec(t, env, extraArgs)
+}
+
+func applyTmuxAgentContext(t *tools.Tool, args []string) []string {
+	instructions := tools.TmuxAgentInstructions()
+	if t == nil || t.Name != "claude" || instructions == "" || !toolInvocationNeedsEndpoint(args) {
+		return args
+	}
+	const flag = "--append-system-prompt"
+	lastValue := -1
+	lastEquals := -1
+	for index := 0; index < len(args); index++ {
+		switch {
+		case args[index] == flag:
+			if index+1 >= len(args) {
+				return args
+			}
+			lastValue = index + 1
+			lastEquals = -1
+			index++
+		case strings.HasPrefix(args[index], flag+"="):
+			lastValue = -1
+			lastEquals = index
+		}
+	}
+	merged := append([]string(nil), args...)
+	appendInstructions := func(existing string) string {
+		if existing == "" {
+			return instructions
+		}
+		return existing + "\n\n" + instructions
+	}
+	switch {
+	case lastValue >= 0:
+		merged[lastValue] = appendInstructions(merged[lastValue])
+		return merged
+	case lastEquals >= 0:
+		value := strings.TrimPrefix(merged[lastEquals], flag+"=")
+		merged[lastEquals] = flag + "=" + appendInstructions(value)
+		return merged
+	default:
+		return append([]string{flag, instructions}, merged...)
+	}
 }
 
 func combineCleanups(cleanups ...func()) func() {

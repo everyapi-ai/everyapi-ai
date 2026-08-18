@@ -71,6 +71,37 @@ func TestPrepareCodex_WritesFiles(t *testing.T) {
 	}
 }
 
+func TestPrepareCodexAddsOnlyCurrentTmuxContext(t *testing.T) {
+	_, codexHome := codexTestHome(t)
+	t.Setenv("TMUX", "/tmp/tmux-501/default,1,0")
+	t.Setenv(TerminalModeEnvironment, "tmux")
+	t.Setenv(TmuxSessionEnvironment, "everyapi-123-456")
+	t.Setenv(TmuxAttachCommandEnvironment, "tmux attach -t everyapi-123-456")
+	if _, err := prepareCodex("https://api.everyapi.ai", "token"); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(codexHome, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `developer_instructions = "You are running inside tmux session everyapi-123-456 for an EveryAPI tmux-mode launch.`) {
+		t.Fatalf("Codex config missing tmux developer instructions:\n%s", body)
+	}
+
+	t.Setenv("TMUX", "")
+	t.Setenv(TerminalModeEnvironment, "native")
+	if _, err := prepareCodex("https://api.everyapi.ai", "token"); err != nil {
+		t.Fatal(err)
+	}
+	body, err = os.ReadFile(filepath.Join(codexHome, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "developer_instructions") {
+		t.Fatalf("Codex native config retained stale tmux instructions:\n%s", body)
+	}
+}
+
 func TestPrepareCodexTransparentUsesBuiltInOpenAIProviderAndPlaceholder(t *testing.T) {
 	_, codexHome := codexTestHome(t)
 	tool, _ := Lookup("codex")

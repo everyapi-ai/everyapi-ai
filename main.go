@@ -801,6 +801,16 @@ func main() {
 	}
 	name := os.Args[1]
 	args := os.Args[2:]
+	if cmd.IsTmuxUseWrapperCommand(name) {
+		exitCode, err := cmd.RunTmuxUseWrapper()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), cliout.Sanitize(err.Error()))
+			if exitCode == 0 {
+				exitCode = 1
+			}
+		}
+		os.Exit(exitCode)
+	}
 	// Private sidecar surface for EveryAPI Connect. It intentionally bypasses the public command registry, help, launcher, login gate, and update prompt: the desktop opens it in a terminal solely to run a registry-pinned tool installer. InstallTool never continues into `use` or launches the client.
 	if name == "desktop-install-tool" {
 		if err := cmd.InstallTool(args); err != nil {
@@ -828,7 +838,7 @@ func main() {
 	}
 
 	// Auto-update check: cached-only, interactive-only. If a newer release is cached and the user picks "update now", we run the upgrade and skip the original command (an old binary running right after a brew upgrade kicked off is asking for trouble). "Later" / "skip this version" / non-TTY / dev build / opt-out env all fall through to the original command unchanged.
-	if cmd.MaybePromptUpdate(name) {
+	if !cmd.IsTmuxUseReentry(args) && cmd.MaybePromptUpdate(name) {
 		return
 	}
 

@@ -408,6 +408,39 @@ func TestKiloPrepareRoutesResponsesModelsThroughCompatibleChatBridge(t *testing.
 	}
 }
 
+func TestKiloTmuxInstructionsShareItsPreparedHomeLifecycle(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("TMUX", "/tmp/tmux-501/default,1,0")
+	t.Setenv(TerminalModeEnvironment, "tmux")
+	t.Setenv(TmuxSessionEnvironment, "everyapi-123-456")
+	t.Setenv(TmuxAttachCommandEnvironment, "tmux attach -t everyapi-123-456")
+	t.Setenv(kiloModelEnv, "gpt-5")
+	extra, err := prepareKiloWithModels("https://api.everyapi.ai", "token", []Model{{ID: "gpt-5", SupportedEndpointTypes: []string{"openai"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config struct {
+		Instructions []string `json:"instructions"`
+	}
+	if err := json.Unmarshal([]byte(extra["KILO_CONFIG_CONTENT"]), &config); err != nil {
+		t.Fatal(err)
+	}
+	if len(config.Instructions) != 1 {
+		t.Fatalf("Kilo instructions = %#v, want one process-scoped file", config.Instructions)
+	}
+	if filepath.Dir(config.Instructions[0]) != extra["KILO_CONFIG_DIR"] {
+		t.Fatalf("Kilo instruction path %q is outside prepared home %q", config.Instructions[0], extra["KILO_CONFIG_DIR"])
+	}
+	cleanup := TakePreparedCleanup(extra)
+	if cleanup == nil {
+		t.Fatal("Kilo tmux instructions have no lifecycle cleanup")
+	}
+	cleanup()
+	if _, err := os.Stat(config.Instructions[0]); !os.IsNotExist(err) {
+		t.Fatalf("Kilo tmux instruction file remained after cleanup: %v", err)
+	}
+}
+
 func TestKiloPromptCacheBreakpointCohort(t *testing.T) {
 	tests := []struct {
 		modelID string

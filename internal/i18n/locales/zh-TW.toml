@@ -258,6 +258,9 @@ unset = "未設定"
 default_key_label = "預設 API 金鑰"
 default_key_none = "未設定"
 gateway_region_label = "閘道區域"
+terminal_mode_label = "終端模式"
+terminal_mode_native = "原生終端"
+terminal_mode_tmux = "tmux 工作階段"
 codex_bypass_label = "Codex hook 信任略過"
 dangerous_mode_label = "危險模式"
 bool_on = "開"
@@ -274,6 +277,7 @@ everyapi settings — 查看 / 修改 CLI 偏好
 
 KEY
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
+  terminal_mode                            native | tmux
 
 設定檔是 'everyapi settings list' 印出的路徑上的純 JSON。可手動編輯；
 CLI 下次啟動時會重新讀取。
@@ -1306,6 +1310,11 @@ yolo_prompt = "啟用 %s？（將略過所有安全確認）"
 hook_trust_prompt = "允許 Codex 不經逐項審查直接執行儲存庫 hooks？"
 launching = "正在啟動 %s，目標 %s"
 launching_via = "正在啟動 %s，目標 %s → %s"
+tmux_launching = "正在 tmux 工作階段 %s 中啟動（按 Ctrl-b d 分離；執行 `tmux attach -t %s` 重新連線）"
+tmux_not_found = "尚未安裝 tmux；請安裝 tmux，或執行 `everyapi settings set terminal_mode native`"
+tmux_windows_unsupported = "Windows 不支援 tmux 終端模式；請執行 `everyapi settings set terminal_mode native`"
+tmux_unavailable_option = "（尚未安裝 tmux）"
+terminal_mode_prompt = "EveryAPI 應如何啟動程式設計工具？"
 claude_inflated_resume = "警告：這個 Claude 工作階段建立時注入了膨脹的 %d token 工具 schema 前綴。EveryAPI 的修正只對新工作階段生效，--resume 會原樣恢復舊記錄；要移除它，請新開 Claude 工作階段。"
 claude_polluted_resume_recovered = "偵測到 Claude 工作階段 %s 於 %s 出現已知輸出污染（受影響的 assistant 訊息 %d 則）。已啟動乾淨的復原工作階段 %s；原始記錄保持不變。"
 claude_polluted_resume_selfrecovered = "工作階段 %s 曾出現已知輸出污染（%s），但其後已自行復原；將原樣恢復該工作階段並啟用回應防護。"

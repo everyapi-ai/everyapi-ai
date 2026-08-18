@@ -259,6 +259,9 @@ unset = "unset"
 default_key_label = "Default API key"
 default_key_none = "not set"
 gateway_region_label = "Gateway region"
+terminal_mode_label = "Terminal mode"
+terminal_mode_native = "native terminal"
+terminal_mode_tmux = "tmux session"
 codex_bypass_label = "Codex hook trust bypass"
 dangerous_mode_label = "Dangerous mode"
 bool_on = "on"
@@ -275,6 +278,7 @@ USAGE
 
 KEYS
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
+  terminal_mode                            native | tmux
 
 The settings file is plain JSON at the path 'everyapi settings list'
 prints. Hand-editing is fine; the CLI re-reads on next invocation.
@@ -1322,6 +1326,11 @@ yolo_prompt = "Enable %s? (skips every safety prompt)"
 hook_trust_prompt = "Allow Codex to run repository hooks without reviewing them first?"
 launching = "Launching %s against %s"
 launching_via = "Launching %s against %s → %s"
+tmux_launching = "Launching in tmux session %s (detach with Ctrl-b d; reattach with `tmux attach -t %s`)"
+tmux_not_found = "tmux is not installed; install tmux or run `everyapi settings set terminal_mode native`"
+tmux_windows_unsupported = "tmux terminal mode is not supported on Windows; run `everyapi settings set terminal_mode native`"
+tmux_unavailable_option = "(tmux is not installed)"
+terminal_mode_prompt = "How should EveryAPI launch coding tools?"
 claude_inflated_resume = "Warning: this Claude session was created with an inflated %d-token tool-schema prefix. The EveryAPI fix applies to new sessions, but --resume restores the old transcript unchanged. Start a new Claude session to remove it."
 claude_polluted_resume_recovered = "Detected known Claude output corruption in session %s at %s (%d affected assistant messages). Started clean recovery session %s; the original transcript was preserved."
 claude_polluted_resume_selfrecovered = "Session %s contains a past Claude output corruption burst (at %s) but recovered on its own; resuming it unchanged with the response guard armed."

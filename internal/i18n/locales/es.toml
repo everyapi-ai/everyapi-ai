@@ -274,6 +274,9 @@ unset = "sin definir"
 default_key_label = "Clave API predeterminada"
 default_key_none = "sin definir"
 gateway_region_label = "Región de la pasarela"
+terminal_mode_label = "Modo de terminal"
+terminal_mode_native = "terminal nativo"
+terminal_mode_tmux = "sesión tmux"
 codex_bypass_label = "Omitir la confianza de hooks de Codex"
 dangerous_mode_label = "Modo peligroso"
 bool_on = "activado"
@@ -290,6 +293,7 @@ USO
 
 CLAVES
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
+  terminal_mode                            native | tmux
 
 El archivo de configuración es un JSON plano en la ruta que muestra
 'everyapi settings list'. Editar a mano está bien; el CLI vuelve a
@@ -1342,6 +1346,11 @@ yolo_prompt = "¿Habilitar %s? (omite todas las confirmaciones de seguridad)"
 hook_trust_prompt = "¿Permitir que Codex ejecute hooks del repositorio sin revisarlos antes?"
 launching = "Iniciando %s contra %s"
 launching_via = "Iniciando %s contra %s → %s"
+tmux_launching = "Iniciando en la sesión tmux %s (separa con Ctrl-b d; vuelve con `tmux attach -t %s`)"
+tmux_not_found = "tmux no está instalado; instala tmux o ejecuta `everyapi settings set terminal_mode native`"
+tmux_windows_unsupported = "el modo de terminal tmux no es compatible con Windows; ejecuta `everyapi settings set terminal_mode native`"
+tmux_unavailable_option = "(tmux no está instalado)"
+terminal_mode_prompt = "¿Cómo debe iniciar EveryAPI las herramientas de programación?"
 claude_inflated_resume = "Advertencia: esta sesión de Claude se creó con un prefijo de esquemas de herramientas inflado de %d tokens. La corrección de EveryAPI se aplica a sesiones nuevas, pero --resume restaura el historial anterior sin cambios. Inicia una sesión nueva de Claude para eliminarlo."
 claude_polluted_resume_recovered = "Se detectó una corrupción conocida de la salida de Claude en la sesión %s a las %s (%d mensajes del asistente afectados). Se inició la sesión de recuperación limpia %s; el historial original se conservó sin cambios."
 claude_polluted_resume_selfrecovered = "La sesión %s contiene una corrupción de salida de Claude conocida en el pasado (a las %s), pero se recuperó por sí sola; se reanuda sin cambios con la protección de respuestas activada."

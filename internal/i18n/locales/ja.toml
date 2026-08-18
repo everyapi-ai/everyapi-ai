@@ -268,6 +268,9 @@ unset = "未設定"
 default_key_label = "デフォルト API キー"
 default_key_none = "未設定"
 gateway_region_label = "ゲートウェイ地域"
+terminal_mode_label = "ターミナルモード"
+terminal_mode_native = "ネイティブターミナル"
+terminal_mode_tmux = "tmux セッション"
 codex_bypass_label = "Codex フック信頼のスキップ"
 dangerous_mode_label = "危険モード"
 bool_on = "オン"
@@ -284,6 +287,7 @@ everyapi settings — CLI 設定の表示 / 変更
 
 キー
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
+  terminal_mode                            native | tmux
 
 設定ファイルは 'everyapi settings list' が表示するパスのプレーン JSON
 です。手動編集も可能で、CLI は次回起動時に読み直します。
@@ -1331,6 +1335,11 @@ yolo_prompt = "%s を有効化しますか？ (すべての安全確認をスキ
 hook_trust_prompt = "Codex が事前確認なしでリポジトリの hooks を実行することを許可しますか？"
 launching = "%s を %s に対して起動中"
 launching_via = "%s を %s 経由で %s に対して起動中"
+tmux_launching = "tmux セッション %s で起動中（Ctrl-b d でデタッチ、`tmux attach -t %s` で再接続）"
+tmux_not_found = "tmux がインストールされていません。tmux をインストールするか、`everyapi settings set terminal_mode native` を実行してください"
+tmux_windows_unsupported = "Windows では tmux ターミナルモードを使用できません。`everyapi settings set terminal_mode native` を実行してください"
+tmux_unavailable_option = "（tmux がインストールされていません）"
+terminal_mode_prompt = "EveryAPI でコーディングツールをどのように起動しますか？"
 claude_inflated_resume = "警告: この Claude セッションは、%d トークンに膨張したツールスキーマのプレフィックスを含んだ状態で作成されました。EveryAPI の修正は新しいセッションに適用されますが、--resume は古い履歴をそのまま復元します。削除するには新しい Claude セッションを開始してください。"
 claude_polluted_resume_recovered = "Claude セッション %s の %s で既知の出力汚染を検出しました（影響を受けた assistant メッセージ: %d 件）。クリーンな復旧セッション %s を開始しました。元の履歴は変更されていません。"
 claude_polluted_resume_selfrecovered = "セッション %s には過去に既知の出力汚染（%s）がありましたが、その後自力で回復しています。セッションはそのまま再開し、応答ガードを有効にします。"
