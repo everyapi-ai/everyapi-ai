@@ -578,6 +578,78 @@ func TestToolAllowsAutomaticYoloRejectsKimiPromptMode(t *testing.T) {
 	}
 }
 
+func TestCodexWindowsDangerousModeArgsSuppressSandboxSetupPrompt(t *testing.T) {
+	codex, err := tools.Lookup("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := []string{codex.YoloFlag, codexHookTrustBypassFlag}
+	got := codexWindowsDangerousModeArgs("windows", codex, original)
+	want := []string{
+		"-c",
+		`windows.sandbox="unelevated"`,
+		codex.YoloFlag,
+		codexHookTrustBypassFlag,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("codexWindowsDangerousModeArgs() = %v, want %v", got, want)
+	}
+	if !reflect.DeepEqual(original, []string{codex.YoloFlag, codexHookTrustBypassFlag}) {
+		t.Fatalf("codexWindowsDangerousModeArgs mutated caller args: %v", original)
+	}
+}
+
+func TestCodexWindowsDangerousModeArgsKeepsExplicitOverrideLast(t *testing.T) {
+	codex, err := tools.Lookup("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	explicit := `windows.sandbox="elevated"`
+	got := codexWindowsDangerousModeArgs(
+		"windows",
+		codex,
+		[]string{codex.YoloFlag, "-c", explicit},
+	)
+	want := []string{
+		"-c",
+		`windows.sandbox="unelevated"`,
+		codex.YoloFlag,
+		"-c",
+		explicit,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("codexWindowsDangerousModeArgs() = %v, want explicit override last in %v", got, want)
+	}
+}
+
+func TestCodexWindowsDangerousModeArgsLeavesOtherLaunchesAlone(t *testing.T) {
+	codex, err := tools.Lookup("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	claude, err := tools.Lookup("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name string
+		goos string
+		tool *tools.Tool
+		args []string
+	}{
+		{name: "safe Windows Codex", goos: "windows", tool: codex, args: []string{"--help"}},
+		{name: "Linux Codex", goos: "linux", tool: codex, args: []string{codex.YoloFlag}},
+		{name: "Windows Claude", goos: "windows", tool: claude, args: []string{claude.YoloFlag}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := codexWindowsDangerousModeArgs(tt.goos, tt.tool, tt.args); !reflect.DeepEqual(got, tt.args) {
+				t.Fatalf("codexWindowsDangerousModeArgs() = %v, want unchanged %v", got, tt.args)
+			}
+		})
+	}
+}
+
 // TestParseUseArgsAcceptsSanitizeWithTransparent checks only that the parser accepts the two flags together. It deliberately does NOT stand in for the removed TestUseRejectsSanitizeAndTransparentTogether: that gate lived in Use, never in the parser, so a parser-level test passes identically with or without the change and pins nothing about it. The real behavioral replacement — that the two now compose into child -> connector -> sanitizer -> gateway rather than erroring — is TestUseWiresTheSanitizerAsTheConnectorUpstream, which drives Use end to end and fails if Use stops pointing the connector at the sanitizer.
 func TestParseUseArgsAcceptsSanitizeWithTransparent(t *testing.T) {
 	tool, _, _, sanitize, transparent, _, _, _, err := parseUseArgsWithTransparent(

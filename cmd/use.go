@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -485,6 +486,7 @@ func Use(args []string) error {
 			env[t.YoloEnv] = ""
 		}
 	}
+	extraArgs = codexWindowsDangerousModeArgs(runtime.GOOS, t, extraArgs)
 
 	// Per-tool pre-exec setup — codex writes an isolated CODEX_HOME and Gemini writes an auth-mode settings overlay. Transparent mode uses separate hooks that retain the official provider/origin. Runs AFTER the yolo prompt so a user who Escs out doesn't pay for a file write that's about to be orphaned. Returned env overlays t.Env so the hook can pin CODEX_HOME.
 	var extraEnv map[string]string
@@ -871,6 +873,21 @@ func createDefaultRelayKey(creds *config.Credentials) (string, error) {
 }
 
 const codexHookTrustBypassFlag = "--dangerously-bypass-hook-trust"
+
+const codexWindowsUnelevatedSandboxOverride = `windows.sandbox="unelevated"`
+
+// codexWindowsDangerousModeArgs works around Codex's native Windows startup
+// prompt checking the configured sandbox implementation even when
+// --dangerously-bypass-approvals-and-sandbox has already selected full access.
+// Selecting the setup-free implementation suppresses that unrelated prompt;
+// the bypass flag still controls the effective permissions for this process.
+// Prepending the override leaves a caller's later -c value authoritative.
+func codexWindowsDangerousModeArgs(goos string, t *tools.Tool, args []string) []string {
+	if goos != "windows" || t.Name != "codex" || !containsFlag(args, t.YoloFlag) {
+		return args
+	}
+	return append([]string{"-c", codexWindowsUnelevatedSandboxOverride}, args...)
+}
 
 func boolPointer(value bool) *bool { return &value }
 
