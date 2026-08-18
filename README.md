@@ -172,7 +172,7 @@ This mode is experimental and intentionally process-scoped:
 
 - the intercepted client side currently uses HTTP/1.1 and supports normal JSON/SSE requests (HTTP/2 gateway responses are translated to HTTP/1.1); client-side HTTP/2, HTTP/3/QUIC, WebSocket, certificate-pinned clients, and clients that ignore `HTTPS_PROXY` are not covered;
 - Codex's built-in OpenAI provider probes the Responses WebSocket once; Connector returns HTTP 426 so Codex immediately falls back to HTTPS/SSE without consuming its retry budget. Codex may still print that single failed-probe log line;
-- Claude Code still treats the non-secret placeholder as API-key authentication, so claude.ai connectors are disabled even though `ANTHROPIC_BASE_URL` is absent. Transparent mode avoids third-party-origin detection; it cannot make API-key auth behave like a claude.ai OAuth login;
+- Claude Code still treats the non-secret placeholder as API-key authentication, so claude.ai connectors are disabled even though `ANTHROPIC_BASE_URL` remains the official `https://api.anthropic.com` origin. Transparent mode avoids third-party-origin detection; it cannot make API-key auth behave like a claude.ai OAuth login;
 - it does not install a system CA, require administrator access, or change the default `everyapi use` behavior;
 - it is not undetectable: clients can inspect proxy variables, the local certificate chain, sockets, timing, or response differences;
 - the Connector sees decrypted model content. Its CA signing key is never written or uploaded, and the public CA file is removed on exit;

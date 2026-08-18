@@ -22,6 +22,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/doctor"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/edge"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/events"
+	"github.com/everyapi-ai/everyapi-ai/v3/cmd/feedback"
 	logcmd "github.com/everyapi-ai/everyapi-ai/v3/cmd/log"
 	mcpcmd "github.com/everyapi-ai/everyapi-ai/v3/cmd/mcp"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/models"
@@ -259,6 +260,8 @@ var commands = []command{
 		{name: "claim", desc: "Claim today's reward", args: []string{"claim"}},
 		{name: "status", desc: "Show this month's check-in calendar", args: []string{"status"}},
 	}},
+	// No subs: one action, driven entirely by flags. EveryAPI Connect shells out to this with --format=json — the desktop renderer holds no credential, so this binary is how it reaches an authenticated endpoint.
+	{name: "feedback", desc: "Send a bug report or feature request to the team", requireLogin: true, run: feedback.Run},
 	{name: "account", desc: "Profile / 2FA / aff · subscription plans / billing", requireLogin: true, run: accountRun, subs: []subcommand{
 		{name: "info", desc: "Rolled-up profile + security view", args: []string{"info"}},
 		{name: "2fa", desc: "2FA status", args: []string{"2fa"}},
@@ -552,7 +555,9 @@ var commandGroup = map[string]string{
 	// Tools & settings
 	"mcp": "tools", "proxy": "tools",
 	"doctor": "tools", "events": "tools", "settings": "tools",
-	"version": "tools", // version namespace = build version + update/uninstall
+	// feedback sits with the tools rather than with account/billing: it is about the product, not about this user's money or session.
+	"feedback": "tools",
+	"version":  "tools", // version namespace = build version + update/uninstall
 	// Admin
 	"admin": "admin",
 }

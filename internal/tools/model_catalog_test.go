@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -27,8 +28,27 @@ func TestClaudeEnablesGatewayModelDiscovery(t *testing.T) {
 	if got := env["CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY"]; got != "1" {
 		t.Fatalf("CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = %q, want 1", got)
 	}
+	if got := env["CLAUDE_CODE_USE_GATEWAY"]; got != "1" {
+		t.Fatalf("CLAUDE_CODE_USE_GATEWAY = %q, want 1 so Claude actually fetches /v1/models", got)
+	}
 	if tool.RequiredEndpoint != "anthropic" {
 		t.Fatalf("Claude RequiredEndpoint = %q, want anthropic fail-closed preflight", tool.RequiredEndpoint)
+	}
+}
+
+func TestTransparentClaudeEnablesGatewayModelDiscoveryAtOfficialOrigin(t *testing.T) {
+	env, unset := transparentStandaloneClaudeEnv("/tmp/everyapi-ca.pem")
+	if got := env["CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY"]; got != "1" {
+		t.Fatalf("CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = %q, want 1", got)
+	}
+	if got := env["CLAUDE_CODE_USE_GATEWAY"]; got != "1" {
+		t.Fatalf("CLAUDE_CODE_USE_GATEWAY = %q, want 1 so Claude actually fetches /v1/models", got)
+	}
+	if got := env["ANTHROPIC_BASE_URL"]; got != "https://api.anthropic.com" {
+		t.Fatalf("ANTHROPIC_BASE_URL = %q, want the official origin intercepted by Connector", got)
+	}
+	if slices.Contains(unset, "ANTHROPIC_BASE_URL") {
+		t.Fatal("transparent Claude unsets ANTHROPIC_BASE_URL, disabling gateway model discovery")
 	}
 }
 

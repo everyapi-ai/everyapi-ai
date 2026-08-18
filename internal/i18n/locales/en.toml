@@ -94,6 +94,7 @@ auth = "Sign in / out, session status"
 topup = "Open the wallet **top-up** page (anti-phishing verification phrase)"
 wallet = "**Payment** history / methods / redemption keys"
 checkin = "Claim today's **daily-grant** quota"
+feedback = "Send a **bug report** or feature request to the team"
 user = "**Profile** / 2FA / passkey / oauth bindings / aff code"
 subscription = "**Subscription** plans / self / billing preference"
 use = "Launch a **third-party CLI** (claude / codex / gemini / hermes) via EveryAPI"
@@ -1550,4 +1551,23 @@ SUBCOMMANDS
 Auth: reuses your 'everyapi auth login' token; you must be an admin on the backend (non-admins get a 403).
 
 Every action lands in the same audit log the dashboard writes to.
+'''
+
+[feedback]
+sent = "Thanks — your feedback was delivered."
+bad_kind = "--kind must be one of: %s"
+bad_stdin = "Could not read the submission from stdin."
+content_required = "--content is required"
+content_too_long = "--content is limited to %d characters"
+contact_too_long = "--contact is limited to %d characters"
+usage = '''
+everyapi feedback — send a bug report or feature request to the team
+
+USAGE
+  everyapi feedback --content <text> [--kind bug|feature|other]
+                    [--contact <handle>] [--page-url <where>] [--format json]
+
+NOTES
+  Goes straight to the team chat; nothing stores a copy, so a failure here
+  means it reached nobody — keep your text and try again.
 '''

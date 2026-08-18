@@ -120,7 +120,8 @@ func enabledTokenChoices(toks []api.TokenSummary, currentID int) ([]relayKeyChoi
 		if tok.Status != api.TokenStatusEnabled {
 			continue
 		}
-		if tok.Group == "auto" {
+		// An EveryAPI-owned auto key must not become the synthetic "Auto" choice: picking that entry persists it as the default relay key, and the default-group resolver honours that cache before it ever applies its own demotion — pinning every later launch to the key's narrow model set. It still appears as an explicit, named row below, so a user who really wants it can say so.
+		if tok.Group == "auto" && !tok.SystemManaged {
 			if autoID == 0 {
 				autoID = tok.ID
 			}

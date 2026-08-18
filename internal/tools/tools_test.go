@@ -534,11 +534,14 @@ func TestTransparentEnvUsesOfficialOriginsWithoutRelayCredential(t *testing.T) {
 		{
 			name: "claude",
 			want: map[string]string{
-				"ANTHROPIC_AUTH_TOKEN":             "everyapi-local-connector",
-				"NODE_EXTRA_CA_CERTS":              caPath,
-				"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1",
+				"ANTHROPIC_BASE_URL":                         "https://api.anthropic.com",
+				"ANTHROPIC_AUTH_TOKEN":                       "everyapi-local-connector",
+				"NODE_EXTRA_CA_CERTS":                        caPath,
+				"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
+				"CLAUDE_CODE_USE_GATEWAY":                    "1",
+				"CLAUDE_CODE_DISABLE_ADVISOR_TOOL":           "1",
 			},
-			wantUnset: []string{"ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY"},
+			wantUnset: []string{"ANTHROPIC_API_KEY"},
 		},
 		{
 			name: "codex",

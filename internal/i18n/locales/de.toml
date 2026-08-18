@@ -107,6 +107,7 @@ auth = "Anmelden / abmelden, Sitzungsstatus"
 topup = "Wallet-Aufladeseite öffnen (Anti-Phishing-Verifizierungsphrase)"
 wallet = "Zahlungsverlauf / Methoden / Einlöse-Schlüssel"
 checkin = "Heutige Tageszuteilungs-Quota einlösen"
+feedback = "**Fehler** melden oder eine Funktion vorschlagen"
 user = "Profil / 2FA / Passkey / OAuth-Bindungen / Affiliate-Code"
 subscription = "Abopläne / eigene Abos / Abrechnungspräferenz"
 use = "Drittanbieter-CLI über EveryAPI starten (claude / codex / gemini / hermes)"
@@ -1568,4 +1569,23 @@ UNTERBEFEHLE
 Auth: verwendet dein 'everyapi auth login'-Token; du musst Backend-Admin sein (sonst 403).
 
 Jede Aktion landet im selben Audit-Log, das auch das Dashboard schreibt.
+'''
+
+[feedback]
+sent = "Danke — dein Feedback wurde zugestellt."
+bad_kind = "--kind muss eines von diesen sein: %s"
+bad_stdin = "Die Meldung konnte nicht von stdin gelesen werden."
+content_required = "--content ist erforderlich"
+content_too_long = "--content darf höchstens %d Zeichen lang sein"
+contact_too_long = "--contact darf höchstens %d Zeichen lang sein"
+usage = '''
+everyapi feedback — Fehler melden oder eine Funktion vorschlagen
+
+VERWENDUNG
+  everyapi feedback --content <Text> [--kind bug|feature|other]
+                    [--contact <Kontakt>] [--page-url <Ort>] [--format json]
+
+HINWEISE
+  Geht direkt in den Team-Chat; es wird keine Kopie gespeichert. Ein Fehler
+  bedeutet, dass niemand die Meldung erhalten hat — Text behalten, erneut senden.
 '''

@@ -109,6 +109,7 @@ auth = "Iniciar / cerrar sesión, estado"
 topup = "Abrir la página de recarga (con frase anti-phishing)"
 wallet = "Historial de pagos / métodos / claves de canje"
 checkin = "Reclamar la cuota diaria de hoy"
+feedback = "Informar de un **error** o pedir una función"
 user = "Perfil / 2FA / passkey / vínculos OAuth / código de afiliado"
 subscription = "Planes de suscripción / mi cuenta / preferencia de facturación"
 use = "Iniciar un CLI de terceros (claude / codex / gemini / hermes) vía EveryAPI"
@@ -1570,4 +1571,23 @@ SUBCOMANDOS
 Auth: reutiliza tu token de 'everyapi auth login'; debes ser admin en el backend (los no admin reciben 403).
 
 Toda acción queda en el mismo registro de auditoría que escribe el panel.
+'''
+
+[feedback]
+sent = "Gracias, tu comentario se ha entregado."
+bad_kind = "--kind debe ser uno de: %s"
+bad_stdin = "No se pudo leer el comentario desde la entrada estándar."
+content_required = "--content es obligatorio"
+content_too_long = "--content no puede superar los %d caracteres"
+contact_too_long = "--contact no puede superar los %d caracteres"
+usage = '''
+everyapi feedback — informar de un error o pedir una función
+
+USO
+  everyapi feedback --content <texto> [--kind bug|feature|other]
+                    [--contact <contacto>] [--page-url <origen>] [--format json]
+
+NOTAS
+  Va directo al chat del equipo y no se guarda ninguna copia: si falla, no lo
+  ha recibido nadie — conserva tu texto e inténtalo de nuevo.
 '''

@@ -24,7 +24,7 @@ const (
 
 // TestUseDefaultsToTransparentForSupportedTool is the end-to-end pin for this PR's headline behavior: a bare `everyapi use claude`, no flags, must launch through the connector. Nothing else asserted it — the parser tests cover only flag parsing and TestTransparentDefaultResolution covers only Tool.SupportsTransparent, so the resolution inside Use (the code that actually decides) could silently regress to the injected path.
 //
-// The launched child's environment is the only honest evidence of which path ran: transparent unsets ANTHROPIC_BASE_URL and points HTTPS_PROXY at the loopback connector while withholding the relay key; the injected path does the exact opposite. Asserting on the launch banner would only re-read our own Printf.
+// The launched child's environment is the only honest evidence of which path ran: transparent keeps ANTHROPIC_BASE_URL on the official Anthropic origin, points HTTPS_PROXY at the loopback connector, and withholds the relay key; the injected path uses a process-local base URL and hands the relay key to the child. Asserting on the launch banner would only re-read our own Printf.
 func TestUseDefaultsToTransparentForSupportedTool(t *testing.T) {
 	switch {
 	case os.Getenv(useDefaultShimEnv) == "1":
@@ -113,8 +113,8 @@ func TestUseDefaultsToTransparentForSupportedTool(t *testing.T) {
 			}
 
 			if tc.wantTransparent {
-				if got["ANTHROPIC_BASE_URL"] != "" {
-					t.Errorf("ANTHROPIC_BASE_URL = %q, want unset — the tool must stay on its vendor origin", got["ANTHROPIC_BASE_URL"])
+				if got["ANTHROPIC_BASE_URL"] != "https://api.anthropic.com" {
+					t.Errorf("ANTHROPIC_BASE_URL = %q, want the official origin intercepted by Connector", got["ANTHROPIC_BASE_URL"])
 				}
 				if !strings.HasPrefix(got["HTTPS_PROXY"], "http://127.0.0.1:") {
 					t.Errorf("HTTPS_PROXY = %q, want the loopback connector", got["HTTPS_PROXY"])

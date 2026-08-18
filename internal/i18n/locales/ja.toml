@@ -103,6 +103,7 @@ auth = "ログイン / ログアウト / セッション状態"
 topup = "ウォレット入金ページを開く（フィッシング対策フレーズあり）"
 wallet = "支払い履歴 / 支払い方法 / 引換キー"
 checkin = "本日のデイリー付与クォータを受領"
+feedback = "**不具合の報告**や機能のご要望をチームへ送信"
 user = "プロフィール / 2FA / passkey / OAuth 連携 / アフィリエイトコード"
 subscription = "サブスクリプションプラン / 自分の契約 / 課金設定"
 use = "EveryAPI 経由でサードパーティ CLI を起動 (claude / codex / gemini / hermes)"
@@ -1559,4 +1560,23 @@ everyapi admin — 運用コマンド（管理者専用）
 認証：'everyapi auth login' のトークンを再利用。後端で管理者である必要あり（非管理者は 403）。
 
 すべての操作はダッシュボードと同じ監査ログに記録されます。
+'''
+
+[feedback]
+sent = "フィードバックを送信しました。ありがとうございます。"
+bad_kind = "--kind は次のいずれかを指定してください: %s"
+bad_stdin = "標準入力からフィードバックを読み取れませんでした。"
+content_required = "--content は必須です"
+content_too_long = "--content は %d 文字以内で指定してください"
+contact_too_long = "--contact は %d 文字以内で指定してください"
+usage = '''
+everyapi feedback — 不具合の報告や機能のご要望をチームへ送信
+
+使い方
+  everyapi feedback --content <本文> [--kind bug|feature|other]
+                    [--contact <連絡先>] [--page-url <送信元>] [--format json]
+
+補足
+  チームのチャットへ直接送られ、サーバーに控えは残りません。送信に失敗した
+  場合は誰にも届いていないので、本文を控えたうえで再試行してください。
 '''

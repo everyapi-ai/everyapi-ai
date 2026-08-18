@@ -103,6 +103,7 @@ auth = "로그인 / 로그아웃 / 세션 상태"
 topup = "지갑 충전 페이지 열기 (피싱 방지 검증 문구 포함)"
 wallet = "결제 내역 / 결제 수단 / 교환 키"
 checkin = "오늘의 데일리 쿼터 수령"
+feedback = "**버그 신고**나 기능 제안을 팀에 보내기"
 user = "프로필 / 2FA / passkey / OAuth 연동 / 추천 코드"
 subscription = "구독 플랜 / 내 구독 / 결제 설정"
 use = "EveryAPI 를 통해 서드파티 CLI 실행 (claude / codex / gemini / hermes)"
@@ -1556,4 +1557,23 @@ everyapi admin — 운영 명령(관리자 전용)
 인증: 'everyapi auth login' 토큰 재사용; 백엔드에서 관리자여야 함(비관리자는 403).
 
 모든 작업은 대시보드와 동일한 감사 로그에 기록됩니다.
+'''
+
+[feedback]
+sent = "피드백이 전달되었습니다. 감사합니다."
+bad_kind = "--kind 는 다음 중 하나여야 합니다: %s"
+bad_stdin = "표준 입력에서 피드백을 읽지 못했습니다."
+content_required = "--content 는 필수입니다"
+content_too_long = "--content 는 최대 %d자까지 입력할 수 있습니다"
+contact_too_long = "--contact 는 최대 %d자까지 입력할 수 있습니다"
+usage = '''
+everyapi feedback — 버그 신고나 기능 제안을 팀에 보내기
+
+사용법
+  everyapi feedback --content <내용> [--kind bug|feature|other]
+                    [--contact <연락처>] [--page-url <위치>] [--format json]
+
+참고
+  팀 채팅으로 바로 전달되며 사본은 저장되지 않습니다. 실패하면 아무도 받지
+  못한 것이니 내용을 보관한 뒤 다시 시도하세요.
 '''

@@ -93,6 +93,7 @@ auth = "登录 / 登出 / 会话状态"
 topup = "打开钱包充值页（反钓鱼校验短语）"
 wallet = "充值历史 / 支付方式 / 兑换码"
 checkin = "领取今日签到额度"
+feedback = "向团队反馈**问题**或提交功能建议"
 user = "个人信息 / 2FA / passkey / OAuth 绑定 / 推广码"
 subscription = "订阅计划 / 我的订阅 / 计费偏好"
 use = "通过 EveryAPI 启动第三方 CLI（claude / codex / gemini / hermes）"
@@ -1535,4 +1536,23 @@ everyapi admin — 运维命令（仅管理员）
 鉴权：复用你 'everyapi auth login' 的令牌；后端须为管理员（非管理员返回 403）。
 
 所有操作都会写入与面板相同的审计日志。
+'''
+
+[feedback]
+sent = "反馈已送达，感谢你的反馈。"
+bad_kind = "--kind 只能是以下之一：%s"
+bad_stdin = "无法从标准输入读取反馈内容。"
+content_required = "必须填写 --content"
+content_too_long = "--content 最多 %d 个字符"
+contact_too_long = "--contact 最多 %d 个字符"
+usage = '''
+everyapi feedback — 向团队反馈问题或提交功能建议
+
+用法
+  everyapi feedback --content <正文> [--kind bug|feature|other]
+                    [--contact <联系方式>] [--page-url <来源>] [--format json]
+
+说明
+  内容直接送到团队群，服务端不留副本；发送失败即表示没人收到，
+  请保留你的文字后重试。
 '''

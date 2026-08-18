@@ -147,7 +147,10 @@ func TestStartTransparentLaunchDoesNotExposeRelayKeyOrGateway(t *testing.T) {
 			t.Errorf("child env %s leaks private routing value %q", key, value)
 		}
 	}
-	for _, key := range []string{"ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "NO_PROXY", "no_proxy"} {
+	if got := launch.env["ANTHROPIC_BASE_URL"]; got != "https://api.anthropic.com" {
+		t.Errorf("ANTHROPIC_BASE_URL = %q, want official origin for connector-backed model discovery", got)
+	}
+	for _, key := range []string{"ANTHROPIC_API_KEY", "NO_PROXY", "no_proxy"} {
 		found := false
 		for _, unset := range launch.unsetEnv {
 			if unset == key {

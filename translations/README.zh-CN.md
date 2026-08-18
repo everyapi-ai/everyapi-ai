@@ -96,7 +96,7 @@ everyapi use                # 无参 → 交互式选择已安装的工具
 
 - 被拦截的客户端侧目前使用 HTTP/1.1，支持普通 JSON/SSE（网关 HTTP/2 响应会转换成 HTTP/1.1）；尚不覆盖客户端侧 HTTP/2、HTTP/3/QUIC、WebSocket、证书固定、忽略 `HTTPS_PROXY` 的客户端；
 - Codex 内置 OpenAI provider 会先探测一次 Responses WebSocket；Connector 返回 HTTP 426，使其不消耗重试预算、立即回落 HTTPS/SSE。Codex 仍可能打印这一条探测失败日志；
-- Claude Code 仍会把无秘密的占位凭证视为 API-key 认证，因此即使没有 `ANTHROPIC_BASE_URL`，claude.ai connectors 仍会被禁用。透明模式避免的是第三方 Origin 判断，不能把 API-key 认证伪装成 claude.ai OAuth 登录；
+- Claude Code 仍会把无秘密的占位凭证视为 API-key 认证，因此即使 `ANTHROPIC_BASE_URL` 保持为官方 `https://api.anthropic.com` Origin，claude.ai connectors 仍会被禁用。透明模式避免的是第三方 Origin 判断，不能把 API-key 认证伪装成 claude.ai OAuth 登录；
 - 不安装系统 CA、不需要管理员权限，未传参数时的原有行为完全不变；
 - 不能承诺“不可检测”：客户端仍可检查代理变量、本地证书链、socket、时延和响应差异；
 - Connector 能看到解密后的模型内容；CA 签名私钥不会写盘或上传，公开 CA 文件会在退出时删除；

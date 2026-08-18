@@ -93,6 +93,7 @@ auth = "登入 / 登出 / 工作階段狀態"
 topup = "開啟錢包儲值頁（反釣魚校驗短語）"
 wallet = "儲值紀錄 / 付款方式 / 兌換碼"
 checkin = "領取今日簽到額度"
+feedback = "向團隊回報**問題**或提交功能建議"
 user = "個人資訊 / 2FA / passkey / OAuth 綁定 / 推廣碼"
 subscription = "訂閱方案 / 我的訂閱 / 計費偏好"
 use = "透過 EveryAPI 啟動第三方 CLI（claude / codex / gemini / hermes）"
@@ -1534,4 +1535,23 @@ everyapi admin — 運維命令（僅管理員）
 驗證：複用你 'everyapi auth login' 的權杖；後端須為管理員（非管理員回傳 403）。
 
 所有操作都會寫入與面板相同的稽核日誌。
+'''
+
+[feedback]
+sent = "回饋已送達，感謝你的回饋。"
+bad_kind = "--kind 只能是下列其一：%s"
+bad_stdin = "無法從標準輸入讀取回饋內容。"
+content_required = "必須填寫 --content"
+content_too_long = "--content 最多 %d 個字元"
+contact_too_long = "--contact 最多 %d 個字元"
+usage = '''
+everyapi feedback — 向團隊回報問題或提交功能建議
+
+用法
+  everyapi feedback --content <內容> [--kind bug|feature|other]
+                    [--contact <聯絡方式>] [--page-url <來源>] [--format json]
+
+說明
+  內容直接送到團隊群組，伺服器不留副本；傳送失敗即表示沒人收到，
+  請保留你的文字後重試。
 '''

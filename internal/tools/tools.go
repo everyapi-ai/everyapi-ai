@@ -267,14 +267,19 @@ func (t *Tool) SupportsTransparent() bool {
 
 func transparentClaudeEnv(caPath string) (map[string]string, []string) {
 	return map[string]string{
+			"ANTHROPIC_BASE_URL":                         "https://api.anthropic.com",
 			"ANTHROPIC_AUTH_TOKEN":                       transparentPlaceholderCredential,
 			"NODE_EXTRA_CA_CERTS":                        caPath,
 			"ENABLE_TOOL_SEARCH":                         "1",
 			"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
+			// Claude Code gates /v1/models behind gateway mode even when discovery is enabled.
+			// Keep the official origin here: Connector intercepts it and the child still never
+			// receives EveryAPI's gateway URL or relay key.
+			"CLAUDE_CODE_USE_GATEWAY": "1",
 			// Advisor is an experimental account-bound server tool. Disable it when Claude runs through EveryAPI so rejected results cannot poison the session and fail every subsequent prompt.
 			"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1",
 		}, []string{
-			"ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY",
+			"ANTHROPIC_API_KEY",
 			"CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
 		}
 }
@@ -339,7 +344,9 @@ var Registry = map[string]*Tool{
 				"ENABLE_TOOL_SEARCH":                         "1",
 				"ENABLE_PROMPT_CACHING_1H":                   "1",
 				"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
-				"CLAUDE_CODE_DISABLE_ADVISOR_TOOL":           "1",
+				// Claude Code only fetches /v1/models when both discovery and gateway mode are enabled.
+				"CLAUDE_CODE_USE_GATEWAY":          "1",
+				"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1",
 				// Clear any ambient ANTHROPIC_API_KEY so the user's real key is never forwarded to the gateway and can't shadow the relay token.
 				"ANTHROPIC_API_KEY": "",
 			}

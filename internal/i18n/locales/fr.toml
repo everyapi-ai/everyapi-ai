@@ -108,6 +108,7 @@ auth = "Connexion / déconnexion, état"
 topup = "Ouvrir la page de rechargement (phrase de vérification anti-phishing)"
 wallet = "Historique de paiements / méthodes / clés d'échange"
 checkin = "Réclamer le quota quotidien d'aujourd'hui"
+feedback = "Signaler un **bug** ou demander une fonctionnalité"
 user = "Profil / 2FA / passkey / liaisons OAuth / code d'affiliation"
 subscription = "Plans d'abonnement / mon compte / préférence de facturation"
 use = "Lancer un CLI tiers (claude / codex / gemini / hermes) via EveryAPI"
@@ -1573,4 +1574,23 @@ SOUS-COMMANDES
 Auth : réutilise le jeton de 'everyapi auth login' ; vous devez être admin sur le backend (sinon 403).
 
 Chaque action est consignée dans le même journal d'audit que le tableau de bord.
+'''
+
+[feedback]
+sent = "Merci, votre retour a bien été transmis."
+bad_kind = "--kind doit valoir l'une de ces valeurs : %s"
+bad_stdin = "Impossible de lire le retour depuis l'entrée standard."
+content_required = "--content est obligatoire"
+content_too_long = "--content est limité à %d caractères"
+contact_too_long = "--contact est limité à %d caractères"
+usage = '''
+everyapi feedback — signaler un bug ou demander une fonctionnalité
+
+UTILISATION
+  everyapi feedback --content <texte> [--kind bug|feature|other]
+                    [--contact <contact>] [--page-url <origine>] [--format json]
+
+REMARQUES
+  Envoyé directement dans le chat de l'équipe, sans copie conservée : un échec
+  signifie que personne ne l'a reçu — gardez votre texte et réessayez.
 '''

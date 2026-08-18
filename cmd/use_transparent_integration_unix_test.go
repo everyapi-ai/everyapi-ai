@@ -40,28 +40,45 @@ func TestUseTransparentChildEnvironmentAndCleanup(t *testing.T) {
 
 	probeAuth := make(chan string, 1)
 	modelRequest := make(chan transparentModelCapture, 1)
+	// Sends are non-blocking on purpose. A handler that blocks on a full channel deadlocks the whole test: the body below fails, Goexit runs the deferred Close, and Close waits on the very connection the handler is still parked in — which turns any assertion failure into a 2-minute timeout panic that never prints the assertion. Dropping an unexpected extra request instead keeps the real failure readable.
+	record := func(ch chan<- string, value string) {
+		select {
+		case ch <- value:
+		default:
+		}
+	}
 	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/v1/messages" {
 			body, _ := io.ReadAll(r.Body)
-			modelRequest <- transparentModelCapture{
+			select {
+			case modelRequest <- transparentModelCapture{
 				authorization: r.Header.Get("Authorization"),
 				providerKey:   r.Header.Get("X-Api-Key"),
 				body:          string(body),
+			}:
+			default:
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"relayed":true}`))
 			return
 		}
-		probeAuth <- r.Header.Get("Authorization")
+		// Only the catalogue read is the relay probe this test asserts on. Matching on "anything that is not /v1/messages" made every unrelated gateway call the CLI learns to make look like that probe — which is how a launch-time token-list call landed here as a bogus empty-Authorization probe.
+		if r.URL.Path == "/v1/models" {
+			record(probeAuth, r.Header.Get("Authorization"))
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":[{"id":"claude-test","owned_by":"anthropic","supported_endpoint_types":["anthropic"]}]}`))
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data":[{"id":"claude-test","owned_by":"anthropic","supported_endpoint_types":["anthropic"]}]}`))
+		_, _ = w.Write([]byte(`{"data":[]}`))
 	}))
 	defer gateway.Close()
 
 	xdg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdg)
 	const relayKey = "integration-real-relay-key"
-	if err := config.Save(&config.Credentials{APIBase: gateway.URL, RelayKey: relayKey}); err != nil {
+	// RelayKeySystemChecked marks the cache as already tiered. Without it ResolveRelayKey treats these credentials as a pre-tiering cache and spends its one-off re-resolution on a token-list call before the launch even starts — a real behaviour, but one this test is not about.
+	if err := config.Save(&config.Credentials{APIBase: gateway.URL, RelayKey: relayKey, RelayKeySystemChecked: true}); err != nil {
 		t.Fatal(err)
 	}
 	binDir := t.TempDir()
@@ -115,7 +132,10 @@ func TestUseTransparentChildEnvironmentAndCleanup(t *testing.T) {
 	}
 	envText := string(envBody)
 	for _, want := range []string{
+		"ANTHROPIC_BASE_URL=https://api.anthropic.com\n",
 		"ANTHROPIC_AUTH_TOKEN=everyapi-local-connector\n",
+		"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1\n",
+		"CLAUDE_CODE_USE_GATEWAY=1\n",
 		"HTTPS_PROXY=http://127.0.0.1:",
 		"https_proxy=http://127.0.0.1:",
 		"NODE_EXTRA_CA_CERTS=",
@@ -125,7 +145,7 @@ func TestUseTransparentChildEnvironmentAndCleanup(t *testing.T) {
 		}
 	}
 	for _, forbidden := range []string{
-		"ANTHROPIC_BASE_URL=", "ANTHROPIC_API_KEY=", "EVERYAPI_RELAY_KEY=",
+		"ANTHROPIC_API_KEY=", "EVERYAPI_RELAY_KEY=",
 		"NO_PROXY=", "no_proxy=", relayKey, "ambient-real-provider-key", "ambient-relay-key",
 	} {
 		if strings.Contains(envText, forbidden) {
