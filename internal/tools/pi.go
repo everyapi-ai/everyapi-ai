@@ -50,9 +50,20 @@ func preparePiWithModels(apiBase, _ string, models []Model) (map[string]string, 
 		removePreparedHomeAfterQuiet(home)
 		return nil, err
 	}
-	settings, err := json.Marshal(map[string]string{
-		"defaultProvider": "everyapi", "defaultModel": selected,
-	})
+	settingsConfig := map[string]any{
+		"defaultProvider": "everyapi",
+		"defaultModel":    selected,
+	}
+	if userHome, homeErr := os.UserHomeDir(); homeErr == nil {
+		piUserDir := filepath.Join(userHome, ".pi", "agent")
+		for _, resource := range []string{"extensions", "skills", "prompts", "themes"} {
+			resourceDir := filepath.Join(piUserDir, resource)
+			if info, statErr := os.Stat(resourceDir); statErr == nil && info.IsDir() {
+				settingsConfig[resource] = []string{resourceDir}
+			}
+		}
+	}
+	settings, err := json.Marshal(settingsConfig)
 	if err != nil {
 		removePreparedHomeAfterQuiet(home)
 		return nil, fmt.Errorf("encode Pi settings: %w", err)

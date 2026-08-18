@@ -430,6 +430,13 @@ func TestKiloPromptCacheBreakpointCohort(t *testing.T) {
 }
 
 func TestPiPrepareUsesIsolatedModelsCatalogAndEnvironmentKey(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, resource := range []string{"extensions", "skills", "prompts", "themes"} {
+		if err := os.MkdirAll(filepath.Join(home, ".pi", "agent", resource), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
 	t.Setenv(piModelEnv, "gpt-5.6-terra")
 	tool, _ := Lookup("pi")
 	if tool.RequiredEndpoint != "openai" || tool.AlternativeEndpoint != "openai-response" {
@@ -466,9 +473,29 @@ func TestPiPrepareUsesIsolatedModelsCatalogAndEnvironmentKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, fragment := range []string{`"defaultProvider":"everyapi"`, `"defaultModel":"gpt-5.6-terra"`} {
-		if !strings.Contains(string(settings), fragment) {
-			t.Fatalf("Pi settings missing %s: %s", fragment, settings)
+	var parsedSettings struct {
+		DefaultProvider string   `json:"defaultProvider"`
+		DefaultModel    string   `json:"defaultModel"`
+		Extensions      []string `json:"extensions"`
+		Skills          []string `json:"skills"`
+		Prompts         []string `json:"prompts"`
+		Themes          []string `json:"themes"`
+	}
+	if err := json.Unmarshal(settings, &parsedSettings); err != nil {
+		t.Fatal(err)
+	}
+	if parsedSettings.DefaultProvider != "everyapi" || parsedSettings.DefaultModel != "gpt-5.6-terra" {
+		t.Fatalf("Pi selected provider/model = %q/%q", parsedSettings.DefaultProvider, parsedSettings.DefaultModel)
+	}
+	for resource, got := range map[string][]string{
+		"extensions": parsedSettings.Extensions,
+		"skills":     parsedSettings.Skills,
+		"prompts":    parsedSettings.Prompts,
+		"themes":     parsedSettings.Themes,
+	} {
+		want := []string{filepath.Join(home, ".pi", "agent", resource)}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Pi %s paths = %#v, want %#v", resource, got, want)
 		}
 	}
 }
