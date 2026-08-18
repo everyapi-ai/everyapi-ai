@@ -22,7 +22,7 @@ const (
 )
 
 const (
-	// preparedHomeOwnerFile records the PID of the `everyapi` process a prepared home belongs to, so a later launch can tell a home whose owner is still working from one orphaned by a hard kill.
+	// preparedHomeOwnerFile records, one PID per line, the processes a prepared home belongs to — the `everyapi` process that created it and then the tool it launched — so a later launch can tell a home that is still in use from one orphaned by a hard kill.
 	preparedHomeOwnerFile = ".everyapi-owner"
 	// preparedHomeKeepFile marks a home the CLI deliberately left on disk for the user to salvage by hand. The sweep never touches a home carrying it, at any age.
 	preparedHomeKeepFile = ".everyapi-keep"
@@ -61,8 +61,28 @@ func newPreparedHome(prefix string) (string, error) {
 		return "", fmt.Errorf("create prepared %s home: %w", prefix, err)
 	}
 	// Stamp ownership immediately: from here on, a hard kill leaves a home the next launch can identify as orphaned instead of one that has to age out. A failed write is not fatal — the home just falls back to the unowned age rule.
-	_ = os.WriteFile(filepath.Join(home, preparedHomeOwnerFile), []byte(strconv.Itoa(os.Getpid())), 0o600)
+	_ = os.WriteFile(filepath.Join(home, preparedHomeOwnerFile), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600)
 	return home, nil
+}
+
+// launchPreparedHome carries the home from TakePreparedCleanup, which is the last place that knows it, to ExecWithOptions, which is the first place that knows the child's PID. One slot covers it: a CLI process launches exactly one tool.
+var launchPreparedHome string
+
+// adoptPreparedHome adds the launched tool to the home's owners.
+//
+// It is what makes the sweep's rule match the cleanup's. Cleanup removes a home once the CHILD has exited — see removePreparedHomeAfterQuiet, which even outlasts a worker recreating the directory. If the sweep only knew the parent, a parent killed with SIGKILL would hand its still-running tool's home to the next launch to delete; the child is reparented to init and keeps its own session and process group, so nothing else connects it back.
+//
+// A failed write is not fatal. The parent PID stays on file and the home just becomes reclaimable earlier than it should.
+func adoptPreparedHome(childPID int) {
+	if launchPreparedHome == "" || childPID <= 0 {
+		return
+	}
+	file, err := os.OpenFile(filepath.Join(launchPreparedHome, preparedHomeOwnerFile), os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return
+	}
+	_, _ = fmt.Fprintf(file, "%d\n", childPID)
+	_ = file.Close()
 }
 
 // TakePreparedArgs removes the internal settings-path marker before the child receives its environment and returns the fixed argv prefix for tools whose official runtime-config surface is a command-line option.
@@ -105,6 +125,7 @@ func TakePreparedCleanup(env map[string]string) func() {
 	if err != nil || rel == "." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
 		return nil
 	}
+	launchPreparedHome = home
 	var once sync.Once
 	return func() {
 		once.Do(func() {
@@ -211,12 +232,14 @@ func preparedHomeIsStale(home string, entry os.DirEntry, now time.Time) bool {
 	}
 	// A live session's own writes land in subdirectories and in SQLite files it opened at startup, so this ModTime tracks top-level entry churn rather than real idleness. It is only ever used as a floor next to the owner check, never as the primary signal.
 	age := now.Sub(info.ModTime())
-	owner, ok := readPreparedHomeOwner(home)
-	if !ok {
+	owners := readPreparedHomeOwners(home)
+	if len(owners) == 0 {
 		return age >= unownedPreparedHomeAge
 	}
-	if preparedHomeOwnerAlive(owner) {
-		return age >= abandonedPreparedHomeAge
+	for _, owner := range owners {
+		if preparedHomeOwnerAlive(owner) {
+			return age >= abandonedPreparedHomeAge
+		}
 	}
 	return true
 }
@@ -224,14 +247,19 @@ func preparedHomeIsStale(home string, entry os.DirEntry, now time.Time) bool {
 // preparedHomeOwnerAlive is procstate.Alive behind a seam, so the sweep's policy can be exercised for both answers without spawning and reaping real processes to manufacture them.
 var preparedHomeOwnerAlive = procstate.Alive
 
-func readPreparedHomeOwner(home string) (int, bool) {
+// readPreparedHomeOwners returns every PID recorded for a home. An empty result means the home is unowned as far as the sweep is concerned — no file, an unreadable one, or nothing parseable in it — and the age rule decides instead.
+func readPreparedHomeOwners(home string) []int {
 	body, err := os.ReadFile(filepath.Join(home, preparedHomeOwnerFile))
 	if err != nil {
-		return 0, false
+		return nil
 	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(body)))
-	if err != nil || pid <= 0 {
-		return 0, false
+	var owners []int
+	for _, line := range strings.Split(string(body), "\n") {
+		pid, err := strconv.Atoi(strings.TrimSpace(line))
+		if err != nil || pid <= 0 {
+			continue
+		}
+		owners = append(owners, pid)
 	}
-	return pid, true
+	return owners
 }

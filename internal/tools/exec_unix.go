@@ -61,6 +61,8 @@ func ExecWithOptions(t *Tool, opts ExecOptions) error {
 		logToolExit(t.ExecName, 0, "start failed: "+err.Error())
 		return fmt.Errorf("start %s: %w", t.ExecName, err)
 	}
+	// Hand the child joint ownership of this launch's prepared home, so a sweep from a later launch cannot reclaim it while the tool is still running on a parent that was hard-killed.
+	adoptPreparedHome(childPID(cmd))
 	// Pair the exit line below with a launch line, so a parent that is itself hard-killed (SIGKILL from the OOM killer leaves no chance to log an exit) is legible as a "launched, never exited" gap.
 	logToolExit(t.ExecName, childPID(cmd), "launched")
 	go func() {
