@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -332,6 +333,7 @@ func writeCodexOfficialConfigTOMLWithCatalog(codexHome, catalogPath, bootModel s
 	if err != nil {
 		return err
 	}
+	applySelectedCodexReasoningEffort(&defaults)
 	if err := inheritPersistentCodexReasoningEffort(&defaults, codexHome, catalogPath); err != nil {
 		return err
 	}
@@ -379,6 +381,7 @@ func writeCodexConfigTOMLWithCatalog(codexHome, apiBase, catalogPath, bootModel 
 	if err != nil {
 		return err
 	}
+	applySelectedCodexReasoningEffort(&defaults)
 	if err := inheritPersistentCodexReasoningEffort(&defaults, codexHome, catalogPath); err != nil {
 		return err
 	}
@@ -427,13 +430,16 @@ func codexCatalogConfig(path string) string {
 	return "model_catalog_json = " + tomlBasicQuote(path) + "\n"
 }
 
-var codexBundledCatalog = func() ([]byte, error) {
+// codexBundledCatalog reads Codex's own model metadata. Two places need it in a single launch — the reasoning-level picker and writeCodexModelCatalog — and the answer cannot change mid-launch, so the default implementation is memoized to spawn the process once rather than twice on the critical path.
+//
+// The memo lives inside the default value rather than wrapping the variable, because tests replace the variable wholesale; a swapped-in function is called directly and never sees this cache.
+var codexBundledCatalog = sync.OnceValues(func() ([]byte, error) {
 	output, err := exec.Command("codex", "debug", "models", "--bundled").Output()
 	if err != nil {
 		return nil, fmt.Errorf("read bundled Codex model metadata (update Codex CLI if `debug models --bundled` is unavailable): %w", err)
 	}
 	return output, nil
-}
+})
 
 func writeCodexModelCatalog(codexHome string, models []Model) (string, error) {
 	if len(models) == 0 {
@@ -521,6 +527,13 @@ func readCodexUserDefaults(codexHome string) (codexUserDefaults, error) {
 		return codexUserDefaults{}, fmt.Errorf("parse existing Codex config: %w", err)
 	}
 	return defaults, nil
+}
+
+// applySelectedCodexReasoningEffort pins the effort chosen at launch. It runs before the two fallbacks — the effort recorded in this home's config.toml, then the one inherited from the persistent home — because those answer "what did the user last leave this at", and an explicit choice made seconds ago outranks both. An unset variable changes nothing, which is what keeps every non-picker caller (a scripted launch, the legacy fixed-home path) on its previous behavior.
+func applySelectedCodexReasoningEffort(defaults *codexUserDefaults) {
+	if level := selectedReasoningLevel(); level != "" {
+		defaults.ModelReasoningEffort = level
+	}
 }
 
 func inheritPersistentCodexReasoningEffort(defaults *codexUserDefaults, codexHome, catalogPath string) error {

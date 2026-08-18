@@ -1360,6 +1360,7 @@ no_relay_key_long = '''
 unknown_flag = "不明なフラグ %q (ツールフラグの前に `--` を付けてください: `everyapi use <tool> -- %s ...`)"
 usage = "使用法: everyapi use <tool> [--group <名前>|--channel <名前>] [--model <id>] [--sanitize] [-- ツール引数...]"
 model_picker = "%s で使うモデルを選択してください（EveryAPI 経由）:"
+reasoning_picker = "%s の推論レベルを選択してください (%s):"
 model_needs_value = "--model には値が必要です。例: --model gpt-5.1"
 model_unsupported = "%s は自身のモデルを選びます — ここでは --model は使えません。\nツール固有のモデルフラグは `--` の後に渡してください。例: everyapi use %s -- --model <id>"
 model_fetch_failed = "モデル一覧を取得できませんでした (%v) — %s をデフォルトモデルで起動します"

@@ -87,6 +87,8 @@ type Model struct {
 	SupportedEndpointTypes []string
 	ContextWindow          int
 	MaxOutput              int
+	// SupportsThinking mirrors the gateway's verified `reasoning_effort` support for this model. False means unknown rather than refused, so a generated client config must withhold the level control instead of declaring the model level-less.
+	SupportsThinking bool
 }
 
 const openCodeCredentialEnv = "EVERYAPI_RELAY_KEY"

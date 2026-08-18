@@ -36,9 +36,21 @@ func preparePiWithModels(apiBase, _ string, models []Model) (map[string]string, 
 			modelSupportsEndpoint(model.SupportedEndpointTypes, "openai-response") {
 			api = "openai-responses"
 		}
-		providerModels = append(providerModels, map[string]any{
-			"api": api, "id": model.ID, "name": name,
-		})
+		entry := map[string]any{"api": api, "id": model.ID, "name": name}
+		// Pi defaults an undeclared model to reasoning:false, which is not "unknown" to it — it is a statement, and it disables the thinking-level control (shift+tab) for that model entirely. Every EveryAPI model therefore arrived level-less, including the GPT-5.x line whose whole point is a selectable effort. Declared only where the gateway has verified the model takes one, so a model of unknown shape keeps the safe answer rather than gaining a control that would send reasoning_effort upstream and 400.
+		//
+		// thinkingLevelMap is deliberately absent: omitting it maps off → high onto pi's default provider values, while xhigh and max stay hidden. Naming those two would need a per-model claim about which extended efforts the upstream accepts (gpt-5.6-sol takes ultra, o4-mini stops at high), and the gateway publishes no such list — supports_thinking is one bit.
+		if model.SupportsThinking {
+			entry["reasoning"] = true
+		}
+		// Pi's own fallbacks are 128000/16384 for a custom provider, so a model with a larger window silently lost most of it — pi compacts against the number it holds, not the one the gateway serves.
+		if model.ContextWindow > 0 {
+			entry["contextWindow"] = model.ContextWindow
+		}
+		if model.MaxOutput > 0 {
+			entry["maxTokens"] = model.MaxOutput
+		}
+		providerModels = append(providerModels, entry)
 	}
 	config := map[string]any{"providers": map[string]any{"everyapi": map[string]any{
 		"baseUrl": joinBase(apiBase, "/v1"),
@@ -56,6 +68,10 @@ func preparePiWithModels(apiBase, _ string, models []Model) (map[string]string, 
 	settingsConfig := map[string]any{
 		"defaultProvider": "everyapi",
 		"defaultModel":    selected,
+	}
+	// The level the launcher resolved. Pi keeps its own thinking level in this settings.json, which lives in the process-scoped agent dir `everyapi use` deletes on exit, so seeding it is the only way a choice survives to the next launch.
+	if level := selectedReasoningLevel(); level != "" {
+		settingsConfig["defaultThinkingLevel"] = level
 	}
 	if piUserDir := piUserAgentDir(); piUserDir != "" {
 		for _, resource := range piUserResources {

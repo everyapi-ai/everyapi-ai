@@ -819,6 +819,17 @@ func main() {
 		}
 		return
 	}
+	// Private headless harness surface for EveryAPI Connect's benchmark runner.
+	// The command package accepts only reviewed harness adapters and a task file;
+	// arbitrary executable names or argument vectors never cross the renderer
+	// boundary.
+	if name == "desktop-benchmark-agent" {
+		if err := cmd.BenchmarkAgent(args); err != nil {
+			fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), cliout.Sanitize(err.Error()))
+			os.Exit(1)
+		}
+		return
+	}
 
 	if name == "help" || name == "--help" || name == "-h" {
 		fmt.Print(renderUsage())

@@ -1369,6 +1369,7 @@ EveryAPI-Dashboard (%s) und führe dann 'everyapi auth login' erneut aus.'''
 unknown_flag = "unbekanntes Flag %q (verwende `--` vor Tool-Flags: `everyapi use <tool> -- %s ...`)"
 usage = "Verwendung: everyapi use <tool> [--group <Name>|--channel <Name>] [--model <id>] [--sanitize] [-- Tool-Argumente...]"
 model_picker = "Modell für %s auswählen (über EveryAPI geroutet):"
+reasoning_picker = "Denkstufe für %s auswählen (%s):"
 model_needs_value = "--model benötigt einen Wert, z. B. --model gpt-5.1"
 model_unsupported = "%s wählt sein eigenes Modell — --model wird hier nicht unterstützt.\nÜbergib das Modell-Flag des Tools nach `--`, z. B. everyapi use %s -- --model <id>"
 model_fetch_failed = "Modellliste konnte nicht abgerufen werden (%v) — %s wird mit seinem Standardmodell gestartet"

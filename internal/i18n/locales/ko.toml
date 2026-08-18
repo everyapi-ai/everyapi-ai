@@ -1357,6 +1357,7 @@ no_relay_key_long = '''
 unknown_flag = "알 수 없는 플래그 %q (도구 플래그 앞에 `--` 를 붙이세요: `everyapi use <tool> -- %s ...`)"
 usage = "사용법: everyapi use <tool> [--group <이름>|--channel <이름>] [--model <id>] [--sanitize] [-- 도구 인자...]"
 model_picker = "%s 에 사용할 모델을 선택하세요 (EveryAPI 경유):"
+reasoning_picker = "%s 의 추론 수준을 선택하세요 (%s):"
 model_needs_value = "--model 에는 값이 필요합니다. 예: --model gpt-5.1"
 model_unsupported = "%s 는 자체 모델을 선택합니다 — 여기서는 --model 을 지원하지 않습니다.\n도구 자체의 모델 플래그는 `--` 뒤에 전달하세요. 예: everyapi use %s -- --model <id>"
 model_fetch_failed = "모델 목록을 가져오지 못했습니다 (%v) — %s 를 기본 모델로 시작합니다"

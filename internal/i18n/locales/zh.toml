@@ -1336,6 +1336,7 @@ no_relay_key_long = '''
 unknown_flag = "未知 flag %q（在工具 flag 前加 `--`：`everyapi use <tool> -- %s ...`）"
 usage = "用法：everyapi use <tool> [--group <名称>|--channel <名称>] [--model <id>] [--sanitize] [-- 工具参数...]"
 model_picker = "为 %s 选择模型（经 EveryAPI 路由）："
+reasoning_picker = "为 %s 选择推理等级（%s）："
 model_needs_value = "--model 需要一个值，例如 --model gpt-5.1"
 model_unsupported = "%s 使用它自带的模型——这里不支持 --model。\n请把工具自己的模型参数放在 `--` 之后，例如 everyapi use %s -- --model <id>"
 model_fetch_failed = "无法获取模型列表（%v）——将以默认模型启动 %s"

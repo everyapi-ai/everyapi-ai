@@ -120,6 +120,13 @@ func Use(args []string) error {
 	if err != nil {
 		return err
 	}
+	return use(args, true)
+}
+
+// use owns the launch flow. persistModelSelection is false only for Connect's
+// benchmark candidates: an experiment may select six models concurrently, and
+// none of them should race to become the user's normal next-launch default.
+func use(args []string, persistModelSelection bool) error {
 	if wantsUseHelp(args) {
 		cliout.Println(useUsage)
 		return nil
@@ -322,12 +329,17 @@ func Use(args []string) error {
 	interactive := cliprompt.IsInteractive()
 	bootModel := ""
 	if managedBootPickerNeeded(t, extraArgs) {
-		bootModel, err = resolveRememberedModel(t, settings, relayCatalog, model, pickModel, interactive)
+		bootModel, err = resolveRememberedModelWithPersistence(t, settings, relayCatalog, model, pickModel, interactive, persistModelSelection)
 		if err != nil {
 			return err
 		}
 	}
 	extraArgs = managedBootModelArgs(t, extraArgs, bootModel)
+
+	// Reasoning level, for the clients that have one. Runs after both model paths — the ModelEnv picker above and the managed picker just now — because the levels on offer depend on which model was chosen. Called unconditionally, including for a metadata-only invocation: the call also clears an inherited ReasoningLevelEnv, and skipping it here would let a nested launch forward the outer session's level.
+	if err := resolveReasoningLevel(t, settings, relayCatalog, launchedModelID(t, bootModel), interactive, toolInvocationNeedsEndpoint(extraArgs)); err != nil {
+		return err
+	}
 
 	// Build the transforms first; hosting them is a separate decision below.
 	var (
@@ -643,6 +655,21 @@ func resolveRememberedModel(
 	modelFlag string,
 	pickModel, interactive bool,
 ) (string, error) {
+	return resolveRememberedModelWithPersistence(t, settings, catalog, modelFlag, pickModel, interactive, true)
+}
+
+func resolveRememberedModelWithPersistence(
+	t *tools.Tool,
+	settings *config.Settings,
+	catalog []api.RelayModel,
+	modelFlag string,
+	pickModel, interactive, persistSelection bool,
+) (string, error) {
+	remember := func(model string) {
+		if persistSelection {
+			persistToolModel(settings, t.Name, model)
+		}
+	}
 	available := launchModelsForTool(t, catalog, "")
 	offered := make([]string, 0, len(available))
 	for _, m := range available {
@@ -658,20 +685,20 @@ func resolveRememberedModel(
 				"model %q is not available to %s with this relay key/group — run `everyapi use %s --model` to choose from the live list",
 				modelFlag, t.ExecName, t.ExecName)
 		}
-		persistToolModel(settings, t.Name, modelFlag)
+		remember(modelFlag)
 		return modelFlag, nil
 	}
 
 	remembered := settings.ToolModel(t.Name)
 	if modelUnavailableForTool(t, remembered) {
 		remembered = ""
-		persistToolModel(settings, t.Name, "")
+		remember("")
 	}
 	// A remembered model that the account can no longer route is dropped rather than pinned: the key may have moved group, or the model may be gone.
 	if remembered != "" && len(catalog) > 0 && !slices.Contains(offered, remembered) {
 		remembered = ""
 		if t.Name != "claude" {
-			persistToolModel(settings, t.Name, "")
+			remember("")
 		}
 	}
 	if remembered != "" && !pickModel && (!interactive || t.Name == "claude") {
@@ -695,7 +722,7 @@ func resolveRememberedModel(
 		}
 		return "", err
 	}
-	persistToolModel(settings, t.Name, selected)
+	remember(selected)
 	return selected, nil
 }
 
@@ -739,6 +766,112 @@ func managedBootModelArgs(t *tools.Tool, args []string, bootModel string) []stri
 		return args
 	}
 	return append([]string{"--model", bootModel}, args...)
+}
+
+// launchedModelID is the model this launch settled on, whichever path chose it: ModelEnv clients read theirs back out of the environment resolveToolModel exported it into, and the managed-picker clients carry theirs in bootModel.
+func launchedModelID(t *tools.Tool, bootModel string) string {
+	if t != nil && t.ModelEnv != "" {
+		return strings.TrimSpace(os.Getenv(t.ModelEnv))
+	}
+	return bootModel
+}
+
+// resolveReasoningLevel asks which reasoning level to launch at and exports it for the tool's prepare hook to write into the generated config.
+//
+// It exists because the level is exactly as unrememberable as the model, and for the same reason: codex records its effort in the config.toml inside the process-scoped CODEX_HOME, and pi records its thinking level in the settings.json inside the process-scoped agent dir — both deleted on exit. So a level chosen inside the tool lasts one session, and the launcher is the only place that can hold one across launches.
+//
+// A tool/model pairing with no level control returns early and prompts for nothing. A non-interactive launch reuses the remembered level rather than blocking, and a remembered level the current model does not offer (a switch from gpt-5.6-sol's "ultra" to a model that stops at "xhigh") is dropped instead of forwarded — the tool would reject it, or worse, accept it and send it upstream.
+//
+// It clears ReasoningLevelEnv before deciding anything, because the variable reaches the launched tool's children: a nested `everyapi use codex` inside a pi session that chose "off" would otherwise inherit "off" and write it as codex's model_reasoning_effort, which is not a codex effort at all. Every path below either resolves a level for THIS launch or leaves the variable unset.
+func resolveReasoningLevel(
+	t *tools.Tool,
+	settings *config.Settings,
+	catalog []api.RelayModel,
+	modelID string,
+	interactive, needsEndpoint bool,
+) error {
+	if err := os.Unsetenv(tools.ReasoningLevelEnv); err != nil {
+		return err
+	}
+	// A metadata-only invocation (`--version`, `--help`) prompts for nothing, for the same reason the model prompts are skipped — but only after the clear above, which is the whole point of running this on that path at all.
+	if !needsEndpoint {
+		return nil
+	}
+	// Asked before the catalogue lookup: a client with no level control at all must not pay for a full per-tool model list it will never consult.
+	if !tools.SupportsReasoningLevels(t) {
+		return nil
+	}
+	model, ok := launchModelByID(t, catalog, modelID)
+	if !ok {
+		return nil
+	}
+	levels, toolDefault := tools.ReasoningLevels(t, model)
+	if len(levels) == 0 {
+		return nil
+	}
+
+	remembered := settings.ToolReasoningLevel(t.Name)
+	stale := remembered != "" && !slices.Contains(levels, remembered)
+	if stale {
+		remembered = ""
+	}
+	if !interactive {
+		if stale {
+			persistToolReasoningLevel(settings, t.Name, "")
+		}
+		if remembered == "" {
+			return nil
+		}
+		return os.Setenv(tools.ReasoningLevelEnv, remembered)
+	}
+
+	// The cursor starts on the remembered level, then on what the tool would have done by itself, then at the top of the list. Never on an arbitrary entry: a picker whose default answer differs from the no-picker behavior changes what a distracted Enter means.
+	//
+	// For codex, "what the tool would have done by itself" is the effort recorded in its persistent home, not the vendor's per-model default — inheritPersistentCodexReasoningEffort feeds that value into every launch today, and applySelectedCodexReasoningEffort now outranks it. Without this the first launch after upgrade would show a cursor on codex's own default and turn a distracted Enter into a silent downgrade of an effort the user had already chosen.
+	initial := 0
+	for _, candidate := range []string{remembered, tools.PersistedReasoningLevel(t), toolDefault} {
+		if candidate == "" {
+			continue
+		}
+		if index := slices.Index(levels, candidate); index >= 0 {
+			initial = index
+			break
+		}
+	}
+	// model.ID came out of launchModelsForTool, which already sanitized it.
+	idx, err := cliprompt.PickWithSelected(
+		fmt.Sprintf(i18n.T("use.reasoning_picker"), t.ExecName, model.ID), levels, initial)
+	if err != nil {
+		return err
+	}
+	// One save, not two: a stale remembered level is overwritten by the pick rather than erased first.
+	selected := levels[idx]
+	persistToolReasoningLevel(settings, t.Name, selected)
+	return os.Setenv(tools.ReasoningLevelEnv, selected)
+}
+
+// launchModelByID looks the chosen id up in the catalogue the tool will be handed, so the level step reads the same capability metadata the client will. A miss — an empty id, or a --model the live catalogue does not list — means the pairing's capabilities are unknown, and the caller skips the prompt rather than assuming.
+func launchModelByID(t *tools.Tool, catalog []api.RelayModel, modelID string) (tools.Model, bool) {
+	if modelID == "" {
+		return tools.Model{}, false
+	}
+	for _, model := range launchModelsForTool(t, catalog, "") {
+		if model.ID == modelID {
+			return model, true
+		}
+	}
+	return tools.Model{}, false
+}
+
+// persistToolReasoningLevel mirrors persistToolModel, including its fail-soft save: not being able to write settings.json is a reason the next launch asks again, not a reason to refuse this one.
+func persistToolReasoningLevel(settings *config.Settings, tool, level string) {
+	if settings.ToolReasoningLevel(tool) == level {
+		return
+	}
+	settings.SetToolReasoningLevel(tool, level)
+	if err := config.SaveSettings(settings); err != nil {
+		cliout.Printf("could not save the %s reasoning level (%v); it will be asked again next launch\n", tool, err)
+	}
 }
 
 // persistToolModel saves the selection so it can be reused as the next launch's default (or silently in a non-interactive launch).
@@ -1414,6 +1547,7 @@ func launchModelsForTool(t *tools.Tool, catalog []api.RelayModel, preferred stri
 			SupportedEndpointTypes: model.SupportedEndpointTypes,
 			ContextWindow:          model.ContextWindow,
 			MaxOutput:              model.MaxOutput,
+			SupportsThinking:       model.SupportsThinking,
 		})
 	}
 	sortLaunchModels(t, models, preferred)
