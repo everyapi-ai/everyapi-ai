@@ -125,7 +125,7 @@ Each tool uses different conventions; the CLI remembers them:
 | openclaw | local embedded TUI with process-scoped config and env-backed SecretRef |
 | continue | lifecycle-bound `CONTINUE_GLOBAL_DIR/config.yaml`; env-backed Continue secret reference |
 | kilo | process-scoped `KILO_CONFIG_CONTENT`; OpenCode-compatible provider with env-backed key |
-| pi | isolated `PI_CODING_AGENT_DIR` containing `models.json` and selected-model settings, with existing resources from `~/.pi/agent/{extensions,skills,prompts,themes}` loaded by absolute path |
+| pi | isolated `PI_CODING_AGENT_DIR` containing `models.json` and selected-model settings, with existing `{extensions,skills,prompts,themes}` from the pre-launch `PI_CODING_AGENT_DIR` (default `~/.pi/agent`) loaded by absolute path |
 | vibe | isolated `VIBE_HOME/config.toml`; generic provider with `api_key_env_var` |
 | copilot | official `COPILOT_PROVIDER_*` BYOK environment; wire API follows the selected model capability |
 | droid | official `--settings` runtime-only file with one `custom:EveryAPI-0` model and env-backed key |

@@ -13,6 +13,9 @@ const (
 	piAgentDirEnv = "PI_CODING_AGENT_DIR"
 )
 
+// piUserResources are the Pi agent-directory entries that hold user-authored content rather than provider configuration. The isolated home only owns `models.json` and the selected-model settings, so these have to be pointed back at the user's own directory or a launch silently loses them.
+var piUserResources = []string{"extensions", "skills", "prompts", "themes"}
+
 func preparePiWithModels(apiBase, _ string, models []Model) (map[string]string, error) {
 	selected := strings.TrimSpace(os.Getenv(piModelEnv))
 	if selected == "" {
@@ -54,9 +57,8 @@ func preparePiWithModels(apiBase, _ string, models []Model) (map[string]string, 
 		"defaultProvider": "everyapi",
 		"defaultModel":    selected,
 	}
-	if userHome, homeErr := os.UserHomeDir(); homeErr == nil {
-		piUserDir := filepath.Join(userHome, ".pi", "agent")
-		for _, resource := range []string{"extensions", "skills", "prompts", "themes"} {
+	if piUserDir := piUserAgentDir(); piUserDir != "" {
+		for _, resource := range piUserResources {
 			resourceDir := filepath.Join(piUserDir, resource)
 			if info, statErr := os.Stat(resourceDir); statErr == nil && info.IsDir() {
 				settingsConfig[resource] = []string{resourceDir}
@@ -73,4 +75,21 @@ func preparePiWithModels(apiBase, _ string, models []Model) (map[string]string, 
 		return nil, err
 	}
 	return preparedHomeEnv(piAgentDirEnv, home), nil
+}
+
+// piUserAgentDir resolves the agent directory Pi would have used without EveryAPI's isolation. An operator-set PI_CODING_AGENT_DIR wins over the default ~/.pi/agent, matching how Pi itself locates the directory; the result is made absolute because the generated settings are read from an unrelated working directory. It returns "" when neither source resolves.
+func piUserAgentDir() string {
+	dir := strings.TrimSpace(os.Getenv(piAgentDirEnv))
+	if dir == "" {
+		userHome, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		dir = filepath.Join(userHome, ".pi", "agent")
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return ""
+	}
+	return abs
 }

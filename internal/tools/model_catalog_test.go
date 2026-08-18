@@ -432,7 +432,10 @@ func TestKiloPromptCacheBreakpointCohort(t *testing.T) {
 func TestPiPrepareUsesIsolatedModelsCatalogAndEnvironmentKey(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	for _, resource := range []string{"extensions", "skills", "prompts", "themes"} {
+	// os.UserHomeDir reads USERPROFILE on Windows, and an inherited PI_CODING_AGENT_DIR would take priority over the home default; both have to be pinned or the assertions below resolve against the developer's real machine.
+	t.Setenv("USERPROFILE", home)
+	t.Setenv(piAgentDirEnv, "")
+	for _, resource := range piUserResources {
 		if err := os.MkdirAll(filepath.Join(home, ".pi", "agent", resource), 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -495,6 +498,47 @@ func TestPiPrepareUsesIsolatedModelsCatalogAndEnvironmentKey(t *testing.T) {
 	} {
 		want := []string{filepath.Join(home, ".pi", "agent", resource)}
 		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Pi %s paths = %#v, want %#v", resource, got, want)
+		}
+	}
+}
+
+func TestPiPrepareHonoursExistingAgentDirOverride(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	agentDir := filepath.Join(t.TempDir(), "pi-agent")
+	t.Setenv(piAgentDirEnv, agentDir)
+	for _, resource := range piUserResources {
+		// The home default must stay populated so a passing assertion proves the override won rather than that nothing existed.
+		if err := os.MkdirAll(filepath.Join(home, ".pi", "agent", resource), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Join(agentDir, resource), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv(piModelEnv, "gpt-5.6-terra")
+	tool, err := Lookup("pi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", testLaunchCatalog, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer TakePreparedCleanup(extra)()
+	settings, err := os.ReadFile(filepath.Join(extra[piAgentDirEnv], "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsedSettings map[string]any
+	if err := json.Unmarshal(settings, &parsedSettings); err != nil {
+		t.Fatal(err)
+	}
+	for _, resource := range piUserResources {
+		want := []any{filepath.Join(agentDir, resource)}
+		if got := parsedSettings[resource]; !reflect.DeepEqual(got, want) {
 			t.Errorf("Pi %s paths = %#v, want %#v", resource, got, want)
 		}
 	}
