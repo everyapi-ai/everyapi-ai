@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/styletest"
+	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 	"github.com/muesli/termenv"
 )
@@ -140,6 +142,91 @@ func TestStatusMachineIncludesLiveBalanceOnlyWhenRequested(t *testing.T) {
 	}
 	if strings.Contains(out.String(), accessToken) {
 		t.Fatalf("machine balance leaked access token: %s", out.String())
+	}
+}
+
+func TestStatusMachineClassifiesAccountFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		statusCode      int
+		unsuccessfulAPI bool
+		message         string
+		wantCode        string
+	}{
+		{name: "server failure stays unavailable", statusCode: http.StatusBadGateway, wantCode: "unavailable"},
+		{name: "business failure stays unavailable", statusCode: http.StatusOK, unsuccessfulAPI: true, message: "database error", wantCode: "unavailable"},
+		{name: "legacy auth rejection requires login", statusCode: http.StatusOK, unsuccessfulAPI: true, message: "access token invalid", wantCode: "invalid_credentials"},
+		{name: "unauthorized account requires login", statusCode: http.StatusUnauthorized, wantCode: "invalid_credentials"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/api/status":
+					_ = json.NewEncoder(w).Encode(map[string]any{
+						"success": true,
+						"data":    map[string]any{"quota_per_unit": 100.0},
+					})
+				case "/api/user/self":
+					w.WriteHeader(tc.statusCode)
+					if tc.unsuccessfulAPI {
+						_ = json.NewEncoder(w).Encode(map[string]any{"success": false, "message": tc.message})
+					} else {
+						_ = json.NewEncoder(w).Encode(map[string]any{"message": "account read failed"})
+					}
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			t.Cleanup(server.Close)
+			if err := config.Save(&config.Credentials{
+				APIBase: server.URL, AccessToken: "token", UserID: 42, Username: "alice",
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			err := Status([]string{"--format=json", "--include-balance"})
+			var statusErr *statusMachineError
+			if !errors.As(err, &statusErr) || statusErr.code != tc.wantCode {
+				t.Fatalf("error = %#v, want %s machine status", err, tc.wantCode)
+			}
+		})
+	}
+}
+
+func TestStatusMachineKeepsCredentialReadFailuresUnavailable(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	if err := os.MkdirAll(filepath.Join(configHome, "everyapi", "credentials.json"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	err := Status([]string{"--format=json", "--include-balance"})
+	var statusErr *statusMachineError
+	if !errors.As(err, &statusErr) || statusErr.code != "unavailable" {
+		t.Fatalf("error = %#v, want unavailable machine status", err)
+	}
+}
+
+func TestAccountMachineErrorRecognizesSupportedLegacyAuthMessages(t *testing.T) {
+	for _, message := range []string{
+		"Unauthorized, invalid access token",
+		"无权进行此操作，access token 无效",
+		"無權進行此操作，access token 無效",
+		"No autorizado, access token no válido",
+		"Non autorisé, access token invalide",
+		"인증되지 않았습니다. access token이 유효하지 않습니다",
+		"認証されていません。access tokenが無効です",
+		"Nicht autorisiert, ungültiger access token",
+		"auth.access_token_invalid",
+	} {
+		t.Run(message, func(t *testing.T) {
+			err := accountMachineError(&api.EnvelopeError{Message: message})
+			var statusErr *statusMachineError
+			if !errors.As(err, &statusErr) || statusErr.code != "invalid_credentials" {
+				t.Fatalf("error = %#v, want invalid_credentials machine status", err)
+			}
+		})
 	}
 }
 

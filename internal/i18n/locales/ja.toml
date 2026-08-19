@@ -126,9 +126,18 @@ mcp = "AI CLI 向け MCP サーバー (Claude Code / Codex / Gemini)"
 doctor = "セルフチェック（認証情報、ゲートウェイ、サニタイザ、ツール）"
 events = "ライブイベントストリームを購読 (SSE)"
 settings = "CLI 設定を表示 / 変更（言語など）"
+artifacts = "自己完結型 HTML レポートを公開"
 update = "新しいリリースを確認し、対応するアップグレードを実行"
 uninstall = "このマシンから everyapi の状態とバイナリを削除"
 version = "ビルドバージョン · update · uninstall"
+
+[artifacts]
+usage = "使用法: everyapi artifacts share <file.html>"
+unknown_sub = "不明な artifacts サブコマンド %q（share を指定してください）"
+html_required = "artifact は .html または .htm ファイルである必要があります"
+regular_required = "artifact は通常ファイルである必要があります"
+too_large = "artifact は %d バイトです。上限は %d バイトです"
+official_only = "ホスト型 artifact 共有には api.everyapi.ai または api-cn.everyapi.ai でログインしたアカウントが必要です"
 
 [launcher.subs.auth]
 login = "この端末を EveryAPI に認証"

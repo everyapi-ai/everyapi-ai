@@ -59,7 +59,7 @@ func ReferralMachine(args []string) error {
 		return encodeReferralOutput(out)
 	}
 	if err != nil {
-		return machineStatusError("invalid_credentials", err)
+		return credentialLoadMachineError(err)
 	}
 	out.SignedIn = true
 
@@ -67,12 +67,7 @@ func ReferralMachine(args []string) error {
 	client := api.ForCredentials(creds)
 	code, err := client.GetAffCode(cliout.WithCtx())
 	if err != nil {
-		// A dead session surfaces as a 401 or, the legacy way, an HTTP-200 envelope rejection (EnvelopeError); both mean "re-login", not a generic failure. Anything else — a refused connection, DNS failure, gateway timeout — is a transport problem the user cannot fix by signing in again.
-		var envelopeError *api.EnvelopeError
-		if api.IsUnauthorized(err) || errors.As(err, &envelopeError) {
-			return machineStatusError("invalid_credentials", fmt.Errorf("fetch affiliate code: %w", err))
-		}
-		return machineStatusError("unavailable", fmt.Errorf("fetch affiliate code: %w", err))
+		return accountMachineError(fmt.Errorf("fetch affiliate code: %w", err))
 	}
 	code = strings.TrimSpace(cliout.Sanitize(code))
 	if code == "" {

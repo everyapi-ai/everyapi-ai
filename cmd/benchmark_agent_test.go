@@ -25,9 +25,9 @@ func TestBenchmarkAgentUseArgs(t *testing.T) {
 		want []string
 	}{
 		{
-			name: "claude headless JSON",
+			name: "claude isolated headless JSONL",
 			tool: "claude",
-			want: []string{"claude", "--model", "model-a", "--", "-p", "Fix the failing parser test.", "--output-format", "json", "--dangerously-skip-permissions"},
+			want: []string{"claude", "--model", "model-a", "--", "--bare", "--no-session-persistence", "--add-dir", ".", "-p", "Fix the failing parser test.", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"},
 		},
 		{
 			name: "codex exec JSONL",
@@ -67,6 +67,35 @@ func TestBenchmarkAgentUseArgs(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, test.want) {
 				t.Fatalf("args = %#v, want %#v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestBenchmarkClaudeIsolationRequiresSupportedFlags(t *testing.T) {
+	tests := []struct {
+		name      string
+		help      string
+		missing   string
+		wantError bool
+	}{
+		{name: "supported", help: "  --bare  Minimal mode\n  --no-session-persistence  Disable persistence\n"},
+		{name: "bare missing", help: "  --no-session-persistence  Disable persistence\n", missing: "--bare", wantError: true},
+		{name: "persistence missing", help: "  --bare  Minimal mode\n", missing: "--no-session-persistence", wantError: true},
+		{name: "prefix is not the option", help: "  --barely  Not bare\n  --no-session-persistence-extra  Not persistence\n", missing: "--bare", wantError: true},
+		{name: "description mention is not the option", help: "This old client does not support --bare or --no-session-persistence.\n", missing: "--bare", wantError: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := benchmarkClaudeIsolationHelpError([]byte(test.help))
+			if test.wantError {
+				if err == nil || !strings.Contains(err.Error(), test.missing) || !strings.Contains(err.Error(), "claude update") {
+					t.Fatalf("error = %v, want unsupported flag and upgrade command", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("error = %v, want nil", err)
 			}
 		})
 	}

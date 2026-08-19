@@ -127,6 +127,22 @@ func TestTokenLauncherOffersAPIKeySwitch(t *testing.T) {
 	t.Fatal("token TUI menu does not offer API key switching")
 }
 
+func TestArtifactsCommandIsRegisteredAsAnAuthenticatedTool(t *testing.T) {
+	c, ok := lookup("artifacts")
+	if !ok {
+		t.Fatal("artifacts command missing")
+	}
+	if !c.requireLogin {
+		t.Fatal("artifacts command must be hidden until the user signs in")
+	}
+	if c.run == nil {
+		t.Fatal("artifacts command has no handler")
+	}
+	if got := groupOf("artifacts"); got != "tools" {
+		t.Errorf("artifacts group = %q, want tools", got)
+	}
+}
+
 func TestUseCommandDescriptionListsGrok(t *testing.T) {
 	c, ok := lookup("use")
 	if !ok {

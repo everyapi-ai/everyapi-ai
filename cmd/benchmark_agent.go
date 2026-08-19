@@ -7,7 +7,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -114,7 +116,60 @@ func BenchmarkAgent(args []string) error {
 	if err != nil {
 		return err
 	}
+	if len(useArgs) > 0 && useArgs[0] == "claude" {
+		claude, lookupErr := tools.Lookup("claude")
+		if lookupErr != nil {
+			return lookupErr
+		}
+		if isolationErr := benchmarkClaudeIsolationPreflight(claude); isolationErr != nil {
+			return isolationErr
+		}
+	}
 	return use(useArgs, false)
+}
+
+func benchmarkClaudeIsolationPreflight(claude *tools.Tool) error {
+	path, err := tools.ResolveExec(claude)
+	if err != nil {
+		// The normal use preflight owns the richer not-installed error and install
+		// hint. Capability checking must not replace it with a version error.
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, path, "--help")
+	command.Args = []string{claude.ExecName, "--help"}
+	help, err := command.Output()
+	if err != nil {
+		return fmt.Errorf("could not verify Claude Code benchmark isolation support; run `claude update` and try again: %w", err)
+	}
+	return benchmarkClaudeIsolationHelpError(help)
+}
+
+func benchmarkClaudeIsolationHelpError(help []byte) error {
+	for _, required := range []string{"--bare", "--no-session-persistence"} {
+		if !benchmarkClaudeHelpHasOption(help, required) {
+			return fmt.Errorf("installed Claude Code does not support %s, which is required for isolated benchmarks; run `claude update` and try again", required)
+		}
+	}
+	return nil
+}
+
+func benchmarkClaudeHelpHasOption(help []byte, option string) bool {
+	for _, line := range strings.Split(string(help), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, option) {
+			continue
+		}
+		if len(line) == len(option) {
+			return true
+		}
+		switch line[len(option)] {
+		case ' ', '\t', ',':
+			return true
+		}
+	}
+	return false
 }
 
 func benchmarkAgentUseArgs(args []string) ([]string, error) {
@@ -154,9 +209,21 @@ func benchmarkAgentUseArgs(args []string) ([]string, error) {
 	useArgs := []string{benchmarkToolName(tool), "--model", modelID, "--"}
 	switch tool {
 	case "claude":
+		// A benchmark must measure the selected harness/model pair, not the
+		// operator's personal Claude setup. --bare skips hooks, LSP/plugin sync,
+		// auto-memory, background prefetches, keychain reads, and CLAUDE.md
+		// discovery; without it those inputs can add tens of thousands of tokens
+		// to every turn and can execute unrelated commands in the worktree.
+		// Persistence is disabled independently so a benchmark never becomes a
+		// resumable personal session even if Claude changes --bare's defaults.
+		// --add-dir explicitly restores repository-local CLAUDE.md discovery,
+		// keeping project instructions available just as they are to harnesses
+		// that discover their own repository instruction files.
 		return append(useArgs,
+			"--bare", "--no-session-persistence",
+			"--add-dir", ".",
 			"-p", task,
-			"--output-format", "json",
+			"--output-format", "stream-json", "--verbose",
 			"--dangerously-skip-permissions",
 		), nil
 	case "codex":

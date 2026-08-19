@@ -116,9 +116,18 @@ mcp = "AI CLI 的 MCP 服务器（Claude Code / Codex / Gemini）"
 doctor = "本机自检（凭证、网关、代理、工具）"
 events = "订阅实时事件流（SSE）"
 settings = "查看 / 修改 CLI 偏好（语言等）"
+artifacts = "发布自包含 HTML 报告"
 update = "检查新版本并执行匹配的升级"
 uninstall = "从此机器移除 everyapi 状态和二进制"
 version = "版本 · 升级 · 卸载"
+
+[artifacts]
+usage = "用法：everyapi artifacts share <file.html>"
+unknown_sub = "未知的 artifacts 子命令 %q（可用：share）"
+html_required = "artifact 必须是 .html 或 .htm 文件"
+regular_required = "artifact 必须是普通文件"
+too_large = "artifact 大小为 %d 字节；最大允许 %d 字节"
+official_only = "托管 artifact 分享仅支持通过 api.everyapi.ai 或 api-cn.everyapi.ai 登录的账户"
 
 [launcher.subs.auth]
 login = "登录此设备到 EveryAPI"

@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -103,6 +105,44 @@ func TestRunOverviewMachineDoesNotCallTransportFailuresExpiredSessions(t *testin
 		selfErr: errors.New("temporary network failure"),
 	}
 	err := runOverviewMachine(context.Background(), client, time.Now(), &bytes.Buffer{})
+	var statusErr *statusMachineError
+	if !errors.As(err, &statusErr) || statusErr.code != "unavailable" {
+		t.Fatalf("error = %#v, want unavailable machine status", err)
+	}
+}
+
+func TestRunOverviewMachineDoesNotCallBusinessFailuresExpiredSessions(t *testing.T) {
+	client := &fakeOverviewClient{
+		status:  &api.StatusData{QuotaPerUnit: 500_000},
+		selfErr: &api.EnvelopeError{Message: "database error"},
+	}
+	err := runOverviewMachine(context.Background(), client, time.Now(), &bytes.Buffer{})
+	var statusErr *statusMachineError
+	if !errors.As(err, &statusErr) || statusErr.code != "unavailable" {
+		t.Fatalf("error = %#v, want unavailable machine status", err)
+	}
+}
+
+func TestRunOverviewMachineRecognizesLegacyAuthRejection(t *testing.T) {
+	client := &fakeOverviewClient{
+		status:  &api.StatusData{QuotaPerUnit: 500_000},
+		selfErr: &api.EnvelopeError{Message: "access token invalid"},
+	}
+	err := runOverviewMachine(context.Background(), client, time.Now(), &bytes.Buffer{})
+	var statusErr *statusMachineError
+	if !errors.As(err, &statusErr) || statusErr.code != "invalid_credentials" {
+		t.Fatalf("error = %#v, want invalid_credentials machine status", err)
+	}
+}
+
+func TestOverviewMachineKeepsCredentialReadFailuresUnavailable(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	if err := os.MkdirAll(filepath.Join(configHome, "everyapi", "credentials.json"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	err := OverviewMachine([]string{"--format=json"})
 	var statusErr *statusMachineError
 	if !errors.As(err, &statusErr) || statusErr.code != "unavailable" {
 		t.Fatalf("error = %#v, want unavailable machine status", err)

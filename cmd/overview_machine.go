@@ -80,7 +80,7 @@ func OverviewMachine(args []string) error {
 	// The loaded value owns all data needed below. Release the file lock before network I/O so the desktop's concurrent balance refresh does not wait for all four overview requests to finish.
 	unlock()
 	if err != nil {
-		return machineStatusError("invalid_credentials", err)
+		return credentialLoadMachineError(err)
 	}
 	if creds.OAuthClientID != "" {
 		return machineStatusError("unsupported_session", errors.New("online usage requires an account session"))
@@ -95,11 +95,7 @@ func runOverviewMachine(ctx context.Context, client overviewClient, now time.Tim
 	}
 	self, err := client.GetSelf(ctx)
 	if err != nil {
-		var envelopeError *api.EnvelopeError
-		if api.IsUnauthorized(err) || errors.As(err, &envelopeError) {
-			return machineStatusError("invalid_credentials", err)
-		}
-		return machineStatusError("unavailable", err)
+		return accountMachineError(err)
 	}
 	perUnit := status.QuotaPerUnit
 	if perUnit <= 0 {

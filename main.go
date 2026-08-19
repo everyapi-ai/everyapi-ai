@@ -15,6 +15,7 @@ import (
 
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/admin"
+	"github.com/everyapi-ai/everyapi-ai/v3/cmd/artifacts"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/checkin"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/demand"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/dispute"
@@ -328,6 +329,7 @@ var commands = []command{
 	{name: "doctor", desc: "Self-check (creds, gateway, sanitizer, tools)", run: doctor.Run},
 	{name: "events", desc: "Subscribe to the live event stream (SSE)", requireLogin: true, run: events.Run},
 	{name: "settings", desc: "View / change CLI preferences (language, …)", run: settings.Run},
+	{name: "artifacts", desc: "Publish self-contained HTML reports", requireLogin: true, run: artifacts.Run},
 	// `version` shows the build version as a header, then offers the CLI-lifecycle actions (update / uninstall) as the menu. The bare `everyapi version` (and the --version/-v flags, special-cased in main) just print the version.
 	{name: "version", aliases: []string{"--version", "-v"}, desc: "Build version · update · uninstall", headerFn: versionHeader, run: versionRun, subs: []subcommand{
 		{name: "update", desc: "Check for a newer release and run the matching upgrade", args: []string{"update"}},
@@ -554,7 +556,7 @@ var commandGroup = map[string]string{
 	"seller": "marketplace", "edge": "marketplace",
 	// Tools & settings
 	"mcp": "tools", "proxy": "tools",
-	"doctor": "tools", "events": "tools", "settings": "tools",
+	"doctor": "tools", "events": "tools", "settings": "tools", "artifacts": "tools",
 	// feedback sits with the tools rather than with account/billing: it is about the product, not about this user's money or session.
 	"feedback": "tools",
 	"version":  "tools", // version namespace = build version + update/uninstall

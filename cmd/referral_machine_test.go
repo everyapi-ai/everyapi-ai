@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -84,6 +87,50 @@ func TestReferralMachineReportsSignedOutWithoutError(t *testing.T) {
 		if _, present := got[key]; present {
 			t.Fatalf("signed-out referral exposed %q: %v", key, got)
 		}
+	}
+}
+
+func TestReferralMachineKeepsCredentialReadFailuresUnavailable(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	if err := os.MkdirAll(filepath.Join(configHome, "everyapi", "credentials.json"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	err := ReferralMachine([]string{"--format=json"})
+	var statusErr *statusMachineError
+	if !errors.As(err, &statusErr) || statusErr.code != "unavailable" {
+		t.Fatalf("error = %#v, want unavailable machine status", err)
+	}
+}
+
+func TestReferralMachineClassifiesAccountEnvelopes(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		message  string
+		wantCode string
+	}{
+		{name: "legacy auth rejection requires login", message: "access token invalid", wantCode: "invalid_credentials"},
+		{name: "business failure stays unavailable", message: "database error", wantCode: "unavailable"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_ = json.NewEncoder(w).Encode(map[string]any{"success": false, "message": tc.message})
+			}))
+			t.Cleanup(server.Close)
+			if err := config.Save(&config.Credentials{
+				APIBase: server.URL, AccessToken: "token", Username: "alice",
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			err := ReferralMachine([]string{"--format=json"})
+			var statusErr *statusMachineError
+			if !errors.As(err, &statusErr) || statusErr.code != tc.wantCode {
+				t.Fatalf("error = %#v, want %s machine status", err, tc.wantCode)
+			}
+		})
 	}
 }
 

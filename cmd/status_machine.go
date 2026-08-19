@@ -50,6 +50,49 @@ func statusMachineRequested(args []string) bool {
 	return false
 }
 
+// accountMachineError keeps a rejected credential distinct from an account
+// request that merely failed. The desktop redirects to login for
+// invalid_credentials, so transport and server failures must stay unavailable.
+func accountMachineError(err error) error {
+	if api.IsUnauthorized(err) || isLegacyAccountUnauthorized(err) {
+		return machineStatusError("invalid_credentials", err)
+	}
+	return machineStatusError("unavailable", err)
+}
+
+// isLegacyAccountUnauthorized is intentionally narrower than
+// api.IsUnauthorized: only the account self/referral commands need to support
+// old gateways that omitted code:"unauthorized" from their HTTP-200 envelope.
+// Keep the SDK predicate exact so unrelated callers never make control-flow
+// decisions from localized business-error text.
+func isLegacyAccountUnauthorized(err error) bool {
+	var envelopeError *api.EnvelopeError
+	if !errors.As(err, &envelopeError) {
+		return false
+	}
+	message := strings.ToLower(envelopeError.Message)
+	message = strings.NewReplacer("_", " ", ".", " ", "-", " ").Replace(message)
+	if !strings.Contains(message, "access token") {
+		return false
+	}
+	for _, invalid := range []string{
+		"invalid", "not valid", "invalide", "inválido", "no válido", "ungültig",
+		"无效", "無效", "無効", "유효하지",
+	} {
+		if strings.Contains(message, invalid) {
+			return true
+		}
+	}
+	return false
+}
+
+func credentialLoadMachineError(err error) error {
+	if errors.Is(err, config.ErrNoCredentials) {
+		return machineStatusError("invalid_credentials", err)
+	}
+	return machineStatusError("unavailable", err)
+}
+
 // statusMachine reports local account metadata by default. includeBalance is an explicit opt-in to one secret-free account request for the desktop popover.
 func statusMachine(includeBalance bool) error {
 	unlock, err := acquireCredentialLock()
@@ -67,7 +110,7 @@ func statusMachine(includeBalance bool) error {
 		return nil
 	}
 	if err != nil {
-		return machineStatusError("invalid_credentials", err)
+		return credentialLoadMachineError(err)
 	}
 	out.SignedIn = true
 	out.Username = strings.TrimSpace(cliout.Sanitize(creds.Username))
@@ -86,18 +129,18 @@ func statusMachine(includeBalance bool) error {
 		if creds.OAuthClientID != "" {
 			relayKey, err := resolveRelayKeyLocked(creds, "")
 			if err != nil {
-				return machineStatusError("invalid_credentials", fmt.Errorf("resolve relay key: %w", err))
+				return accountMachineError(fmt.Errorf("resolve relay key: %w", err))
 			}
 			summary, err := api.New(config.ResolveAPIBaseForBase(creds.APIBase), relayKey).
 				GetAccountSummary(cliout.WithCtx())
 			if err != nil {
-				return machineStatusError("invalid_credentials", fmt.Errorf("fetch account summary: %w", err))
+				return accountMachineError(fmt.Errorf("fetch account summary: %w", err))
 			}
 			quota = summary.Wallet.Quota
 		} else {
 			self, err := client.GetSelf(cliout.WithCtx())
 			if err != nil {
-				return machineStatusError("invalid_credentials", fmt.Errorf("fetch user: %w", err))
+				return accountMachineError(fmt.Errorf("fetch user: %w", err))
 			}
 			quota = self.Quota
 			// This request already carries the current picture, so refresh the cache here rather than making the desktop wait for the next login. A save failure is non-fatal: reporting status is the primary job.
