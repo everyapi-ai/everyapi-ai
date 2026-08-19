@@ -132,18 +132,19 @@ mcp = "Servidor MCP para CLIs de IA (Claude Code / Codex / Gemini)"
 doctor = "Auto-chequeo (credenciales, gateway, sanitizador, herramientas)"
 events = "Suscribirse al stream de eventos en vivo (SSE)"
 settings = "Ver / cambiar preferencias del CLI (idioma, …)"
-artifacts = "Publicar informes HTML autocontenidos"
+artifacts = "Publicar y administrar informes HTML autocontenidos"
 update = "Buscar una versión más nueva y ejecutar la actualización correspondiente"
 uninstall = "Eliminar el estado y el binario de everyapi de esta máquina"
 version = "Versión · update · uninstall"
 
 [artifacts]
-usage = "uso: everyapi artifacts share <file.html>"
-unknown_sub = "subcomando de artifacts desconocido %q (prueba: share)"
+usage = "uso: everyapi artifacts share [--json] <file.html> | everyapi artifacts update [--json] <url> <file.html> | everyapi artifacts delete [--json] <url>"
+unknown_sub = "subcomando de artifacts desconocido %q (prueba: share, update, delete)"
 html_required = "el artifact debe ser un archivo .html o .htm"
 regular_required = "el artifact debe ser un archivo normal"
 too_large = "el artifact tiene %d bytes; el máximo es %d bytes"
 official_only = "el uso compartido de artifacts alojados requiere una cuenta iniciada mediante api.everyapi.ai o api-cn.everyapi.ai"
+deleted = "%s eliminado"
 
 [launcher.subs.auth]
 login = "Autenticar este dispositivo con EveryAPI"

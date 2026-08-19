@@ -116,18 +116,19 @@ mcp = "AI CLI 的 MCP 伺服器（Claude Code / Codex / Gemini）"
 doctor = "本機自我檢查（憑證、閘道、代理、工具）"
 events = "訂閱即時事件串流（SSE）"
 settings = "查看 / 修改 CLI 偏好（語言等）"
-artifacts = "發布自包含 HTML 報告"
+artifacts = "發布和管理自包含 HTML 報告"
 update = "檢查新版本並執行對應的升級"
 uninstall = "從此機器移除 everyapi 狀態和二進位"
 version = "版本 · 升級 · 解除安裝"
 
 [artifacts]
-usage = "用法：everyapi artifacts share <file.html>"
-unknown_sub = "未知的 artifacts 子命令 %q（可用：share）"
+usage = "用法：everyapi artifacts share [--json] <file.html> | everyapi artifacts update [--json] <url> <file.html> | everyapi artifacts delete [--json] <url>"
+unknown_sub = "未知的 artifacts 子命令 %q（可用：share、update、delete）"
 html_required = "artifact 必須是 .html 或 .htm 檔案"
 regular_required = "artifact 必須是一般檔案"
 too_large = "artifact 大小為 %d 位元組；最大允許 %d 位元組"
 official_only = "託管 artifact 分享僅支援透過 api.everyapi.ai 或 api-cn.everyapi.ai 登入的帳戶"
+deleted = "已刪除 %s"
 
 [launcher.subs.auth]
 login = "登入此裝置到 EveryAPI"

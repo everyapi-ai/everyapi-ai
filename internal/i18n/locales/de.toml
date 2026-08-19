@@ -130,18 +130,19 @@ mcp = "MCP-Server für KI-CLIs (Claude Code / Codex / Gemini)"
 doctor = "Selbsttest (Anmeldedaten, Gateway, Sanitizer, Tools)"
 events = "Live-Event-Stream abonnieren (SSE)"
 settings = "CLI-Einstellungen anzeigen / ändern (Sprache, …)"
-artifacts = "Eigenständige HTML-Berichte veröffentlichen"
+artifacts = "Eigenständige HTML-Berichte veröffentlichen und verwalten"
 update = "Auf neuere Version prüfen und das passende Upgrade ausführen"
 uninstall = "everyapi state and binary entfernen"
 version = "Version · update · uninstall"
 
 [artifacts]
-usage = "Verwendung: everyapi artifacts share <file.html>"
-unknown_sub = "unbekannter artifacts-Unterbefehl %q (versuche: share)"
+usage = "Verwendung: everyapi artifacts share [--json] <file.html> | everyapi artifacts update [--json] <url> <file.html> | everyapi artifacts delete [--json] <url>"
+unknown_sub = "unbekannter artifacts-Unterbefehl %q (versuche: share, update, delete)"
 html_required = "das Artefakt muss eine .html- oder .htm-Datei sein"
 regular_required = "das Artefakt muss eine reguläre Datei sein"
 too_large = "das Artefakt ist %d Byte groß; maximal sind %d Byte erlaubt"
 official_only = "das gehostete Teilen von Artefakten erfordert eine Anmeldung über api.everyapi.ai oder api-cn.everyapi.ai"
+deleted = "%s gelöscht"
 
 [launcher.subs.auth]
 login = "Dieses Gerät bei EveryAPI authentifizieren"

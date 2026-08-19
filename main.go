@@ -329,7 +329,7 @@ var commands = []command{
 	{name: "doctor", desc: "Self-check (creds, gateway, sanitizer, tools)", run: doctor.Run},
 	{name: "events", desc: "Subscribe to the live event stream (SSE)", requireLogin: true, run: events.Run},
 	{name: "settings", desc: "View / change CLI preferences (language, …)", run: settings.Run},
-	{name: "artifacts", desc: "Publish self-contained HTML reports", requireLogin: true, run: artifacts.Run},
+	{name: "artifacts", desc: "Publish and manage self-contained HTML reports", requireLogin: true, run: artifacts.Run},
 	// `version` shows the build version as a header, then offers the CLI-lifecycle actions (update / uninstall) as the menu. The bare `everyapi version` (and the --version/-v flags, special-cased in main) just print the version.
 	{name: "version", aliases: []string{"--version", "-v"}, desc: "Build version · update · uninstall", headerFn: versionHeader, run: versionRun, subs: []subcommand{
 		{name: "update", desc: "Check for a newer release and run the matching upgrade", args: []string{"update"}},

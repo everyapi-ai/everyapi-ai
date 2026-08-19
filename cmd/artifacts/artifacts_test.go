@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -152,6 +154,49 @@ func TestArtifactHTTPClientHasATimeout(t *testing.T) {
 	}
 }
 
+func TestArtifactHTTPClientRefusesRedirects(t *testing.T) {
+	var redirectedRequests atomic.Int32
+	destination := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		redirectedRequests.Add(1)
+		http.Error(w, "must not be reached", http.StatusInternalServerError)
+	}))
+	defer destination.Close()
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, destination.URL, http.StatusFound)
+	}))
+	defer source.Close()
+	path := writeArtifactFile(t, "<html></html>")
+	creds := &config.Credentials{APIBase: config.DefaultAPIBase, AccessToken: "access-token", UserID: 42}
+	tests := []struct {
+		name string
+		run  func() error
+	}{
+		{name: "share", run: func() error {
+			_, err := publish(context.Background(), httpClient, source.URL, creds, path)
+			return err
+		}},
+		{name: "update", run: func() error {
+			_, err := updateArtifact(context.Background(), httpClient, source.URL, creds, "https://artifacts.everyapi.ai/TK4tBA9HQErZ", path)
+			return err
+		}},
+		{name: "delete", run: func() error {
+			_, err := deleteArtifact(context.Background(), httpClient, source.URL, creds, "https://artifacts.everyapi.ai/TK4tBA9HQErZ")
+			return err
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			redirectedRequests.Store(0)
+			if err := test.run(); err == nil {
+				t.Fatal("redirect response must not be accepted as an artifact result")
+			}
+			if got := redirectedRequests.Load(); got != 0 {
+				t.Fatalf("artifact client followed the redirect and sent %d request(s) to the second server", got)
+			}
+		})
+	}
+}
+
 func TestRunSharePrintsOnlyThePublicURL(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -192,4 +237,199 @@ func TestRunRequiresSharePathAndCredentials(t *testing.T) {
 	if err := Run([]string{"share", "/tmp/report.html"}); err == nil {
 		t.Fatal("want an error when signed out")
 	}
+}
+
+func TestRunUpdateReplacesTheOwnedArtifact(t *testing.T) {
+	const html = "<!doctype html><title>Updated</title>"
+	var received bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received = true
+		if r.Method != http.MethodPut || r.URL.Path != "/api/artifacts/TK4tBA9HQErZ" {
+			t.Errorf("request = %s %s, want PUT /api/artifacts/TK4tBA9HQErZ", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer access-token" || r.Header.Get("EveryAPI-User-Id") != "42" {
+			t.Errorf("management credentials were not forwarded")
+		}
+		body := new(bytes.Buffer)
+		if _, err := body.ReadFrom(r.Body); err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if body.String() != html {
+			t.Errorf("body = %q", body.String())
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"url":"https://artifacts.everyapi.ai/TK4tBA9HQErZ","expires_at":"2026-09-18T12:00:00Z"}`))
+	}))
+	defer server.Close()
+	configureRunTest(t, server)
+	path := writeArtifactFile(t, html)
+	out := captureArtifactOutput(t)
+
+	if err := Run([]string{"update", "https://artifacts.everyapi.ai/TK4tBA9HQErZ", path}); err != nil {
+		t.Fatalf("Run update: %v", err)
+	}
+	if !received {
+		t.Fatal("artifact service was not called")
+	}
+	if got := strings.TrimSpace(out.String()); got != "https://artifacts.everyapi.ai/TK4tBA9HQErZ" {
+		t.Errorf("stdout = %q", got)
+	}
+}
+
+func TestRunUpdateRejectsAResponseForADifferentArtifact(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"url":"https://artifacts.everyapi.ai/NJR7itv46u5X","expires_at":"2026-09-18T12:00:00Z"}`))
+	}))
+	defer server.Close()
+	configureRunTest(t, server)
+	path := writeArtifactFile(t, "<html>updated</html>")
+
+	err := Run([]string{"update", "https://artifacts.everyapi.ai/TK4tBA9HQErZ", path})
+	if err == nil || !strings.Contains(err.Error(), "TK4tBA9HQErZ") {
+		t.Fatalf("Run update error = %v, want mismatched artifact URL error", err)
+	}
+}
+
+func TestRunDeleteRevokesTheOwnedArtifact(t *testing.T) {
+	var received bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received = true
+		if r.Method != http.MethodDelete || r.URL.Path != "/api/artifacts/TK4tBA9HQErZ" {
+			t.Errorf("request = %s %s, want DELETE /api/artifacts/TK4tBA9HQErZ", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	configureRunTest(t, server)
+	out := captureArtifactOutput(t)
+
+	if err := Run([]string{"delete", "https://artifacts.everyapi.ai/TK4tBA9HQErZ"}); err != nil {
+		t.Fatalf("Run delete: %v", err)
+	}
+	if !received {
+		t.Fatal("artifact service was not called")
+	}
+	if got := strings.TrimSpace(out.String()); got != "deleted https://artifacts.everyapi.ai/TK4tBA9HQErZ" {
+		t.Errorf("stdout = %q", got)
+	}
+}
+
+func TestRunJSONEmitsMachineReadableResults(t *testing.T) {
+	tests := []struct {
+		name       string
+		args       func(string) []string
+		wantMethod string
+		wantStatus int
+		wantJSON   map[string]any
+	}{
+		{
+			name:       "share",
+			args:       func(path string) []string { return []string{"share", "--json", path} },
+			wantMethod: http.MethodPost,
+			wantStatus: http.StatusCreated,
+			wantJSON:   map[string]any{"url": "https://artifacts.everyapi.ai/TK4tBA9HQErZ", "expires_at": "2026-09-18T12:00:00Z"},
+		},
+		{
+			name: "update",
+			args: func(path string) []string {
+				return []string{"update", "--json", "https://artifacts.everyapi.ai/TK4tBA9HQErZ", path}
+			},
+			wantMethod: http.MethodPut,
+			wantStatus: http.StatusOK,
+			wantJSON:   map[string]any{"url": "https://artifacts.everyapi.ai/TK4tBA9HQErZ", "expires_at": "2026-09-18T12:00:00Z"},
+		},
+		{
+			name: "delete",
+			args: func(string) []string {
+				return []string{"delete", "--json", "https://artifacts.everyapi.ai/TK4tBA9HQErZ"}
+			},
+			wantMethod: http.MethodDelete,
+			wantStatus: http.StatusNoContent,
+			wantJSON:   map[string]any{"url": "https://artifacts.everyapi.ai/TK4tBA9HQErZ", "deleted": true},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != test.wantMethod {
+					t.Errorf("method = %s, want %s", r.Method, test.wantMethod)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(test.wantStatus)
+				if test.wantStatus != http.StatusNoContent {
+					_, _ = w.Write([]byte(`{"url":"https://artifacts.everyapi.ai/TK4tBA9HQErZ","expires_at":"2026-09-18T12:00:00Z"}`))
+				}
+			}))
+			defer server.Close()
+			configureRunTest(t, server)
+			out := captureArtifactOutput(t)
+
+			if err := Run(test.args(writeArtifactFile(t, "<html></html>"))); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			var got map[string]any
+			if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+				t.Fatalf("stdout is not JSON: %q: %v", out.String(), err)
+			}
+			if len(got) != len(test.wantJSON) {
+				t.Fatalf("JSON = %#v, want %#v", got, test.wantJSON)
+			}
+			for key, want := range test.wantJSON {
+				if got[key] != want {
+					t.Errorf("JSON[%q] = %#v, want %#v", key, got[key], want)
+				}
+			}
+		})
+	}
+}
+
+func TestRunRejectsUntrustedArtifactURLsBeforeSendingCredentials(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests++ }))
+	defer server.Close()
+	configureRunTest(t, server)
+	path := writeArtifactFile(t, "<html></html>")
+
+	for _, args := range [][]string{
+		{"update", "https://evil.example/TK4tBA9HQErZ", path},
+		{"delete", "https://artifacts.everyapi.ai/TK4tBA9HQErZ?redirect=evil"},
+		{"delete", "not-an-artifact"},
+	} {
+		if err := Run(args); err == nil || !strings.Contains(err.Error(), "invalid artifact URL") {
+			t.Fatalf("Run(%q) error = %v, want an invalid artifact URL error", args, err)
+		}
+	}
+	if requests != 0 {
+		t.Fatalf("invalid URLs made %d requests", requests)
+	}
+}
+
+func configureRunTest(t *testing.T, server *httptest.Server) {
+	t.Helper()
+	previousBase, previousClient := serviceBaseURL, httpClient
+	serviceBaseURL, httpClient = server.URL, server.Client()
+	t.Cleanup(func() { serviceBaseURL, httpClient = previousBase, previousClient })
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := config.Save(&config.Credentials{APIBase: config.DefaultAPIBase, AccessToken: "access-token", UserID: 42}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeArtifactFile(t *testing.T, html string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "report.html")
+	if err := os.WriteFile(path, []byte(html), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func captureArtifactOutput(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	out := &bytes.Buffer{}
+	previous := cliout.Out
+	cliout.Out = out
+	t.Cleanup(func() { cliout.Out = previous })
+	return out
 }
