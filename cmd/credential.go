@@ -54,11 +54,11 @@ func machineCredentialError(code string, err error) error {
 	return &credentialError{code: code, err: err}
 }
 
-// Credential implements the non-interactive credential-process contract used by local integrations. It never prompts and writes exactly one JSON object to stdout on success.
+// Credential implements the non-interactive credential-process contract used by local integrations. It never prompts and writes either one JSON object or one raw token to stdout on success.
 func Credential(args []string) error {
 	fs := flag.NewFlagSet("auth credential", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	format := fs.String("format", "json", "output format (json)")
+	format := fs.String("format", "json", "output format (json or token)")
 	invalidate := fs.Bool("invalidate", false, "invalidate a rejected cached relay key")
 	includeModels := fs.Bool("include-models", false, "include the relay-scoped model catalog")
 	if err := fs.Parse(args); err != nil {
@@ -67,8 +67,12 @@ func Credential(args []string) error {
 	if fs.NArg() != 0 {
 		return machineCredentialError("invalid_request", errors.New("unexpected positional arguments"))
 	}
-	if !strings.EqualFold(strings.TrimSpace(*format), "json") {
+	outputFormat := strings.ToLower(strings.TrimSpace(*format))
+	if outputFormat != "json" && outputFormat != "token" {
 		return machineCredentialError("invalid_request", fmt.Errorf("unsupported format %q", *format))
+	}
+	if outputFormat == "token" && *includeModels {
+		return machineCredentialError("invalid_request", errors.New("token format cannot include models"))
 	}
 	unlock, err := credentiallock.AcquireTimeout(5 * time.Second)
 	if err != nil {
@@ -128,6 +132,12 @@ func Credential(args []string) error {
 	// The key and any rotated refresh token are persisted now. Do not hold the credential-file lock across the optional model-directory network call; login/logout and ordinary credential consumers have a bounded wait.
 	unlock()
 	locked = false
+	if outputFormat == "token" {
+		if _, err := fmt.Fprintln(cliout.Out, key); err != nil {
+			return machineCredentialError("unavailable", fmt.Errorf("write credential token: %w", err))
+		}
+		return nil
+	}
 	if *includeModels {
 		models, err := api.New(apiBase, key).RelayModelCatalog(context.Background())
 		if err != nil {

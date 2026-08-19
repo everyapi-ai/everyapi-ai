@@ -172,21 +172,6 @@ func TestCondemnStalePreparedHomesAgesOutUnownedHomes(t *testing.T) {
 	}
 }
 
-// TestCondemnStalePreparedHomesHonorsKeepMarker guards the one directory the CLI leaves behind on purpose — the home whose Codex session index could not be merged back, which the user is told to go salvage.
-func TestCondemnStalePreparedHomesHonorsKeepMarker(t *testing.T) {
-	root := preparedHomeTestRoot(t)
-	stubOwnerLiveness(t, false)
-	home := seedPreparedHome(t, root, "codex-kept", abandonedPreparedHomeAge+time.Hour, deadParent, deadChild)
-	keepPreparedHome(home)
-
-	if condemned := condemnStalePreparedHomes(root, time.Now()); len(condemned) != 0 {
-		t.Fatalf("condemned = %v, want the deliberately kept home left alone", condemned)
-	}
-	if _, err := os.Stat(home); err != nil {
-		t.Fatalf("deliberately kept home was reaped: %v", err)
-	}
-}
-
 // TestCondemnStalePreparedHomesFinishesAnInterruptedReap covers a sweep whose background delete was cut short by an early exit: the tombstone is out of the live namespace already, so it is finished unconditionally.
 func TestCondemnStalePreparedHomesFinishesAnInterruptedReap(t *testing.T) {
 	root := preparedHomeTestRoot(t)
@@ -207,7 +192,18 @@ func TestCondemnStalePreparedHomesFinishesAnInterruptedReap(t *testing.T) {
 func TestSweepStalePreparedHomesDeletesCondemnedHomes(t *testing.T) {
 	root := preparedHomeTestRoot(t)
 	stubOwnerLiveness(t, false)
-	seedPreparedHome(t, root, "codex-dead", time.Minute, deadParent, deadChild)
+	home := seedPreparedHome(t, root, "codex-dead", time.Minute, deadParent, deadChild)
+	persistentHome := filepath.Join(filepath.Dir(root), "codex-home")
+	if err := os.MkdirAll(persistentHome, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	profilePath := filepath.Join(persistentHome, "everyapi-codex-dead.config.toml")
+	if err := os.WriteFile(profilePath, []byte("model = \"gpt-5\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, preparedCodexProfileFile), []byte(profilePath), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	sweepStalePreparedHomes(root)
 
@@ -218,6 +214,9 @@ func TestSweepStalePreparedHomesDeletesCondemnedHomes(t *testing.T) {
 			t.Fatal(err)
 		}
 		if len(entries) == 0 {
+			if _, err := os.Stat(profilePath); !os.IsNotExist(err) {
+				t.Fatalf("orphaned Codex profile survived its prepared home: %v", err)
+			}
 			return
 		}
 		if time.Now().After(deadline) {
@@ -227,7 +226,66 @@ func TestSweepStalePreparedHomesDeletesCondemnedHomes(t *testing.T) {
 	}
 }
 
-// TestSweepStalePreparedHomesLeavesSymlinkTargetsAlone is the guarantee that makes reaping safe at all: Codex points its rollouts and archive at the persistent codex-home through symlinks, so deleting a home must delete the link and not the durable conversation record behind it.
+// TestSweepStalePreparedHomesDeletesCodexProfileWithoutMarker covers a hard
+// kill after the persistent profile is created but before its ownership marker
+// reaches the prepared home.
+func TestSweepStalePreparedHomesDeletesCodexProfileWithoutMarker(t *testing.T) {
+	root := preparedHomeTestRoot(t)
+	stubOwnerLiveness(t, false)
+	seedPreparedHome(t, root, "codex-interrupted", time.Minute, deadParent, deadChild)
+	persistentHome := filepath.Join(filepath.Dir(root), "codex-home")
+	if err := os.MkdirAll(persistentHome, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	profilePath := filepath.Join(persistentHome, "everyapi-codex-interrupted.config.toml")
+	if err := os.WriteFile(profilePath, []byte("model = \"gpt-5\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	sweepStalePreparedHomes(root)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(profilePath); os.IsNotExist(err) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("orphaned Codex profile without a marker survived its prepared home")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestTakePreparedCleanupRetainsCodexMarkerWhenProfileRemovalFails(t *testing.T) {
+	root := preparedHomeTestRoot(t)
+	home, err := newPreparedHome("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	persistentHome := filepath.Join(filepath.Dir(root), "codex-home")
+	profilePath := filepath.Join(persistentHome, "everyapi-"+filepath.Base(home)+".config.toml")
+	if err := os.MkdirAll(filepath.Join(profilePath, "cannot-remove"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, preparedCodexProfileFile), []byte(profilePath), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cleanup := TakePreparedCleanup(preparedHomeEnv("CODEX_HOME", home))
+	if cleanup == nil {
+		t.Fatal("TakePreparedCleanup returned no cleanup")
+	}
+	cleanup()
+
+	if _, err := os.Stat(home); err != nil {
+		t.Fatalf("prepared home was removed after profile cleanup failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, preparedCodexProfileFile)); err != nil {
+		t.Fatalf("profile marker was lost after cleanup failed: %v", err)
+	}
+}
+
+// TestSweepStalePreparedHomesLeavesSymlinkTargetsAlone guards the generic RemoveAll invariant: reaping a prepared home must never follow a symlink into external state.
 func TestSweepStalePreparedHomesLeavesSymlinkTargetsAlone(t *testing.T) {
 	root := preparedHomeTestRoot(t)
 	stubOwnerLiveness(t, false)
@@ -274,34 +332,5 @@ func TestNewPreparedHomeReapsOrphansBeforeItsOwn(t *testing.T) {
 	}
 	if _, err := os.Stat(home); err != nil {
 		t.Fatalf("launch reaped the home it just created: %v", err)
-	}
-}
-
-// TestTakePreparedCleanupKeepsTheHomeItCannotMerge pairs the warning printed on a failed session-index merge with a marker, so the next launch does not delete the directory the user was just told to go look at.
-func TestTakePreparedCleanupKeepsTheHomeItCannotMerge(t *testing.T) {
-	root := preparedHomeTestRoot(t)
-	home, err := newPreparedHome("codex")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// No .session_index.baseline.jsonl in the home, so the merge fails on its first read.
-	env := preparedHomeEnv("CODEX_HOME", home)
-	env[preparedCodexSessionIndexMarker] = filepath.Join(root, "session_index.jsonl")
-
-	cleanup := TakePreparedCleanup(env)
-	if cleanup == nil {
-		t.Fatal("TakePreparedCleanup returned no cleanup for a prepared home")
-	}
-	cleanup()
-
-	if _, err := os.Stat(home); err != nil {
-		t.Fatalf("home was removed despite the failed merge: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(home, preparedHomeKeepFile)); err != nil {
-		t.Fatalf("kept home carries no keep marker, so the next sweep would reap it: %v", err)
-	}
-	stubOwnerLiveness(t, false)
-	if condemned := condemnStalePreparedHomes(root, time.Now().Add(abandonedPreparedHomeAge)); len(condemned) != 0 {
-		t.Fatalf("condemned = %v, want the kept home to survive later sweeps", condemned)
 	}
 }

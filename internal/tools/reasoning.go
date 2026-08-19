@@ -51,7 +51,7 @@ func ReasoningLevels(t *Tool, model Model) (levels []string, preferred string) {
 
 // PersistedReasoningLevel reports the level this client last recorded outside the launcher, or "" when it keeps none. It is what the tool would boot at if `everyapi use` asked nothing, so it — not the vendor's per-model default — is where an interactive picker's cursor belongs on the first launch after this feature ships.
 //
-// Only codex has one. Its legacy fixed home survives across launches and inheritPersistentCodexReasoningEffort already feeds it back into a fresh CODEX_HOME, so a user who set "high" there before ever seeing this picker must be shown "high". Pi's agent dir is process-scoped and deleted on exit, so there is nothing to read back.
+// Only Codex has one. Its EveryAPI-owned home survives across launches and inheritPersistentCodexReasoningEffort feeds it into each fresh lifecycle-bound profile, so a user who set "high" there before ever seeing this picker must be shown "high". Pi's agent dir is process-scoped and deleted on exit, so there is nothing to read back.
 func PersistedReasoningLevel(t *Tool) string {
 	if t == nil || t.Name != "codex" {
 		return ""

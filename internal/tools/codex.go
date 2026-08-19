@@ -7,10 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/everyapi-ai/everyapi-sdk/config"
@@ -21,32 +19,21 @@ type codexUserDefaults struct {
 	ModelReasoningEffort string `toml:"model_reasoning_effort"`
 }
 
-type codexSessionIndexEntry struct {
-	ID         string `json:"id"`
-	ThreadName string `json:"thread_name"`
-	UpdatedAt  string `json:"updated_at"`
-}
+const preparedCodexProfileFile = ".everyapi-codex-profile"
 
-type codexSessionIndexLine struct {
-	Entry codexSessionIndexEntry
-	Line  string
-}
-
-const codexSessionIndexBaseline = ".session_index.baseline.jsonl"
-
-// prepareCodex generates an isolated CODEX_HOME under ~/.config/everyapi/codex-home and seeds it with the two files codex reads on startup:
+// prepareCodex generates the isolated auth and provider configuration Codex reads on startup:
 //
-//   - auth.json  →  pins auth_mode to "apikey" and stamps the relay key, so codex skips its ChatGPT device-login dance even when the user's real ~/.codex/auth.json is in chatgpt mode.
-//   - config.toml → defines an `everyapi` model_provider pointing at <apiBase>/v1 (wire_api = "responses" — the gateway exposes the full /v1/responses surface, see backend/internal/router/relay -router.go) and selects it as the default model_provider. Codex does NOT read OPENAI_BASE_URL on its own; this is how requests actually get routed through EveryAPI.
+//   - auth.json pins auth_mode to "apikey", so Codex skips its ChatGPT device-login dance even when the user's real ~/.codex/auth.json is in chatgpt mode.
+//   - config.toml defines an `everyapi` model_provider pointing at <apiBase>/v1 (wire_api = "responses" — the gateway exposes the full /v1/responses surface, see backend/internal/router/relay-router.go) and selects it as the default model_provider. Codex does NOT read OPENAI_BASE_URL on its own; this is how requests actually get routed through EveryAPI.
 //
-// Live-catalog launches use a process-scoped home so concurrent keys/groups cannot overwrite auth or model metadata. Compatibility callers that do not provide a catalog retain the legacy fixed home.
+// Live-catalog launches keep sessions in a persistent CODEX_HOME and pass the generated config through a unique, lifecycle-bound Codex profile, so concurrent keys/groups cannot overwrite provider or model metadata. Compatibility callers that do not provide a catalog retain the legacy fixed config.
 //
 // Returns the env additions to overlay on top of envFn — primarily CODEX_HOME so codex sees our config dir instead of ~/.codex.
 func prepareCodex(apiBase, token string) (map[string]string, error) {
 	return prepareCodexWithModels(apiBase, token, nil, "")
 }
 
-func prepareCodexWithModels(apiBase, token string, models []Model, bootModel string) (map[string]string, error) {
+func prepareCodexWithModels(apiBase, _ string, models []Model, bootModel string) (map[string]string, error) {
 	codexHome := ""
 	var err error
 	if len(models) > 0 {
@@ -59,12 +46,13 @@ func prepareCodexWithModels(apiBase, token string, models []Model, bootModel str
 	if err != nil {
 		return nil, err
 	}
-	// 0700 — auth.json carries a bearer token; treat the whole directory as secret. MkdirAll is a no-op when it already exists with the right permissions.
+	// 0700 keeps Codex's auth/config boundary private even though auth.json carries
+	// only a launch-independent placeholder; the real relay key stays process-scoped.
 	if err := os.MkdirAll(codexHome, 0o700); err != nil {
 		return nil, fmt.Errorf("create codex-home: %w", err)
 	}
 
-	if err := writeCodexAuthJSON(codexHome, token); err != nil {
+	if err := writeCodexAuthJSON(codexHome, transparentPlaceholderCredential); err != nil {
 		if len(models) > 0 {
 			removePreparedHomeAfterQuiet(codexHome)
 		}
@@ -136,7 +124,7 @@ func prepareCodexTransparentWithModels(models []Model, bootModel string) (map[st
 	return map[string]string{"CODEX_HOME": codexHome}, nil
 }
 
-// preparedCodexHomeEnv keeps per-launch credentials and model metadata in the generated CODEX_HOME while joining Codex's durable state back to the legacy persistent home. Codex stores rollout files below CODEX_HOME/sessions. Its SQLite index deliberately stays in the generated home so each launch backfills paths through its own live link instead of persisting paths through a previous launch home that cleanup has already removed.
+// preparedCodexHomeEnv keeps per-launch provider and model metadata in a generated Codex profile while using the persistent home as the real CODEX_HOME. Rollouts must be real descendants of CODEX_HOME: Codex canonicalizes both paths before thread/fork (the /btw command), so linking a temporary home's sessions directory to persistent storage makes every rollout look external and rejects the fork.
 func preparedCodexHomeEnv(codexHome string) (env map[string]string, err error) {
 	defer func() {
 		if err != nil {
@@ -152,176 +140,75 @@ func preparedCodexHomeEnv(codexHome string) (env map[string]string, err error) {
 		return nil, fmt.Errorf("create persistent codex home: %w", err)
 	}
 	for _, name := range []string{"sessions", "archived_sessions"} {
-		target := filepath.Join(persistentHome, name)
-		if err := os.MkdirAll(target, 0o700); err != nil {
+		if err := os.MkdirAll(filepath.Join(persistentHome, name), 0o700); err != nil {
 			return nil, fmt.Errorf("create persistent Codex %s: %w", name, err)
 		}
-		if err := linkCodexStateDirectory(target, filepath.Join(codexHome, name)); err != nil {
-			return nil, fmt.Errorf("link persistent Codex %s: %w", name, err)
-		}
 	}
-	indexTarget := filepath.Join(persistentHome, "session_index.jsonl")
-	indexLock, err := os.OpenFile(indexTarget+".lock", os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return nil, fmt.Errorf("open persistent Codex session index lock: %w", err)
-	}
-	unlock, err := lockCodexSessionIndex(indexLock)
-	if err != nil {
-		_ = indexLock.Close()
-		return nil, fmt.Errorf("lock persistent Codex session index: %w", err)
-	}
-	indexBody, err := os.ReadFile(indexTarget)
-	if err != nil && !os.IsNotExist(err) {
-		unlock()
-		_ = indexLock.Close()
-		return nil, fmt.Errorf("read persistent Codex session index: %w", err)
-	}
-	unlock()
-	if err := indexLock.Close(); err != nil {
-		return nil, fmt.Errorf("close persistent Codex session index lock: %w", err)
-	}
-	if err := writeFileAtomic(filepath.Join(codexHome, "session_index.jsonl"), indexBody, 0o600); err != nil {
+	if err := writeCodexAuthJSON(persistentHome, transparentPlaceholderCredential); err != nil {
 		return nil, err
 	}
-	if err := writeFileAtomic(filepath.Join(codexHome, codexSessionIndexBaseline), indexBody, 0o600); err != nil {
+	// --profile layers on top of the root config. Clear legacy routing/model assignments only after the generated profile has inherited the one supported migration value (reasoning effort), otherwise a stale fixed-home model can silently override a launch where the user made no selection.
+	if err := writeFileAtomic(
+		filepath.Join(persistentHome, "config.toml"),
+		[]byte("# EveryAPI routes Codex through a lifecycle-bound --profile.\n"),
+		0o644,
+	); err != nil {
 		return nil, err
+	}
+	profileBody, err := os.ReadFile(filepath.Join(codexHome, "config.toml"))
+	if err != nil {
+		return nil, fmt.Errorf("read prepared Codex profile: %w", err)
+	}
+	profileName := "everyapi-" + filepath.Base(codexHome)
+	profilePath := filepath.Join(persistentHome, profileName+".config.toml")
+	if err := os.WriteFile(filepath.Join(codexHome, preparedCodexProfileFile), []byte(profilePath), 0o600); err != nil {
+		return nil, fmt.Errorf("record prepared Codex profile: %w", err)
+	}
+	// Record ownership before creating the persistent resource. A hard kill can
+	// now leave a harmless marker with no profile, never an untracked profile.
+	if err := writeFileAtomic(profilePath, profileBody, 0o600); err != nil {
+		return nil, fmt.Errorf("write prepared Codex profile: %w", err)
+	}
+	args, err := json.Marshal([]string{"--profile", profileName})
+	if err != nil {
+		_ = os.Remove(profilePath)
+		return nil, fmt.Errorf("encode prepared Codex profile arguments: %w", err)
 	}
 	env = preparedHomeEnv("CODEX_HOME", codexHome)
-	env[preparedCodexSessionIndexMarker] = indexTarget
+	env["CODEX_HOME"] = persistentHome
+	env[preparedArgvMarker] = string(args)
 	return env, nil
 }
 
-func persistPreparedCodexSessionIndex(codexHome, target string) error {
-	baseline, err := os.ReadFile(filepath.Join(codexHome, codexSessionIndexBaseline))
+// removePreparedCodexProfile removes the profile owned by one prepared home. The marker is validated against EveryAPI's persistent Codex home before deletion so a corrupted prepared directory cannot turn cleanup into an arbitrary-file remove. Callers retain the marker-bearing prepared home on failure so a later orphan sweep can retry.
+func removePreparedCodexProfile(home string) error {
+	configDir, err := config.ConfigDir()
 	if err != nil {
-		return fmt.Errorf("read session-index baseline: %w", err)
+		return err
 	}
-	updated, err := os.ReadFile(filepath.Join(codexHome, "session_index.jsonl"))
-	if err != nil {
-		return fmt.Errorf("read updated session index: %w", err)
+	persistentHome := filepath.Join(configDir, "codex-home")
+	profilePath := ""
+	if body, readErr := os.ReadFile(filepath.Join(home, preparedCodexProfileFile)); readErr == nil {
+		candidate := strings.TrimSpace(string(body))
+		rel, relErr := filepath.Rel(persistentHome, candidate)
+		if relErr == nil && !filepath.IsAbs(rel) && filepath.Dir(rel) == "." && strings.HasPrefix(rel, "everyapi-codex-") && strings.HasSuffix(rel, ".config.toml") {
+			profilePath = candidate
+		}
 	}
-	lockFile, err := os.OpenFile(target+".lock", os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return fmt.Errorf("open session-index lock: %w", err)
+	if profilePath == "" {
+		// Older/interrupted launches may have been killed between profile creation
+		// and marker creation. The name is derived from the prepared home, including
+		// after the stale sweep renames that home into the .reaping-* namespace.
+		homeName := strings.TrimPrefix(filepath.Base(home), preparedHomeReapPrefix)
+		if !strings.HasPrefix(homeName, "codex-") {
+			return nil
+		}
+		profilePath = filepath.Join(persistentHome, "everyapi-"+homeName+".config.toml")
 	}
-	unlock, err := lockCodexSessionIndex(lockFile)
-	if err != nil {
-		_ = lockFile.Close()
-		return fmt.Errorf("lock session index: %w", err)
-	}
-	defer func() {
-		unlock()
-		_ = lockFile.Close()
-	}()
-	current, err := os.ReadFile(target)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("read current session index: %w", err)
-	}
-	merged, err := mergeCodexSessionIndex(baseline, updated, current)
-	if err != nil {
-		return fmt.Errorf("merge session index: %w", err)
-	}
-	if err := writeFileAtomic(target, merged, 0o600); err != nil {
-		return fmt.Errorf("write merged session index: %w", err)
+	if err := os.Remove(profilePath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove prepared Codex profile: %w", err)
 	}
 	return nil
-}
-
-func mergeCodexSessionIndex(baseline, updated, current []byte) ([]byte, error) {
-	before, err := latestCodexSessionIndexLines(baseline)
-	if err != nil {
-		return nil, fmt.Errorf("parse baseline: %w", err)
-	}
-	after, err := latestCodexSessionIndexLines(updated)
-	if err != nil {
-		return nil, fmt.Errorf("parse updated index: %w", err)
-	}
-	currentLatest, err := latestCodexSessionIndexLines(current)
-	if err != nil {
-		return nil, fmt.Errorf("parse persistent index: %w", err)
-	}
-	deleted := make(map[string]bool)
-	for id, baselineLine := range before {
-		if _, ok := after[id]; !ok {
-			currentLine, exists := currentLatest[id]
-			deleted[id] = exists && currentLine.Entry == baselineLine.Entry
-		}
-	}
-	changed := make(map[string]codexSessionIndexLine)
-	for id, line := range after {
-		previous, existedBefore := before[id]
-		if existedBefore && previous.Entry == line.Entry {
-			continue
-		}
-		currentLine, existsNow := currentLatest[id]
-		if !existsNow {
-			// A concurrent deletion has no timestamp to compare with this update. Prefer the recoverable operation so cleanup order cannot silently discard a renamed session.
-			changed[id] = line
-			continue
-		}
-		if existedBefore && currentLine.Entry == previous.Entry {
-			changed[id] = line
-			continue
-		}
-		if codexSessionIndexEntryIsNewer(line.Entry, currentLine.Entry) {
-			changed[id] = line
-		}
-	}
-
-	var merged strings.Builder
-	for _, raw := range strings.Split(string(current), "\n") {
-		line := strings.TrimSpace(raw)
-		if line == "" {
-			continue
-		}
-		var entry codexSessionIndexEntry
-		if json.Unmarshal([]byte(line), &entry) == nil && deleted[entry.ID] {
-			continue
-		}
-		merged.WriteString(raw)
-		merged.WriteByte('\n')
-	}
-	ids := make([]string, 0, len(changed))
-	for id := range changed {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	for _, id := range ids {
-		merged.WriteString(changed[id].Line)
-		merged.WriteByte('\n')
-	}
-	return []byte(merged.String()), nil
-}
-
-func codexSessionIndexEntryIsNewer(candidate, current codexSessionIndexEntry) bool {
-	candidateTime, candidateErr := time.Parse(time.RFC3339Nano, candidate.UpdatedAt)
-	currentTime, currentErr := time.Parse(time.RFC3339Nano, current.UpdatedAt)
-	return candidateErr == nil && currentErr == nil && candidateTime.After(currentTime)
-}
-
-func latestCodexSessionIndexLines(body []byte) (map[string]codexSessionIndexLine, error) {
-	latest := make(map[string]codexSessionIndexLine)
-	for lineNumber, raw := range strings.Split(string(body), "\n") {
-		line := strings.TrimSpace(raw)
-		if line == "" {
-			continue
-		}
-		var entry codexSessionIndexEntry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			return nil, fmt.Errorf("line %d: %w", lineNumber+1, err)
-		}
-		if entry.ID == "" {
-			return nil, fmt.Errorf("line %d: missing session id", lineNumber+1)
-		}
-		if entry.ThreadName == "" {
-			return nil, fmt.Errorf("line %d: missing thread name", lineNumber+1)
-		}
-		if _, err := time.Parse(time.RFC3339Nano, entry.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("line %d: invalid updated_at: %w", lineNumber+1, err)
-		}
-		latest[entry.ID] = codexSessionIndexLine{Entry: entry, Line: raw}
-	}
-	return latest, nil
 }
 
 func writeCodexOfficialConfigTOML(codexHome string) error {
@@ -352,7 +239,7 @@ func writeCodexOfficialConfigTOMLWithCatalog(codexHome, catalogPath, bootModel s
 	return writeFileAtomic(filepath.Join(codexHome, "config.toml"), body, 0o644)
 }
 
-// writeCodexAuthJSON atomically writes auth.json with apikey mode + the relay key. Schema mirrors what codex itself emits for the `codex login --api-key ...` path: OPENAI_API_KEY top-level (NOT nested under tokens), tokens nulled out, auth_mode pinned.
+// writeCodexAuthJSON atomically writes auth.json with apikey mode + the supplied credential. Schema mirrors what codex itself emits for the `codex login --api-key ...` path: OPENAI_API_KEY top-level (NOT nested under tokens), tokens nulled out, auth_mode pinned. EveryAPI launch paths pass a launch-independent placeholder; the real relay key comes from the child process environment.
 //
 // 0600 perms — same as how codex writes its own auth.json.
 func writeCodexAuthJSON(codexHome, token string) error {
@@ -368,7 +255,7 @@ func writeCodexAuthJSON(codexHome, token string) error {
 	return writeFileAtomic(filepath.Join(codexHome, "auth.json"), body, 0o600)
 }
 
-// writeCodexConfigTOML writes config.toml selecting the everyapi model_provider as default. We do NOT copy the user's real ~/.codex/config.toml — the user explicitly chose isolation, so personality/theme/etc. start fresh. The EveryAPI-owned provider configuration is regenerated on every `everyapi use codex` launch; root-level model defaults are read from the existing config first.
+// writeCodexConfigTOML writes config.toml selecting the everyapi model_provider as default. We do NOT copy the user's real ~/.codex/config.toml — the user explicitly chose isolation, so personality/theme/etc. start fresh. The EveryAPI-owned provider configuration is regenerated on every `everyapi use codex` launch.
 //
 // wire_api = "responses" matches the backend's native /v1/responses surface. requires_openai_auth = false because EveryAPI's relay key is its own credential, not an OpenAI ChatGPT session token.
 func writeCodexConfigTOML(codexHome, apiBase string) error {
@@ -385,7 +272,7 @@ func writeCodexConfigTOMLWithCatalog(codexHome, apiBase, catalogPath, bootModel 
 	if err := inheritPersistentCodexReasoningEffort(&defaults, codexHome, catalogPath); err != nil {
 		return err
 	}
-	// A live-catalog launch gets a process-scoped CODEX_HOME created fresh by os.MkdirTemp and removed on exit, so the read above finds nothing and "root-level model is preserved" cannot hold there — whatever codex recorded about its own model died with the previous home. The selection EveryAPI persisted is the only thing that survives across launches, and it arrives here already sorted to the head of the catalogue. A model the user set in a legacy fixed home still wins, so this only fills a gap.
+	// A live-catalog launch gets a fresh per-launch profile, so the read above finds no model to preserve. The selection EveryAPI persisted is the value that survives across launches. A model set in the legacy fixed config still wins, so this only fills a gap.
 	if defaults.Model == "" {
 		defaults.Model = bootModel
 	}

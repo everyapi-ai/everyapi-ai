@@ -15,17 +15,14 @@ import (
 )
 
 const (
-	preparedHomeMarker              = "__EVERYAPI_PREPARED_HOME"
-	preparedCodexSessionIndexMarker = "__EVERYAPI_CODEX_SESSION_INDEX"
-	preparedArgsMarker              = "__EVERYAPI_PREPARED_SETTINGS_ARG"
-	preparedArgvMarker              = "__EVERYAPI_PREPARED_ARGV_JSON"
+	preparedHomeMarker = "__EVERYAPI_PREPARED_HOME"
+	preparedArgsMarker = "__EVERYAPI_PREPARED_SETTINGS_ARG"
+	preparedArgvMarker = "__EVERYAPI_PREPARED_ARGV_JSON"
 )
 
 const (
 	// preparedHomeOwnerFile records, one PID per line, the processes a prepared home belongs to — the `everyapi` process that created it and then the tool it launched — so a later launch can tell a home that is still in use from one orphaned by a hard kill.
 	preparedHomeOwnerFile = ".everyapi-owner"
-	// preparedHomeKeepFile marks a home the CLI deliberately left on disk for the user to salvage by hand. The sweep never touches a home carrying it, at any age.
-	preparedHomeKeepFile = ".everyapi-keep"
 	// preparedHomeReapPrefix renames a condemned home out of the way. Tool prefixes passed to newPreparedHome are exec names, so no live home can start with a dot and collide.
 	preparedHomeReapPrefix = ".reaping-"
 )
@@ -112,8 +109,6 @@ func preparedHomeEnv(key, home string) map[string]string {
 func TakePreparedCleanup(env map[string]string) func() {
 	home := env[preparedHomeMarker]
 	delete(env, preparedHomeMarker)
-	codexSessionIndex := env[preparedCodexSessionIndexMarker]
-	delete(env, preparedCodexSessionIndexMarker)
 	if home == "" {
 		return nil
 	}
@@ -129,26 +124,12 @@ func TakePreparedCleanup(env map[string]string) func() {
 	var once sync.Once
 	return func() {
 		once.Do(func() {
-			if codexSessionIndex != "" {
-				if err := persistPreparedCodexSessionIndex(home, codexSessionIndex); err != nil {
-					keepPreparedHome(home)
-					fmt.Fprintf(os.Stderr,
-						"Warning: preserve Codex session names: %v\nTemporary state kept at %s\n",
-						err, home,
-					)
-					return
-				}
+			if err := removePreparedCodexProfile(home); err != nil {
+				return
 			}
 			removePreparedHomeAfterQuiet(home)
 		})
 	}
-}
-
-// keepPreparedHome marks a home the CLI is deliberately leaving behind so the user can recover state from it. Without the marker the next launch would see the owner PID gone and reap the very directory the warning above tells the user to go look at.
-func keepPreparedHome(home string) {
-	_ = os.WriteFile(filepath.Join(home, preparedHomeKeepFile), []byte(
-		"EveryAPI kept this session directory because it could not merge the launch's Codex session index back into the persistent Codex home. Nothing here is read again; delete the directory once you no longer need it.\n",
-	), 0o600)
 }
 
 func removePreparedHomeAfterQuiet(home string) {
@@ -175,7 +156,7 @@ func removePreparedHomeAfterQuiet(home string) {
 
 // sweepStalePreparedHomes reclaims prepared client homes orphaned by an `everyapi` process that died without running its cleanup — SIGKILL, an OOM kill, a reboot. Without it the directory only grows: a normal exit (including the child dying on a signal) removes its own home through TakePreparedCleanup, but a hard-killed parent leaves a Codex home behind at tens of thousands of files apiece.
 //
-// Nothing reachable is lost. Every launch mints a fresh MkdirTemp home and no launch ever looks inside an older one, so an orphan's contents are already unreachable by the tool that wrote them; the state that outlives a session is linked out, not stored here (Codex's rollouts and archive are symlinks into the persistent codex-home — see preparedCodexHomeEnv — and RemoveAll deletes the link, not the target).
+// Nothing reachable is lost. Every launch mints a fresh MkdirTemp home and no launch ever looks inside an older one. Durable Codex rollouts live directly under its persistent CODEX_HOME; only the per-launch model catalog and profile bookkeeping live here.
 //
 // Every error is ignored: a sweep failure must never block a launch.
 func sweepStalePreparedHomes(root string) {
@@ -186,6 +167,9 @@ func sweepStalePreparedHomes(root string) {
 	// The rename is what makes a home unreachable and it is O(1); the recursive delete is not, and running it inline would stall every launch behind the whole backlog. Detached so the launch proceeds at once — the process outlives the child, and a delete cut short by an early exit leaves a .reaping- directory the next sweep finishes unconditionally.
 	go func() {
 		for _, path := range condemned {
+			if err := removePreparedCodexProfile(path); err != nil {
+				continue
+			}
 			_ = os.RemoveAll(path)
 		}
 	}()
@@ -223,9 +207,6 @@ func condemnStalePreparedHomes(root string, now time.Time) []string {
 
 // preparedHomeIsStale reports whether a prepared home has stopped belonging to a working launch. Keeping is the safe answer at every branch: reaping a live home breaks a running tool, while keeping a dead one costs one launch's worth of disk until the next sweep.
 func preparedHomeIsStale(home string, entry os.DirEntry, now time.Time) bool {
-	if _, err := os.Lstat(filepath.Join(home, preparedHomeKeepFile)); err == nil {
-		return false
-	}
 	info, err := entry.Info()
 	if err != nil {
 		return false

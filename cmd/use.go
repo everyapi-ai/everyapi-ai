@@ -500,7 +500,7 @@ func use(args []string, persistModelSelection bool) error {
 	}
 	extraArgs = codexWindowsDangerousModeArgs(runtime.GOOS, t, extraArgs)
 
-	// Per-tool pre-exec setup — codex writes an isolated CODEX_HOME and Gemini writes an auth-mode settings overlay. Transparent mode uses separate hooks that retain the official provider/origin. Runs AFTER the yolo prompt so a user who Escs out doesn't pay for a file write that's about to be orphaned. Returned env overlays t.Env so the hook can pin CODEX_HOME.
+	// Per-tool pre-exec setup — Codex writes a lifecycle-bound profile/catalog for its persistent EveryAPI-owned CODEX_HOME, and Gemini writes an auth-mode settings overlay. Transparent mode uses separate hooks that retain the official provider/origin. Runs AFTER the yolo prompt so a user who Escs out doesn't pay for a file write that's about to be orphaned. Returned env overlays t.Env so the hook can pin CODEX_HOME.
 	var extraEnv map[string]string
 	if transparent {
 		extraEnv, err = t.PrepareTransparentWithModels(launchModelsForTool(t, relayCatalog, bootModel), bootModel)
@@ -778,7 +778,7 @@ func launchedModelID(t *tools.Tool, bootModel string) string {
 
 // resolveReasoningLevel asks which reasoning level to launch at and exports it for the tool's prepare hook to write into the generated config.
 //
-// It exists because the level is exactly as unrememberable as the model, and for the same reason: codex records its effort in the config.toml inside the process-scoped CODEX_HOME, and pi records its thinking level in the settings.json inside the process-scoped agent dir — both deleted on exit. So a level chosen inside the tool lasts one session, and the launcher is the only place that can hold one across launches.
+// It exists because the level is exactly as unrememberable as the model, and for the same reason: Codex records its effort in the lifecycle-bound profile, and pi records its thinking level in the settings.json inside the process-scoped agent dir — both deleted on exit. So a level chosen inside the tool lasts one session, and the launcher is the only place that can hold one across launches.
 //
 // A tool/model pairing with no level control returns early and prompts for nothing. A non-interactive launch reuses the remembered level rather than blocking, and a remembered level the current model does not offer (a switch from gpt-5.6-sol's "ultra" to a model that stops at "xhigh") is dropped instead of forwarded — the tool would reject it, or worse, accept it and send it upstream.
 //
@@ -1864,7 +1864,7 @@ func toolInvocationNeedsEndpoint(args []string) bool {
 	}
 }
 
-// toolArgsForLaunch pins launch arguments whose tool defaults make the EveryAPI-managed experience misleading. Codex scopes its bare resume picker to the current working directory, which can report 0/0 even though the managed home contains resumable sessions, so make the bare picker global. Qwen project settings override its QWEN_HOME settings, so force the OpenAI protocol at CLI precedence. Continue and Cline receive lifecycle config through managed paths, so remove caller-supplied overrides that would escape those isolated directories. Remove Qwen's caller-supplied auth type too: forwarding another protocol would either bypass the EveryAPI OPENAI_* overlay or make duplicate yargs values ambiguous.
+// toolArgsForLaunch pins launch arguments whose tool defaults make the EveryAPI-managed experience misleading. Codex scopes its bare resume picker to the current working directory, which can report 0/0 even though the managed home contains resumable sessions, so make the bare picker global. Its profile is lifecycle-owned and Codex rejects duplicate --profile arguments, so remove caller overrides before prepending the generated profile. Qwen project settings override its QWEN_HOME settings, so force the OpenAI protocol at CLI precedence. Continue and Cline receive lifecycle config through managed paths, so remove caller-supplied overrides that would escape those isolated directories. Remove Qwen's caller-supplied auth type too: forwarding another protocol would either bypass the EveryAPI OPENAI_* overlay or make duplicate yargs values ambiguous.
 func toolArgsForLaunch(t *tools.Tool, args []string) []string {
 	if t.Name == "openhands" {
 		filtered := make([]string, 0, len(args)+1)
@@ -1879,8 +1879,30 @@ func toolArgsForLaunch(t *tools.Tool, args []string) []string {
 	if len(args) == 0 && len(t.DefaultArgs) > 0 {
 		return append([]string(nil), t.DefaultArgs...)
 	}
-	if t.Name == "codex" && len(args) == 1 && args[0] == "resume" {
-		return []string{"resume", "--all"}
+	if t.Name == "codex" {
+		if len(args) == 0 {
+			return args
+		}
+		filtered := make([]string, 0, len(args))
+		for i := 0; i < len(args); i++ {
+			if args[i] == "--" {
+				return append(filtered, args[i:]...)
+			}
+			switch {
+			case args[i] == "--profile" || args[i] == "-p":
+				if i+1 < len(args) && args[i+1] != "--" {
+					i++
+				}
+			case strings.HasPrefix(args[i], "--profile=") ||
+				(strings.HasPrefix(args[i], "-p") && len(args[i]) > 2):
+			default:
+				filtered = append(filtered, args[i])
+			}
+		}
+		if len(filtered) == 1 && filtered[0] == "resume" {
+			return []string{"resume", "--all"}
+		}
+		return filtered
 	}
 	if t.Name == "continue" {
 		filtered := make([]string, 0, len(args))

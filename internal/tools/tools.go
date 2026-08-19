@@ -378,7 +378,7 @@ var Registry = map[string]*Tool{
 		},
 	},
 
-	// OpenAI Codex CLI: unlike claude/gemini, codex does NOT read OPENAI_BASE_URL at runtime — its router is pinned to whatever `model_provider` is set in ~/.codex/config.toml, and auth_mode is pinned in ~/.codex/auth.json (defaults to "chatgpt" on a fresh install, which then redirects to the ChatGPT login page regardless of OPENAI_API_KEY). To make `everyapi use codex` actually route through the gateway we redirect CODEX_HOME at a generated config dir (see codex.go) where we write our own auth.json (apikey mode) + config.toml (everyapi provider). The OPENAI_API_KEY env var is still set as belt-and-suspenders — config.toml's env_key points back at it.
+	// OpenAI Codex CLI: unlike claude/gemini, codex does NOT read OPENAI_BASE_URL at runtime — its router is pinned to the active config/profile's `model_provider`, and auth_mode is pinned in CODEX_HOME/auth.json (defaults to "chatgpt" on a fresh install, which then redirects to the ChatGPT login page regardless of OPENAI_API_KEY). To make `everyapi use codex` actually route through the gateway we redirect CODEX_HOME to an EveryAPI-owned persistent directory and supply a generated lifecycle-bound provider profile (see codex.go). OPENAI_API_KEY carries the launch credential referenced by that profile's env_key; auth.json contains only a launch-independent placeholder.
 	"codex": {
 		Name:        "codex",
 		ExecName:    "codex",

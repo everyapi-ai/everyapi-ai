@@ -399,6 +399,14 @@ func TestToolArgsForLaunchMakesBareCodexResumeGlobal(t *testing.T) {
 		{"explicit all", []string{"resume", "--all"}, []string{"resume", "--all"}},
 		{"last session", []string{"resume", "--last"}, []string{"resume", "--last"}},
 		{"specific session", []string{"resume", "session-id"}, []string{"resume", "session-id"}},
+		{"long profile", []string{"--profile", "personal", "prompt"}, []string{"prompt"}},
+		{"long profile equals", []string{"--profile=personal", "prompt"}, []string{"prompt"}},
+		{"short profile", []string{"-p", "personal", "prompt"}, []string{"prompt"}},
+		{"short profile attached", []string{"-ppersonal", "prompt"}, []string{"prompt"}},
+		{"short profile equals", []string{"-p=personal", "prompt"}, []string{"prompt"}},
+		{"long profile after separator is prompt", []string{"--", "--profile", "personal"}, []string{"--", "--profile", "personal"}},
+		{"short profile after separator is prompt", []string{"--", "-ppersonal"}, []string{"--", "-ppersonal"}},
+		{"missing profile value keeps separator", []string{"--profile", "--", "-pprompt"}, []string{"--", "-pprompt"}},
 		{"ordinary launch", nil, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

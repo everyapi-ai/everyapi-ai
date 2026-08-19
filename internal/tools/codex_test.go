@@ -20,6 +20,40 @@ func codexTestHome(t *testing.T) (xdg, wantCodexHome string) {
 	return xdg, filepath.Join(xdg, "everyapi", "codex-home")
 }
 
+func preparedCodexConfigPath(t *testing.T, env map[string]string) string {
+	t.Helper()
+	var args []string
+	if err := json.Unmarshal([]byte(env[preparedArgvMarker]), &args); err != nil {
+		t.Fatalf("decode prepared Codex arguments: %v", err)
+	}
+	if len(args) != 2 || args[0] != "--profile" || args[1] == "" {
+		t.Fatalf("prepared Codex arguments = %v, want [--profile <name>]", args)
+	}
+	return filepath.Join(env["CODEX_HOME"], args[1]+".config.toml")
+}
+
+func assertTreeDoesNotContain(t *testing.T, root, forbidden string) {
+	t.Helper()
+	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(body), forbidden) {
+			t.Errorf("%s contains forbidden launch credential", path)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestPrepareCodex_WritesFiles verifies the apikey-mode auth.json and the everyapi-provider config.toml both land in CODEX_HOME with the expected schema. This is the smoke test: if it breaks, `everyapi use codex` won't route through the gateway.
 func TestPrepareCodex_WritesFiles(t *testing.T) {
 	_, codexHome := codexTestHome(t)
@@ -32,7 +66,7 @@ func TestPrepareCodex_WritesFiles(t *testing.T) {
 		t.Errorf("CODEX_HOME env = %q, want %q", got, codexHome)
 	}
 
-	// auth.json: apikey mode, key present, tokens nulled.
+	// auth.json: apikey mode, launch-independent placeholder present, tokens nulled.
 	authBody, err := os.ReadFile(filepath.Join(codexHome, "auth.json"))
 	if err != nil {
 		t.Fatalf("read auth.json: %v", err)
@@ -44,8 +78,11 @@ func TestPrepareCodex_WritesFiles(t *testing.T) {
 	if auth["auth_mode"] != "apikey" {
 		t.Errorf("auth_mode = %v, want \"apikey\"", auth["auth_mode"])
 	}
-	if auth["OPENAI_API_KEY"] != "sk-everyapi-abc" {
-		t.Errorf("OPENAI_API_KEY = %v, want \"sk-everyapi-abc\"", auth["OPENAI_API_KEY"])
+	if auth["OPENAI_API_KEY"] != transparentPlaceholderCredential {
+		t.Errorf("OPENAI_API_KEY = %v, want connector placeholder", auth["OPENAI_API_KEY"])
+	}
+	if strings.Contains(string(authBody), "sk-everyapi-abc") {
+		t.Fatal("auth.json persisted the relay key")
 	}
 	if auth["tokens"] != nil {
 		t.Errorf("tokens = %v, want nil (chatgpt tokens must be cleared in apikey mode)", auth["tokens"])
@@ -267,7 +304,7 @@ func TestPrepareCodex_TrailingSlashBase(t *testing.T) {
 	}
 }
 
-// TestPrepareCodex_FilePerms guards the secret-bearing files. auth.json carries a relay key — chmod 0600 is non-negotiable. config.toml holds no secret but inherits 0644 (readable to the user's tools that might inspect it, like a debug helper). Skipped on Windows where Unix perms don't apply.
+// TestPrepareCodex_FilePerms guards Codex's credential boundary. auth.json currently carries only a placeholder, but keep the vendor-compatible 0600 mode so future schema changes cannot silently broaden access. config.toml holds no secret and inherits 0644 (readable to the user's tools that might inspect it, like a debug helper). Skipped on Windows where Unix perms don't apply.
 func TestPrepareCodex_FilePerms(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix permission bits not meaningful on Windows")
@@ -281,7 +318,7 @@ func TestPrepareCodex_FilePerms(t *testing.T) {
 		t.Fatalf("stat auth.json: %v", err)
 	}
 	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("auth.json perm = %o, want 0600 (carries bearer token)", perm)
+		t.Errorf("auth.json perm = %o, want vendor-compatible 0600", perm)
 	}
 	dirInfo, err := os.Stat(codexHome)
 	if err != nil {
@@ -292,8 +329,8 @@ func TestPrepareCodex_FilePerms(t *testing.T) {
 	}
 }
 
-// TestPrepareCodex_Idempotent re-runs on the same directory and verifies the new relay key wins on the second call (covers the "user rotated keys / switched groups" case). The directory is reused on purpose (preserves codex's session/cache state across invocations), so the rewrite-every-call contract matters.
-func TestPrepareCodex_Idempotent(t *testing.T) {
+// TestPrepareCodexDoesNotPersistRotatedKeys re-runs on the same directory and verifies neither launch credential reaches persistent auth state. The real key comes from Tool.Env for each child; auth.json exists only to pin API-key mode with a launch-independent placeholder.
+func TestPrepareCodexDoesNotPersistRotatedKeys(t *testing.T) {
 	_, codexHome := codexTestHome(t)
 	if _, err := prepareCodex("https://api.everyapi.ai", "first-key"); err != nil {
 		t.Fatalf("first prepareCodex: %v", err)
@@ -309,8 +346,11 @@ func TestPrepareCodex_Idempotent(t *testing.T) {
 	if err := json.Unmarshal(body, &auth); err != nil {
 		t.Fatalf("parse auth.json: %v", err)
 	}
-	if auth["OPENAI_API_KEY"] != "second-key" {
-		t.Errorf("OPENAI_API_KEY after rerun = %v, want \"second-key\"", auth["OPENAI_API_KEY"])
+	if auth["OPENAI_API_KEY"] != transparentPlaceholderCredential {
+		t.Errorf("OPENAI_API_KEY after rerun = %v, want connector placeholder", auth["OPENAI_API_KEY"])
+	}
+	if strings.Contains(string(body), "first-key") || strings.Contains(string(body), "second-key") {
+		t.Fatal("persistent auth.json contains a rotated relay key")
 	}
 }
 
@@ -339,16 +379,21 @@ func TestPrepareCodexWithModelsWritesPickerCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	preparedHome := extra[preparedHomeMarker]
+	configPath := preparedCodexConfigPath(t, extra)
+	args := TakePreparedArgs(extra)
+	if len(args) != 2 || args[0] != "--profile" || args[1]+".config.toml" != filepath.Base(configPath) {
+		t.Fatalf("prepared Codex arguments = %v, want profile for %s", args, configPath)
+	}
 	defer TakePreparedCleanup(extra)()
-	home := extra["CODEX_HOME"]
-	configBody, err := os.ReadFile(filepath.Join(home, "config.toml"))
+	configBody, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(configBody), `model_catalog_json = "`) {
 		t.Fatalf("Codex config missing model_catalog_json: %s", configBody)
 	}
-	catalogBody, err := os.ReadFile(filepath.Join(home, "models.json"))
+	catalogBody, err := os.ReadFile(filepath.Join(preparedHome, "models.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,7 +402,7 @@ func TestPrepareCodexWithModelsWritesPickerCatalog(t *testing.T) {
 	}
 }
 
-func TestPrepareCodexWithModelsPersistsSessionsAcrossLaunchHomes(t *testing.T) {
+func TestPrepareCodexWithModelsPersistsSessionsInStableHome(t *testing.T) {
 	_, persistentHome := codexTestHome(t)
 	stubCodexBundledCatalog(t)
 	models := []Model{{ID: "gpt-5.6-sol"}}
@@ -371,13 +416,26 @@ func TestPrepareCodexWithModelsPersistsSessionsAcrossLaunchHomes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first prepareCodexWithModels: %v", err)
 	}
+	firstPreparedHome := first[preparedHomeMarker]
+	firstCleanup := TakePreparedCleanup(first)
+	defer firstCleanup()
 	firstHome := first["CODEX_HOME"]
-	if firstHome == persistentHome {
-		t.Fatalf("live-catalog launch reused persistent CODEX_HOME %q", persistentHome)
+	if firstHome != persistentHome {
+		t.Fatalf("CODEX_HOME = %q, want persistent home %q", firstHome, persistentHome)
 	}
+	firstProfile := preparedCodexConfigPath(t, first)
 	if got := first["CODEX_SQLITE_HOME"]; got != "" {
-		t.Fatalf("CODEX_SQLITE_HOME = %q, want launch-local SQLite state", got)
+		t.Fatalf("CODEX_SQLITE_HOME = %q, want SQLite state under CODEX_HOME", got)
 	}
+	authBody, err := os.ReadFile(filepath.Join(firstHome, "auth.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(authBody), "first-key") || !strings.Contains(string(authBody), transparentPlaceholderCredential) {
+		t.Fatalf("persistent auth must contain only the launch-independent placeholder:\n%s", authBody)
+	}
+	assertTreeDoesNotContain(t, firstHome, "first-key")
+	assertTreeDoesNotContain(t, firstPreparedHome, "first-key")
 
 	sessionPath := filepath.Join(firstHome, "sessions", "2026", "08", "session.jsonl")
 	if err := os.MkdirAll(filepath.Dir(sessionPath), 0o700); err != nil {
@@ -395,20 +453,39 @@ func TestPrepareCodexWithModelsPersistsSessionsAcrossLaunchHomes(t *testing.T) {
 	if err := os.Rename(replacementPath, indexPath); err != nil {
 		t.Fatal(err)
 	}
-	TakePreparedCleanup(first)()
-
 	second, err := prepareCodexWithModels(
 		"https://api.everyapi.ai",
 		"second-key",
-		models,
-		"gpt-5.6-sol",
+		[]Model{{ID: "gpt-5.6-terra"}},
+		"gpt-5.6-terra",
 	)
 	if err != nil {
 		t.Fatalf("second prepareCodexWithModels: %v", err)
 	}
 	defer TakePreparedCleanup(second)()
-	if second["CODEX_HOME"] == firstHome {
-		t.Fatalf("launches shared temporary CODEX_HOME %q", firstHome)
+	if second["CODEX_HOME"] != firstHome {
+		t.Fatalf("second CODEX_HOME = %q, want stable home %q", second["CODEX_HOME"], firstHome)
+	}
+	secondProfile := preparedCodexConfigPath(t, second)
+	if secondProfile == firstProfile {
+		t.Fatalf("launches shared prepared profile %q", firstProfile)
+	}
+	if body, err := os.ReadFile(firstProfile); err != nil {
+		t.Fatalf("first profile disappeared while its launch was active: %v", err)
+	} else if !strings.Contains(string(body), `model = "gpt-5.6-sol"`) {
+		t.Fatalf("first active profile lost its model: %s", body)
+	}
+	if body, err := os.ReadFile(secondProfile); err != nil {
+		t.Fatalf("read second active profile: %v", err)
+	} else if !strings.Contains(string(body), `model = "gpt-5.6-terra"`) {
+		t.Fatalf("second active profile lost its model: %s", body)
+	}
+	firstCleanup()
+	if _, err := os.Stat(firstProfile); !os.IsNotExist(err) {
+		t.Fatalf("first launch profile survived cleanup: %v", err)
+	}
+	if _, err := os.Stat(secondProfile); err != nil {
+		t.Fatalf("cleaning first launch removed second active profile: %v", err)
 	}
 	if body, err := os.ReadFile(filepath.Join(second["CODEX_HOME"], "sessions", "2026", "08", "session.jsonl")); err != nil {
 		t.Fatalf("read session from second launch: %v", err)
@@ -422,236 +499,42 @@ func TestPrepareCodexWithModelsPersistsSessionsAcrossLaunchHomes(t *testing.T) {
 	}
 }
 
-func TestPrepareCodexWithModelsMergesConcurrentSessionIndexUpdates(t *testing.T) {
+func TestPrepareCodexWithModelsKeepsCanonicalRolloutsInsideCodexHome(t *testing.T) {
 	codexTestHome(t)
 	stubCodexBundledCatalog(t)
-	models := []Model{{ID: "gpt-5.6-sol"}}
-	prepare := func() map[string]string {
-		t.Helper()
-		env, err := prepareCodexWithModels(
-			"https://api.everyapi.ai",
-			"key",
-			models,
-			"gpt-5.6-sol",
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return env
-	}
-	replaceIndex := func(env map[string]string, body string) {
-		t.Helper()
-		path := filepath.Join(env["CODEX_HOME"], "session_index.jsonl")
-		tmp := path + ".tmp"
-		if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Rename(tmp, path); err != nil {
-			t.Fatal(err)
-		}
-	}
 
-	first := prepare()
-	second := prepare()
-	const firstEntry = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"first","updated_at":"2026-08-09T00:00:01Z"}` + "\n"
-	const secondEntry = `{"id":"22222222-2222-4222-8222-222222222222","thread_name":"second","updated_at":"2026-08-09T00:00:02Z"}` + "\n"
-	replaceIndex(first, firstEntry)
-	replaceIndex(second, secondEntry)
-	TakePreparedCleanup(first)()
-	TakePreparedCleanup(second)()
-
-	third := prepare()
-	defer TakePreparedCleanup(third)()
-	body, err := os.ReadFile(filepath.Join(third["CODEX_HOME"], "session_index.jsonl"))
+	env, err := prepareCodexWithModels(
+		"https://api.everyapi.ai",
+		"key",
+		[]Model{{ID: "gpt-5.6-sol"}},
+		"gpt-5.6-sol",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{firstEntry, secondEntry} {
-		if !strings.Contains(string(body), want) {
-			t.Fatalf("merged session index missing %q:\n%s", want, body)
-		}
-	}
-}
+	defer TakePreparedCleanup(env)()
 
-func TestPrepareCodexWithModelsPreservesStateWhenUpdatedSessionIndexIsCorrupt(t *testing.T) {
-	_, persistentHome := codexTestHome(t)
-	stubCodexBundledCatalog(t)
-	models := []Model{{ID: "gpt-5.6-sol"}}
-	prepare := func() map[string]string {
-		t.Helper()
-		env, err := prepareCodexWithModels(
-			"https://api.everyapi.ai",
-			"key",
-			models,
-			"gpt-5.6-sol",
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return env
+	rolloutPath := filepath.Join(env["CODEX_HOME"], "sessions", "2026", "08", "rollout.jsonl")
+	if err := os.MkdirAll(filepath.Dir(rolloutPath), 0o700); err != nil {
+		t.Fatal(err)
 	}
-	replaceIndex := func(env map[string]string, body string) {
-		t.Helper()
-		path := filepath.Join(env["CODEX_HOME"], "session_index.jsonl")
-		tmp := path + ".tmp"
-		if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Rename(tmp, path); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.WriteFile(rolloutPath, []byte("rollout\n"), 0o600); err != nil {
+		t.Fatal(err)
 	}
-
-	const namedEntry = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"safe","updated_at":"2026-08-09T00:00:00Z"}` + "\n"
-	seed := prepare()
-	replaceIndex(seed, namedEntry)
-	TakePreparedCleanup(seed)()
-
-	corrupt := prepare()
-	corruptHome := corrupt["CODEX_HOME"]
-	replaceIndex(corrupt, "{truncated\n")
-	TakePreparedCleanup(corrupt)()
-	if _, err := os.Stat(corruptHome); err != nil {
-		t.Fatalf("corrupt launch home was not preserved: %v", err)
-	}
-	t.Cleanup(func() { removePreparedHomeAfterQuiet(corruptHome) })
-
-	body, err := os.ReadFile(filepath.Join(persistentHome, "session_index.jsonl"))
+	canonicalHome, err := filepath.EvalSymlinks(env["CODEX_HOME"])
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(body) != namedEntry {
-		t.Fatalf("persistent session index = %q after corrupt update, want %q", body, namedEntry)
-	}
-}
-
-func TestMergeCodexSessionIndexRejectsIncompleteEntry(t *testing.T) {
-	const original = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"safe","updated_at":"2026-08-09T00:00:00Z"}` + "\n"
-
-	if _, err := mergeCodexSessionIndex([]byte(original), []byte(`{"id":"11111111-1111-4111-8111-111111111111"}`+"\n"), []byte(original)); err == nil {
-		t.Fatal("mergeCodexSessionIndex accepted an incomplete session-index entry")
-	}
-}
-
-func TestPrepareCodexWithModelsDoesNotLetStaleDeleteRemoveConcurrentRename(t *testing.T) {
-	codexTestHome(t)
-	stubCodexBundledCatalog(t)
-	models := []Model{{ID: "gpt-5.6-sol"}}
-	prepare := func() map[string]string {
-		t.Helper()
-		env, err := prepareCodexWithModels("https://api.everyapi.ai", "key", models, "gpt-5.6-sol")
-		if err != nil {
-			t.Fatal(err)
-		}
-		return env
-	}
-	replaceIndex := func(env map[string]string, body string) {
-		t.Helper()
-		path := filepath.Join(env["CODEX_HOME"], "session_index.jsonl")
-		tmp := path + ".tmp"
-		if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Rename(tmp, path); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	const original = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"old","updated_at":"2026-08-09T00:00:00Z"}` + "\n"
-	const renamed = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"new","updated_at":"2026-08-09T00:00:02Z"}` + "\n"
-	seed := prepare()
-	replaceIndex(seed, original)
-	TakePreparedCleanup(seed)()
-
-	deleter := prepare()
-	renamer := prepare()
-	replaceIndex(deleter, "")
-	replaceIndex(renamer, renamed)
-	TakePreparedCleanup(renamer)()
-	TakePreparedCleanup(deleter)()
-
-	check := prepare()
-	defer TakePreparedCleanup(check)()
-	body, err := os.ReadFile(filepath.Join(check["CODEX_HOME"], "session_index.jsonl"))
+	canonicalRollout, err := filepath.EvalSymlinks(rolloutPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	latest, err := latestCodexSessionIndexLines(body)
+	rel, err := filepath.Rel(canonicalHome, canonicalRollout)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := latest["11111111-1111-4111-8111-111111111111"].Entry.ThreadName; got != "new" {
-		t.Fatalf("latest session name = %q after rename/delete race, want %q\n%s", got, "new", body)
-	}
-}
-
-func TestMergeCodexSessionIndexRestoresConcurrentRenameAfterDelete(t *testing.T) {
-	const original = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"old","updated_at":"2026-08-09T00:00:00Z"}` + "\n"
-	const renamed = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"new","updated_at":"2026-08-09T00:00:02Z"}` + "\n"
-
-	merged, err := mergeCodexSessionIndex([]byte(original), []byte(renamed), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	latest, err := latestCodexSessionIndexLines(merged)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := latest["11111111-1111-4111-8111-111111111111"].Entry.ThreadName; got != "new" {
-		t.Fatalf("latest session name = %q after delete/rename race, want %q\n%s", got, "new", merged)
-	}
-}
-
-func TestPrepareCodexWithModelsKeepsNewestConcurrentRename(t *testing.T) {
-	codexTestHome(t)
-	stubCodexBundledCatalog(t)
-	models := []Model{{ID: "gpt-5.6-sol"}}
-	prepare := func() map[string]string {
-		t.Helper()
-		env, err := prepareCodexWithModels("https://api.everyapi.ai", "key", models, "gpt-5.6-sol")
-		if err != nil {
-			t.Fatal(err)
-		}
-		return env
-	}
-	replaceIndex := func(env map[string]string, body string) {
-		t.Helper()
-		path := filepath.Join(env["CODEX_HOME"], "session_index.jsonl")
-		tmp := path + ".tmp"
-		if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Rename(tmp, path); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	const original = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"old","updated_at":"2026-08-09T00:00:00Z"}` + "\n"
-	const olderRename = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"older","updated_at":"2026-08-09T00:00:01Z"}` + "\n"
-	const newerRename = `{"id":"11111111-1111-4111-8111-111111111111","thread_name":"newer","updated_at":"2026-08-09T00:00:02Z"}` + "\n"
-	seed := prepare()
-	replaceIndex(seed, original)
-	TakePreparedCleanup(seed)()
-
-	older := prepare()
-	newer := prepare()
-	replaceIndex(older, olderRename)
-	replaceIndex(newer, newerRename)
-	TakePreparedCleanup(newer)()
-	TakePreparedCleanup(older)()
-
-	check := prepare()
-	defer TakePreparedCleanup(check)()
-	body, err := os.ReadFile(filepath.Join(check["CODEX_HOME"], "session_index.jsonl"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	latest, err := latestCodexSessionIndexLines(body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := latest["11111111-1111-4111-8111-111111111111"].Entry.ThreadName; got != "newer" {
-		t.Fatalf("latest session name = %q after concurrent renames, want %q\n%s", got, "newer", body)
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		t.Fatalf("canonical rollout %q escapes CODEX_HOME %q", canonicalRollout, canonicalHome)
 	}
 }
 
@@ -668,12 +551,12 @@ func TestPrepareCodexTransparentWithModelsUsesPersistentSessionState(t *testing.
 	}
 	defer TakePreparedCleanup(env)()
 	if got := env["CODEX_SQLITE_HOME"]; got != "" {
-		t.Fatalf("CODEX_SQLITE_HOME = %q, want launch-local SQLite state", got)
+		t.Fatalf("CODEX_SQLITE_HOME = %q, want SQLite state under CODEX_HOME", got)
 	}
 	if info, err := os.Stat(filepath.Join(env["CODEX_HOME"], "sessions")); err != nil {
-		t.Fatalf("stat linked sessions directory: %v", err)
+		t.Fatalf("stat persistent sessions directory: %v", err)
 	} else if !info.IsDir() {
-		t.Fatalf("linked sessions path is not a directory: %v", info.Mode())
+		t.Fatalf("persistent sessions path is not a directory: %v", info.Mode())
 	}
 }
 
@@ -729,7 +612,7 @@ func stubCodexBundledCatalog(t *testing.T) {
 	t.Cleanup(func() { codexBundledCatalog = original })
 }
 
-// TestPrepareCodex_SeedsBootModelIntoAFreshHome covers the gap the "root-level model is preserved" contract cannot fill on the live-catalog path. That path hands codex a process-scoped CODEX_HOME created by os.MkdirTemp and deleted on exit, so there is never a previous config.toml to preserve a model from — whatever codex recorded about its own model died with the last home. The catalogue's first entry is the selection EveryAPI persisted, so it seeds the boot model instead.
+// TestPrepareCodex_SeedsBootModelIntoAFreshHome covers the gap the "root-level model is preserved" contract cannot fill in a fresh per-launch profile. The selection EveryAPI persisted seeds the boot model instead.
 func TestPrepareCodex_SeedsBootModelIntoAFreshHome(t *testing.T) {
 	codexTestHome(t)
 	stubCodexBundledCatalog(t)
@@ -743,9 +626,10 @@ func TestPrepareCodex_SeedsBootModelIntoAFreshHome(t *testing.T) {
 	if home == "" {
 		t.Fatal("no CODEX_HOME returned")
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	configPath := preparedCodexConfigPath(t, env)
+	t.Cleanup(TakePreparedCleanup(env))
 
-	body, err := os.ReadFile(filepath.Join(home, "config.toml"))
+	body, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -791,9 +675,10 @@ func TestPrepareCodexTransparent_SeedsBootModelIntoAFreshHome(t *testing.T) {
 	if home == "" {
 		t.Fatal("no CODEX_HOME returned")
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	configPath := preparedCodexConfigPath(t, env)
+	t.Cleanup(TakePreparedCleanup(env))
 
-	body, err := os.ReadFile(filepath.Join(home, "config.toml"))
+	body, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -805,6 +690,7 @@ func TestPrepareCodexTransparent_SeedsBootModelIntoAFreshHome(t *testing.T) {
 func TestPrepareCodexTransparent_InheritsReasoningEffortIntoFreshHome(t *testing.T) {
 	_, persistentHome := codexTestHome(t)
 	stubCodexBundledCatalog(t)
+	t.Setenv(ReasoningLevelEnv, "")
 	if err := os.MkdirAll(persistentHome, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -823,9 +709,10 @@ func TestPrepareCodexTransparent_InheritsReasoningEffortIntoFreshHome(t *testing
 	if err != nil {
 		t.Fatalf("prepareCodexTransparentWithModels: %v", err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(env["CODEX_HOME"]) })
+	configPath := preparedCodexConfigPath(t, env)
+	t.Cleanup(TakePreparedCleanup(env))
 
-	body, err := os.ReadFile(filepath.Join(env["CODEX_HOME"], "config.toml"))
+	body, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -841,6 +728,7 @@ func TestPrepareCodexTransparent_InheritsReasoningEffortIntoFreshHome(t *testing
 func TestPrepareCodex_InheritsReasoningEffortIntoFreshHome(t *testing.T) {
 	_, persistentHome := codexTestHome(t)
 	stubCodexBundledCatalog(t)
+	t.Setenv(ReasoningLevelEnv, "")
 	if err := os.MkdirAll(persistentHome, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -861,9 +749,10 @@ func TestPrepareCodex_InheritsReasoningEffortIntoFreshHome(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepareCodexWithModels: %v", err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(env["CODEX_HOME"]) })
+	configPath := preparedCodexConfigPath(t, env)
+	t.Cleanup(TakePreparedCleanup(env))
 
-	body, err := os.ReadFile(filepath.Join(env["CODEX_HOME"], "config.toml"))
+	body, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -900,9 +789,9 @@ func TestPrepareCodex_DoesNotPinAModelTheUserNeverChose(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			home := env["CODEX_HOME"]
-			t.Cleanup(func() { _ = os.RemoveAll(home) })
-			body, err := os.ReadFile(filepath.Join(home, "config.toml"))
+			configPath := preparedCodexConfigPath(t, env)
+			t.Cleanup(TakePreparedCleanup(env))
+			body, err := os.ReadFile(configPath)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -913,5 +802,45 @@ func TestPrepareCodex_DoesNotPinAModelTheUserNeverChose(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPrepareCodexWithModelsDoesNotLayerAStaleLegacyModel(t *testing.T) {
+	_, persistentHome := codexTestHome(t)
+	stubCodexBundledCatalog(t)
+	t.Setenv(ReasoningLevelEnv, "")
+	if err := os.MkdirAll(persistentHome, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(persistentHome, "config.toml"),
+		[]byte("model = \"stale-legacy-model\"\nmodel_reasoning_effort = \"medium\"\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	env, err := prepareCodexWithModels(
+		"https://api.everyapi.ai",
+		"tok",
+		[]Model{{ID: "gpt-5.6-sol"}},
+		"",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configPath := preparedCodexConfigPath(t, env)
+	t.Cleanup(TakePreparedCleanup(env))
+
+	for _, path := range []string{filepath.Join(persistentHome, "config.toml"), configPath} {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, line := range strings.Split(string(body), "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "model = ") {
+				t.Fatalf("stale model survived in %s: %q\n%s", path, line, body)
+			}
+		}
 	}
 }

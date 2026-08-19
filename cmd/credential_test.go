@@ -123,6 +123,25 @@ func TestCredentialOmitsExpirationForLongLivedKey(t *testing.T) {
 	}
 }
 
+func TestCredentialEmitsOnlyTheResolvedTokenForCredentialCommands(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := config.Save(&config.Credentials{
+		APIBase:  config.DefaultAPIBase,
+		RelayKey: "sk-everyapi-command-token",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := captureCredentialOutput(t)
+
+	if err := Credential([]string{"--format=token"}); err != nil {
+		t.Fatalf("Credential: %v", err)
+	}
+
+	if got, want := out.String(), "sk-everyapi-command-token\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+}
+
 func TestCredentialCanIncludeTheRelayScopedModelCatalog(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

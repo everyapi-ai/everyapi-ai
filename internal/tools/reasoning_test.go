@@ -103,9 +103,9 @@ func TestPrepareCodexPinsTheSelectedReasoningEffort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	home := env["CODEX_HOME"]
-	t.Cleanup(func() { _ = os.RemoveAll(home) })
-	body, err := os.ReadFile(filepath.Join(home, "config.toml"))
+	configPath := preparedCodexConfigPath(t, env)
+	t.Cleanup(TakePreparedCleanup(env))
+	body, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,9 +124,9 @@ func TestPrepareCodexTransparentPinsTheSelectedReasoningEffort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	home := env["CODEX_HOME"]
-	t.Cleanup(func() { _ = os.RemoveAll(home) })
-	body, err := os.ReadFile(filepath.Join(home, "config.toml"))
+	configPath := preparedCodexConfigPath(t, env)
+	t.Cleanup(TakePreparedCleanup(env))
+	body, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,9 +146,9 @@ func TestPrepareCodexLeavesEffortAloneWithoutASelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	home := env["CODEX_HOME"]
-	t.Cleanup(func() { _ = os.RemoveAll(home) })
-	body, err := os.ReadFile(filepath.Join(home, "config.toml"))
+	configPath := preparedCodexConfigPath(t, env)
+	t.Cleanup(TakePreparedCleanup(env))
+	body, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +234,7 @@ func TestPiPrepareOmitsThinkingLevelWithoutASelection(t *testing.T) {
 	}
 }
 
-// PersistedReasoningLevel is what makes the first launch after this feature shipped non-destructive. inheritPersistentCodexReasoningEffort already feeds the legacy fixed home's effort into every fresh CODEX_HOME, and applySelectedCodexReasoningEffort now outranks it — so unless the picker opens with that value on the cursor, a user who had chosen "high" long ago sees codex's own per-slug default ("low" for gpt-5.6-sol) preselected and one distracted Enter downgrades them.
+// PersistedReasoningLevel is what makes the first launch after this feature shipped non-destructive. inheritPersistentCodexReasoningEffort feeds the EveryAPI-owned home's effort into every fresh lifecycle-bound profile, and applySelectedCodexReasoningEffort now outranks it — so unless the picker opens with that value on the cursor, a user who had chosen "high" long ago sees Codex's own per-slug default ("low" for gpt-5.6-sol) preselected and one distracted Enter downgrades them.
 func TestPersistedReasoningLevelReadsTheCodexHomeTheLauncherInherits(t *testing.T) {
 	_, codexHome := codexTestHome(t)
 	if err := os.MkdirAll(codexHome, 0o700); err != nil {
