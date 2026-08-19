@@ -830,6 +830,16 @@ func main() {
 		}
 		return
 	}
+	// Secret-free companion surface for the benchmark form. It returns the
+	// reviewed harnesses and each one's live compatible model IDs; the relay key
+	// used to obtain that catalogue never leaves this process.
+	if name == "desktop-benchmark-catalog" {
+		if err := cmd.BenchmarkCatalog(args); err != nil {
+			fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), cliout.Sanitize(err.Error()))
+			os.Exit(1)
+		}
+		return
+	}
 
 	if name == "help" || name == "--help" || name == "-h" {
 		fmt.Print(renderUsage())

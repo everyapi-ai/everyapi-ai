@@ -79,12 +79,13 @@ enable dangerous mode (and, for Codex, whether to bypass hook trust review).
 Your choices are saved in settings.json and reused without prompting. The
 prompt defaults to Yes, but no dangerous option is enabled before you confirm.
 
-Terminal preference: the first interactive launch asks whether to use the native terminal or a persistent tmux session, then saves 'terminal_mode' in settings.json. Tmux launches expose the session name and attach command to every client; Codex, Claude Code, OpenCode, and Kilo also receive proactive model context. A non-interactive launch always uses the native terminal. Change it later with 'everyapi settings set terminal_mode native|tmux'.
+Terminal preference: the first interactive launch asks whether to use the native terminal or a persistent tmux session, then saves 'terminal_mode' in settings.json. Tmux launches expose the session name and attach command to every client; Codex, Claude Code, OpenCode, and Kilo also receive proactive model context. A bare Codex resume reattaches the sole live tmux session for the same project instead of starting a duplicate; dead EveryAPI sessions are pruned before launch. A non-interactive launch always uses the native terminal. Change it later with 'everyapi settings set terminal_mode native|tmux'.
 
 EXAMPLES
   everyapi use claude                  (transparent by default)
   everyapi use claude --transparent=false
   everyapi use codex --channel byteplus
+  everyapi use codex -- resume          (reattach the sole live project tmux, otherwise open the global picker)
   everyapi use opencode --model gpt-5
 	 everyapi use continue --model gpt-5
 	 everyapi use kilo --model gpt-5
@@ -136,6 +137,13 @@ func use(args []string, persistModelSelection bool) error {
 	if err != nil {
 		return err
 	}
+	if toolName == "" {
+		toolName, err = interactivePicker()
+		if err != nil {
+			return err
+		}
+		args = useArgsWithSelectedTool(args, toolName)
+	}
 	if err := maybeRelaunchUseInTerminal(args); err != nil {
 		return err
 	}
@@ -154,13 +162,6 @@ func use(args []string, persistModelSelection bool) error {
 	if creds.OAuthClientID != "" && (group != "" || pickGroup) {
 		return errors.New(i18n.T("use.relay_key_mode_group"))
 	}
-	if toolName == "" {
-		toolName, err = interactivePicker()
-		if err != nil {
-			return err
-		}
-	}
-
 	if pickGroup {
 		group, err = pickGroupInteractive(creds)
 		if err != nil {
@@ -551,6 +552,20 @@ func use(args []string, persistModelSelection bool) error {
 		return tools.ExecWithOptions(t, tools.ExecOptions{Env: env, Args: extraArgs, Cleanup: cleanup})
 	}
 	return tools.Exec(t, env, extraArgs)
+}
+
+func useArgsWithSelectedTool(args []string, toolName string) []string {
+	separator := len(args)
+	for i, arg := range args {
+		if arg == "--" {
+			separator = i
+			break
+		}
+	}
+	result := make([]string, 0, len(args)+1)
+	result = append(result, args[:separator]...)
+	result = append(result, toolName)
+	return append(result, args[separator:]...)
 }
 
 func applyTmuxAgentContext(t *tools.Tool, args []string) []string {

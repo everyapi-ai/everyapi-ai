@@ -171,3 +171,30 @@ func TestResolveTerminalModeReturnsSaveFailure(t *testing.T) {
 		t.Fatalf("error = %v, want %v", err, want)
 	}
 }
+
+func TestShouldReuseTmuxSessionOnlyForBareCodexResume(t *testing.T) {
+	tests := []struct {
+		name    string
+		useArgs []string
+		want    bool
+	}{
+		{name: "picker", useArgs: []string{"codex", "--", "resume"}, want: true},
+		{name: "global picker", useArgs: []string{"codex", "--", "resume", "--all"}, want: true},
+		{name: "channel override", useArgs: []string{"codex", "--channel", "new", "--", "resume"}, want: false},
+		{name: "model override", useArgs: []string{"--model", "gpt-5", "codex", "--", "resume"}, want: false},
+		{name: "transparent override", useArgs: []string{"codex", "--transparent=false", "--", "resume"}, want: false},
+		{name: "sanitizer override", useArgs: []string{"codex", "--sanitize=false", "--", "resume"}, want: false},
+		{name: "last", useArgs: []string{"codex", "--", "resume", "--last"}, want: false},
+		{name: "specific", useArgs: []string{"codex", "--", "resume", "session-id"}, want: false},
+		{name: "new codex", useArgs: []string{"codex"}, want: false},
+		{name: "codex help", useArgs: []string{"codex", "--", "help"}, want: false},
+		{name: "other tool", useArgs: []string{"claude", "--", "resume"}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldReuseTmuxSession(tt.useArgs); got != tt.want {
+				t.Fatalf("shouldReuseTmuxSession(%#v) = %v, want %v", tt.useArgs, got, tt.want)
+			}
+		})
+	}
+}

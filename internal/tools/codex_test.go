@@ -16,6 +16,11 @@ func codexTestHome(t *testing.T) (xdg, wantCodexHome string) {
 	t.Helper()
 	xdg = t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdg)
+	// A launcher-selected effort intentionally overrides persisted defaults in
+	// production. Tests that exercise persistence must not inherit the parent
+	// developer session's launch-only selection; individual override tests set
+	// their own value after calling this helper.
+	t.Setenv(ReasoningLevelEnv, "")
 	// On non-Linux ConfigDir also checks HOME, but XDG_CONFIG_HOME wins when set — so this works cross-platform.
 	return xdg, filepath.Join(xdg, "everyapi", "codex-home")
 }
@@ -101,10 +106,25 @@ func TestPrepareCodex_WritesFiles(t *testing.T) {
 		`env_key = "OPENAI_API_KEY"`,
 		// Pins the routing surface: omitting wire_api falls back to codex's Chat default (/v1/chat/completions) instead of the gateway's native /v1/responses.
 		`wire_api = "responses"`,
+		`http_headers = { "X-EveryAPI-Agent" = "codex" }`,
 	} {
 		if !strings.Contains(cfg, want) {
 			t.Errorf("config.toml missing %q\nFull config:\n%s", want, cfg)
 		}
+	}
+	if strings.Contains(cfg, "X-EveryAPI-Session") {
+		t.Errorf("config.toml must not fabricate a logical session identifier:\n%s", cfg)
+	}
+	var generated struct {
+		ModelProviders map[string]struct {
+			HTTPHeaders map[string]string `toml:"http_headers"`
+		} `toml:"model_providers"`
+	}
+	if _, err := toml.Decode(cfg, &generated); err != nil {
+		t.Fatalf("generated config.toml is invalid: %v", err)
+	}
+	if got := generated.ModelProviders["everyapi"].HTTPHeaders["X-EveryAPI-Agent"]; got != "codex" {
+		t.Errorf("EveryAPI provider agent header = %q, want codex", got)
 	}
 }
 

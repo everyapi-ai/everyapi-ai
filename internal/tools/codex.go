@@ -299,6 +299,10 @@ func writeCodexConfigTOMLWithCatalog(codexHome, apiBase, catalogPath, bootModel 
 	b.WriteString("wire_api = \"responses\"\n")
 	// EveryAPI's relay key is its own credential, not an OpenAI ChatGPT session token (already the codex default; written to match intent).
 	b.WriteString("requires_openai_auth = false\n")
+	// Static attribution is safe because it identifies the client kind, not a
+	// logical conversation. Codex itself owns and emits resumable thread/session
+	// identifiers; never mint X-EveryAPI-Session per launcher process.
+	b.WriteString("http_headers = { \"X-EveryAPI-Agent\" = \"codex\" }\n")
 	return writeFileAtomic(filepath.Join(codexHome, "config.toml"), []byte(b.String()), 0o644)
 }
 

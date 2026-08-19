@@ -3,6 +3,10 @@
 package cmd
 
 import (
+	"bytes"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +16,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -25,10 +30,321 @@ import (
 const (
 	tmuxStatusSocketName    = "status.sock"
 	tmuxEnvironmentFileName = "environment.json"
+	managedTmuxPrefix       = "everyapi-v3-"
+	previousTmuxPrefix      = "everyapi-v2-"
 )
 
 func tmuxLaunchArgs(envExecutable, executable, workingDirectory, sessionName, encodedUseArgs, statusSocket, environmentFile string) []string {
 	return []string{"tmux", "new-session", "-s", sessionName, "-c", workingDirectory, envExecutable, tmuxUseArgsEnv + "=" + encodedUseArgs, tmuxStatusSocketEnv + "=" + statusSocket, tmuxEnvironmentFileEnv + "=" + environmentFile, tools.TerminalModeEnvironment + "=tmux", tools.TmuxSessionEnvironment + "=" + sessionName, tools.TmuxAttachCommandEnvironment + "=" + tools.TmuxAttachCommand(sessionName), executable, tmuxUseWrapperCommand}
+}
+
+func tmuxSessionPrefix(toolName, workingDirectory string) string {
+	workspaceIdentity := filepath.Clean(workingDirectory)
+	if info, err := os.Stat(workingDirectory); err == nil {
+		if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+			workspaceIdentity = fmt.Sprintf("%d:%d", stat.Dev, stat.Ino)
+		}
+	}
+	return tmuxSessionPrefixForIdentity(toolName, workspaceIdentity)
+}
+
+func previousTmuxSessionPrefix(toolName, workingDirectory string) string {
+	return tmuxSessionPrefixForIdentity(toolName, filepath.Clean(workingDirectory))
+}
+
+func tmuxSessionPrefixForIdentity(toolName, workspaceIdentity string) string {
+	toolComponent := strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' {
+			return r
+		}
+		return '-'
+	}, strings.ToLower(toolName))
+	toolComponent = strings.Trim(toolComponent, "-")
+	if toolComponent == "" {
+		toolComponent = "use"
+	}
+	workspaceHash := sha256.Sum256([]byte(workspaceIdentity))
+	return fmt.Sprintf("%s%s-%x-", managedTmuxPrefix, toolComponent, workspaceHash[:6])
+}
+
+func newTmuxSessionName(prefix string) (string, error) {
+	nonce := make([]byte, 16)
+	if _, err := rand.Read(nonce); err != nil {
+		return "", fmt.Errorf("generate tmux session identity: %w", err)
+	}
+	return prefix + hex.EncodeToString(nonce), nil
+}
+
+type tmuxSessionInventory struct {
+	id               string
+	allPanesDead     bool
+	managedPaneSeen  bool
+	managedPaneAlive bool
+	managedPaneID    string
+}
+
+type tmuxSessionReference struct {
+	name   string
+	paneID string
+}
+
+func legacyEveryAPITmuxSession(name string) bool {
+	parts := strings.Split(name, "-")
+	if len(parts) != 3 || parts[0] != "everyapi" {
+		return false
+	}
+	pid, pidErr := strconv.ParseUint(parts[1], 10, 64)
+	timestamp, timestampErr := strconv.ParseUint(parts[2], 10, 64)
+	return pidErr == nil && timestampErr == nil && pid > 0 && timestamp > 0
+}
+
+func generatedEveryAPITmuxSession(name string) bool {
+	prefix := ""
+	version := 0
+	switch {
+	case strings.HasPrefix(name, managedTmuxPrefix):
+		prefix, version = managedTmuxPrefix, 3
+	case strings.HasPrefix(name, previousTmuxPrefix):
+		prefix, version = previousTmuxPrefix, 2
+	default:
+		return false
+	}
+	parts := strings.Split(strings.TrimPrefix(name, prefix), "-")
+	suffixParts := 2
+	if version == 2 {
+		suffixParts = 3
+	}
+	if len(parts) <= suffixParts {
+		return false
+	}
+	tool := strings.Join(parts[:len(parts)-suffixParts], "-")
+	workspaceHash := parts[len(parts)-suffixParts]
+	if tool == "" || strings.Trim(tool, "-") != tool || len(workspaceHash) != 12 || !lowerHex(workspaceHash) {
+		return false
+	}
+	for _, r := range tool {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') {
+			return false
+		}
+	}
+	if version == 3 {
+		nonce := parts[len(parts)-1]
+		return len(nonce) == 32 && lowerHex(nonce)
+	}
+	pidText := parts[len(parts)-2]
+	timestampText := parts[len(parts)-1]
+	pid, pidErr := strconv.ParseUint(pidText, 10, 64)
+	timestamp, timestampErr := strconv.ParseUint(timestampText, 10, 64)
+	return pidErr == nil && timestampErr == nil && pid > 0 && timestamp > 0
+}
+
+func lowerHex(value string) bool {
+	for _, r := range value {
+		if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func tmuxManagedPaneFormat() string {
+	return "#{m:* " + tmuxUseWrapperCommand + ",#{pane_start_command}}"
+}
+
+func tmuxAndConditions(conditions ...string) string {
+	if len(conditions) == 0 {
+		return "1"
+	}
+	combined := conditions[len(conditions)-1]
+	for index := len(conditions) - 2; index >= 0; index-- {
+		combined = "#{&&:" + conditions[index] + "," + combined + "}"
+	}
+	return combined
+}
+
+func tmuxDeadCleanupCondition(sessionName string) string {
+	// EveryAPI creates exactly one window and one pane. Treat any expanded session as user-owned: tmux has no session-wide all-panes-dead predicate that can be checked atomically with kill-session, so trying to collect a multi-pane session would reopen the live-pane TOCTOU this guard exists to prevent.
+	return tmuxAndConditions(
+		"#{==:#{session_name},"+sessionName+"}",
+		"#{==:#{session_windows},1}",
+		"#{==:#{window_panes},1}",
+		"#{==:#{pane_dead},1}",
+		tmuxManagedPaneFormat(),
+	)
+}
+
+func tmuxReusableCondition(sessionName string) string {
+	return tmuxAndConditions(
+		"#{==:#{session_name},"+sessionName+"}",
+		tmuxManagedPaneFormat(),
+		"#{==:#{pane_dead},0}",
+	)
+}
+
+func exactTmuxSessionTarget(name string) string {
+	return "=" + name
+}
+
+func classifyTmuxSessions(output string, targetPrefixes ...string) (tmuxSessionReference, []tmuxSessionReference, error) {
+	sessions := make(map[string]tmuxSessionInventory)
+	for _, line := range strings.Split(strings.TrimSuffix(output, "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.SplitN(line, "\t", 5)
+		if len(fields) != 5 || fields[0] == "" || fields[1] == "" || !strings.HasPrefix(fields[2], "%") || fields[3] != "0" && fields[3] != "1" || fields[4] != "0" && fields[4] != "1" {
+			return tmuxSessionReference{}, nil, fmt.Errorf("invalid tmux session inventory line %q", line)
+		}
+		state, exists := sessions[fields[0]]
+		if !exists {
+			state.id = fields[1]
+			state.allPanesDead = true
+		} else if state.id != fields[1] {
+			return tmuxSessionReference{}, nil, fmt.Errorf("tmux session %q changed identity inside inventory", fields[0])
+		}
+		paneDead := fields[3] == "1"
+		if !paneDead {
+			state.allPanesDead = false
+		}
+		if fields[4] == "1" {
+			state.managedPaneSeen = true
+			if !paneDead {
+				state.managedPaneAlive = true
+				state.managedPaneID = fields[2]
+			} else if state.managedPaneID == "" {
+				state.managedPaneID = fields[2]
+			}
+		}
+		sessions[fields[0]] = state
+	}
+
+	var liveMatches []tmuxSessionReference
+	var dead []tmuxSessionReference
+	for name, state := range sessions {
+		managedName := generatedEveryAPITmuxSession(name) || legacyEveryAPITmuxSession(name)
+		if !managedName || !state.managedPaneSeen {
+			continue
+		}
+		if state.allPanesDead {
+			dead = append(dead, tmuxSessionReference{name: name, paneID: state.managedPaneID})
+			continue
+		}
+		matchesTarget := false
+		for _, prefix := range targetPrefixes {
+			if prefix != "" && strings.HasPrefix(name, prefix) {
+				matchesTarget = true
+				break
+			}
+		}
+		if state.managedPaneAlive && matchesTarget {
+			liveMatches = append(liveMatches, tmuxSessionReference{name: name, paneID: state.managedPaneID})
+		}
+	}
+	sort.Slice(liveMatches, func(i, j int) bool { return liveMatches[i].name < liveMatches[j].name })
+	sort.Slice(dead, func(i, j int) bool { return dead[i].name < dead[j].name })
+	if len(liveMatches) == 1 {
+		return liveMatches[0], dead, nil
+	}
+	return tmuxSessionReference{}, dead, nil
+}
+
+func reusableTmuxSession(tmuxPath string, targetPrefixes ...string) (tmuxSessionReference, error) {
+	output, err := exec.Command(
+		tmuxPath,
+		"list-panes", "-a",
+		"-f", "#{m:everyapi-*,#{session_name}}",
+		"-F", "#{session_name}\t#{session_id}\t#{pane_id}\t#{pane_dead}\t"+tmuxManagedPaneFormat(),
+	).Output()
+	if err != nil {
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) {
+			return tmuxSessionReference{}, nil
+		}
+		return tmuxSessionReference{}, fmt.Errorf("list tmux sessions: %w", err)
+	}
+	reusable, dead, err := classifyTmuxSessions(string(output), targetPrefixes...)
+	if err != nil {
+		return tmuxSessionReference{}, err
+	}
+	for _, session := range dead {
+		pruneDeadTmuxSession(tmuxPath, session)
+	}
+	return reusable, nil
+}
+
+func pruneDeadTmuxSession(tmuxPath string, session tmuxSessionReference) {
+	target := exactTmuxSessionTarget(session.name)
+	_ = exec.Command(
+		tmuxPath,
+		"if-shell", "-F", "-t", session.paneID,
+		tmuxDeadCleanupCondition(session.name),
+		"kill-session -t "+target,
+	).Run()
+}
+
+func attachReusableTmuxSession(tmuxPath string, session tmuxSessionReference) (bool, error) {
+	terminationSignals := make(chan os.Signal, 2)
+	signal.Notify(terminationSignals, syscall.SIGHUP, syscall.SIGTERM)
+	defer signal.Stop(terminationSignals)
+	target := exactTmuxSessionTarget(session.name)
+	rejectionDirectory, err := os.MkdirTemp("/tmp", "everyapi-tmux-attach-")
+	if err != nil {
+		return false, fmt.Errorf("create tmux attach state directory: %w", err)
+	}
+	rejectionMarker := filepath.Join(rejectionDirectory, "rejected")
+	defer func() {
+		_ = os.Remove(rejectionMarker)
+		_ = os.Remove(rejectionDirectory)
+	}()
+	// The false branch runs synchronously in tmux but reports through this process-private marker. Unlike a tmux global environment variable, it is not inherited by newly created sessions, and it survives a server restart between the rejection and this process reading the result. MkdirTemp's path alphabet is shell-safe and the 0700 parent prevents substitution by another user.
+	rejectionCommand := "run-shell 'umask 077; : > " + rejectionMarker + "'"
+	command := exec.Command(
+		tmuxPath,
+		"if-shell", "-F", "-t", session.paneID,
+		tmuxReusableCondition(session.name),
+		"attach-session -t "+target,
+		rejectionCommand,
+	)
+	command.Stdin = os.Stdin
+	command.Stdout = os.Stdout
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	select {
+	case <-terminationSignals:
+		return true, nil
+	default:
+	}
+	if err := command.Start(); err != nil {
+		if exec.Command(tmuxPath, "has-session", "-t", target).Run() != nil {
+			return false, nil
+		}
+		return true, fmt.Errorf("attach to tmux session %s: %w", session.name, err)
+	}
+	result := make(chan error, 1)
+	go func() { result <- command.Wait() }()
+	var waitErr error
+	select {
+	case waitErr = <-result:
+	case received := <-terminationSignals:
+		_ = command.Process.Signal(received)
+		return true, nil
+	}
+	if waitErr == nil {
+		_, markerErr := os.Lstat(rejectionMarker)
+		if markerErr == nil {
+			return false, nil
+		}
+		if !errors.Is(markerErr, os.ErrNotExist) {
+			return true, fmt.Errorf("inspect tmux attach rejection state: %w", markerErr)
+		}
+		_, _ = io.Copy(os.Stderr, &stderr)
+		return true, nil
+	}
+	_, _ = io.Copy(os.Stderr, &stderr)
+	if exec.Command(tmuxPath, "has-session", "-t", target).Run() != nil {
+		return false, nil
+	}
+	return true, fmt.Errorf("attach to tmux session %s: %w", session.name, waitErr)
 }
 
 func tmuxAvailable() bool {
@@ -298,6 +614,34 @@ func relaunchUseInTmux(useArgs []string) error {
 	if err != nil {
 		return fmt.Errorf("resolve working directory for tmux: %w", err)
 	}
+	canonicalWorkingDirectory, canonicalErr := filepath.EvalSymlinks(workingDirectory)
+	if canonicalErr == nil {
+		workingDirectory = canonicalWorkingDirectory
+	}
+	toolName, _, _, _, _, _, _, _, parseErr := parseUseArgsWithTransparent(useArgs)
+	if parseErr != nil {
+		return parseErr
+	}
+	sessionPrefix := tmuxSessionPrefix(toolName, workingDirectory)
+	var targetPrefixes []string
+	if shouldReuseTmuxSession(useArgs) {
+		targetPrefixes = []string{sessionPrefix, previousTmuxSessionPrefix(toolName, workingDirectory)}
+	}
+	reusableSession, err := reusableTmuxSession(tmuxPath, targetPrefixes...)
+	if err != nil {
+		return err
+	}
+	if reusableSession.name != "" {
+		cliout.Printf(i18n.T("use.tmux_launching")+"\n", reusableSession.name, reusableSession.name)
+		attached, attachErr := attachReusableTmuxSession(tmuxPath, reusableSession)
+		if attachErr != nil {
+			return attachErr
+		}
+		if attached {
+			// The original outer launch already crossed the detach boundary and exited successfully while its wrapper kept running. This invocation is a tmux client reattachment, so its completion has the same terminal-client semantics: it does not invent a second persistent channel for the old tool's exit status.
+			os.Exit(0)
+		}
+	}
 	encodedUseArgs, err := encodeTmuxUseArgs(useArgs)
 	if err != nil {
 		return err
@@ -331,7 +675,10 @@ func relaunchUseInTmux(useArgs []string) error {
 	}
 	defer cleanup(true)
 
-	sessionName := fmt.Sprintf("everyapi-%d-%d", os.Getpid(), time.Now().UnixMilli())
+	sessionName, err := newTmuxSessionName(sessionPrefix)
+	if err != nil {
+		return err
+	}
 	cliout.Printf(i18n.T("use.tmux_launching")+"\n", sessionName, sessionName)
 	tmuxCommand := exec.Command(tmuxPath)
 	tmuxCommand.Args = tmuxLaunchArgs(envExecutable, executable, workingDirectory, sessionName, encodedUseArgs, statusSocket, environmentFile)

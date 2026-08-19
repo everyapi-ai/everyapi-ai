@@ -221,6 +221,31 @@ func TestParseUseArgsWithTransparent(t *testing.T) {
 	}
 }
 
+func TestUseArgsWithSelectedToolInsertsBeforeToolSeparator(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		tool string
+		want []string
+	}{
+		{name: "bare picker", tool: "codex", want: []string{"codex"}},
+		{name: "routing flags", args: []string{"--channel", "team"}, tool: "codex", want: []string{"--channel", "team", "codex"}},
+		{name: "tool arguments", args: []string{"--", "resume"}, tool: "codex", want: []string{"codex", "--", "resume"}},
+		{name: "flags and tool arguments", args: []string{"--transparent=false", "--", "resume"}, tool: "codex", want: []string{"--transparent=false", "codex", "--", "resume"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := append([]string(nil), tt.args...)
+			if got := useArgsWithSelectedTool(tt.args, tt.tool); !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("useArgsWithSelectedTool(%#v, %q) = %#v, want %#v", tt.args, tt.tool, got, tt.want)
+			}
+			if !reflect.DeepEqual(tt.args, original) {
+				t.Fatalf("input args mutated: got %#v, want %#v", tt.args, original)
+			}
+		})
+	}
+}
+
 // TestParseUseArgsTransparentDoesNotEatValueTokens pins that a bare value literally spelled "transparent" — a routing group, a --model value, or the tool positional — is never mistaken for the --transparent flag. Only a dash-prefixed token toggles the connector; a group named "transparent" must still select that group (and keep the experimental MITM mode off).
 func TestParseUseArgsTransparentDoesNotEatValueTokens(t *testing.T) {
 	t.Run("channel value", func(t *testing.T) {
@@ -278,6 +303,12 @@ func TestUseUsageDocumentsTerminalMode(t *testing.T) {
 		if !strings.Contains(useUsage, text) {
 			t.Errorf("use help does not document %q", text)
 		}
+	}
+	if !strings.Contains(useUsage, "A bare Codex resume reattaches") {
+		t.Error("use help does not document tmux resume reuse and cleanup")
+	}
+	if !strings.Contains(useUsage, "everyapi use codex -- resume") {
+		t.Error("use help does not show the exact managed Codex resume command")
 	}
 }
 

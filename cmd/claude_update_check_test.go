@@ -176,7 +176,11 @@ func TestRunClaudeUpdateCommandCancelsAChildThatIgnoresInterrupt(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() { done <- runClaudeUpdateCommand() }()
-	deadline := time.Now().Add(2 * time.Second)
+	// The race detector and cross-package test parallelism can delay the shell
+	// process being scheduled on loaded CI workers. Poll the real readiness file
+	// with a generous failure bound instead of treating scheduler latency as a
+	// product failure.
+	deadline := time.Now().Add(10 * time.Second)
 	for {
 		if _, err := os.Stat(ready); err == nil {
 			break

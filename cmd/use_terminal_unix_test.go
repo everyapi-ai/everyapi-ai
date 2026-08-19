@@ -52,6 +52,585 @@ func TestTmuxLaunchArgsPreserveUseArgumentsWithoutShellJoining(t *testing.T) {
 	}
 }
 
+func TestTmuxSessionNameGroupsLaunchesByToolAndWorkspace(t *testing.T) {
+	prefix := tmuxSessionPrefix("codex", "/tmp/project with spaces")
+	first, err := newTmuxSessionName(prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := newTmuxSessionName(prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second {
+		t.Fatalf("concurrent launches shared session name %q", first)
+	}
+	if !strings.HasPrefix(prefix, "everyapi-v3-codex-") {
+		t.Fatalf("session prefix = %q, want versioned random-identity format", prefix)
+	}
+	for _, name := range []string{first, second} {
+		if !strings.HasPrefix(name, prefix) {
+			t.Fatalf("session name %q does not use workspace prefix %q", name, prefix)
+		}
+		nonce := strings.TrimPrefix(name, prefix)
+		if len(nonce) != 32 || strings.Trim(nonce, "0123456789abcdef") != "" {
+			t.Fatalf("session name %q does not end in a 128-bit hexadecimal nonce", name)
+		}
+		if strings.ContainsAny(name, " /\\\t\n") {
+			t.Fatalf("session name is not tmux-safe: %q", name)
+		}
+	}
+	if got := tmuxSessionPrefix("codex", "/tmp/another-project"); got == prefix {
+		t.Fatalf("different workspaces shared prefix %q", prefix)
+	}
+	if got := tmuxSessionPrefix("claude", "/tmp/project with spaces"); got == prefix {
+		t.Fatalf("different tools shared prefix %q", prefix)
+	}
+}
+
+func TestTmuxSessionPrefixUsesFilesystemIdentityForAliases(t *testing.T) {
+	workspaceRoot := t.TempDir()
+	mixedCasePath := filepath.Join(workspaceRoot, "EveryAPIWorkspace")
+	if err := os.Mkdir(mixedCasePath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("symlink", func(t *testing.T) {
+		symlinkAlias := filepath.Join(workspaceRoot, "workspace-link")
+		if err := os.Symlink(mixedCasePath, symlinkAlias); err != nil {
+			t.Fatal(err)
+		}
+		if mixed, alias := tmuxSessionPrefix("codex", mixedCasePath), tmuxSessionPrefix("codex", symlinkAlias); mixed != alias {
+			t.Fatalf("symlink aliases for one workspace produced different prefixes: %q != %q", mixed, alias)
+		}
+	})
+
+	t.Run("case insensitive filesystem", func(t *testing.T) {
+		lowerCaseAlias := filepath.Join(workspaceRoot, "everyapiworkspace")
+		if _, err := os.Stat(lowerCaseAlias); errors.Is(err, os.ErrNotExist) {
+			t.Skip("filesystem is case-sensitive")
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		if mixed, alias := tmuxSessionPrefix("codex", mixedCasePath), tmuxSessionPrefix("codex", lowerCaseAlias); mixed != alias {
+			t.Fatalf("case aliases for one workspace produced different prefixes: %q != %q", mixed, alias)
+		}
+	})
+}
+
+func tmuxTestInventoryLine(name, id string, dead, managed bool) string {
+	return tmuxTestInventoryPaneLine(name, id, "%"+strings.TrimPrefix(id, "$"), dead, managed)
+}
+
+func tmuxTestInventoryPaneLine(name, id, paneID string, dead, managed bool) string {
+	deadValue := "0"
+	if dead {
+		deadValue = "1"
+	}
+	managedValue := "0"
+	if managed {
+		managedValue = "1"
+	}
+	return strings.Join([]string{name, id, paneID, deadValue, managedValue}, "\t")
+}
+
+func TestClassifyTmuxSessionsReusesOnlyUniqueLiveWorkspaceAndFindsDeadGarbage(t *testing.T) {
+	prefix := tmuxSessionPrefix("codex", "/tmp/project")
+	matching := prefix + strings.Repeat("1", 32)
+	deadMatching := prefix + strings.Repeat("2", 32)
+	otherWorkspace := tmuxSessionPrefix("codex", "/tmp/other") + strings.Repeat("3", 32)
+	deadOtherTool := tmuxSessionPrefix("claude", "/tmp/project") + strings.Repeat("4", 32)
+	legacyDead := "everyapi-987-654321"
+	previousVersionDead := "everyapi-v2-codex-0123456789ab-128-461"
+	prefixedUserSession := tmuxSessionPrefix("codex", "/tmp/user") + strings.Repeat("5", 32)
+	invalidV2UserSession := "everyapi-v2-codex-project"
+	output := strings.Join([]string{
+		tmuxTestInventoryLine(matching, "$1", false, true),
+		tmuxTestInventoryLine(matching, "$1", true, false),
+		tmuxTestInventoryLine(deadMatching, "$2", true, true),
+		tmuxTestInventoryLine(otherWorkspace, "$3", false, true),
+		tmuxTestInventoryLine(deadOtherTool, "$4", true, true),
+		tmuxTestInventoryLine(legacyDead, "$5", true, true),
+		tmuxTestInventoryLine(previousVersionDead, "$9", true, true),
+		tmuxTestInventoryLine(prefixedUserSession, "$6", true, false),
+		tmuxTestInventoryLine("user-session", "$7", true, false),
+		tmuxTestInventoryLine(invalidV2UserSession, "$8", true, true),
+	}, "\n") + "\n"
+
+	gotSession, gotDead, err := classifyTmuxSessions(output, prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotSession.name != matching || gotSession.paneID != "%1" {
+		t.Fatalf("reusable session = %#v, want %q / %%1", gotSession, matching)
+	}
+	wantDead := []tmuxSessionReference{
+		{name: legacyDead, paneID: "%5"},
+		{name: previousVersionDead, paneID: "%9"},
+		{name: deadOtherTool, paneID: "%4"},
+		{name: deadMatching, paneID: "%2"},
+	}
+	if !reflect.DeepEqual(gotDead, wantDead) {
+		t.Fatalf("dead sessions = %#v, want %#v", gotDead, wantDead)
+	}
+}
+
+func TestClassifyTmuxSessionsReusesPreviousPathIdentityDuringUpgrade(t *testing.T) {
+	workspace := t.TempDir()
+	currentPrefix := tmuxSessionPrefix("codex", workspace)
+	previousPrefix := previousTmuxSessionPrefix("codex", workspace)
+	if currentPrefix == previousPrefix {
+		t.Fatal("test fixture did not produce distinct filesystem and path identities")
+	}
+	previousSession := previousPrefix + strings.Repeat("d", 32)
+	output := tmuxTestInventoryLine(previousSession, "$1", false, true) + "\n"
+
+	got, _, err := classifyTmuxSessions(output, currentPrefix, previousPrefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.name != previousSession {
+		t.Fatalf("previous path-identity session was not reusable during upgrade: got %#v, want %q", got, previousSession)
+	}
+}
+
+func TestClassifyTmuxSessionsRequiresStrictGeneratedNameBeforeCleanup(t *testing.T) {
+	output := strings.Join([]string{
+		tmuxTestInventoryLine("everyapi-v2-codex-project", "$1", true, true),
+		tmuxTestInventoryLine("everyapi-v2-codex-0123456789ab-0-123", "$2", true, true),
+		tmuxTestInventoryLine("everyapi-v2-codex-0123456789ab-123-0", "$3", true, true),
+		tmuxTestInventoryLine("everyapi-v2-codex-not-a-hash-123-456", "$4", true, true),
+	}, "\n") + "\n"
+
+	gotSession, gotDead, err := classifyTmuxSessions(output, "everyapi-v2-codex-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotSession.name != "" {
+		t.Fatalf("invalid generated session was reused: %#v", gotSession)
+	}
+	if len(gotDead) != 0 {
+		t.Fatalf("user sessions with invalid generated names were pruned: %#v", gotDead)
+	}
+}
+
+func TestTmuxSessionConditionsRecognizeOnlyLiveManagedPanes(t *testing.T) {
+	tmuxPath, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Skip("tmux is not installed")
+	}
+	tmuxTemp, err := os.MkdirTemp("/tmp", "everyapi-tmux-condition-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tmuxTemp) })
+	t.Setenv("TMUX", "")
+	t.Setenv("TMUX_TMPDIR", tmuxTemp)
+	defer exec.Command(tmuxPath, "kill-server").Run() //nolint:errcheck // best-effort isolated test cleanup
+
+	managedSession := "everyapi-v3-codex-0123456789ab-" + strings.Repeat("1", 32)
+	if output, err := exec.Command(
+		tmuxPath, "new-session", "-d", "-s", managedSession,
+		"sh", "-c", "while :; do sleep 1; done", "sh", tmuxUseWrapperCommand,
+	).CombinedOutput(); err != nil {
+		t.Fatalf("start isolated managed tmux session: %v\n%s", err, output)
+	}
+	paneOutput, err := exec.Command(tmuxPath, "list-panes", "-t", exactTmuxSessionTarget(managedSession), "-F", "#{pane_id}").CombinedOutput()
+	if err != nil {
+		t.Fatalf("find managed pane: %v\n%s", err, paneOutput)
+	}
+	managedPaneID := strings.TrimSpace(string(paneOutput))
+
+	formatValue := func(format string) string {
+		t.Helper()
+		output, err := exec.Command(tmuxPath, "display-message", "-p", "-t", managedPaneID, format).CombinedOutput()
+		if err != nil {
+			t.Fatalf("expand tmux format %q: %v\n%s", format, err, output)
+		}
+		return strings.TrimSpace(string(output))
+	}
+	if got := formatValue(tmuxReusableCondition(managedSession)); got != "1" {
+		t.Fatalf("live managed session reusable condition = %q, want 1", got)
+	}
+	if got := formatValue(tmuxDeadCleanupCondition(managedSession)); got != "0" {
+		t.Fatalf("live managed session cleanup condition = %q, want 0", got)
+	}
+}
+
+func TestTmuxAndConditionsUsesBinaryNestingForOlderTmux(t *testing.T) {
+	if got, want := tmuxAndConditions("one", "two", "three"), "#{&&:one,#{&&:two,three}}"; got != want {
+		t.Fatalf("combined tmux condition = %q, want %q", got, want)
+	}
+	if got := tmuxAndConditions(); got != "1" {
+		t.Fatalf("empty tmux condition = %q, want 1", got)
+	}
+}
+
+func TestClassifyTmuxSessionsPreservesUserPaneAfterManagedPaneDies(t *testing.T) {
+	prefix := tmuxSessionPrefix("codex", "/tmp/project")
+	session := prefix + strings.Repeat("1", 32)
+	output := strings.Join([]string{
+		tmuxTestInventoryLine(session, "$1", true, true),
+		tmuxTestInventoryLine(session, "$1", false, false),
+	}, "\n") + "\n"
+
+	gotSession, gotDead, err := classifyTmuxSessions(output, prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotSession.name != "" {
+		t.Fatalf("session with dead managed pane was reused: %#v", gotSession)
+	}
+	if len(gotDead) != 0 {
+		t.Fatalf("session with live user pane was pruned: %#v", gotDead)
+	}
+}
+
+func TestClassifyTmuxSessionsTargetsTheLiveManagedPane(t *testing.T) {
+	prefix := tmuxSessionPrefix("codex", "/tmp/project")
+	session := prefix + strings.Repeat("b", 32)
+	output := strings.Join([]string{
+		tmuxTestInventoryPaneLine(session, "$1", "%10", true, true),
+		tmuxTestInventoryPaneLine(session, "$1", "%11", false, true),
+	}, "\n") + "\n"
+
+	gotSession, _, err := classifyTmuxSessions(output, prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotSession.paneID != "%11" {
+		t.Fatalf("reusable session targets pane %q, want live managed pane %%11", gotSession.paneID)
+	}
+}
+
+func TestClassifyTmuxSessionsDoesNotGuessBetweenMultipleLiveMatches(t *testing.T) {
+	prefix := tmuxSessionPrefix("codex", "/tmp/project")
+	first := prefix + strings.Repeat("1", 32)
+	second := prefix + strings.Repeat("2", 32)
+	output := tmuxTestInventoryLine(first, "$1", false, true) + "\n" + tmuxTestInventoryLine(second, "$2", false, true) + "\n"
+	gotSession, gotDead, err := classifyTmuxSessions(output, prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotSession.name != "" {
+		t.Fatalf("ambiguous live sessions selected %#v", gotSession)
+	}
+	if len(gotDead) != 0 {
+		t.Fatalf("live sessions classified as dead: %#v", gotDead)
+	}
+}
+
+func TestClassifyTmuxSessionsRejectsMalformedInventory(t *testing.T) {
+	prefix := tmuxSessionPrefix("codex", "/tmp/project")
+	for _, output := range []string{"missing-tabs\n", "session\t$1\t%1\t2\t1\n", "\t$1\t%1\t0\t1\n"} {
+		if _, _, err := classifyTmuxSessions(output, prefix); err == nil {
+			t.Fatalf("malformed inventory accepted: %q", output)
+		}
+	}
+}
+
+func TestReusableTmuxSessionPrunesOnlyManagedDeadSessions(t *testing.T) {
+	prefix := tmuxSessionPrefix("codex", "/tmp/project")
+	live := prefix + strings.Repeat("1", 32)
+	dead := tmuxSessionPrefix("claude", "/tmp/other") + strings.Repeat("2", 32)
+	testDir := t.TempDir()
+	logPath := filepath.Join(testDir, "tmux.log")
+	tmuxPath := filepath.Join(testDir, "tmux")
+	script := `#!/bin/sh
+printf '%s\n' "$*" >> "$TMUX_TEST_LOG"
+if [ "$1" = "list-panes" ]; then
+  printf '%s\t$1\t%%1\t0\t1\n%s\t$2\t%%2\t1\t1\n%s\t$3\t%%3\t1\t0\n' "$TMUX_TEST_LIVE" "$TMUX_TEST_DEAD" "user-session"
+fi
+`
+	if err := os.WriteFile(tmuxPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMUX_TEST_LOG", logPath)
+	t.Setenv("TMUX_TEST_LIVE", live)
+	t.Setenv("TMUX_TEST_DEAD", dead)
+
+	got, err := reusableTmuxSession(tmuxPath, prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.name != live || got.paneID != "%1" {
+		t.Fatalf("reusable session = %#v, want %q / %%1", got, live)
+	}
+	logBody, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logText := string(logBody)
+	deadCleanupLine := "if-shell -F -t %2"
+	if !strings.Contains(logText, deadCleanupLine) || !strings.Contains(logText, "kill-session -t ="+dead) {
+		t.Fatalf("dead managed session was not atomically revalidated and pruned by exact name:\n%s", logText)
+	}
+	if strings.Contains(logText, "kill-session -t $2\n") {
+		t.Fatalf("stale server-local session ID was used for cleanup:\n%s", logText)
+	}
+	for _, protected := range []string{"$1", "$3", live, "user-session"} {
+		if strings.Contains(logText, "kill-session -t "+protected) {
+			t.Fatalf("live or unmanaged session %q was pruned:\n%s", protected, logText)
+		}
+	}
+}
+
+func TestAttachReusableTmuxSessionUsesStableServerIdentity(t *testing.T) {
+	testDir := t.TempDir()
+	session := tmuxSessionReference{
+		name:   tmuxSessionPrefix("codex", "/tmp/project") + strings.Repeat("1", 32),
+		paneID: "%42",
+	}
+	logPath := filepath.Join(testDir, "tmux.log")
+	tmuxPath := filepath.Join(testDir, "tmux")
+	script := `#!/bin/sh
+printf '%s\n' "$*" >> "$TMUX_TEST_LOG"
+if [ "$1" = "if-shell" ]; then
+  exit 0
+fi
+exit 2
+`
+	if err := os.WriteFile(tmuxPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMUX_TEST_LOG", logPath)
+	attached, err := attachReusableTmuxSession(tmuxPath, session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !attached {
+		t.Fatal("successful tmux attach was not handled")
+	}
+	logBody, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logText := string(logBody)
+	if !strings.Contains(logText, "if-shell -F -t "+session.paneID) || !strings.Contains(logText, "attach-session -t ="+session.name) {
+		t.Fatalf("attach did not atomically revalidate and target the exact session name:\n%s", logText)
+	}
+	if strings.Contains(logText, "$42") {
+		t.Fatalf("attach used a reusable server-local ID:\n%s", logText)
+	}
+	if strings.Contains(logText, "run-shell 'exit") {
+		t.Fatalf("ineligible attach path can print a synthetic shell failure:\n%s", logText)
+	}
+	if strings.Contains(logText, "set-environment -g") {
+		t.Fatalf("attach rejection state leaks through tmux's inherited global environment:\n%s", logText)
+	}
+}
+
+func TestAttachReusableTmuxSessionFallsBackWhenIdentityVanished(t *testing.T) {
+	testDir := t.TempDir()
+	tmuxPath := filepath.Join(testDir, "tmux")
+	script := `#!/bin/sh
+if [ "$1" = "if-shell" ] || [ "$1" = "has-session" ]; then
+  exit 1
+fi
+exit 2
+`
+	if err := os.WriteFile(tmuxPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	attached, err := attachReusableTmuxSession(tmuxPath, tmuxSessionReference{name: "everyapi-v3-codex-project-random", paneID: "%42"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attached {
+		t.Fatal("vanished tmux identity was treated as attached")
+	}
+}
+
+func isolatedTmuxServer(t *testing.T) string {
+	t.Helper()
+	tmuxPath, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Skip("tmux is not installed")
+	}
+	runtimeDirectory, err := os.MkdirTemp("/tmp", "everyapi-tmux-race-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMUX", "")
+	t.Setenv("TMUX_TMPDIR", runtimeDirectory)
+	t.Cleanup(func() {
+		_ = exec.Command(tmuxPath, "kill-server").Run()
+		_ = os.RemoveAll(runtimeDirectory)
+	})
+	return tmuxPath
+}
+
+func waitForTmuxFormat(t *testing.T, tmuxPath, target, format, want string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		output, err := exec.Command(tmuxPath, "display-message", "-p", "-t", target, format).CombinedOutput()
+		if err == nil && strings.TrimSpace(string(output)) == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("tmux format %q for %q did not become %q: err=%v output=%q", format, target, want, err, output)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func startDeadManagedTmuxSession(t *testing.T, tmuxPath, name string) string {
+	t.Helper()
+	gate := filepath.Join(os.Getenv("TMUX_TMPDIR"), "exit-gate")
+	output, err := exec.Command(
+		tmuxPath, "new-session", "-d", "-s", name,
+		"sh", "-c", `while [ ! -e "$1" ]; do sleep 0.01; done`, "sh", gate, tmuxUseWrapperCommand,
+	).CombinedOutput()
+	if err != nil {
+		t.Fatalf("start managed tmux fixture: %v\n%s", err, output)
+	}
+	target := exactTmuxSessionTarget(name)
+	paneOutput, err := exec.Command(tmuxPath, "list-panes", "-t", target, "-F", "#{pane_id}").CombinedOutput()
+	if err != nil {
+		t.Fatalf("find managed fixture pane: %v\n%s", err, paneOutput)
+	}
+	paneID := strings.TrimSpace(string(paneOutput))
+	if output, err := exec.Command(tmuxPath, "set-option", "-w", "-t", paneID, "remain-on-exit", "on").CombinedOutput(); err != nil {
+		t.Fatalf("enable remain-on-exit: %v\n%s", err, output)
+	}
+	if err := os.WriteFile(gate, []byte("exit"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	waitForTmuxFormat(t, tmuxPath, paneID, "#{pane_dead}", "1")
+	return paneID
+}
+
+func TestPruneDeadTmuxSessionRevalidatesRevivedPane(t *testing.T) {
+	tmuxPath := isolatedTmuxServer(t)
+	sessionName := "everyapi-v3-codex-0123456789ab-" + strings.Repeat("6", 32)
+	managedPaneID := startDeadManagedTmuxSession(t, tmuxPath, sessionName)
+	target := exactTmuxSessionTarget(sessionName)
+	if output, err := exec.Command(tmuxPath, "respawn-pane", "-k", "-t", managedPaneID, "sleep", "30").CombinedOutput(); err != nil {
+		t.Fatalf("revive pane before cleanup: %v\n%s", err, output)
+	}
+	waitForTmuxFormat(t, tmuxPath, managedPaneID, "#{pane_dead}", "0")
+
+	pruneDeadTmuxSession(tmuxPath, tmuxSessionReference{name: sessionName, paneID: managedPaneID})
+	if err := exec.Command(tmuxPath, "has-session", "-t", target).Run(); err != nil {
+		t.Fatal("cleanup deleted a session whose pane revived after inventory")
+	}
+}
+
+func TestPruneDeadTmuxSessionRemovesSoleDeadManagedPane(t *testing.T) {
+	tmuxPath := isolatedTmuxServer(t)
+	sessionName := "everyapi-v3-codex-0123456789ab-" + strings.Repeat("a", 32)
+	managedPaneID := startDeadManagedTmuxSession(t, tmuxPath, sessionName)
+	conditionOutput, err := exec.Command(tmuxPath, "display-message", "-p", "-t", managedPaneID, tmuxDeadCleanupCondition(sessionName)).CombinedOutput()
+	if err != nil || strings.TrimSpace(string(conditionOutput)) != "1" {
+		t.Fatalf("sole dead managed pane cleanup condition = %q, err=%v, want 1", conditionOutput, err)
+	}
+
+	pruneDeadTmuxSession(tmuxPath, tmuxSessionReference{name: sessionName, paneID: managedPaneID})
+	if err := exec.Command(tmuxPath, "has-session", "-t", exactTmuxSessionTarget(sessionName)).Run(); err == nil {
+		t.Fatal("cleanup preserved a standard managed session whose sole pane was dead")
+	}
+}
+
+func TestPruneDeadTmuxSessionDoesNotFollowReusedServerID(t *testing.T) {
+	tmuxPath := isolatedTmuxServer(t)
+	staleName := "everyapi-v3-codex-0123456789ab-" + strings.Repeat("7", 32)
+	stalePaneID := startDeadManagedTmuxSession(t, tmuxPath, staleName)
+	if err := exec.Command(tmuxPath, "kill-server").Run(); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := exec.Command(tmuxPath, "new-session", "-d", "-s", "user-session", "sleep", "30").CombinedOutput(); err != nil {
+		t.Fatalf("start replacement user session: %v\n%s", err, output)
+	}
+
+	pruneDeadTmuxSession(tmuxPath, tmuxSessionReference{name: staleName, paneID: stalePaneID})
+	if err := exec.Command(tmuxPath, "has-session", "-t", "=user-session").Run(); err != nil {
+		t.Fatal("cleanup followed a reused server-local ID and deleted the replacement user session")
+	}
+}
+
+func TestAttachReusableTmuxSessionRevalidatesManagedPaneAndExactName(t *testing.T) {
+	t.Run("managed pane died while user window survived", func(t *testing.T) {
+		tmuxPath := isolatedTmuxServer(t)
+		sessionName := "everyapi-v3-codex-0123456789ab-" + strings.Repeat("8", 32)
+		managedPaneID := startDeadManagedTmuxSession(t, tmuxPath, sessionName)
+		if output, err := exec.Command(tmuxPath, "new-window", "-d", "-t", exactTmuxSessionTarget(sessionName), "sleep", "30").CombinedOutput(); err != nil {
+			t.Fatalf("add live user window: %v\n%s", err, output)
+		}
+
+		attached, err := attachReusableTmuxSession(tmuxPath, tmuxSessionReference{name: sessionName, paneID: managedPaneID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if attached {
+			t.Fatal("session with a dead managed pane was reattached")
+		}
+		if err := exec.Command(tmuxPath, "has-session", "-t", exactTmuxSessionTarget(sessionName)).Run(); err != nil {
+			t.Fatal("ineligible session with a live user window was not preserved")
+		}
+	})
+
+	t.Run("managed pane was removed while user window survived", func(t *testing.T) {
+		tmuxPath := isolatedTmuxServer(t)
+		sessionName := "everyapi-v3-codex-0123456789ab-" + strings.Repeat("c", 32)
+		if output, err := exec.Command(tmuxPath, "new-session", "-d", "-s", sessionName, "sh", "-c", "while :; do sleep 1; done", "sh", tmuxUseWrapperCommand).CombinedOutput(); err != nil {
+			t.Fatalf("start managed session: %v\n%s", err, output)
+		}
+		paneOutput, err := exec.Command(tmuxPath, "list-panes", "-t", exactTmuxSessionTarget(sessionName), "-F", "#{pane_id}").CombinedOutput()
+		if err != nil {
+			t.Fatal(err)
+		}
+		managedPaneID := strings.TrimSpace(string(paneOutput))
+		if output, err := exec.Command(tmuxPath, "new-window", "-d", "-t", exactTmuxSessionTarget(sessionName), "sleep", "30").CombinedOutput(); err != nil {
+			t.Fatalf("add live user window: %v\n%s", err, output)
+		}
+		if output, err := exec.Command(tmuxPath, "kill-pane", "-t", managedPaneID).CombinedOutput(); err != nil {
+			t.Fatalf("remove managed pane: %v\n%s", err, output)
+		}
+
+		attached, err := attachReusableTmuxSession(tmuxPath, tmuxSessionReference{name: sessionName, paneID: managedPaneID})
+		if err != nil {
+			t.Fatalf("removed managed pane should fall back without an attach error: %v", err)
+		}
+		if attached {
+			t.Fatal("session whose managed pane was removed was reattached")
+		}
+		if err := exec.Command(tmuxPath, "has-session", "-t", exactTmuxSessionTarget(sessionName)).Run(); err != nil {
+			t.Fatal("user window was not preserved")
+		}
+	})
+
+	t.Run("server restarted and reused pane ID", func(t *testing.T) {
+		tmuxPath := isolatedTmuxServer(t)
+		staleName := "everyapi-v3-codex-0123456789ab-" + strings.Repeat("9", 32)
+		if output, err := exec.Command(tmuxPath, "new-session", "-d", "-s", staleName, "sh", "-c", "while :; do sleep 1; done", "sh", tmuxUseWrapperCommand).CombinedOutput(); err != nil {
+			t.Fatalf("start stale managed session: %v\n%s", err, output)
+		}
+		paneOutput, err := exec.Command(tmuxPath, "list-panes", "-t", exactTmuxSessionTarget(staleName), "-F", "#{pane_id}").CombinedOutput()
+		if err != nil {
+			t.Fatal(err)
+		}
+		stalePaneID := strings.TrimSpace(string(paneOutput))
+		if err := exec.Command(tmuxPath, "kill-server").Run(); err != nil {
+			t.Fatal(err)
+		}
+		if output, err := exec.Command(tmuxPath, "new-session", "-d", "-s", "replacement-user", "sleep", "30").CombinedOutput(); err != nil {
+			t.Fatalf("start replacement user session: %v\n%s", err, output)
+		}
+
+		attached, err := attachReusableTmuxSession(tmuxPath, tmuxSessionReference{name: staleName, paneID: stalePaneID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if attached {
+			t.Fatal("reattach followed a pane ID reused by a restarted tmux server")
+		}
+		if err := exec.Command(tmuxPath, "has-session", "-t", "=replacement-user").Run(); err != nil {
+			t.Fatal("replacement user session was disturbed")
+		}
+	})
+}
+
 func TestTmuxEnvironmentFileRoundTripAndChildOverlay(t *testing.T) {
 	statusDirectory, err := os.MkdirTemp("/tmp", "everyapi-tmux-test-")
 	if err != nil {
@@ -225,7 +804,11 @@ func TestRunTmuxChildAndReportSurvivesForegroundGroupInterrupt(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-	case <-time.After(2 * time.Second):
+	// A race-instrumented helper can take several seconds to start when all CLI
+	// packages test concurrently. Wait for the actual readiness line with a
+	// generous failure bound so scheduler load is not reported as product
+	// signal-handling failure.
+	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for signal helper")
 	}
 	if err := syscall.Kill(-helper.Process.Pid, syscall.SIGINT); err != nil {

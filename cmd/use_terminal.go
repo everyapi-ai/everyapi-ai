@@ -97,6 +97,11 @@ func shouldRelaunchInTmux(mode, tmuxEnvironment string) bool {
 	return mode == config.TerminalModeTmux && tmuxEnvironment == ""
 }
 
+func shouldReuseTmuxSession(useArgs []string) bool {
+	return len(useArgs) == 3 && useArgs[0] == "codex" && useArgs[1] == "--" && useArgs[2] == "resume" ||
+		len(useArgs) == 4 && useArgs[0] == "codex" && useArgs[1] == "--" && useArgs[2] == "resume" && useArgs[3] == "--all"
+}
+
 func terminalModePickerOptions(tmuxIsAvailable bool) (labels, values []string, disabled []bool) {
 	labels = []string{i18n.T("settings.terminal_mode_native"), i18n.T("settings.terminal_mode_tmux")}
 	if !tmuxIsAvailable {
