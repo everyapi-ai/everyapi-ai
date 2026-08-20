@@ -69,12 +69,25 @@ function Write-Warn($m) { Write-Host "! $m" -ForegroundColor Yellow }
 # wrapper at the bottom, which prints the message and returns control.
 function Die($m) { throw $m }
 
+# Invoke-WebRequest only hands back a string when it recognises the response's
+# Content-Type as text; for anything else -- including the application/octet-
+# stream the OSS mirror serves /latest as -- Windows PowerShell 5.1 hands back
+# a byte[], and `.Content.Trim()` dies with "[System.Byte] does not contain a
+# method named 'Trim'". That took out the whole mirror path, i.e. every install
+# from mainland China, which is the one case the mirror exists for. Decode
+# explicitly rather than trusting the client's guess.
+function Get-TextContent($response) {
+  $c = $response.Content
+  if ($c -is [byte[]]) { return [System.Text.Encoding]::UTF8.GetString($c) }
+  return [string]$c
+}
+
 function Get-LatestTag {
   # Mirror mode (parity with install.sh): read the tag from a plain-text
   # "<base>/latest" pointer the release pipeline writes next to the artifacts.
   if ($DownloadBase) {
     try {
-      return ((Invoke-WebRequest -Uri "$DownloadBase/latest" -TimeoutSec 8 -UseBasicParsing).Content).Trim()
+      return (Get-TextContent (Invoke-WebRequest -Uri "$DownloadBase/latest" -TimeoutSec 8 -UseBasicParsing)).Trim()
     } catch {
       Die "could not resolve the latest version from mirror ($DownloadBase/latest). Pass -Version vX.Y.Z explicitly. ($($_.Exception.Message))"
     }
@@ -91,11 +104,74 @@ function Get-LatestTag {
     Write-Warn "github.com version lookup failed -- using the mainland mirror ($MirrorBase)"
     $script:DownloadBase = $MirrorBase
     try {
-      return ((Invoke-WebRequest -Uri "$MirrorBase/latest" -TimeoutSec 8 -UseBasicParsing).Content).Trim()
+      return (Get-TextContent (Invoke-WebRequest -Uri "$MirrorBase/latest" -TimeoutSec 8 -UseBasicParsing)).Trim()
     } catch {
       Die "could not resolve the latest version from GitHub or the mirror. Pass -Version vX.Y.Z explicitly. ($($_.Exception.Message))"
     }
   }
+}
+
+function Set-UserPath($installDir) {
+  # Persist installDir onto the User PATH when it isn't already there, and add
+  # it to the current session so `everyapi` works without reopening the shell.
+  #
+  # Read the RAW (unexpanded) value straight from the registry with
+  # DoNotExpandEnvironmentNames, and remember its value KIND. [Environment]::
+  # GetEnvironmentVariable expands %VAR% tokens, and [Environment]::
+  # SetEnvironmentVariable ALWAYS writes REG_SZ — round-tripping a PATH that
+  # was REG_EXPAND_SZ (the Windows default whenever it holds entries like
+  # %USERPROFILE%\bin / %JAVA_HOME%\bin) through those APIs would either bake
+  # in the expanded values or persist literal %VAR% tokens that no longer
+  # expand, silently breaking the user's environment for other tools. So
+  # write back through the registry preserving the original type.
+  $envKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $false)
+  $userPath = ''
+  $pathKind = [Microsoft.Win32.RegistryValueKind]::ExpandString
+  if ($envKey) {
+    $userPath = [string]$envKey.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+    try { $pathKind = $envKey.GetValueKind('Path') } catch { }
+    $envKey.Close()
+  }
+  # No existing value: pick the type from the content we're about to write —
+  # ExpandString only if it actually contains a %VAR% token.
+  if (-not $userPath) {
+    $pathKind = [Microsoft.Win32.RegistryValueKind]::String
+  }
+  $onPath = @($userPath -split ';' |
+    Where-Object { $_ -and ($_.TrimEnd('\') -ieq $installDir.TrimEnd('\')) }).Count -gt 0
+  if ($onPath) {
+    # Persisted already, but a session that started before that write still
+    # has the old PATH — including the CI shell that just ran the installer.
+    if (-not (@($env:Path -split ';' |
+      Where-Object { $_ -and ($_.TrimEnd('\') -ieq $installDir.TrimEnd('\')) }).Count -gt 0)) {
+      $env:Path = "$installDir;$env:Path"
+    }
+    return
+  }
+  $newPath = if ($userPath) { "$installDir;$userPath" } else { $installDir }
+  $pathType = if ($pathKind -eq [Microsoft.Win32.RegistryValueKind]::ExpandString) { 'ExpandString' } else { 'String' }
+  Set-ItemProperty -Path 'HKCU:\Environment' -Name 'Path' -Value $newPath -Type $pathType
+  # Set-ItemProperty (unlike SetEnvironmentVariable) doesn't notify running
+  # processes, so broadcast WM_SETTINGCHANGE ourselves — otherwise Explorer
+  # and already-open shells wouldn't see the new PATH until the next logon.
+  try {
+    if (-not ('Win32.NativeMethods' -as [type])) {
+      Add-Type -Namespace Win32 -Name NativeMethods -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, uint Msg, System.UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out System.UIntPtr lpdwResult);
+'@
+    }
+    $result = [System.UIntPtr]::Zero
+    [void][Win32.NativeMethods]::SendMessageTimeout([System.IntPtr]0xffff, 0x1A, [System.UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$result)
+  } catch { }
+  $env:Path = "$installDir;$env:Path"
+  Write-Host ''
+  # Parity with install.sh's PATH hint, but Windows lets us DO the fix rather
+  # than hand the user a command to paste: the User PATH is now persisted and
+  # this session's $env:Path is already updated, so `everyapi` works in this
+  # window right away. Only other/already-open apps need a fresh terminal.
+  Write-Ok "Setup done: added $installDir to your User PATH (and this session)."
+  Write-Host '  everyapi works in this window now; open a new terminal for other apps to pick it up.'
 }
 
 function Invoke-Install {
@@ -153,6 +229,13 @@ function Invoke-Install {
       $m = [regex]::Match($existing, '\d+\.\d+\.\d+')
       if ($m.Success -and $m.Value -eq $ver.TrimStart('v')) {
         Write-Ok "already at $ver -- nothing to do (pass -Force to reinstall)"
+        # "Nothing to download" is not "nothing to do": the binary being current
+        # says nothing about whether PATH was ever wired up. A machine where the
+        # User PATH was reset, or that was provisioned by copying the exe in,
+        # would never get fixed by re-running the one-liner if we returned here,
+        # and this script's contract (see .DESCRIPTION) is that everyapi ends up
+        # on your PATH. Set-UserPath is a no-op when it already is.
+        Set-UserPath $installDir
         return
       }
       Write-Info "found existing install: $existing"
@@ -330,60 +413,7 @@ function Invoke-Install {
   Write-Ok $installedVer
 
   # ----- PATH ----------------------------------------------------------------
-  #
-  # Persist installDir onto the User PATH when it isn't already there, and add
-  # it to the current session so `everyapi` works without reopening the shell.
-  #
-  # Read the RAW (unexpanded) value straight from the registry with
-  # DoNotExpandEnvironmentNames, and remember its value KIND. [Environment]::
-  # GetEnvironmentVariable expands %VAR% tokens, and [Environment]::
-  # SetEnvironmentVariable ALWAYS writes REG_SZ — round-tripping a PATH that
-  # was REG_EXPAND_SZ (the Windows default whenever it holds entries like
-  # %USERPROFILE%\bin / %JAVA_HOME%\bin) through those APIs would either bake
-  # in the expanded values or persist literal %VAR% tokens that no longer
-  # expand, silently breaking the user's environment for other tools. So
-  # write back through the registry preserving the original type.
-  $envKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $false)
-  $userPath = ''
-  $pathKind = [Microsoft.Win32.RegistryValueKind]::ExpandString
-  if ($envKey) {
-    $userPath = [string]$envKey.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
-    try { $pathKind = $envKey.GetValueKind('Path') } catch { }
-    $envKey.Close()
-  }
-  # No existing value: pick the type from the content we're about to write —
-  # ExpandString only if it actually contains a %VAR% token.
-  if (-not $userPath) {
-    $pathKind = [Microsoft.Win32.RegistryValueKind]::String
-  }
-  $onPath = @($userPath -split ';' |
-    Where-Object { $_ -and ($_.TrimEnd('\') -ieq $installDir.TrimEnd('\')) }).Count -gt 0
-  if (-not $onPath) {
-    $newPath = if ($userPath) { "$installDir;$userPath" } else { $installDir }
-    $pathType = if ($pathKind -eq [Microsoft.Win32.RegistryValueKind]::ExpandString) { 'ExpandString' } else { 'String' }
-    Set-ItemProperty -Path 'HKCU:\Environment' -Name 'Path' -Value $newPath -Type $pathType
-    # Set-ItemProperty (unlike SetEnvironmentVariable) doesn't notify running
-    # processes, so broadcast WM_SETTINGCHANGE ourselves — otherwise Explorer
-    # and already-open shells wouldn't see the new PATH until the next logon.
-    try {
-      if (-not ('Win32.NativeMethods' -as [type])) {
-        Add-Type -Namespace Win32 -Name NativeMethods -MemberDefinition @'
-[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Auto)]
-public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, uint Msg, System.UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out System.UIntPtr lpdwResult);
-'@
-      }
-      $result = [System.UIntPtr]::Zero
-      [void][Win32.NativeMethods]::SendMessageTimeout([System.IntPtr]0xffff, 0x1A, [System.UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$result)
-    } catch { }
-    $env:Path = "$installDir;$env:Path"
-    Write-Host ''
-    # Parity with install.sh's PATH hint, but Windows lets us DO the fix rather
-    # than hand the user a command to paste: the User PATH is now persisted and
-    # this session's $env:Path is already updated, so `everyapi` works in this
-    # window right away. Only other/already-open apps need a fresh terminal.
-    Write-Ok "Setup done: added $installDir to your User PATH (and this session)."
-    Write-Host '  everyapi works in this window now; open a new terminal for other apps to pick it up.'
-  }
+  Set-UserPath $installDir
 
   Write-Host ''
   Write-Host 'Next steps:'

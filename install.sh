@@ -84,6 +84,31 @@ ok()   { printf '%b✓%b %s\n' "$GREEN" "$RESET" "$*" >&2; }
 warn() { printf '%b!%b %s\n' "$YELLOW" "$RESET" "$*" >&2; }
 err()  { printf '%b✗%b %s\n' "$RED" "$RESET" "$*" >&2; }
 
+# path_hint prints the "add this to your PATH" instructions when $INSTALL_DIR isn't on $PATH, and prints nothing when it is. It's a function rather than a straight-line block at the end because both exits from this script need it: a fresh install AND the same-version no-op below. The binary being current says nothing about whether PATH was ever set up, so a user whose rc file lost the export would otherwise re-run the one-liner, be told "nothing to do", and still not have a working `everyapi`.
+#
+# `case` over `:$PATH:` matches any colon-bounded segment, which is more reliable than `[[ $PATH == *"$INSTALL_DIR"* ]]` (that one false-positives on e.g. /opt/.local/bin when INSTALL_DIR is ~/.local/bin).
+path_hint() {
+  case ":${PATH:-}:" in
+    *":$INSTALL_DIR:"*) return 0 ;;
+  esac
+
+  echo
+  warn "Setup needed: $INSTALL_DIR is not on your PATH yet."
+  # Pick the right rc file hint based on the user's shell. We default to ~/.bashrc when $SHELL is empty or unrecognised — that's the most common case on Linux servers.
+  RC_HINT="~/.bashrc"
+  case "${SHELL:-}" in
+    */zsh)  RC_HINT="~/.zshrc" ;;
+    */fish) RC_HINT="~/.config/fish/config.fish" ;;
+  esac
+  # Emit a single copy-paste command that both persists the PATH change (appends to the rc file) AND applies it to the current shell — so a user can run one line and have `everyapi` work immediately, instead of hand-editing a dotfile and remembering to re-source it. fish gets its idiomatic `fish_add_path` (universal + persistent in one call); bash/zsh get the `echo … >> rc && source rc` idiom. $INSTALL_DIR is baked in literally; \$PATH stays unexpanded so it re-evaluates when the rc file is sourced.
+  echo "  Run this to fix it (adds it to $RC_HINT and applies it now):"
+  echo
+  case "${SHELL:-}" in
+    */fish) echo "    fish_add_path $INSTALL_DIR" ;;
+    *)      echo "    echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> $RC_HINT && source $RC_HINT" ;;
+  esac
+}
+
 # ----- Args ------------------------------------------------------------------
 
 # need_value validates that the value-taking flag $1 has a non-empty
@@ -340,6 +365,7 @@ if [ -x "$INSTALL_DIR/everyapi" ]; then
        [ "$EXISTING_SEMVER" = "$TARGET_SEMVER" ] && \
        [ "$FORCE" -ne 1 ]; then
       ok "already at $VERSION — nothing to do (pass --force to reinstall)"
+      path_hint
       exit 0
     fi
   fi
@@ -652,44 +678,9 @@ ok "installed"
 INSTALLED_VER=$("$TARGET" version 2>/dev/null | head -n1 || echo "$VERSION")
 ok "$INSTALLED_VER"
 
-# PATH hint: only emit if the install dir is NOT already on $PATH.
-# `case` over `:$PATH:` matches any colon-bounded segment, which is
-# more reliable than `[[ $PATH == *"$INSTALL_DIR"* ]]` (that one
-# false-positives on e.g. /opt/.local/bin when INSTALL_DIR is
-# ~/.local/bin).
-case ":${PATH:-}:" in
-  *":$INSTALL_DIR:"*) ON_PATH=1 ;;
-  *)                  ON_PATH=0 ;;
-esac
+path_hint
 
 echo
-if [ "$ON_PATH" -eq 0 ]; then
-  warn "Setup needed: $INSTALL_DIR is not on your PATH yet."
-  # Pick the right rc file hint based on the user's shell. We default
-  # to ~/.bashrc when $SHELL is empty or unrecognised — that's the
-  # most common case on Linux servers.
-  RC_HINT="~/.bashrc"
-  case "${SHELL:-}" in
-    */zsh)  RC_HINT="~/.zshrc" ;;
-    */fish) RC_HINT="~/.config/fish/config.fish" ;;
-  esac
-  # Emit a single copy-paste command that both persists the PATH change
-  # (appends to the rc file) AND applies it to the current shell — so a
-  # user can run one line and have `everyapi` work immediately, instead
-  # of hand-editing a dotfile and remembering to re-source it. fish gets
-  # its idiomatic `fish_add_path` (universal + persistent in one call);
-  # bash/zsh get the `echo … >> rc && source rc` idiom. $INSTALL_DIR is
-  # baked in literally; \$PATH stays unexpanded so it re-evaluates when
-  # the rc file is sourced.
-  echo "  Run this to fix it (adds it to $RC_HINT and applies it now):"
-  echo
-  case "${SHELL:-}" in
-    */fish) echo "    fish_add_path $INSTALL_DIR" ;;
-    *)      echo "    echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> $RC_HINT && source $RC_HINT" ;;
-  esac
-  echo
-fi
-
 echo "Next steps:"
 echo "  • Sign in:        everyapi auth login"
 echo "  • Point a CLI:    everyapi use claude   # or codex / gemini / grok / qwen-code / kimi-code"
