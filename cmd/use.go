@@ -37,11 +37,11 @@ USAGE
 ARGUMENTS
 	<tool>                 claude | codex | opencode | gemini | antigravity
 	                       aider | goose | crush | cline | openclaw | continue
-	                       kilo | pi | pi-web | vibe | copilot | droid | openhands
+	                       kilo | pi | vibe | copilot | droid | openhands
 	                       forge | llxprt | grok
 	                       qwen-code | kimi-code
 	                       hermes | librefang
-	                       open-webui
+	                       open-webui | pi-web | deepseek-harness
                          Omit to open an interactive picker over installed tools.
 
 FLAGS
@@ -113,7 +113,7 @@ EXAMPLES
 //
 // Usage:
 //
-//	everyapi use claude everyapi use codex everyapi use opencode everyapi use gemini everyapi use antigravity everyapi use aider everyapi use goose everyapi use crush everyapi use cline everyapi use openclaw everyapi use continue everyapi use kilo everyapi use pi everyapi use vibe everyapi use copilot everyapi use droid everyapi use openhands everyapi use forge everyapi use llxprt everyapi use grok everyapi use qwen-code everyapi use kimi-code everyapi use hermes everyapi use librefang everyapi use            (no arg → interactive picker over installed tools) everyapi use claude --group byteplus   (relay through the key bound to the "byteplus" group instead of the default key; --channel is an alias for --group) everyapi use claude --channel  (bare --group/--channel, no value → interactive picker over the routing groups your enabled keys are bound to) everyapi use claude --sanitize (opt in to the local sanitizer proxy, which is off by default; it chains behind the transparent connector) everyapi use claude --transparent=false (opt out of transparent mode, injecting the gateway Base URL + relay key instead) everyapi use claude -- --dangerously-skip-permissions (everything after `--` is forwarded verbatim to the tool's argv)
+//	everyapi use <tool>            (the registered tools are listed in useUsage, which TestUseUsageListsEveryRegisteredTool keeps in step with tools.Names(); an enumeration here would be a second copy to forget) everyapi use            (no arg → interactive picker over installed tools) everyapi use claude --group byteplus   (relay through the key bound to the "byteplus" group instead of the default key; --channel is an alias for --group) everyapi use claude --channel  (bare --group/--channel, no value → interactive picker over the routing groups your enabled keys are bound to) everyapi use claude --sanitize (opt in to the local sanitizer proxy, which is off by default; it chains behind the transparent connector) everyapi use claude --transparent=false (opt out of transparent mode, injecting the gateway Base URL + relay key instead) everyapi use claude -- --dangerously-skip-permissions (everything after `--` is forwarded verbatim to the tool's argv)
 //
 // Flags may appear before or after the tool name; a value attached with `=` (`--channel=byteplus`) is always explicit. Space form (`--channel team-a`) consumes the next token as the value unless it's another flag or a known tool name — so `everyapi use claude --channel` opens the picker while `--channel team-a claude` is explicit. A group literally named like a registered tool needs the `=` form when it appears before the tool positional. A bare `--` ends everyapi's option parsing; everything after is forwarded raw to the tool — use it for tool flags like claude's `--dangerously-skip-permissions` or codex's `--dangerously-bypass-*`.
 func Use(args []string) error {

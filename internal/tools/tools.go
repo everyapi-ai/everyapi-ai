@@ -297,9 +297,7 @@ func transparentClaudeEnv(caPath string) (map[string]string, []string) {
 			"NODE_EXTRA_CA_CERTS":                        caPath,
 			"ENABLE_TOOL_SEARCH":                         "1",
 			"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
-			// Claude Code gates /v1/models behind gateway mode even when discovery is enabled.
-			// Keep the official origin here: Connector intercepts it and the child still never
-			// receives EveryAPI's gateway URL or relay key.
+			// Claude Code gates /v1/models behind gateway mode even when discovery is enabled. Keep the official origin here: Connector intercepts it and the child still never receives EveryAPI's gateway URL or relay key. Gateway mode also swaps the family alias table for the gateway tier's, which resolves opus to a retired id; prepareTransparentCatalogFn corrects that from the catalogue.
 			"CLAUDE_CODE_USE_GATEWAY": "1",
 			// Advisor is an experimental account-bound server tool. Disable it when Claude runs through EveryAPI so rejected results cannot poison the session and fail every subsequent prompt.
 			"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1",
@@ -361,6 +359,9 @@ var Registry = map[string]*Tool{
 		YoloLabel:        "skip all permission prompts (--dangerously-skip-permissions)",
 		RequiredEndpoint: "anthropic",
 		transparentEnvFn: transparentStandaloneClaudeEnv,
+		// Both paths pin the family aliases from the launch catalogue. CLAUDE_CODE_USE_GATEWAY below is what makes this necessary — see claudeFamilyDefaultEnv.
+		prepareCatalogFn:            ignoreBootModel(prepareClaudeWithModels),
+		prepareTransparentCatalogFn: prepareClaudeTransparentWithModels,
 		envFn: func(apiBase, token string) map[string]string {
 			return map[string]string{
 				"ANTHROPIC_BASE_URL":   joinBase(apiBase, ""),
@@ -369,7 +370,7 @@ var Registry = map[string]*Tool{
 				"ENABLE_TOOL_SEARCH":                         "1",
 				"ENABLE_PROMPT_CACHING_1H":                   "1",
 				"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
-				// Claude Code only fetches /v1/models when both discovery and gateway mode are enabled.
+				// Claude Code only fetches /v1/models when both discovery and gateway mode are enabled. Gateway mode also swaps its family alias table for the gateway tier's, which still resolves opus to claude-opus-4-7; prepareCatalogFn above corrects that from the catalogue.
 				"CLAUDE_CODE_USE_GATEWAY":          "1",
 				"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1",
 				// Clear any ambient ANTHROPIC_API_KEY so the user's real key is never forwarded to the gateway and can't shadow the relay token.

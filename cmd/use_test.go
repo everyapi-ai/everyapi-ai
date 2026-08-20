@@ -1918,3 +1918,56 @@ func TestManagedBootModelArgsClaude(t *testing.T) {
 		}
 	})
 }
+
+// usageToolNames parses the tool names out of the ARGUMENTS block of `everyapi use --help`.
+//
+// It reads the block rather than substring-matching each name, because substring matching cannot fail: "pi" is inside both "copilot" and "pi-web", so a naive check would pass on a help text that never mentions pi at all.
+func usageToolNames(t *testing.T) map[string]bool {
+	t.Helper()
+	_, after, found := strings.Cut(useUsage, "ARGUMENTS\n")
+	if !found {
+		t.Fatal("useUsage has no ARGUMENTS block")
+	}
+	block, _, found := strings.Cut(after, "Omit to open an interactive picker")
+	if !found {
+		t.Fatal("the ARGUMENTS block has no terminator")
+	}
+	names := map[string]bool{}
+	for _, field := range strings.Fields(strings.ReplaceAll(block, "|", " ")) {
+		if field == "<tool>" {
+			continue
+		}
+		names[field] = true
+	}
+	if len(names) == 0 {
+		t.Fatal("parsed no tool names out of the ARGUMENTS block")
+	}
+	return names
+}
+
+// TestUseUsageListsEveryRegisteredTool pins the help text to the registry.
+//
+// The list in useUsage is a hand-maintained literal, so every tool added to the registry since it was written had to be copied here by hand — and deepseek-harness was not, staying invisible in `everyapi use --help` for as long as it shipped. Registering a tool is meant to be a single map entry; this makes the help text part of what that entry is checked against instead of a second place to remember.
+func TestUseUsageListsEveryRegisteredTool(t *testing.T) {
+	t.Parallel()
+	listed := usageToolNames(t)
+	for _, name := range tools.Names() {
+		if !listed[name] {
+			t.Errorf("tool %q is registered but missing from `everyapi use --help`", name)
+		}
+	}
+}
+
+// TestUseUsageListsNoUnregisteredTool is the other direction: a tool removed or renamed in the registry must not linger in the help as an option that errors when the user types it.
+func TestUseUsageListsNoUnregisteredTool(t *testing.T) {
+	t.Parallel()
+	registered := map[string]bool{}
+	for _, name := range tools.Names() {
+		registered[name] = true
+	}
+	for name := range usageToolNames(t) {
+		if !registered[name] {
+			t.Errorf("`everyapi use --help` offers %q, which is not a registered tool", name)
+		}
+	}
+}
