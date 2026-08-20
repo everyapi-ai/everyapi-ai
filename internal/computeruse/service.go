@@ -142,7 +142,7 @@ func (s *Service) ListWindows(ctx context.Context, selector string) ([]Window, e
 	return windows, nil
 }
 
-func (s *Service) resolveTarget(ctx context.Context, selector string, windowIndex *int) (Target, error) {
+func (s *Service) resolveTarget(ctx context.Context, selector string, windowIndex, windowID *int) (Target, error) {
 	if err := validateTargetRequest(selector, windowIndex); err != nil {
 		return Target{}, err
 	}
@@ -156,6 +156,14 @@ func (s *Service) resolveTarget(ctx context.Context, selector string, windowInde
 	}
 	if len(windows) == 0 {
 		return Target{}, NewError(CodeWindowNotFound, fmt.Sprintf("application %q has no accessible windows", redactSensitiveText(app.Name)), nil)
+	}
+	if windowID != nil {
+		for _, window := range windows {
+			if window.ID == *windowID {
+				return Target{App: app, Window: window}, nil
+			}
+		}
+		return Target{}, NewError(CodeWindowNotFound, fmt.Sprintf("window id %d was not found for %q", *windowID, redactSensitiveText(app.Name)), nil)
 	}
 	if windowIndex != nil {
 		for _, window := range windows {
@@ -186,7 +194,7 @@ func (s *Service) GetAppState(ctx context.Context, req StateRequest) (State, err
 }
 
 func (s *Service) getAppStateLocked(ctx context.Context, req StateRequest) (State, error) {
-	target, err := s.resolveTarget(ctx, req.App, req.WindowIndex)
+	target, err := s.resolveTarget(ctx, req.App, req.WindowIndex, req.WindowID)
 	if err != nil {
 		return State{}, err
 	}
@@ -209,6 +217,26 @@ func (s *Service) getAppStateLocked(ctx context.Context, req StateRequest) (Stat
 		return State{}, NewError(CodeInternal, "save computer-use snapshot: "+err.Error(), err)
 	}
 	return redactState(state), nil
+}
+
+// Screenshot does not save a snapshot record: unlike GetAppState, its result
+// is opaque image bytes, not an accessibility tree with element indexes a
+// later action could reference, so there is nothing here for the snapshot
+// cache to serve.
+func (s *Service) Screenshot(ctx context.Context, req StateRequest) ([]byte, error) {
+	if err := validateTargetRequest(req.App, req.WindowIndex); err != nil {
+		return nil, err
+	}
+	unlock, err := s.lock(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	target, err := s.resolveTarget(ctx, req.App, req.WindowIndex, req.WindowID)
+	if err != nil {
+		return nil, err
+	}
+	return s.provider.Screenshot(ctx, target)
 }
 
 func (s *Service) cachedElement(ctx context.Context, target Target, index int) (SnapshotRecord, *CachedElement, error) {
@@ -237,10 +265,10 @@ func (s *Service) Perform(ctx context.Context, req ActionRequest) (State, error)
 	if err := validateTargetRequest(req.App, req.WindowIndex); err != nil {
 		return State{}, err
 	}
-	if req.Kind == ActionTypeText && req.Text == "" {
+	if (req.Kind == ActionTypeText || req.Kind == ActionPasteText) && req.Text == "" {
 		return State{}, NewError(CodeInvalidArgument, string(req.Kind)+" requires non-empty text", nil)
 	}
-	if req.Kind == ActionTypeText || req.Kind == ActionSetValue {
+	if req.Kind == ActionTypeText || req.Kind == ActionPasteText || req.Kind == ActionSetValue {
 		if err := rejectSensitiveText(req.Text); err != nil {
 			return State{}, err
 		}
@@ -253,14 +281,14 @@ func (s *Service) Perform(ctx context.Context, req ActionRequest) (State, error)
 		return State{}, err
 	}
 	defer unlock()
-	target, err := s.resolveTarget(ctx, req.App, req.WindowIndex)
+	target, err := s.resolveTarget(ctx, req.App, req.WindowIndex, req.WindowID)
 	if err != nil {
 		return State{}, err
 	}
 	if err := validateWindowCoordinates(req, target.Window); err != nil {
 		return State{}, err
 	}
-	perform := PerformRequest{Target: target, Kind: req.Kind, ExpectedWindowFingerprint: target.Window.Fingerprint, X: req.X, Y: req.Y, FromX: req.FromX, FromY: req.FromY, ToX: req.ToX, ToY: req.ToY, Text: req.Text, Key: req.Key, Direction: req.Direction, Amount: req.Amount, SecondaryAction: req.SecondaryAction}
+	perform := PerformRequest{Target: target, Kind: req.Kind, ExpectedWindowFingerprint: target.Window.Fingerprint, X: req.X, Y: req.Y, FromX: req.FromX, FromY: req.FromY, ToX: req.ToX, ToY: req.ToY, Text: req.Text, Key: req.Key, Direction: req.Direction, Amount: req.Amount, SecondaryAction: req.SecondaryAction, MouseButton: req.MouseButton, ClickCount: req.ClickCount, Modifiers: req.Modifiers, RestoreWindow: req.RestoreWindow}
 	if req.ElementIndex != nil {
 		record, element, cacheErr := s.cachedElement(ctx, target, *req.ElementIndex)
 		if cacheErr != nil {
@@ -389,11 +417,17 @@ func validateActionRequest(req ActionRequest) error {
 		if req.ElementIndex != nil && *req.ElementIndex <= 0 {
 			return NewError(CodeInvalidArgument, "element-index must be positive", nil)
 		}
+		if req.MouseButton != "" && req.MouseButton != "left" && req.MouseButton != "right" && req.MouseButton != "middle" {
+			return NewError(CodeInvalidArgument, "mouse-button must be left, right, or middle", nil)
+		}
+		if req.ClickCount != nil && *req.ClickCount <= 0 {
+			return NewError(CodeInvalidArgument, "click-count must be positive", nil)
+		}
 	case ActionSetValue:
 		if req.ElementIndex == nil || *req.ElementIndex <= 0 {
 			return NewError(CodeInvalidArgument, "set-value requires element-index", nil)
 		}
-	case ActionTypeText:
+	case ActionTypeText, ActionPasteText:
 	case ActionPressKey, ActionHotkey:
 		if strings.TrimSpace(req.Key) == "" {
 			return NewError(CodeInvalidArgument, string(req.Kind)+" requires key", nil)

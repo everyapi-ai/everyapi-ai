@@ -3,7 +3,10 @@ package computer
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,9 +14,11 @@ import (
 )
 
 type fakeService struct {
-	stateRequests  []computeruse.StateRequest
-	actionRequests []computeruse.ActionRequest
-	listAppsErr    error
+	stateRequests      []computeruse.StateRequest
+	actionRequests     []computeruse.ActionRequest
+	screenshotRequests []computeruse.StateRequest
+	listAppsErr        error
+	screenshotPNG      []byte
 }
 
 func (f *fakeService) Capabilities(context.Context) (computeruse.Capabilities, error) {
@@ -45,6 +50,14 @@ func (f *fakeService) Perform(_ context.Context, req computeruse.ActionRequest) 
 	return computeruse.State{App: computeruse.App{Name: "TextEdit", PID: 42}, Window: computeruse.Window{ID: 7}, Snapshot: computeruse.Snapshot{TreeText: "[1] AXTextArea", ElementCount: 1}}, nil
 }
 
+func (f *fakeService) Screenshot(_ context.Context, req computeruse.StateRequest) ([]byte, error) {
+	f.screenshotRequests = append(f.screenshotRequests, req)
+	if f.screenshotPNG != nil {
+		return f.screenshotPNG, nil
+	}
+	return []byte("fake-png-bytes"), nil
+}
+
 func TestCapabilitiesJSONEnvelope(t *testing.T) {
 	service := &fakeService{}
 	var out bytes.Buffer
@@ -65,21 +78,74 @@ func TestCapabilitiesJSONEnvelope(t *testing.T) {
 	}
 }
 
-func TestListWindowsDoesNotExposeInternalWindowID(t *testing.T) {
+func TestListWindowsExposesWindowID(t *testing.T) {
 	service := &fakeService{}
 	var jsonOut bytes.Buffer
 	if err := run(context.Background(), []string{"list-windows", "--app", "TextEdit", "--json"}, service, strings.NewReader(""), &jsonOut); err != nil {
 		t.Fatalf("JSON run: %v", err)
 	}
-	if strings.Contains(jsonOut.String(), `"id"`) || !strings.Contains(jsonOut.String(), `"index":0`) {
+	if !strings.Contains(jsonOut.String(), `"id":7`) || !strings.Contains(jsonOut.String(), `"index":0`) {
 		t.Fatalf("JSON output = %q", jsonOut.String())
 	}
 	var plainOut bytes.Buffer
 	if err := run(context.Background(), []string{"list-windows", "--app", "TextEdit"}, service, strings.NewReader(""), &plainOut); err != nil {
 		t.Fatalf("plain run: %v", err)
 	}
-	if strings.Contains(plainOut.String(), "id=") || !strings.Contains(plainOut.String(), "[0]") {
+	if !strings.Contains(plainOut.String(), "id=7") || !strings.Contains(plainOut.String(), "[0]") {
 		t.Fatalf("plain output = %q", plainOut.String())
+	}
+}
+
+func TestScreenshotWritesFileWhenOutIsGiven(t *testing.T) {
+	service := &fakeService{screenshotPNG: []byte("real-png-bytes")}
+	outPath := filepath.Join(t.TempDir(), "shot.png")
+	var out bytes.Buffer
+	if err := run(context.Background(), []string{"screenshot", "--app", "TextEdit", "--window-index", "0", "--out", outPath}, service, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(service.screenshotRequests) != 1 || service.screenshotRequests[0].App != "TextEdit" {
+		t.Fatalf("screenshot requests = %+v", service.screenshotRequests)
+	}
+	written, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", outPath, err)
+	}
+	if string(written) != "real-png-bytes" {
+		t.Fatalf("written bytes = %q", written)
+	}
+	if !strings.Contains(out.String(), outPath) {
+		t.Fatalf("plain output = %q", out.String())
+	}
+}
+
+func TestScreenshotJSONReturnsBase64WithoutOut(t *testing.T) {
+	service := &fakeService{screenshotPNG: []byte("real-png-bytes")}
+	var out bytes.Buffer
+	if err := run(context.Background(), []string{"screenshot", "--app", "TextEdit", "--window-index", "0", "--json"}, service, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	var response struct {
+		Result struct {
+			PNG string `json:"png"`
+		} `json:"result"`
+	}
+	if decodeErr := json.Unmarshal(out.Bytes(), &response); decodeErr != nil {
+		t.Fatalf("decode output %q: %v", out.String(), decodeErr)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(response.Result.PNG)
+	if err != nil || string(decoded) != "real-png-bytes" {
+		t.Fatalf("decoded png = %q, err = %v", decoded, err)
+	}
+}
+
+func TestScreenshotPlainWithoutOutIsRejected(t *testing.T) {
+	service := &fakeService{}
+	err := run(context.Background(), []string{"screenshot", "--app", "TextEdit", "--window-index", "0"}, service, strings.NewReader(""), &bytes.Buffer{})
+	if computeruse.ErrorCode(err) != computeruse.CodeInvalidArgument {
+		t.Fatalf("error = %v (%q)", err, computeruse.ErrorCode(err))
+	}
+	if len(service.screenshotRequests) != 0 {
+		t.Fatal("service was called before validating --out/--json")
 	}
 }
 
@@ -98,9 +164,23 @@ func TestGetAppStateParsesWindowIndex(t *testing.T) {
 	}
 }
 
-func TestGetAppStateRejectsUnavailableWindowIDSelector(t *testing.T) {
+func TestGetAppStateParsesWindowID(t *testing.T) {
 	service := &fakeService{}
-	err := run(context.Background(), []string{"get-app-state", "--app", "TextEdit", "--window-id", "7"}, service, strings.NewReader(""), &bytes.Buffer{})
+	if err := run(context.Background(), []string{"get-app-state", "--app", "TextEdit", "--window-id", "7", "--json"}, service, strings.NewReader(""), &bytes.Buffer{}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(service.stateRequests) != 1 {
+		t.Fatalf("state requests = %d", len(service.stateRequests))
+	}
+	req := service.stateRequests[0]
+	if req.App != "TextEdit" || req.WindowID == nil || *req.WindowID != 7 || req.WindowIndex != nil {
+		t.Fatalf("state request = %+v", req)
+	}
+}
+
+func TestGetAppStateRejectsWindowIDAndWindowIndexTogether(t *testing.T) {
+	service := &fakeService{}
+	err := run(context.Background(), []string{"get-app-state", "--app", "TextEdit", "--window-id", "7", "--window-index", "0"}, service, strings.NewReader(""), &bytes.Buffer{})
 	if computeruse.ErrorCode(err) != computeruse.CodeInvalidArgument {
 		t.Fatalf("error = %v (%q), want %q", err, computeruse.ErrorCode(err), computeruse.CodeInvalidArgument)
 	}
@@ -155,6 +235,33 @@ func TestTypeTextRejectsExplicitEmptyValues(t *testing.T) {
 	}
 }
 
+func TestPasteTextRejectsExplicitEmptyValues(t *testing.T) {
+	for _, args := range [][]string{
+		{"paste-text", "--app", "TextEdit", "--text="},
+		{"paste-text", "--app", "TextEdit", "--text-stdin"},
+	} {
+		service := &fakeService{}
+		err := run(context.Background(), args, service, strings.NewReader(""), &bytes.Buffer{})
+		if computeruse.ErrorCode(err) != computeruse.CodeInvalidArgument {
+			t.Fatalf("run(%v) error = %v (%q)", args, err, computeruse.ErrorCode(err))
+		}
+		if len(service.actionRequests) != 0 {
+			t.Fatalf("run(%v) called service", args)
+		}
+	}
+}
+
+func TestClickRejectsInvalidMouseButton(t *testing.T) {
+	service := &fakeService{}
+	err := run(context.Background(), []string{"click", "--app", "TextEdit", "--x", "1", "--y", "2", "--mouse-button", "scroll-wheel"}, service, strings.NewReader(""), &bytes.Buffer{})
+	if computeruse.ErrorCode(err) != computeruse.CodeInvalidArgument {
+		t.Fatalf("error = %v (%q)", err, computeruse.ErrorCode(err))
+	}
+	if len(service.actionRequests) != 0 {
+		t.Fatal("service was called for an invalid mouse button")
+	}
+}
+
 func TestClickRequiresExactlyOneTargetShape(t *testing.T) {
 	service := &fakeService{}
 	for _, args := range [][]string{
@@ -187,8 +294,17 @@ func TestActionCommandsDispatchExactRequestShape(t *testing.T) {
 		{name: "click coordinates", args: []string{"click", "--app", "TextEdit", "--x", "10", "--y", "20", "--json"}, want: func(req computeruse.ActionRequest) bool {
 			return req.Kind == computeruse.ActionClick && req.X != nil && *req.X == 10 && req.Y != nil && *req.Y == 20
 		}},
+		{name: "click with mouse button, click count, and modifiers", args: []string{"click", "--app", "TextEdit", "--x", "10", "--y", "20", "--mouse-button", "right", "--click-count", "2", "--modifiers", "cmd+shift", "--json"}, want: func(req computeruse.ActionRequest) bool {
+			return req.Kind == computeruse.ActionClick && req.MouseButton == "right" && req.ClickCount != nil && *req.ClickCount == 2 && req.Modifiers == "cmd+shift"
+		}},
+		{name: "click with restore-window", args: []string{"click", "--app", "TextEdit", "--x", "10", "--y", "20", "--restore-window", "--json"}, want: func(req computeruse.ActionRequest) bool {
+			return req.Kind == computeruse.ActionClick && req.RestoreWindow
+		}},
 		{name: "type text", args: []string{"type-text", "--app", "TextEdit", "--text", "hello", "--json"}, want: func(req computeruse.ActionRequest) bool {
 			return req.Kind == computeruse.ActionTypeText && req.Text == "hello"
+		}},
+		{name: "paste text", args: []string{"paste-text", "--app", "TextEdit", "--text", "hello", "--json"}, want: func(req computeruse.ActionRequest) bool {
+			return req.Kind == computeruse.ActionPasteText && req.Text == "hello"
 		}},
 		{name: "press key", args: []string{"press-key", "--app", "TextEdit", "--key", "return", "--json"}, want: func(req computeruse.ActionRequest) bool {
 			return req.Kind == computeruse.ActionPressKey && req.Key == "return"

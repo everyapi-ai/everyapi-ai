@@ -2,6 +2,7 @@ package computer
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -21,13 +22,15 @@ const (
 
 Commands:
   capabilities                  Show provider and supported operations
-  permissions                   Show Accessibility and Automation status
+  permissions                   Show Accessibility, Automation, and Screen Recording status
   list-apps                     List running desktop applications
   list-windows                  List windows for --app
   get-app-state                 Read the accessibility tree
+  screenshot                    Capture a window's own pixels as PNG
   click                         Click an element or window-local point
   set-value                     Set an editable element value
   type-text                     Type into the focused receiver
+  paste-text                    Paste text through the native clipboard
   press-key                     Press one key
   hotkey                        Press a modifier chord
   scroll                        Scroll at an element or point
@@ -42,8 +45,10 @@ Use 'everyapi computer <command> --help' for command flags. Add --json for machi
 `
 	targetHelpFlags = `  --app <selector>       App name, bundle ID, or pid:<number> (required)
   --window-index <n>     Select an index from list-windows
+  --window-id <id>       Select a window by id from list-windows (instead of --window-index)
 `
-	actionOutputHelpFlags = `  --json                 Print a machine-readable envelope
+	actionOutputHelpFlags = `  --restore-window       Bring the target window forward first; do not fail the action if that is not possible
+  --json                 Print a machine-readable envelope
 `
 	subcommandHelpFormat = `Usage: everyapi computer %s [flags]
 
@@ -58,6 +63,7 @@ type commandService interface {
 	ListWindows(context.Context, string) ([]computeruse.Window, error)
 	GetAppState(context.Context, computeruse.StateRequest) (computeruse.State, error)
 	Perform(context.Context, computeruse.ActionRequest) (computeruse.State, error)
+	Screenshot(context.Context, computeruse.StateRequest) ([]byte, error)
 }
 
 type envelope struct {
@@ -141,12 +147,18 @@ func writeSubcommandHelp(out io.Writer, command string) error {
 		flags = appHelpFlags + jsonHelpFlags
 	case "get-app-state":
 		flags = targetHelpFlags + jsonHelpFlags
-	case "click", "set-value", "type-text", "press-key", "hotkey", "scroll", "drag", "perform-secondary-action":
+	case "screenshot":
+		flags = targetHelpFlags + `  --out <path>           Write the PNG to this file
+` + jsonHelpFlags
+	case "click", "set-value", "type-text", "paste-text", "press-key", "hotkey", "scroll", "drag", "perform-secondary-action":
 		flags = targetHelpFlags
 		switch command {
 		case "click":
 			flags += `  --element-index <n>    Element from the latest state
   --x <n> --y <n>       Window-local point instead of an element
+  --mouse-button <btn>   left (default), right, or middle
+  --click-count <n>      Clicks to synthesize, e.g. 2 for a double-click
+  --modifiers <chord>    Modifier keys held only for this click, e.g. cmd or cmd+shift
 `
 		case "set-value":
 			flags += `  --element-index <n>    Editable element from the latest state
@@ -155,6 +167,10 @@ func writeSubcommandHelp(out io.Writer, command string) error {
 `
 		case "type-text":
 			flags += `  --text <text>          Text for the focused receiver
+  --text-stdin           Read text from stdin
+`
+		case "paste-text":
+			flags += `  --text <text>          Text to paste at the focused receiver
   --text-stdin           Read text from stdin
 `
 		case "press-key", "hotkey":
@@ -222,28 +238,70 @@ func dispatch(ctx context.Context, command string, args []string, service comman
 		return result, *jsonOutput, err
 	case "get-app-state":
 		fs := newFlagSet(command)
-		app, windowIndex := addTargetFlags(fs)
+		app, windowIndex, windowID := addTargetFlags(fs)
 		jsonOutput := fs.Bool("json", false, "print JSON")
 		if err := parseFlags(fs, args); err != nil {
 			return nil, jsonRequested(args), err
 		}
-		if err := validateTargetFlags(*app, windowIndex); err != nil {
+		if err := validateTargetFlags(*app, windowIndex, windowID); err != nil {
 			return nil, *jsonOutput, err
 		}
-		result, err := service.GetAppState(ctx, computeruse.StateRequest{App: *app, WindowIndex: windowIndex.pointer()})
+		result, err := service.GetAppState(ctx, computeruse.StateRequest{App: *app, WindowIndex: windowIndex.pointer(), WindowID: windowID.pointer()})
 		return result, *jsonOutput, err
-	case "click", "set-value", "type-text", "press-key", "hotkey", "scroll", "drag", "perform-secondary-action":
+	case "screenshot":
+		return dispatchScreenshot(ctx, args, service)
+	case "click", "set-value", "type-text", "paste-text", "press-key", "hotkey", "scroll", "drag", "perform-secondary-action":
 		return dispatchAction(ctx, command, args, service, in)
 	default:
 		return nil, jsonRequested(args), invalid(fmt.Sprintf("unknown computer command %q", command))
 	}
 }
 
+// screenshotResult carries either a file path (when --out was given) or the
+// raw PNG bytes base64-encoded for --json output — never both, and never
+// raw bytes in plain-text mode, since writing arbitrary binary image data to
+// a terminal is not a usable result for a human running the command bare.
+type screenshotResult struct {
+	Bytes int    `json:"bytes"`
+	Path  string `json:"path,omitempty"`
+	PNG   string `json:"png,omitempty"`
+}
+
+func dispatchScreenshot(ctx context.Context, args []string, service commandService) (any, bool, error) {
+	fs := newFlagSet("screenshot")
+	app, windowIndex, windowID := addTargetFlags(fs)
+	jsonOutput := fs.Bool("json", false, "print JSON")
+	outPath := fs.String("out", "", "write the PNG to this file path")
+	if err := parseFlags(fs, args); err != nil {
+		return nil, jsonRequested(args), err
+	}
+	if err := validateTargetFlags(*app, windowIndex, windowID); err != nil {
+		return nil, *jsonOutput, err
+	}
+	if strings.TrimSpace(*outPath) == "" && !*jsonOutput {
+		return nil, *jsonOutput, invalid("screenshot requires --out <path> unless --json is used")
+	}
+	png, err := service.Screenshot(ctx, computeruse.StateRequest{App: *app, WindowIndex: windowIndex.pointer(), WindowID: windowID.pointer()})
+	if err != nil {
+		return nil, *jsonOutput, err
+	}
+	result := screenshotResult{Bytes: len(png)}
+	if strings.TrimSpace(*outPath) != "" {
+		if writeErr := os.WriteFile(*outPath, png, 0o600); writeErr != nil {
+			return nil, *jsonOutput, invalid("write screenshot file: " + writeErr.Error())
+		}
+		result.Path = *outPath
+	} else {
+		result.PNG = base64.StdEncoding.EncodeToString(png)
+	}
+	return result, *jsonOutput, nil
+}
+
 func dispatchAction(ctx context.Context, command string, args []string, service commandService, in io.Reader) (any, bool, error) {
 	fs := newFlagSet(command)
-	app, windowIndex := addTargetFlags(fs)
+	app, windowIndex, windowID := addTargetFlags(fs)
 	jsonOutput := fs.Bool("json", false, "print JSON")
-	var elementIndex, fromElementIndex, toElementIndex optionalInt
+	var elementIndex, fromElementIndex, toElementIndex, clickCount optionalInt
 	var x, y, fromX, fromY, toX, toY optionalInt
 	fs.Var(&elementIndex, "element-index", "element index from the latest state")
 	fs.Var(&fromElementIndex, "from-element-index", "drag source element index")
@@ -262,16 +320,20 @@ func dispatchAction(ctx context.Context, command string, args []string, service 
 	direction := fs.String("direction", "", "scroll direction: up, down, left, right")
 	amount := fs.Int("amount", 600, "scroll distance in pixels")
 	secondaryAction := fs.String("action", "", "accessibility action name")
+	mouseButton := fs.String("mouse-button", "", "mouse button: left, right, or middle")
+	fs.Var(&clickCount, "click-count", "number of clicks, e.g. 2 for a double-click")
+	modifiers := fs.String("modifiers", "", "modifier chord held for the click, e.g. cmd or cmd+shift")
+	restoreWindow := fs.Bool("restore-window", false, "bring the target window forward first; do not fail the action if that is not possible")
 	if err := parseFlags(fs, args); err != nil {
 		return nil, jsonRequested(args), err
 	}
 	if err := rejectIrrelevantActionFlags(fs, command); err != nil {
 		return nil, *jsonOutput, err
 	}
-	if err := validateTargetFlags(*app, windowIndex); err != nil {
+	if err := validateTargetFlags(*app, windowIndex, windowID); err != nil {
 		return nil, *jsonOutput, err
 	}
-	request := computeruse.ActionRequest{App: *app, WindowIndex: windowIndex.pointer(), ElementIndex: elementIndex.pointer(), FromElementIndex: fromElementIndex.pointer(), ToElementIndex: toElementIndex.pointer(), X: x.pointer(), Y: y.pointer(), FromX: fromX.pointer(), FromY: fromY.pointer(), ToX: toX.pointer(), ToY: toY.pointer(), Key: *key, Direction: *direction, Amount: *amount, SecondaryAction: *secondaryAction}
+	request := computeruse.ActionRequest{App: *app, WindowIndex: windowIndex.pointer(), WindowID: windowID.pointer(), ElementIndex: elementIndex.pointer(), FromElementIndex: fromElementIndex.pointer(), ToElementIndex: toElementIndex.pointer(), X: x.pointer(), Y: y.pointer(), FromX: fromX.pointer(), FromY: fromY.pointer(), ToX: toX.pointer(), ToY: toY.pointer(), Key: *key, Direction: *direction, Amount: *amount, SecondaryAction: *secondaryAction, MouseButton: *mouseButton, ClickCount: clickCount.pointer(), Modifiers: *modifiers, RestoreWindow: *restoreWindow}
 	switch command {
 	case "click":
 		request.Kind = computeruse.ActionClick
@@ -287,6 +349,13 @@ func dispatchAction(ctx context.Context, command string, args []string, service 
 		request.Text = payload
 	case "type-text":
 		request.Kind = computeruse.ActionTypeText
+		payload, err := resolveTextInput(*text, flagWasSet(fs, "text"), *textStdin, false, "text", in)
+		if err != nil {
+			return nil, *jsonOutput, err
+		}
+		request.Text = payload
+	case "paste-text":
+		request.Kind = computeruse.ActionPasteText
 		payload, err := resolveTextInput(*text, flagWasSet(fs, "text"), *textStdin, false, "text", in)
 		if err != nil {
 			return nil, *jsonOutput, err
@@ -326,14 +395,16 @@ func parseJSONOnly(name string, args []string) (bool, error) {
 }
 
 func rejectIrrelevantActionFlags(fs *flag.FlagSet, command string) error {
-	allowed := map[string]bool{"app": true, "window-index": true, "json": true}
+	allowed := map[string]bool{"app": true, "window-index": true, "window-id": true, "json": true, "restore-window": true}
 	var commandFlags []string
 	switch command {
 	case "click":
-		commandFlags = []string{"element-index", "x", "y"}
+		commandFlags = []string{"element-index", "x", "y", "mouse-button", "click-count", "modifiers"}
 	case "set-value":
 		commandFlags = []string{"element-index", "value", "value-stdin"}
 	case "type-text":
+		commandFlags = []string{"text", "text-stdin"}
+	case "paste-text":
 		commandFlags = []string{"text", "text-stdin"}
 	case "press-key", "hotkey":
 		commandFlags = []string{"key"}
@@ -372,25 +443,37 @@ func parseFlags(fs *flag.FlagSet, args []string) error {
 	return nil
 }
 
-func addTargetFlags(fs *flag.FlagSet) (*string, *optionalInt) {
+func addTargetFlags(fs *flag.FlagSet) (*string, *optionalInt, *optionalInt) {
 	app := fs.String("app", "", "application name, bundle ID, or pid:<number>")
 	windowIndex := &optionalInt{}
 	fs.Var(windowIndex, "window-index", "window index from list-windows")
-	return app, windowIndex
+	windowID := &optionalInt{}
+	fs.Var(windowID, "window-id", "window id from list-windows")
+	return app, windowIndex, windowID
 }
 
-func validateTargetFlags(app string, windowIndex *optionalInt) error {
+func validateTargetFlags(app string, windowIndex, windowID *optionalInt) error {
 	if strings.TrimSpace(app) == "" {
 		return invalid("--app is required")
 	}
 	if windowIndex.set && windowIndex.value < 0 {
 		return invalid("--window-index must be zero or greater")
 	}
+	if windowID.set && windowIndex.set {
+		return invalid("--window-id and --window-index are mutually exclusive")
+	}
 	return nil
 }
 
 func validateActionFlags(request computeruse.ActionRequest) error {
 	switch request.Kind {
+	case computeruse.ActionClick:
+		if request.MouseButton != "" && request.MouseButton != "left" && request.MouseButton != "right" && request.MouseButton != "middle" {
+			return invalid("--mouse-button must be left, right, or middle")
+		}
+		if request.ClickCount != nil && *request.ClickCount <= 0 {
+			return invalid("--click-count must be positive")
+		}
 	case computeruse.ActionSetValue:
 		if request.ElementIndex == nil {
 			return invalid("set-value requires --element-index")
@@ -458,6 +541,9 @@ func flagWasSet(fs *flag.FlagSet, wanted string) bool {
 
 func renderPlain(out io.Writer, command string, result any) error {
 	switch value := result.(type) {
+	case screenshotResult:
+		_, err := fmt.Fprintf(out, "wrote %d bytes to %s\n", value.Bytes, value.Path)
+		return err
 	case computeruse.Capabilities, computeruse.PermissionStatus:
 		data, err := json.MarshalIndent(value, "", "  ")
 		if err != nil {
@@ -474,7 +560,7 @@ func renderPlain(out io.Writer, command string, result any) error {
 		return nil
 	case []computeruse.Window:
 		for _, window := range value {
-			if _, err := fmt.Fprintf(out, "[%d]\t%s\tframe=%.0f,%.0f %.0fx%.0f\tfocused=%t\n", window.Index, cliout.Sanitize(window.Title), window.Frame.X, window.Frame.Y, window.Frame.Width, window.Frame.Height, window.Focused); err != nil {
+			if _, err := fmt.Fprintf(out, "[%d]\tid=%d\t%s\tframe=%.0f,%.0f %.0fx%.0f\tfocused=%t\n", window.Index, window.ID, cliout.Sanitize(window.Title), window.Frame.X, window.Frame.Y, window.Frame.Width, window.Frame.Height, window.Focused); err != nil {
 				return err
 			}
 		}
@@ -548,9 +634,10 @@ func standaloneArgumentRequested(args []string, requested func(string) bool) boo
 
 func visitStandaloneArguments(args []string, visit func(string)) {
 	valueFlags := map[string]bool{
-		"--app": true, "--window-index": true, "--element-index": true, "--from-element-index": true, "--to-element-index": true,
+		"--app": true, "--window-index": true, "--window-id": true, "--element-index": true, "--from-element-index": true, "--to-element-index": true,
 		"--x": true, "--y": true, "--from-x": true, "--from-y": true, "--to-x": true, "--to-y": true,
 		"--value": true, "--text": true, "--key": true, "--direction": true, "--amount": true, "--action": true,
+		"--mouse-button": true, "--click-count": true, "--modifiers": true, "--out": true,
 	}
 	for index := 0; index < len(args); index++ {
 		arg := args[index]

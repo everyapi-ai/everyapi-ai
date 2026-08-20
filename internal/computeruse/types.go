@@ -73,6 +73,7 @@ const (
 type PermissionStatus struct {
 	Accessibility PermissionState `json:"accessibility"`
 	Automation    PermissionState `json:"automation"`
+	Screenshot    PermissionState `json:"screenshot"`
 }
 
 type Capabilities struct {
@@ -105,6 +106,7 @@ type Capabilities struct {
 			Scroll        bool `json:"scroll"`
 			Drag          bool `json:"drag"`
 			PerformAction bool `json:"performAction"`
+			PasteText     bool `json:"pasteText"`
 		} `json:"actions"`
 	} `json:"supports"`
 }
@@ -125,7 +127,7 @@ type App struct {
 }
 
 type Window struct {
-	ID          int    `json:"-"`
+	ID          int    `json:"id"`
 	Index       int    `json:"index"`
 	Title       string `json:"title"`
 	Frame       Frame  `json:"frame"`
@@ -168,6 +170,7 @@ type Target struct {
 type StateRequest struct {
 	App         string
 	WindowIndex *int
+	WindowID    *int
 }
 
 type ActionKind string
@@ -176,6 +179,7 @@ const (
 	ActionClick     ActionKind = "click"
 	ActionSetValue  ActionKind = "set-value"
 	ActionTypeText  ActionKind = "type-text"
+	ActionPasteText ActionKind = "paste-text"
 	ActionPressKey  ActionKind = "press-key"
 	ActionHotkey    ActionKind = "hotkey"
 	ActionScroll    ActionKind = "scroll"
@@ -186,6 +190,7 @@ const (
 type ActionRequest struct {
 	App              string
 	WindowIndex      *int
+	WindowID         *int
 	Kind             ActionKind
 	ElementIndex     *int
 	FromElementIndex *int
@@ -201,6 +206,10 @@ type ActionRequest struct {
 	Direction        string
 	Amount           int
 	SecondaryAction  string
+	MouseButton      string
+	ClickCount       *int
+	Modifiers        string
+	RestoreWindow    bool
 }
 
 type CachedElement struct {
@@ -243,6 +252,10 @@ type PerformRequest struct {
 	Direction                 string
 	Amount                    int
 	SecondaryAction           string
+	MouseButton               string
+	ClickCount                *int
+	Modifiers                 string
+	RestoreWindow             bool
 }
 
 type Provider interface {
@@ -252,6 +265,7 @@ type Provider interface {
 	ListWindows(context.Context, App) ([]Window, error)
 	GetState(context.Context, Target) (State, error)
 	Perform(context.Context, PerformRequest) error
+	Screenshot(context.Context, Target) ([]byte, error)
 }
 
 type SnapshotStore interface {

@@ -51,6 +51,10 @@ func (f *fakeProvider) Perform(_ context.Context, req PerformRequest) error {
 	return f.performErr
 }
 
+func (f *fakeProvider) Screenshot(context.Context, Target) ([]byte, error) {
+	return []byte("fake-png-bytes"), nil
+}
+
 func (f *fakeProvider) lastPerform() (PerformRequest, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -313,6 +317,106 @@ func TestInvalidTargetFailsBeforeProviderDiscovery(t *testing.T) {
 	provider.mu.Unlock()
 	if listCalls != 0 {
 		t.Fatalf("provider ListApps calls = %d, want 0", listCalls)
+	}
+}
+
+func TestResolveTargetByWindowID(t *testing.T) {
+	provider := fixtureProvider()
+	provider.windows = append(provider.windows, Window{ID: 9, Index: 1, Title: "Second", Frame: Frame{X: 0, Y: 0, Width: 400, Height: 300}, Fingerprint: "second-window"})
+	service := NewService(provider, newMemoryStore(), time.Now)
+	target, err := service.resolveTarget(context.Background(), "com.apple.TextEdit", nil, intPtr(9))
+	if err != nil {
+		t.Fatalf("resolveTarget by window id: %v", err)
+	}
+	if target.Window.ID != 9 || target.Window.Index != 1 {
+		t.Fatalf("resolveTarget by window id resolved %+v, want ID=9 Index=1", target.Window)
+	}
+}
+
+func TestResolveTargetByWindowIDNotFound(t *testing.T) {
+	provider := fixtureProvider()
+	service := NewService(provider, newMemoryStore(), time.Now)
+	_, err := service.resolveTarget(context.Background(), "com.apple.TextEdit", nil, intPtr(999))
+	if ErrorCode(err) != CodeWindowNotFound {
+		t.Fatalf("resolveTarget by unknown window id error = %v (%q), want %q", err, ErrorCode(err), CodeWindowNotFound)
+	}
+}
+
+func TestScreenshotReturnsProviderBytesForResolvedWindow(t *testing.T) {
+	provider := fixtureProvider()
+	service := NewService(provider, newMemoryStore(), time.Now)
+	png, err := service.Screenshot(context.Background(), StateRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0)})
+	if err != nil {
+		t.Fatalf("Screenshot: %v", err)
+	}
+	if string(png) != "fake-png-bytes" {
+		t.Fatalf("Screenshot bytes = %q, want %q", png, "fake-png-bytes")
+	}
+}
+
+func TestScreenshotRejectsInvalidTargetBeforeProviderDiscovery(t *testing.T) {
+	provider := fixtureProvider()
+	service := NewService(provider, newMemoryStore(), time.Now)
+	negative := -1
+	_, err := service.Screenshot(context.Background(), StateRequest{App: "com.apple.TextEdit", WindowIndex: &negative})
+	if ErrorCode(err) != CodeInvalidArgument {
+		t.Fatalf("Screenshot invalid target error = %v (%q)", err, ErrorCode(err))
+	}
+	provider.mu.Lock()
+	listCalls := provider.listCalls
+	provider.mu.Unlock()
+	if listCalls != 0 {
+		t.Fatalf("provider ListApps calls = %d, want 0", listCalls)
+	}
+}
+
+func TestClickRejectsInvalidMouseButtonAndClickCount(t *testing.T) {
+	provider := fixtureProvider()
+	service := NewService(provider, newMemoryStore(), time.Now)
+	requests := []ActionRequest{
+		{App: "com.apple.TextEdit", WindowIndex: intPtr(0), Kind: ActionClick, ElementIndex: intPtr(12), MouseButton: "double"},
+		{App: "com.apple.TextEdit", WindowIndex: intPtr(0), Kind: ActionClick, ElementIndex: intPtr(12), ClickCount: intPtr(0)},
+	}
+	for _, request := range requests {
+		if _, err := service.Perform(context.Background(), request); ErrorCode(err) != CodeInvalidArgument {
+			t.Fatalf("click %+v error = %v (%q), want %q", request, err, ErrorCode(err), CodeInvalidArgument)
+		}
+	}
+	if _, ok := provider.lastPerform(); ok {
+		t.Fatal("provider performed an action with an invalid mouse-button/click-count")
+	}
+}
+
+func TestClickForwardsMouseButtonClickCountModifiersAndRestoreWindow(t *testing.T) {
+	provider := fixtureProvider()
+	service := NewService(provider, newMemoryStore(), time.Now)
+	if _, err := service.GetAppState(context.Background(), StateRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0)}); err != nil {
+		t.Fatalf("GetAppState: %v", err)
+	}
+	request := ActionRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0), Kind: ActionClick, ElementIndex: intPtr(12), MouseButton: "right", ClickCount: intPtr(2), Modifiers: "shift+cmd", RestoreWindow: true}
+	if _, err := service.Perform(context.Background(), request); err != nil {
+		t.Fatalf("Perform: %v", err)
+	}
+	performed, ok := provider.lastPerform()
+	if !ok {
+		t.Fatal("provider did not receive the click")
+	}
+	if performed.MouseButton != "right" || performed.ClickCount == nil || *performed.ClickCount != 2 || performed.Modifiers != "shift+cmd" || !performed.RestoreWindow {
+		t.Fatalf("forwarded PerformRequest = %+v, want MouseButton=right ClickCount=2 Modifiers=shift+cmd RestoreWindow=true", performed)
+	}
+}
+
+func TestPasteTextRejectsEmptyAndSensitiveText(t *testing.T) {
+	provider := fixtureProvider()
+	service := NewService(provider, newMemoryStore(), time.Now)
+	if _, err := service.Perform(context.Background(), ActionRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0), Kind: ActionPasteText, Text: ""}); ErrorCode(err) != CodeInvalidArgument {
+		t.Fatalf("empty paste-text error = %v (%q)", err, ErrorCode(err))
+	}
+	if _, err := service.Perform(context.Background(), ActionRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0), Kind: ActionPasteText, Text: testStripeCredential()}); ErrorCode(err) != CodeSensitiveText {
+		t.Fatalf("sensitive paste-text error = %v (%q), want %q", err, ErrorCode(err), CodeSensitiveText)
+	}
+	if _, ok := provider.lastPerform(); ok {
+		t.Fatal("provider performed a rejected paste-text")
 	}
 }
 

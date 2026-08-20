@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -72,17 +73,17 @@ func (p *darwinProvider) Capabilities(ctx context.Context) (Capabilities, error)
 	capabilities.Supports.Apps.PIDs = true
 	capabilities.Supports.Windows.List = true
 	capabilities.Supports.Windows.TargetByIndex = true
-	// Still false: the native helper now matches AXUIElement windows to the
-	// real CGWindowID CoreGraphics assigns (see
-	// clients/desktop/native/computer-use-macos/src/state.rs) instead of a
-	// bare enumeration index, which makes staleness detection more precise,
-	// but that id is internal (Window.ID is json:"-" in types.go) — no CLI
-	// flag or Perform request field lets a caller select a window by it.
-	// --window-index is still the only public selector, so this capability
-	// claim stays false until one exists.
-	capabilities.Supports.Windows.TargetByID = false
+	// The native helper matches AXUIElement windows to the real CGWindowID
+	// CoreGraphics assigns (see
+	// clients/desktop/native/computer-use-macos/src/state.rs); --window-id
+	// (alongside --window-index) exposes that id as a public selector.
+	capabilities.Supports.Windows.TargetByID = true
 	capabilities.Supports.Observation.AccessibilityTree = true
 	capabilities.Supports.Observation.ElementFrames = true
+	// CGWindowListCreateImage captures window_id's own pixels regardless of
+	// what overlaps it, so screenshot shares the window-scoped guarantee the
+	// other observation capabilities already make.
+	capabilities.Supports.Observation.Screenshot = true
 	capabilities.Supports.Actions.Click = true
 	capabilities.Supports.Actions.SetValue = true
 	capabilities.Supports.Actions.TypeText = true
@@ -91,6 +92,7 @@ func (p *darwinProvider) Capabilities(ctx context.Context) (Capabilities, error)
 	capabilities.Supports.Actions.Scroll = true
 	capabilities.Supports.Actions.Drag = true
 	capabilities.Supports.Actions.PerformAction = true
+	capabilities.Supports.Actions.PasteText = true
 	return capabilities, nil
 }
 
@@ -98,11 +100,12 @@ func (p *darwinProvider) Permissions(ctx context.Context) (PermissionStatus, err
 	var wire struct {
 		Accessibility PermissionState `json:"accessibility"`
 		Automation    PermissionState `json:"automation"`
+		Screenshot    PermissionState `json:"screenshot"`
 	}
 	if err := p.call(ctx, "permissions", nil, &wire, 5*time.Second); err != nil {
 		return PermissionStatus{}, err
 	}
-	return PermissionStatus{Accessibility: wire.Accessibility, Automation: wire.Automation}, nil
+	return PermissionStatus{Accessibility: wire.Accessibility, Automation: wire.Automation, Screenshot: wire.Screenshot}, nil
 }
 
 func (p *darwinProvider) ListApps(ctx context.Context) ([]App, error) {
@@ -194,6 +197,30 @@ func (p *darwinProvider) GetState(ctx context.Context, target Target) (State, er
 	return state, nil
 }
 
+type darwinScreenshotParams struct {
+	PID               int    `json:"pid"`
+	BundleID          string `json:"bundleId"`
+	WindowID          uint32 `json:"windowId"`
+	WindowFingerprint string `json:"windowFingerprint"`
+}
+
+type darwinScreenshotWire struct {
+	PNG string `json:"png"`
+}
+
+func (p *darwinProvider) Screenshot(ctx context.Context, target Target) ([]byte, error) {
+	params := darwinScreenshotParams{PID: target.App.PID, BundleID: target.App.BundleID, WindowID: uint32(target.Window.ID), WindowFingerprint: target.Window.Fingerprint}
+	var wire darwinScreenshotWire
+	if err := p.call(ctx, "screenshot", params, &wire, darwinStateTimeout); err != nil {
+		return nil, err
+	}
+	png, err := base64.StdEncoding.DecodeString(wire.PNG)
+	if err != nil {
+		return nil, NewError(CodeInternal, "decode screenshot payload: "+err.Error(), err)
+	}
+	return png, nil
+}
+
 func renderTree(snapshot Snapshot) string {
 	var b strings.Builder
 	for _, element := range snapshot.Elements {
@@ -247,10 +274,13 @@ type darwinActionPayload struct {
 	Direction          string   `json:"direction,omitempty"`
 	Amount             int      `json:"amount,omitempty"`
 	SecondaryAction    string   `json:"secondaryAction,omitempty"`
+	MouseButton        string   `json:"mouseButton,omitempty"`
+	ClickCount         *int     `json:"clickCount,omitempty"`
+	RestoreWindow      bool     `json:"restoreWindow,omitempty"`
 }
 
 func (p *darwinProvider) Perform(ctx context.Context, req PerformRequest) error {
-	payload := darwinActionPayload{PID: req.Target.App.PID, BundleID: req.Target.App.BundleID, WindowID: uint32(req.Target.Window.ID), Kind: string(req.Kind), WindowFingerprint: req.ExpectedWindowFingerprint, Text: req.Text, Direction: req.Direction, Amount: req.Amount, SecondaryAction: req.SecondaryAction}
+	payload := darwinActionPayload{PID: req.Target.App.PID, BundleID: req.Target.App.BundleID, WindowID: uint32(req.Target.Window.ID), Kind: string(req.Kind), WindowFingerprint: req.ExpectedWindowFingerprint, Text: req.Text, Direction: req.Direction, Amount: req.Amount, SecondaryAction: req.SecondaryAction, MouseButton: req.MouseButton, ClickCount: req.ClickCount, RestoreWindow: req.RestoreWindow}
 	if req.ExpectedElement != nil {
 		payload.Path = req.ExpectedElement.Path
 		payload.Role = req.ExpectedElement.Role
@@ -275,6 +305,13 @@ func (p *darwinProvider) Perform(ctx context.Context, req PerformRequest) error 
 			return err
 		}
 		payload.KeyChar, payload.KeyCode, payload.Modifiers = char, code, modifiers
+	}
+	if req.Kind == ActionClick && req.Modifiers != "" {
+		modifiers, err := parseDarwinModifiers(req.Modifiers)
+		if err != nil {
+			return err
+		}
+		payload.Modifiers = modifiers
 	}
 	var empty struct{}
 	if err := p.call(ctx, "perform", payload, &empty, darwinActionTimeout); err != nil {
@@ -331,6 +368,33 @@ func parseDarwinKey(value string, requireModifier bool) (string, *int, []string,
 		return "", nil, nil, NewError(CodeInvalidArgument, "unsupported key "+key, nil)
 	}
 	return key, nil, modifiers, nil
+}
+
+// parseDarwinModifiers accepts the same modifier names as parseDarwinKey but,
+// unlike it, requires every "+"-joined part to be a modifier — there is no
+// final key, because a click already has its own target (an element or a
+// point) and only needs to know which modifier keys were held while it fired.
+func parseDarwinModifiers(value string) ([]string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	var modifiers []string
+	for _, part := range strings.Split(value, "+") {
+		switch strings.ToLower(strings.TrimSpace(part)) {
+		case "cmd", "command", "cmdorctrl":
+			modifiers = append(modifiers, "command")
+		case "shift":
+			modifiers = append(modifiers, "shift")
+		case "opt", "option", "alt":
+			modifiers = append(modifiers, "option")
+		case "ctrl", "control":
+			modifiers = append(modifiers, "control")
+		default:
+			return nil, NewError(CodeInvalidArgument, "unsupported modifier "+part, nil)
+		}
+	}
+	return modifiers, nil
 }
 
 // --- RPC transport ---

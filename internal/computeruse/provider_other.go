@@ -38,3 +38,7 @@ func (unsupportedProvider) GetState(context.Context, Target) (State, error) {
 func (unsupportedProvider) Perform(context.Context, PerformRequest) error {
 	return unsupportedPlatformError()
 }
+
+func (unsupportedProvider) Screenshot(context.Context, Target) ([]byte, error) {
+	return nil, unsupportedPlatformError()
+}
