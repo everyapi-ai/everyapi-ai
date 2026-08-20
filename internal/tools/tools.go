@@ -637,6 +637,20 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: ignoreBootModel(preparePiWithModels),
 	},
 
+	// Pi Web is the official browser UI over the same pi agent directory, so its configuration has to be durable: sessions, project trust, the selected model, and the Models panel's own edits all live there. Registering the provider in the real models.json keeps every one of those, and the entry references the relay key through the environment rather than storing it.
+	"pi-web": {
+		Name:                "pi-web",
+		ExecName:            "pi-web",
+		InstallHint:         "Install Pi Web: https://github.com/agegr/pi-web#quick-start",
+		InstallCmd:          "npm install -g @agegr/pi-web@latest || npm install -g @agegr/pi-web@latest --registry=https://mirrors.cloud.tencent.com/npm/ || npm install -g @agegr/pi-web@latest --registry=https://registry.npmmirror.com",
+		RequiredEndpoint:    "openai",
+		AlternativeEndpoint: "openai-response",
+		envFn: func(_, token string) map[string]string {
+			return map[string]string{openClawCredentialEnv: token}
+		},
+		prepareCatalogFn: ignoreBootModel(preparePiWebWithModels),
+	},
+
 	// Vibe's VIBE_HOME is an official profile boundary. A generated TOML file registers EveryAPI as a generic OpenAI-compatible provider and references the process environment for its credential.
 	"vibe": {
 		Name:        "vibe",
@@ -879,6 +893,6 @@ func Lookup(name string) (*Tool, error) {
 func Names() []string {
 	// Deterministic order matters for both the error message and the picker UX. Hand-coded to match the ordering most likely to reflect user demand.
 	return []string{
-		"claude", "codex", "opencode", "gemini", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang", "open-webui", "deepseek-harness",
+		"claude", "codex", "opencode", "gemini", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "pi-web", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang", "open-webui", "deepseek-harness",
 	}
 }

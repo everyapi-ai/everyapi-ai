@@ -184,3 +184,46 @@ func writeYAMLPrivate(path string, root *yaml.Node) error {
 	}
 	return writeFileAtomic(path, body.Bytes(), 0o600)
 }
+
+// ScrubDeepSeekHarnessCredential removes the relay key `everyapi use deepseek-harness` persisted in DeepSeek Harness's own credentials file.
+//
+// Harness resolves its provider credential through `apiKeyEnv` pointing at that file, so unlike every environment-backed client the launch has to write the real key to disk. Nothing reclaimed it: logout's other scrub only covers the per-tool homes under EveryAPI's config dir, and Connect's desktop scrub only covers Continue, Codex, and Claude. A working, billable credential therefore outlived `everyapi auth logout`.
+//
+// The file belongs to Harness and can hold the user's other credentials, so this deletes one entry rather than the file. A file that becomes empty is removed, leaving Harness exactly as it was before EveryAPI configured it. A file with no EveryAPI entry is left byte-for-byte alone — logout has no business reformatting it.
+//
+// The provider block in settings.yaml is deliberately left in place: it carries only a base URL, a model list, and the `apiKeyEnv` name, so without this credential it reads as an unconfigured provider — the same state Pi Web is in after logout.
+func ScrubDeepSeekHarnessCredential() error {
+	dshHome, err := deepSeekHarnessHome()
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(dshHome, ".credentials.yaml")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil
+	}
+	credentials, err := loadYAMLMapping(path)
+	if err != nil {
+		return err
+	}
+	if !deleteYAMLMapValue(credentials, deepSeekHarnessCredentialRef) {
+		return nil
+	}
+	if len(credentials.Content) == 0 {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove DeepSeek Harness credentials %s: %w", path, err)
+		}
+		return nil
+	}
+	return writeYAMLPrivate(path, credentials)
+}
+
+// deleteYAMLMapValue removes one key/value pair and reports whether it was there.
+func deleteYAMLMapValue(mapping *yaml.Node, key string) bool {
+	for index := 0; index+1 < len(mapping.Content); index += 2 {
+		if mapping.Content[index].Value == key {
+			mapping.Content = append(mapping.Content[:index], mapping.Content[index+2:]...)
+			return true
+		}
+	}
+	return false
+}

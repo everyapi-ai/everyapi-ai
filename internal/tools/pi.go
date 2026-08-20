@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,6 +12,8 @@ import (
 const (
 	piModelEnv    = "EVERYAPI_PI_MODEL"
 	piAgentDirEnv = "PI_CODING_AGENT_DIR"
+	// piCredentialRef is the environment reference written into models.json instead of the relay key itself. Pi resolves a "$NAME" config value from the process environment, so the generated provider carries no credential on disk and reads as unconfigured to a pi launched outside EveryAPI.
+	piCredentialRef = "$" + openClawCredentialEnv
 )
 
 // piUserResources are the Pi agent-directory entries that hold user-authored content rather than provider configuration. The isolated home only owns `models.json` and the selected-model settings, so these have to be pointed back at the user's own directory or a launch silently loses them.
@@ -25,37 +28,7 @@ func preparePiWithModels(apiBase, _ string, models []Model) (map[string]string, 
 	if err != nil {
 		return nil, err
 	}
-	providerModels := make([]map[string]any, 0, len(models))
-	for _, model := range models {
-		name := model.DisplayName
-		if name == "" {
-			name = model.ID
-		}
-		api := "openai-completions"
-		if !modelSupportsEndpoint(model.SupportedEndpointTypes, "openai") &&
-			modelSupportsEndpoint(model.SupportedEndpointTypes, "openai-response") {
-			api = "openai-responses"
-		}
-		entry := map[string]any{"api": api, "id": model.ID, "name": name}
-		// Pi defaults an undeclared model to reasoning:false, which is not "unknown" to it — it is a statement, and it disables the thinking-level control (shift+tab) for that model entirely. Every EveryAPI model therefore arrived level-less, including the GPT-5.x line whose whole point is a selectable effort. Declared only where the gateway has verified the model takes one, so a model of unknown shape keeps the safe answer rather than gaining a control that would send reasoning_effort upstream and 400.
-		//
-		// thinkingLevelMap is deliberately absent: omitting it maps off → high onto pi's default provider values, while xhigh and max stay hidden. Naming those two would need a per-model claim about which extended efforts the upstream accepts (gpt-5.6-sol takes ultra, o4-mini stops at high), and the gateway publishes no such list — supports_thinking is one bit.
-		if model.SupportsThinking {
-			entry["reasoning"] = true
-		}
-		// Pi's own fallbacks are 128000/16384 for a custom provider, so a model with a larger window silently lost most of it — pi compacts against the number it holds, not the one the gateway serves.
-		if model.ContextWindow > 0 {
-			entry["contextWindow"] = model.ContextWindow
-		}
-		if model.MaxOutput > 0 {
-			entry["maxTokens"] = model.MaxOutput
-		}
-		providerModels = append(providerModels, entry)
-	}
-	config := map[string]any{"providers": map[string]any{"everyapi": map[string]any{
-		"baseUrl": joinBase(apiBase, "/v1"),
-		"apiKey":  "$EVERYAPI_RELAY_KEY", "models": providerModels,
-	}}}
+	config := map[string]any{"providers": map[string]any{"everyapi": piProviderNode(apiBase, models)}}
 	body, err := json.Marshal(config)
 	if err != nil {
 		removePreparedHomeAfterQuiet(home)
@@ -108,4 +81,106 @@ func piUserAgentDir() string {
 		return ""
 	}
 	return abs
+}
+
+// piProviderNode builds the `providers.everyapi` entry both Pi surfaces share. Pi CLI writes it into a process-scoped agent directory; Pi Web merges it into the durable one. Neither carries the relay key: apiKey is an environment reference the launching process supplies.
+func piProviderNode(apiBase string, models []Model) map[string]any {
+	providerModels := make([]map[string]any, 0, len(models))
+	for _, model := range models {
+		name := model.DisplayName
+		if name == "" {
+			name = model.ID
+		}
+		api := "openai-completions"
+		if !modelSupportsEndpoint(model.SupportedEndpointTypes, "openai") &&
+			modelSupportsEndpoint(model.SupportedEndpointTypes, "openai-response") {
+			api = "openai-responses"
+		}
+		entry := map[string]any{"api": api, "id": model.ID, "name": name}
+		// Pi defaults an undeclared model to reasoning:false, which is not "unknown" to it — it is a statement, and it disables the thinking-level control (shift+tab) for that model entirely. Every EveryAPI model therefore arrived level-less, including the GPT-5.x line whose whole point is a selectable effort. Declared only where the gateway has verified the model takes one, so a model of unknown shape keeps the safe answer rather than gaining a control that would send reasoning_effort upstream and 400.
+		//
+		// thinkingLevelMap is deliberately absent: omitting it maps off → high onto pi's default provider values, while xhigh and max stay hidden. Naming those two would need a per-model claim about which extended efforts the upstream accepts (gpt-5.6-sol takes ultra, o4-mini stops at high), and the gateway publishes no such list — supports_thinking is one bit.
+		if model.SupportsThinking {
+			entry["reasoning"] = true
+		}
+		// Pi's own fallbacks are 128000/16384 for a custom provider, so a model with a larger window silently lost most of it — pi compacts against the number it holds, not the one the gateway serves.
+		if model.ContextWindow > 0 {
+			entry["contextWindow"] = model.ContextWindow
+		}
+		if model.MaxOutput > 0 {
+			entry["maxTokens"] = model.MaxOutput
+		}
+		providerModels = append(providerModels, entry)
+	}
+	return map[string]any{
+		"baseUrl": joinBase(apiBase, "/v1"),
+		"apiKey":  piCredentialRef,
+		"models":  providerModels,
+	}
+}
+
+// preparePiWebWithModels registers EveryAPI in the agent directory Pi Web actually reads, rather than the process-scoped one `everyapi use pi` builds.
+//
+// Pi Web is a durable local web app over that directory: sessions, project trust, drafts, the selected model, and every edit its Models panel makes all live there and are the whole reason to open it. Handing it a temporary directory would show an empty session list on every launch and discard the user's own configuration on exit, so this merges one provider into the real models.json and leaves the rest of the file untouched.
+//
+// Nothing secret is written. The provider's apiKey is the fixed "$EVERYAPI_RELAY_KEY" reference, which resolves from the launched process's environment; a pi or Pi Web started outside EveryAPI simply reports the provider as unconfigured. That is also why logout has nothing to scrub here.
+func preparePiWebWithModels(apiBase, _ string, models []Model) (map[string]string, error) {
+	agentDir := piUserAgentDir()
+	if agentDir == "" {
+		return nil, fmt.Errorf("resolve Pi agent directory")
+	}
+	if err := os.MkdirAll(agentDir, 0o700); err != nil {
+		return nil, fmt.Errorf("create Pi agent directory: %w", err)
+	}
+	modelsPath := filepath.Join(agentDir, "models.json")
+	config, err := loadPiModelsConfig(modelsPath)
+	if err != nil {
+		return nil, err
+	}
+	providers, ok := config["providers"].(map[string]any)
+	if !ok {
+		if _, present := config["providers"]; present && config["providers"] != nil {
+			return nil, fmt.Errorf("Pi models config %s: providers must be a JSON object", modelsPath)
+		}
+		providers = map[string]any{}
+		config["providers"] = providers
+	}
+	providers["everyapi"] = piProviderNode(apiBase, models)
+	body, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("encode Pi models config: %w", err)
+	}
+	if err := writeFileAtomic(modelsPath, body, 0o600); err != nil {
+		return nil, err
+	}
+	return map[string]string{}, nil
+}
+
+// loadPiModelsConfig reads the durable models.json as a generic object so unrelated providers, model overrides, and future keys survive the merge. A missing file starts empty; anything that is not a regular file or not a JSON object is an error rather than something to overwrite.
+func loadPiModelsConfig(path string) (map[string]any, error) {
+	if info, err := os.Lstat(path); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("refuse unsafe Pi models config path %s", path)
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("inspect Pi models config %s: %w", path, err)
+	}
+	body, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return map[string]any{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read Pi models config %s: %w", path, err)
+	}
+	if len(bytes.TrimSpace(body)) == 0 {
+		return map[string]any{}, nil
+	}
+	var config map[string]any
+	if err := json.Unmarshal(body, &config); err != nil {
+		return nil, fmt.Errorf("parse Pi models config %s: %w", path, err)
+	}
+	if config == nil {
+		return nil, fmt.Errorf("Pi models config %s must be a JSON object", path)
+	}
+	return config, nil
 }

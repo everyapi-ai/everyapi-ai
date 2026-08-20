@@ -37,7 +37,7 @@ USAGE
 ARGUMENTS
 	<tool>                 claude | codex | opencode | gemini | antigravity
 	                       aider | goose | crush | cline | openclaw | continue
-	                       kilo | pi | vibe | copilot | droid | openhands
+	                       kilo | pi | pi-web | vibe | copilot | droid | openhands
 	                       forge | llxprt | grok
 	                       qwen-code | kimi-code
 	                       hermes | librefang
@@ -106,6 +106,7 @@ EXAMPLES
   everyapi use hermes --model gpt-5.1  (skip the picker)
 	 everyapi use librefang               (native credential process)
 	 everyapi use open-webui               (start a configured local server)
+	 everyapi use pi-web                   (start Pi's browser UI on 127.0.0.1:30141)
 `
 
 // Use is the buyer onboarding bridge: verify credentials, configure the tool's env vars to point at EveryAPI, exec into the tool.

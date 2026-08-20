@@ -13,7 +13,7 @@ import (
 
 var desktopCLITools = []string{
 	"claude", "codex", "opencode", "aider", "goose", "crush", "cline",
-	"openclaw", "continue", "kilo", "pi", "vibe", "copilot", "droid",
+	"openclaw", "continue", "kilo", "pi", "pi-web", "vibe", "copilot", "droid",
 	"openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code",
 	"hermes", "librefang", "open-webui", "deepseek-harness",
 }
@@ -125,7 +125,7 @@ func TestClaudeInstallerUsesTheChinaMirrorFallback(t *testing.T) {
 func TestNpmInstallersRetryThroughTheChinaRegistry(t *testing.T) {
 	npmTools := []string{
 		"codex", "opencode", "gemini", "crush", "cline", "openclaw",
-		"continue", "deepseek-harness", "kilo", "pi", "copilot", "droid",
+		"continue", "deepseek-harness", "kilo", "pi", "pi-web", "copilot", "droid",
 		"llxprt", "grok", "qwen-code", "kimi-code",
 	}
 	for _, name := range npmTools {

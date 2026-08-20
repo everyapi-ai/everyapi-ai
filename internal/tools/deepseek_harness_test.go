@@ -169,3 +169,119 @@ func TestDeepSeekHarnessRegistryUsesOfficialPackageAndWebLauncher(t *testing.T) 
 		t.Fatalf("registry entry does not configure the EveryAPI provider: %#v", tool)
 	}
 }
+
+func TestDeepSeekHarnessCredentialDoesNotOutliveLogout(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("DSH_HOME", "")
+	credentialsPath := filepath.Join(home, ".dsh", ".credentials.yaml")
+
+	// Nothing configured yet: the scrub is a no-op rather than an error.
+	if err := ScrubDeepSeekHarnessCredential(); err != nil {
+		t.Fatalf("scrub with no Harness home: %v", err)
+	}
+
+	if _, err := prepareDeepSeekHarnessWithModels("https://api.everyapi.ai", "sk-everyapi-billable", []Model{
+		{ID: "chat-model", SupportedEndpointTypes: []string{"openai"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := os.ReadFile(credentialsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(stored), "sk-everyapi-billable") {
+		t.Fatalf("precondition failed: the launch should have persisted the key:\n%s", stored)
+	}
+
+	if err := ScrubDeepSeekHarnessCredential(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(credentialsPath); !os.IsNotExist(err) {
+		remaining, _ := os.ReadFile(credentialsPath)
+		t.Fatalf("a credentials file holding only the EveryAPI key should be removed, got:\n%s", remaining)
+	}
+
+	// The provider block is not a credential and stays, so Harness reports an unconfigured provider rather than losing the user's edits.
+	settings, err := os.ReadFile(filepath.Join(home, ".dsh", "settings.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(settings), "apiKeyEnv: EVERYAPI_API_KEY") {
+		t.Errorf("settings.yaml should be untouched by the credential scrub:\n%s", settings)
+	}
+	if strings.Contains(string(settings), "sk-everyapi-billable") {
+		t.Errorf("the key leaked into settings.yaml:\n%s", settings)
+	}
+
+	if err := ScrubDeepSeekHarnessCredential(); err != nil {
+		t.Fatalf("scrub must be idempotent: %v", err)
+	}
+}
+
+func TestDeepSeekHarnessScrubKeepsCredentialsBelongingToTheUser(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	dshHome := filepath.Join(home, "custom-dsh")
+	t.Setenv("DSH_HOME", dshHome)
+	if err := os.MkdirAll(dshHome, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	credentialsPath := filepath.Join(dshHome, ".credentials.yaml")
+	if err := os.WriteFile(credentialsPath, []byte("ANTHROPIC_API_KEY: user-own\nEVERYAPI_API_KEY: sk-everyapi-billable\nOPENAI_API_KEY: also-user-own\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ScrubDeepSeekHarnessCredential(); err != nil {
+		t.Fatal(err)
+	}
+
+	remaining, err := os.ReadFile(credentialsPath)
+	if err != nil {
+		t.Fatalf("a file holding other credentials must survive: %v", err)
+	}
+	if strings.Contains(string(remaining), "sk-everyapi-billable") || strings.Contains(string(remaining), "EVERYAPI_API_KEY") {
+		t.Errorf("EveryAPI entry survived the scrub:\n%s", remaining)
+	}
+	for _, want := range []string{"ANTHROPIC_API_KEY: user-own", "OPENAI_API_KEY: also-user-own"} {
+		if !strings.Contains(string(remaining), want) {
+			t.Errorf("scrub removed %q, which belongs to the user:\n%s", want, remaining)
+		}
+	}
+	if info, err := os.Stat(credentialsPath); err != nil {
+		t.Fatal(err)
+	} else if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("rewritten credentials mode = %v, want 0600", perm)
+	}
+}
+
+func TestDeepSeekHarnessScrubLeavesAFileWithNoEveryAPIEntryByteForByte(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("DSH_HOME", "")
+	dshHome := filepath.Join(home, ".dsh")
+	if err := os.MkdirAll(dshHome, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	credentialsPath := filepath.Join(dshHome, ".credentials.yaml")
+	// Comments and spacing a YAML round-trip would not necessarily reproduce.
+	original := "# my keys\n\nANTHROPIC_API_KEY:   user-own\n"
+	if err := os.WriteFile(credentialsPath, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ScrubDeepSeekHarnessCredential(); err != nil {
+		t.Fatal(err)
+	}
+
+	remaining, err := os.ReadFile(credentialsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(remaining) != original {
+		t.Errorf("logout reformatted a file it had nothing to remove from:\ngot:  %q\nwant: %q", remaining, original)
+	}
+}

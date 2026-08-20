@@ -8,11 +8,22 @@ import (
 
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/tools"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
 // toolCredentialHomes are the per-tool config dirs that `everyapi use` seeds with the resolved relay key (codex-home/auth.json holds it as OPENAI_API_KEY; hermes-home/config.yaml inlines it as api_key). They live next to credentials.json but config.Delete only removes the latter, so logout must scrub these too — otherwise a fully working, billable spend credential survives "logout" on disk.
+//
+// These are the homes EveryAPI owns outright and can delete whole. A client whose credential lands in a file the vendor owns needs a surgical scrub instead; see vendorCredentialScrubs.
 var toolCredentialHomes = []string{"codex-home", "hermes-home"}
+
+// vendorCredentialScrubs remove the relay key from files that belong to the client rather than to EveryAPI, so the deletion has to be one entry rather than one directory. DeepSeek Harness is the only launch that persists the key this way — every other client either receives it in its process environment or references it by name.
+var vendorCredentialScrubs = []struct {
+	name  string
+	scrub func() error
+}{
+	{name: "DeepSeek Harness", scrub: tools.ScrubDeepSeekHarnessCredential},
+}
 
 // Logout removes the on-disk credentials. Idempotent — calling it twice doesn't error (config.Delete handles missing file as success). We deliberately do NOT call the backend to invalidate the token: (a) the user wants offline logout to work, (b) the token is the same user-scoped access_token used by /api/user/self, killing it remotely would log them out of the dashboard too.
 func Logout(args []string) error {
@@ -47,6 +58,11 @@ func scrubToolCredentials() {
 		p := filepath.Join(cfgDir, home)
 		if err := os.RemoveAll(p); err != nil && !errors.Is(err, os.ErrNotExist) {
 			cliout.Printf(i18n.T("logout.cached_key_warn"), p, err)
+		}
+	}
+	for _, target := range vendorCredentialScrubs {
+		if err := target.scrub(); err != nil {
+			cliout.Printf(i18n.T("logout.cached_key_warn"), target.name, err)
 		}
 	}
 }
