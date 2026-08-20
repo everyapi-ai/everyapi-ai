@@ -216,7 +216,27 @@ func (s *Service) getAppStateLocked(ctx context.Context, req StateRequest) (Stat
 	if err := s.store.Save(ctx, record); err != nil {
 		return State{}, NewError(CodeInternal, "save computer-use snapshot: "+err.Error(), err)
 	}
+	if !req.NoScreenshot {
+		if shot, shotErr := s.captureScreenshot(ctx, target); shotErr != nil {
+			state.ScreenshotError = codedError(shotErr)
+		} else {
+			state.Screenshot = shot
+		}
+	}
 	return redactState(state), nil
+}
+
+// captureScreenshot is best-effort: a failure here (missing Screen Recording
+// permission, a window that closed between resolveTarget and this call)
+// must not fail the observation or action it is attached to, since the
+// screenshot is a convenience on top of the accessibility snapshot, not a
+// required part of it. Callers see the failure via State.ScreenshotError.
+func (s *Service) captureScreenshot(ctx context.Context, target Target) (*ScreenshotAttachment, error) {
+	png, err := s.provider.Screenshot(ctx, target)
+	if err != nil {
+		return nil, err
+	}
+	return writeScreenshotFile(png)
 }
 
 // Screenshot does not save a snapshot record: unlike GetAppState, its result
@@ -322,7 +342,7 @@ func (s *Service) Perform(ctx context.Context, req ActionRequest) (State, error)
 	if err := s.provider.Perform(ctx, perform); err != nil {
 		return State{}, err
 	}
-	state, refreshErr := s.getAppStateLocked(ctx, StateRequest{App: req.App})
+	state, refreshErr := s.getAppStateLocked(ctx, StateRequest{App: req.App, NoScreenshot: req.NoScreenshot})
 	if refreshErr != nil {
 		return redactState(State{App: target.App, Window: target.Window, RefreshError: codedError(refreshErr)}), nil
 	}

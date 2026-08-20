@@ -1,8 +1,12 @@
 package computeruse
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"image"
+	"image/png"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -11,14 +15,17 @@ import (
 )
 
 type fakeProvider struct {
-	apps       []App
-	windows    []Window
-	state      State
-	stateErr   error
-	performErr error
-	performed  []PerformRequest
-	mu         sync.Mutex
-	listCalls  int
+	apps            []App
+	windows         []Window
+	state           State
+	stateErr        error
+	performErr      error
+	performed       []PerformRequest
+	screenshotPNG   []byte
+	screenshotErr   error
+	screenshotCalls int
+	mu              sync.Mutex
+	listCalls       int
 }
 
 func (f *fakeProvider) Capabilities(context.Context) (Capabilities, error) {
@@ -52,7 +59,28 @@ func (f *fakeProvider) Perform(_ context.Context, req PerformRequest) error {
 }
 
 func (f *fakeProvider) Screenshot(context.Context, Target) ([]byte, error) {
-	return []byte("fake-png-bytes"), nil
+	f.mu.Lock()
+	f.screenshotCalls++
+	f.mu.Unlock()
+	if f.screenshotErr != nil {
+		return nil, f.screenshotErr
+	}
+	if f.screenshotPNG != nil {
+		return f.screenshotPNG, nil
+	}
+	return fakePNG(), nil
+}
+
+// fakePNG is a real, decodable 3x2 PNG — distinct width and height so a test
+// asserting on ScreenshotAttachment.Width/Height can't pass by accident with
+// the dimensions swapped.
+func fakePNG() []byte {
+	img := image.NewRGBA(image.Rect(0, 0, 3, 2))
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
 }
 
 func (f *fakeProvider) lastPerform() (PerformRequest, bool) {
@@ -345,12 +373,12 @@ func TestResolveTargetByWindowIDNotFound(t *testing.T) {
 func TestScreenshotReturnsProviderBytesForResolvedWindow(t *testing.T) {
 	provider := fixtureProvider()
 	service := NewService(provider, newMemoryStore(), time.Now)
-	png, err := service.Screenshot(context.Background(), StateRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0)})
+	got, err := service.Screenshot(context.Background(), StateRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0)})
 	if err != nil {
 		t.Fatalf("Screenshot: %v", err)
 	}
-	if string(png) != "fake-png-bytes" {
-		t.Fatalf("Screenshot bytes = %q, want %q", png, "fake-png-bytes")
+	if !bytes.Equal(got, fakePNG()) {
+		t.Fatalf("Screenshot bytes did not match the provider's PNG (len=%d)", len(got))
 	}
 }
 
@@ -367,6 +395,99 @@ func TestScreenshotRejectsInvalidTargetBeforeProviderDiscovery(t *testing.T) {
 	provider.mu.Unlock()
 	if listCalls != 0 {
 		t.Fatalf("provider ListApps calls = %d, want 0", listCalls)
+	}
+}
+
+func TestGetAppStateAttachesAScreenshotByDefault(t *testing.T) {
+	provider := fixtureProvider()
+	service := NewService(provider, newMemoryStore(), time.Now)
+	state, err := service.GetAppState(context.Background(), StateRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0)})
+	if err != nil {
+		t.Fatalf("GetAppState: %v", err)
+	}
+	if state.ScreenshotError != nil {
+		t.Fatalf("ScreenshotError = %v, want nil", state.ScreenshotError)
+	}
+	if state.Screenshot == nil {
+		t.Fatal("Screenshot is nil, want an attachment")
+	}
+	if state.Screenshot.Format != "png" || state.Screenshot.Width != 3 || state.Screenshot.Height != 2 {
+		t.Fatalf("Screenshot = %+v, want format=png width=3 height=2", state.Screenshot)
+	}
+	data, err := os.ReadFile(state.Screenshot.Path)
+	if err != nil {
+		t.Fatalf("read screenshot file: %v", err)
+	}
+	if !bytes.Equal(data, fakePNG()) {
+		t.Fatal("screenshot file on disk does not match the provider's PNG bytes")
+	}
+	_ = os.Remove(state.Screenshot.Path)
+}
+
+func TestGetAppStateSkipsScreenshotWhenRequested(t *testing.T) {
+	provider := fixtureProvider()
+	service := NewService(provider, newMemoryStore(), time.Now)
+	state, err := service.GetAppState(context.Background(), StateRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0), NoScreenshot: true})
+	if err != nil {
+		t.Fatalf("GetAppState: %v", err)
+	}
+	if state.Screenshot != nil || state.ScreenshotError != nil {
+		t.Fatalf("state = %+v, want no screenshot and no screenshotError", state)
+	}
+	provider.mu.Lock()
+	calls := provider.screenshotCalls
+	provider.mu.Unlock()
+	if calls != 0 {
+		t.Fatalf("provider.Screenshot calls = %d, want 0", calls)
+	}
+}
+
+func TestGetAppStateReportsScreenshotFailureWithoutFailingTheCall(t *testing.T) {
+	provider := fixtureProvider()
+	provider.screenshotErr = errors.New("screen recording permission denied")
+	service := NewService(provider, newMemoryStore(), time.Now)
+	state, err := service.GetAppState(context.Background(), StateRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0)})
+	if err != nil {
+		t.Fatalf("GetAppState: %v", err)
+	}
+	if state.Screenshot != nil {
+		t.Fatalf("Screenshot = %+v, want nil", state.Screenshot)
+	}
+	if state.ScreenshotError == nil || !strings.Contains(state.ScreenshotError.Message, "screen recording permission denied") {
+		t.Fatalf("ScreenshotError = %v, want it to mention the provider failure", state.ScreenshotError)
+	}
+}
+
+func TestPerformAttachesAScreenshotToTheRefreshedState(t *testing.T) {
+	provider := fixtureProvider()
+	service := NewService(provider, newMemoryStore(), time.Now)
+	x, y := 10, 20
+	state, err := service.Perform(context.Background(), ActionRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0), Kind: ActionClick, X: &x, Y: &y})
+	if err != nil {
+		t.Fatalf("Perform: %v", err)
+	}
+	if state.Screenshot == nil {
+		t.Fatal("Screenshot is nil, want an attachment after a successful action")
+	}
+	_ = os.Remove(state.Screenshot.Path)
+}
+
+func TestPerformSkipsScreenshotWhenRequested(t *testing.T) {
+	provider := fixtureProvider()
+	service := NewService(provider, newMemoryStore(), time.Now)
+	x, y := 10, 20
+	state, err := service.Perform(context.Background(), ActionRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0), Kind: ActionClick, X: &x, Y: &y, NoScreenshot: true})
+	if err != nil {
+		t.Fatalf("Perform: %v", err)
+	}
+	if state.Screenshot != nil {
+		t.Fatalf("Screenshot = %+v, want nil", state.Screenshot)
+	}
+	provider.mu.Lock()
+	calls := provider.screenshotCalls
+	provider.mu.Unlock()
+	if calls != 0 {
+		t.Fatalf("provider.Screenshot calls = %d, want 0", calls)
 	}
 }
 

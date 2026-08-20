@@ -178,6 +178,19 @@ func TestGetAppStateParsesWindowID(t *testing.T) {
 	}
 }
 
+func TestGetAppStateParsesNoScreenshot(t *testing.T) {
+	service := &fakeService{}
+	if err := run(context.Background(), []string{"get-app-state", "--app", "TextEdit", "--window-index", "0", "--no-screenshot", "--json"}, service, strings.NewReader(""), &bytes.Buffer{}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(service.stateRequests) != 1 {
+		t.Fatalf("state requests = %d", len(service.stateRequests))
+	}
+	if req := service.stateRequests[0]; !req.NoScreenshot {
+		t.Fatalf("state request = %+v, want NoScreenshot=true", req)
+	}
+}
+
 func TestGetAppStateRejectsWindowIDAndWindowIndexTogether(t *testing.T) {
 	service := &fakeService{}
 	err := run(context.Background(), []string{"get-app-state", "--app", "TextEdit", "--window-id", "7", "--window-index", "0"}, service, strings.NewReader(""), &bytes.Buffer{})
@@ -299,6 +312,9 @@ func TestActionCommandsDispatchExactRequestShape(t *testing.T) {
 		}},
 		{name: "click with restore-window", args: []string{"click", "--app", "TextEdit", "--x", "10", "--y", "20", "--restore-window", "--json"}, want: func(req computeruse.ActionRequest) bool {
 			return req.Kind == computeruse.ActionClick && req.RestoreWindow
+		}},
+		{name: "click with no-screenshot", args: []string{"click", "--app", "TextEdit", "--x", "10", "--y", "20", "--no-screenshot", "--json"}, want: func(req computeruse.ActionRequest) bool {
+			return req.Kind == computeruse.ActionClick && req.NoScreenshot
 		}},
 		{name: "type text", args: []string{"type-text", "--app", "TextEdit", "--text", "hello", "--json"}, want: func(req computeruse.ActionRequest) bool {
 			return req.Kind == computeruse.ActionTypeText && req.Text == "hello"
@@ -494,6 +510,28 @@ func TestRenderPlainRefreshFailureDoesNotStartWithBlankLine(t *testing.T) {
 		t.Fatalf("renderPlain: %v", err)
 	}
 	if got, want := out.String(), "Action completed; refreshed state unavailable: window closed\n"; got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestRenderPlainPrintsScreenshotPath(t *testing.T) {
+	var out bytes.Buffer
+	state := computeruse.State{Screenshot: &computeruse.ScreenshotAttachment{Path: "/tmp/shot.png", Format: "png", Width: 12, Height: 34}}
+	if err := renderPlain(&out, "click", state); err != nil {
+		t.Fatalf("renderPlain: %v", err)
+	}
+	if got, want := out.String(), "screenshot: /tmp/shot.png (12x34)\n"; got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestRenderPlainPrintsScreenshotError(t *testing.T) {
+	var out bytes.Buffer
+	state := computeruse.State{ScreenshotError: computeruse.NewError(computeruse.CodeInternal, "screen recording permission denied", nil)}
+	if err := renderPlain(&out, "click", state); err != nil {
+		t.Fatalf("renderPlain: %v", err)
+	}
+	if got, want := out.String(), "screenshot unavailable: screen recording permission denied\n"; got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
 }

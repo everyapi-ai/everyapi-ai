@@ -48,6 +48,7 @@ Use 'everyapi computer <command> --help' for command flags. Add --json for machi
   --window-id <id>       Select a window by id from list-windows (instead of --window-index)
 `
 	actionOutputHelpFlags = `  --restore-window       Bring the target window forward first; do not fail the action if that is not possible
+  --no-screenshot        Skip the window screenshot normally attached to the result
   --json                 Print a machine-readable envelope
 `
 	subcommandHelpFormat = `Usage: everyapi computer %s [flags]
@@ -146,7 +147,8 @@ func writeSubcommandHelp(out io.Writer, command string) error {
 	case "list-windows":
 		flags = appHelpFlags + jsonHelpFlags
 	case "get-app-state":
-		flags = targetHelpFlags + jsonHelpFlags
+		flags = targetHelpFlags + `  --no-screenshot        Skip the window screenshot normally attached to the result
+` + jsonHelpFlags
 	case "screenshot":
 		flags = targetHelpFlags + `  --out <path>           Write the PNG to this file
 ` + jsonHelpFlags
@@ -239,6 +241,7 @@ func dispatch(ctx context.Context, command string, args []string, service comman
 	case "get-app-state":
 		fs := newFlagSet(command)
 		app, windowIndex, windowID := addTargetFlags(fs)
+		noScreenshot := fs.Bool("no-screenshot", false, "skip the window screenshot normally attached to the result")
 		jsonOutput := fs.Bool("json", false, "print JSON")
 		if err := parseFlags(fs, args); err != nil {
 			return nil, jsonRequested(args), err
@@ -246,7 +249,7 @@ func dispatch(ctx context.Context, command string, args []string, service comman
 		if err := validateTargetFlags(*app, windowIndex, windowID); err != nil {
 			return nil, *jsonOutput, err
 		}
-		result, err := service.GetAppState(ctx, computeruse.StateRequest{App: *app, WindowIndex: windowIndex.pointer(), WindowID: windowID.pointer()})
+		result, err := service.GetAppState(ctx, computeruse.StateRequest{App: *app, WindowIndex: windowIndex.pointer(), WindowID: windowID.pointer(), NoScreenshot: *noScreenshot})
 		return result, *jsonOutput, err
 	case "screenshot":
 		return dispatchScreenshot(ctx, args, service)
@@ -324,6 +327,7 @@ func dispatchAction(ctx context.Context, command string, args []string, service 
 	fs.Var(&clickCount, "click-count", "number of clicks, e.g. 2 for a double-click")
 	modifiers := fs.String("modifiers", "", "modifier chord held for the click, e.g. cmd or cmd+shift")
 	restoreWindow := fs.Bool("restore-window", false, "bring the target window forward first; do not fail the action if that is not possible")
+	noScreenshot := fs.Bool("no-screenshot", false, "skip the window screenshot normally attached to the result")
 	if err := parseFlags(fs, args); err != nil {
 		return nil, jsonRequested(args), err
 	}
@@ -333,7 +337,7 @@ func dispatchAction(ctx context.Context, command string, args []string, service 
 	if err := validateTargetFlags(*app, windowIndex, windowID); err != nil {
 		return nil, *jsonOutput, err
 	}
-	request := computeruse.ActionRequest{App: *app, WindowIndex: windowIndex.pointer(), WindowID: windowID.pointer(), ElementIndex: elementIndex.pointer(), FromElementIndex: fromElementIndex.pointer(), ToElementIndex: toElementIndex.pointer(), X: x.pointer(), Y: y.pointer(), FromX: fromX.pointer(), FromY: fromY.pointer(), ToX: toX.pointer(), ToY: toY.pointer(), Key: *key, Direction: *direction, Amount: *amount, SecondaryAction: *secondaryAction, MouseButton: *mouseButton, ClickCount: clickCount.pointer(), Modifiers: *modifiers, RestoreWindow: *restoreWindow}
+	request := computeruse.ActionRequest{App: *app, WindowIndex: windowIndex.pointer(), WindowID: windowID.pointer(), ElementIndex: elementIndex.pointer(), FromElementIndex: fromElementIndex.pointer(), ToElementIndex: toElementIndex.pointer(), X: x.pointer(), Y: y.pointer(), FromX: fromX.pointer(), FromY: fromY.pointer(), ToX: toX.pointer(), ToY: toY.pointer(), Key: *key, Direction: *direction, Amount: *amount, SecondaryAction: *secondaryAction, MouseButton: *mouseButton, ClickCount: clickCount.pointer(), Modifiers: *modifiers, RestoreWindow: *restoreWindow, NoScreenshot: *noScreenshot}
 	switch command {
 	case "click":
 		request.Kind = computeruse.ActionClick
@@ -395,7 +399,7 @@ func parseJSONOnly(name string, args []string) (bool, error) {
 }
 
 func rejectIrrelevantActionFlags(fs *flag.FlagSet, command string) error {
-	allowed := map[string]bool{"app": true, "window-index": true, "window-id": true, "json": true, "restore-window": true}
+	allowed := map[string]bool{"app": true, "window-index": true, "window-id": true, "json": true, "restore-window": true, "no-screenshot": true}
 	var commandFlags []string
 	switch command {
 	case "click":
@@ -574,6 +578,15 @@ func renderPlain(out io.Writer, command string, result any) error {
 		if value.RefreshError != nil {
 			_, err := fmt.Fprintf(out, "Action completed; refreshed state unavailable: %s\n", cliout.Sanitize(value.RefreshError.Message))
 			return err
+		}
+		if value.Screenshot != nil {
+			if _, err := fmt.Fprintf(out, "screenshot: %s (%dx%d)\n", value.Screenshot.Path, value.Screenshot.Width, value.Screenshot.Height); err != nil {
+				return err
+			}
+		} else if value.ScreenshotError != nil {
+			if _, err := fmt.Fprintf(out, "screenshot unavailable: %s\n", cliout.Sanitize(value.ScreenshotError.Message)); err != nil {
+				return err
+			}
 		}
 		return nil
 	default:

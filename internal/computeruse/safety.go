@@ -102,5 +102,8 @@ func redactState(state State) State {
 	if state.RefreshError != nil {
 		state.RefreshError.Message = redactSensitiveText(state.RefreshError.Message)
 	}
+	if state.ScreenshotError != nil {
+		state.ScreenshotError.Message = redactSensitiveText(state.ScreenshotError.Message)
+	}
 	return state
 }

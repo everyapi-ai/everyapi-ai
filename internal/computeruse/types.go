@@ -155,11 +155,26 @@ type Snapshot struct {
 	Elements     []Element `json:"elements,omitempty"`
 }
 
+// ScreenshotAttachment is a best-effort capture taken after a GetAppState or
+// Perform call, written to a temporary file rather than inlined as base64 —
+// inlining would bloat every action response by the image's full encoded
+// size even when the caller never looks at it. The file lives under the
+// OS temp directory and is swept once it is older than screenshotFileTTL;
+// callers that want to keep it should copy it out promptly.
+type ScreenshotAttachment struct {
+	Path   string `json:"path"`
+	Format string `json:"format"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+}
+
 type State struct {
-	App          App      `json:"app"`
-	Window       Window   `json:"window"`
-	Snapshot     Snapshot `json:"snapshot"`
-	RefreshError *Error   `json:"refreshError,omitempty"`
+	App             App                   `json:"app"`
+	Window          Window                `json:"window"`
+	Snapshot        Snapshot              `json:"snapshot"`
+	RefreshError    *Error                `json:"refreshError,omitempty"`
+	Screenshot      *ScreenshotAttachment `json:"screenshot,omitempty"`
+	ScreenshotError *Error                `json:"screenshotError,omitempty"`
 }
 
 type Target struct {
@@ -168,9 +183,10 @@ type Target struct {
 }
 
 type StateRequest struct {
-	App         string
-	WindowIndex *int
-	WindowID    *int
+	App          string
+	WindowIndex  *int
+	WindowID     *int
+	NoScreenshot bool
 }
 
 type ActionKind string
@@ -210,6 +226,7 @@ type ActionRequest struct {
 	ClickCount       *int
 	Modifiers        string
 	RestoreWindow    bool
+	NoScreenshot     bool
 }
 
 type CachedElement struct {
