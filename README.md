@@ -59,20 +59,33 @@ Same flow as the shell script — resolves the latest tag, downloads `everyapi_w
 
 ## Commands
 
+Running `everyapi` with no arguments on a TTY opens an interactive launcher over this same set; `everyapi help` prints it as text.
+
 | Command | Purpose |
 |---|---|
-| `everyapi auth login` | Sign in to EveryAPI on this device |
-| `everyapi auth logout` | Clear local credentials |
-| `everyapi auth status` | Show balance, usage, quota |
-| `everyapi wallet topup` | Open the topup page (with anti-phishing phrase check) |
+| `everyapi auth <sub>` | Sign in / out and show session status (`login` / `logout` / `status`) |
+| `everyapi wallet <sub>` | Top-up (with anti-phishing phrase check), payment history, payment methods |
+| `everyapi checkin <sub>` | Claim today's daily-grant quota; show this month's calendar |
+| `everyapi account <sub>` | Profile, 2FA, affiliate code, subscription plans |
 | `everyapi use <tool>` | Set env and exec into a third-party CLI (pointed at EveryAPI) |
-| `everyapi seller <sub>` | Marketplace seller commands (list / withdraw / add-key / setup) |
-| `everyapi edge <sub>` | One-command deploy for the BYO-GPU supplier agent (register / start / status / logs / models / stop / update / remove) |
+| `everyapi token <sub>` | Manage relay API keys (list / create / key / revoke / switch / …) |
+| `everyapi models <sub>` | Model catalog: list / pricing / groups |
+| `everyapi stats <sub>` | Usage, request log, per-model performance, upstream health |
+| `everyapi market <sub>` | Demand posts, disputes, abuse reports |
+| `everyapi inbox <sub>` | In-app notifications and direct messages |
+| `everyapi seller <sub>` | Marketplace seller commands (list / setup / withdraw / add-key / add-oauth) |
+| `everyapi edge <sub>` | One-command deploy for the BYO-GPU supplier agent (register / start / status / logs / models / rename / pause / resume / stop / update / remove) |
+| `everyapi artifacts <sub>` | Publish and manage self-contained HTML reports (`share` / `update` / `delete`) |
+| `everyapi events` | Subscribe to the live event stream (SSE) |
+| `everyapi feedback` | Send a bug report or feature request to the team |
+| `everyapi proxy <sub>` | Local sanitizer proxy (`start` / `stop` / `status` / `configure`) |
 | `everyapi computer <sub>` | Read and control local macOS app windows through Accessibility |
 | `everyapi mcp` | Run as an MCP server (stdin/stdout JSON-RPC) |
-| `everyapi update` | Check for new versions and print the upgrade command for your install method |
-| `everyapi version` | Show build version |
-| `everyapi help` | Help |
+| `everyapi doctor` | Self-check: credentials, gateway, sanitizer, installed tools |
+| `everyapi settings <sub>` | View / change CLI preferences (language, terminal mode) |
+| `everyapi admin` | Operator console — shown only to admin accounts |
+| `everyapi version [update\|uninstall]` | Build version; check for and run an upgrade; remove the CLI |
+| `everyapi help` | Print the full command list |
 
 ### `everyapi computer <sub>` — local macOS computer use
 
@@ -102,36 +115,39 @@ A maintained list of known terminal apps, password managers, Keychain Access, Pa
 The main reason to install this CLI. It configures and launches supported coding clients through EveryAPI. Native integrations (`antigravity`, `librefang`) keep their own authentication path and never receive a copied relay key.
 
 ```bash
-everyapi use claude         # Claude Code → EveryAPI
-everyapi use codex          # OpenAI Codex CLI → EveryAPI
-everyapi use opencode       # OpenCode → process-scoped EveryAPI provider
-everyapi use gemini         # Google Gemini CLI → EveryAPI
-everyapi use antigravity    # Antigravity (native Google auth and routing)
-everyapi use aider          # Aider → EveryAPI (pick a model)
-everyapi use goose          # Goose CLI → EveryAPI (pick a model)
-everyapi use crush          # Crush CLI → isolated EveryAPI catalog
-everyapi use cline          # Cline CLI → lifecycle-bound provider settings
-everyapi use openclaw       # OpenClaw local TUI → isolated EveryAPI catalog
-everyapi use continue       # Continue CLI → isolated assistant config
-everyapi use kilo           # Kilo Code CLI → process-scoped provider config
-everyapi use pi             # Pi coding agent → isolated models catalog
-everyapi use vibe           # Mistral Vibe → isolated generic provider
-everyapi use copilot        # GitHub Copilot CLI → official process-scoped BYOK
-everyapi use droid          # Factory Droid → isolated runtime settings
-everyapi use openhands      # OpenHands CLI → explicit process-only env override
-everyapi use forge          # ForgeCode → isolated OpenAI-compatible session
-everyapi use llxprt         # LLxprt Code → isolated homes + pinned runtime flags
-everyapi use grok           # xAI Grok Build → EveryAPI
-everyapi use qwen-code      # Alibaba Qwen Code → EveryAPI (pick a model)
-everyapi use kimi-code      # Moonshot Kimi Code → EveryAPI (pick a model)
-everyapi use hermes         # Nous Research Hermes Agent → EveryAPI (pick a model)
-everyapi use librefang      # LibreFang start (native EveryAPI credential process)
-everyapi use hermes --model gpt-5.1   # pin the model, skip the picker
-everyapi use claude                    # transparent by default: stays on api.anthropic.com
-everyapi use codex                     # stays on api.openai.com
-everyapi use antigravity               # stays on Google's official origin
+everyapi use claude            # Claude Code → EveryAPI
+everyapi use codex             # OpenAI Codex CLI → EveryAPI
+everyapi use opencode          # OpenCode → process-scoped EveryAPI provider
+everyapi use gemini            # Google Gemini CLI → EveryAPI
+everyapi use antigravity       # Antigravity (native Google auth and routing)
+everyapi use aider             # Aider → EveryAPI (pick a model)
+everyapi use goose             # Goose CLI → EveryAPI (pick a model)
+everyapi use crush             # Crush CLI → isolated EveryAPI catalog
+everyapi use cline             # Cline CLI → lifecycle-bound provider settings
+everyapi use openclaw          # OpenClaw local TUI → isolated EveryAPI catalog
+everyapi use continue          # Continue CLI → isolated assistant config
+everyapi use kilo              # Kilo Code CLI → process-scoped provider config
+everyapi use pi                # Pi coding agent → isolated models catalog
+everyapi use pi-web            # Pi Web browser UI → durable models.json provider entry
+everyapi use vibe              # Mistral Vibe → isolated generic provider
+everyapi use copilot           # GitHub Copilot CLI → official process-scoped BYOK
+everyapi use droid             # Factory Droid → isolated runtime settings
+everyapi use openhands         # OpenHands CLI → explicit process-only env override
+everyapi use forge             # ForgeCode → isolated OpenAI-compatible session
+everyapi use llxprt            # LLxprt Code → isolated homes + pinned runtime flags
+everyapi use grok              # xAI Grok Build → EveryAPI
+everyapi use qwen-code         # Alibaba Qwen Code → EveryAPI (pick a model)
+everyapi use kimi-code         # Moonshot Kimi Code → EveryAPI (pick a model)
+everyapi use hermes            # Nous Research Hermes Agent → EveryAPI (pick a model)
+everyapi use librefang         # LibreFang start (native EveryAPI credential process)
+everyapi use open-webui        # Open WebUI server → EveryAPI as its OpenAI backend
+everyapi use deepseek-harness  # DeepSeek Harness web UI (dsh) → generated provider + credential
+everyapi use hermes --model gpt-5.1      # pin the model, skip the picker
+everyapi use claude                      # transparent by default: stays on api.anthropic.com
+everyapi use codex                       # stays on api.openai.com
+everyapi use antigravity                 # stays on Google's official origin
 everyapi use claude --transparent=false  # opt out: inject the gateway Base URL + relay key
-everyapi use                # no arg → interactive picker over installed tools
+everyapi use                             # no arg → interactive picker over installed tools
 ```
 
 Each tool uses different conventions; the CLI remembers them:
@@ -150,6 +166,7 @@ Each tool uses different conventions; the CLI remembers them:
 | continue | lifecycle-bound `CONTINUE_GLOBAL_DIR/config.yaml`; env-backed Continue secret reference |
 | kilo | process-scoped `KILO_CONFIG_CONTENT`; OpenCode-compatible provider with env-backed key |
 | pi | isolated `PI_CODING_AGENT_DIR` containing `models.json` and selected-model settings, with existing `{extensions,skills,prompts,themes}` from the pre-launch `PI_CODING_AGENT_DIR` (default `~/.pi/agent`) loaded by absolute path |
+| pi-web | `providers.everyapi` merged into the *durable* `PI_CODING_AGENT_DIR/models.json` (default `~/.pi/agent`), so sessions, project trust, the selected model, and the Models panel's own edits all survive; the relay key stays an env reference, never written to disk |
 | vibe | isolated `VIBE_HOME/config.toml`; generic provider with `api_key_env_var` |
 | copilot | official `COPILOT_PROVIDER_*` BYOK environment; wire API follows the selected model capability |
 | droid | official `--settings` runtime-only file with one `custom:EveryAPI-0` model and env-backed key |
@@ -161,6 +178,8 @@ Each tool uses different conventions; the CLI remembers them:
 | kimi-code | env: `KIMI_MODEL_API_KEY`, `KIMI_MODEL_BASE_URL`, `KIMI_MODEL_PROVIDER_TYPE`, `KIMI_MODEL_NAME`; isolated `KIMI_CODE_HOME` with generated model aliases |
 | hermes | generated `HERMES_HOME/config.yaml` (named custom provider, `base_url`, inline `api_key`); filtered live model discovery |
 | librefang | native `librefang start`, which detaches the daemon and returns the terminal (`librefang stop` ends it); LibreFang resolves the current EveryAPI credential per request |
+| open-webui | launched as `open-webui serve` with `OPENAI_API_BASE_URLS`, `OPENAI_API_KEYS`, and `ENABLE_PERSISTENT_CONFIG=false` so the process env wins over any stored config; `DATA_DIR` pinned to `~/.open-webui` |
+| deepseek-harness | the official `dsh web` UI; a generated `llm-pi-ai.providers.everyapi` entry in `$DSH_HOME/settings.yaml` (default `~/.dsh`, mode `0700`) plus a `0600` `.credentials.yaml` holding the key |
 
 No more looking up which variable name each tool reads, whether you need to append `/v1`, or which auth-header style applies.
 
@@ -170,7 +189,7 @@ A key already cached from an earlier launch keeps being used — that lookup is 
 
 **model selection**: At launch, EveryAPI fetches the live catalog available to the selected relay key/group, removes incompatible media/embedding protocols, and injects the resulting snapshot into every routed client's native selector. Use `/model` in Claude Code, Codex, Qwen Code, or Kimi Code; use Grok's `/model`/`models` entry or `hermes model` for Hermes. Non-Claude model IDs are represented internally with Claude-compatible aliases but are displayed and sent upstream under their real IDs.
 
-Tools with a `ModelEnv` contract (Gemini, Aider, Goose, Crush, Cline, OpenClaw, Continue, Kilo, Pi, Vibe, GitHub Copilot CLI, Factory Droid, OpenHands, ForgeCode, LLxprt, Hermes, Qwen Code, and Kimi Code) open EveryAPI's picker; pass `--model <id>` to skip it. In a non-interactive run EveryAPI deterministically uses the first compatible model. Plain claude/codex/grok still own their boot-model behavior. `antigravity` launches native `agy` with Google authentication and `librefang` uses its first-party EveryAPI credential process.
+Tools with a `ModelEnv` contract (Gemini, Aider, Goose, Crush, Cline, OpenClaw, Continue, Kilo, Pi, Vibe, GitHub Copilot CLI, Factory Droid, OpenHands, ForgeCode, LLxprt, Hermes, Qwen Code, and Kimi Code) open EveryAPI's picker; pass `--model <id>` to skip it. In a non-interactive run EveryAPI deterministically uses the first compatible model. Plain claude/codex/grok still own their boot-model behavior. `antigravity` launches native `agy` with Google authentication and `librefang` uses its first-party EveryAPI credential process. `pi-web`, `open-webui`, and `deepseek-harness` serve browser UIs: EveryAPI registers the provider and the whole compatible catalog up front, and the model is chosen inside that UI rather than by a terminal picker.
 
 **reasoning level**: After the model, `everyapi use codex` and `everyapi use pi` ask which reasoning level to launch at, and remember the answer for the next launch — asked once, then reused without prompting, the same way as the safety preferences below. The two clients are gated differently because they know different things. Codex reads the levels its own bundled catalog publishes for that model (`low` … `ultra`, which differ per model — `gpt-5.6-sol` reaches `ultra`, `gpt-5.5` stops at `xhigh`) and receives the choice as `model_reasoning_effort`; it never consults the gateway for this, so a model Codex has not heard of gets no step. Pi has no per-model table for a custom provider, so its step appears only where the gateway has verified the model takes an effort (`supports_thinking` on `/v1/models`); it is offered `off` … `high` and receives the choice as `defaultThinkingLevel`. A remembered level the current model does not offer is dropped rather than pinned, and on the first launch after this shipped the cursor starts on the effort Codex already had in its persistent home, so accepting the default changes nothing. Both clients keep their own in-session controls — Codex's `/model`, pi's shift+tab — while the launcher retains the cross-launch choice because Codex's generated profile and Pi's isolated home are removed at exit.
 
@@ -319,7 +338,7 @@ Comparison with the other two providers:
 
 ### `everyapi edge <sub>` — one-command BYO-GPU supplier agent deploy
 
-Onboard idle GPUs to sell compute through EveryAPI. The CLI condenses the deployment to 8 subcommands, sparing suppliers from hand-copying docker-compose, filling `.env`, or moving the registration token around:
+Onboard idle GPUs to sell compute through EveryAPI. The CLI condenses the deployment into one command set — `register` / `list` / `start` / `status` / `logs` / `models` / `rename` / `pause` / `resume` / `stop` / `update` / `remove` — sparing suppliers from hand-copying docker-compose, filling `.env`, or moving the registration token around. The usual path is eight commands:
 
 ```bash
 everyapi auth login                              # reuses existing login
@@ -366,12 +385,14 @@ $ everyapi auth status
   topup:     https://app.everyapi.ai/wallet
 ```
 
-### `everyapi update` — run the brew upgrade automatically
+### `everyapi version update` — run the upgrade automatically
 
-Checks the latest release on the GitHub mirror, compares with the current version, and **automatically runs `brew update && brew upgrade everyapi`** — one command, no copy-paste.
+There is no top-level `everyapi update`; the CLI-lifecycle actions live under `version` (`everyapi version update`, `everyapi version uninstall`).
+
+It checks the latest release on the GitHub mirror, compares with the current version, and then hands the upgrade to whatever installed the binary — Homebrew (`brew update && brew upgrade everyapi`), `go install …@latest`, or the published install script. One command, no copy-paste.
 
 ```bash
-$ everyapi update
+$ everyapi version update
 
 Update available: v0.2.0 → v0.2.1
 Install method:   Homebrew
@@ -387,18 +408,18 @@ $ brew upgrade everyapi
 Done. Run `everyapi version` to confirm.
 ```
 
-Why not just swap the binary directly? Homebrew's verification chain (SHA / bottle signing) is stronger than anything we'd rebuild inside the CLI, and self-replacing a running executable is a minefield on Windows.
+Why not just swap the binary directly? Homebrew's and Go's verification chains (SHA / bottle signing / module checksum) are stronger than anything we'd rebuild inside the CLI, and self-replacing a running executable is a minefield on Windows. An install-script install does get replaced in place — but by re-running the published installer, which already does that safely.
 
 Flags:
-- `--check` — silent compare; exit 0 if up to date, exit 1 if outdated. For CI / cron:
+- `--check` — silent compare, for CI / cron. Exit 0 if up to date, 1 if outdated, 2 if the latest version could not be determined (with the reason on stderr) — a network blip must not read as "an upgrade is available":
   ```bash
-  everyapi update --check || echo "needs upgrade"
+  everyapi version update --check || echo "needs upgrade"
   ```
 - `--dry-run` — print the command that would run but don't actually run it (for inspection)
 
 ### `everyapi settings` — CLI preferences (language, etc.)
 
-The CLI ships i18n in 7 languages: English, Simplified Chinese, Japanese, Korean, Spanish, German, French — CLI strings render in the user's chosen language. Backend API errors auto-negotiate via the `Accept-Language` header and cover 8 — the same 7 plus Traditional Chinese.
+The CLI ships i18n in 8 languages: English, Simplified Chinese, Traditional Chinese, Japanese, Korean, Spanish, German, French — CLI strings render in the user's chosen language. Backend API errors auto-negotiate via the `Accept-Language` header and cover the same 8.
 
 ```bash
 $ everyapi settings                          # interactive picker: choose a language
@@ -420,16 +441,17 @@ $ everyapi settings reset                    # reset to default (en + LANG auto-
 EVERYAPI_LANG=zh everyapi auth status             # this one invocation shows in Chinese; not persisted
 ```
 
-**Translation example** (not-logged-in error, 7 languages × same line):
+**Translation example** (not-logged-in error, 8 languages × same line):
 
 ```
-en : Error: not logged in — run 'everyapi auth login' first
-zh : 错误: 未登录 — 先运行 'everyapi auth login'
-ja : エラー: ログインしていません — まず 'everyapi auth login' を実行してください
-ko : 오류: 로그인되어 있지 않습니다 — 먼저 'everyapi auth login' 을 실행하세요
-es : Error: no has iniciado sesión — ejecuta primero 'everyapi auth login'
-de : Fehler: nicht angemeldet — führe zuerst 'everyapi auth login' aus
-fr : Erreur: non connecté — exécutez d'abord 'everyapi auth login'
+en    : Error: not logged in — run 'everyapi auth login' first
+zh    : 错误: 未登录 — 先运行 'everyapi auth login'
+zh-TW : 錯誤: 尚未登入 — 先執行 'everyapi auth login'
+ja    : エラー: ログインしていません — まず 'everyapi auth login' を実行してください
+ko    : 오류: 로그인되어 있지 않습니다 — 먼저 'everyapi auth login' 을 실행하세요
+es    : Error: no has iniciado sesión — ejecuta primero 'everyapi auth login'
+de    : Fehler: nicht angemeldet — führe zuerst 'everyapi auth login' aus
+fr    : Erreur: non connecté — exécutez d'abord 'everyapi auth login'
 ```
 
 Settings live in `~/.config/everyapi/settings.json` (same directory as `credentials.json`, but mode `0644` — no secrets).
@@ -450,10 +472,10 @@ Credentials live in `~/.config/everyapi/credentials.json` (or `$XDG_CONFIG_HOME/
 
 Fields:
 
-- `api_base` — the EveryAPI gateway URL. Default `https://api.everyapi.ai`. Self-hosted users / local development can override with `--api-base` on `login`.
+- `api_base` — the EveryAPI gateway URL. Default `https://api.everyapi.ai`. Self-hosted users / local development can override with `--api-base` on `auth login`.
 - `access_token` — bearer used by every authenticated API call.
 - `relay_key` — relay API key (`sk-everyapi-…`) used for the subprocess env of `everyapi use`. Fetched from `/api/token/*` and cached here.
-- `user_id` / `username` — cached so `status` can render the identity line before its first API round-trip.
+- `user_id` / `username` — cached so `auth status` can render the identity line before its first API round-trip.
 
 Gateway region is a CLI preference in `settings.json`: if it is unset, interactive login asks once and saves the choice. `everyapi settings set gateway_region cn` switches official gateway traffic to `https://api-cn.everyapi.ai`; `global` uses `https://api.everyapi.ai`. A custom `--api-base` for self-hosting still wins.
 
@@ -463,14 +485,14 @@ In the CLI source directory (the one containing this README, `go.mod`, and `Make
 
 ```bash
 go test ./...
-go run . status            # against production
-go run . login --api-base http://localhost:8787   # against local backend
+go run . auth status       # against production
+go run . auth login --api-base http://localhost:8787   # against local backend
 ```
 
 Local cross-compile for all platforms (same recipe CI uses):
 
 ```bash
-make cli-release           # artifacts in dist/ (5 platforms × 1 binary = 5 files)
+make cli-release           # artifacts in dist/ (6 platforms × 1 binary = 6 files)
 ```
 
 ## MCP server (`everyapi mcp` subcommand)
@@ -516,7 +538,7 @@ Wiring into Cursor, Codex CLI, or other MCP clients is similar — point `comman
 
 You must have run `everyapi auth login` in a terminal at least once — the MCP server is a background process with no terminal interaction capability, so it cannot run the device-code flow itself. It reads `~/.config/everyapi/credentials.json` directly; if missing, every tool returns a `isError: true` "not logged in" message guiding the user to log in.
 
-### Tools exposed in v1 (8 total)
+### Tools exposed (15 total)
 
 | Tool | Input | Purpose |
 |---|---|---|
@@ -524,10 +546,17 @@ You must have run `everyapi auth login` in a terminal at least once — the MCP 
 | `everyapi_topup` | none | Returns the web topup URL |
 | `everyapi_seller_list` | none | Lists marketplace seller channels |
 | `everyapi_seller_withdraw` | `{confirm: "yes", quota?: int}` | Transfers seller_quota to main balance; **`confirm: "yes"` required** (money-path friction) |
+| `everyapi_seller_eligibility` | none | Read-only mount-gate checklist (marketplace open, account active, email verified, account age, prior usage, channel cap). Call this *before* asking the user for a key |
+| `everyapi_seller_add_key` | `{name, type, keys[], models, key_remarks?[], remark?}` | Mounts a seller channel from plain API key(s) — the twin of `everyapi seller add-key`. Only ever pass keys the user supplied in the conversation |
 | `everyapi_seller_add_oauth_codex_start` | `{name, models}` | Starts the Codex / ChatGPT device authorization flow; returns `user_code` + `verification_uri` + `flow_id` |
 | `everyapi_seller_add_oauth_codex_poll` | `{flow_id}` | Checks Codex authorization status. `pending`/`slow_down` keep polling; `authorized` returns the channel id; `expired`/`denied` terminate |
 | `everyapi_seller_add_oauth_claude_start` | `{name, models}` | Starts the Anthropic OAuth flow; returns `authorize_url`. After the user signs in via browser, they receive a `<code>#<state>` string |
 | `everyapi_seller_add_oauth_claude_complete` | `{input}` | Submits the `<code>#<state>` string the user pasted in the previous step; mints the channel |
+| `everyapi_edge_list` | none | Lists BYO-GPU edge nodes: id, name, online state, paired channel, last seen, installed models |
+| `everyapi_edge_status` | `{node_id: int}` | One node's detail — paused flag, agent version, GPU model / count / VRAM, installed models |
+| `everyapi_edge_remove` | `{node_id: int, confirm: "yes"}` | Deletes a node (and its paired channel if it was the last one); **`confirm: "yes"` required** (destructive-path friction) |
+| `everyapi_admin_marketplace_status` | none | Reads the deployment-wide `marketplace.enabled` flag. Admin role required |
+| `everyapi_admin_marketplace_set` | `{enabled: bool, confirm: "yes"}` | Opens or closes the marketplace for the whole deployment; **`confirm: "yes"` required**. Existing nodes and channels keep serving when closed |
 
 **OAuth tool usage pattern** (how an AI agent walks through this in a conversation):
 
@@ -562,7 +591,7 @@ make cli
 EOF
 ```
 
-You should see three JSON response lines: initialize result, list of 14 tools, status text (or a not-logged-in isError).
+You should see three JSON response lines: initialize result, list of 15 tools, status text (or a not-logged-in isError).
 
 ## What this binary does NOT include yet
 
@@ -575,7 +604,7 @@ Previously listed here but **now shipped** (don't treat as unimplemented):
 
 - ✅ Local sanitizer proxy — the command is `everyapi proxy {start,stop,status,configure}` (not `everyapi start`/`everyapi configure`); engine + 6 built-in detectors + custom regex + integrated into `everyapi use`
 - ✅ Seller OAuth onboarding across all three providers (codex device / claude paste / gemini loopback)
-- ✅ QR sign-in main path — `login` uses device-code **+ QR as the main path**, with `--no-qr` as fallback
+- ✅ QR sign-in main path — `auth login` uses device-code **+ QR as the main path**, with `--no-qr` as fallback
 - ✅ Anti-phishing layers — phrase string (`everyapi wallet topup`), PKCE/state strict-check, and cert pinning have all landed; cert pinning is **report-only** (silent on match / alert on mismatch / never refuses to connect), with the product decision being "alert only, do not enforce"
 
 ## Reporting vulnerabilities

@@ -10,11 +10,7 @@
 # overseas (GitHub), self-routing the artifact downloads at runtime, so
 # there is no separate "China command".
 #
-# everyapi-ai/everyapi-web also serves a verbatim copy at
-# https://everyapi.ai/install.sh (marketing site, overseas alias). Because
-# this is a curl|bash installer — arbitrary code piped into a shell —
-# drift is a supply-chain risk: edit the canonical here first, then mirror
-# it byte-for-byte into everyapi-web.
+# https://everyapi.ai/install.sh (marketing site, overseas alias) serves the same script: the landing page in web/apps/landingpage proxies it from the everyapi-ai/everyapi-ai CLI mirror, pinned to a reviewed commit via CLI_INSTALLER_REVISION in web/apps/landingpage/vite.config.ts. Because this is a curl|bash installer — arbitrary code piped into a shell — the pin is deliberate: edit the canonical here first, let cli-release.yml publish the mirror, then review that mirror commit's diff before advancing CLI_INSTALLER_REVISION. Never point the proxy at a moving branch.
 #
 # Usage:
 #

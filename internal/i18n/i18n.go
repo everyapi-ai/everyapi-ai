@@ -28,7 +28,7 @@ import (
 var localesFS embed.FS
 
 const (
-	// LangEn / LangZh / LangJa / LangKo / LangEs / LangDe / LangFr are the languages currently shipped. Adding more later means dropping {lang}.toml under ./locales (loader picks them up at init) plus a matching const here only if Go code needs to reference the new tag by name. The loader doesn't require it.
+	// LangEn / LangZh / LangZhTW / LangJa / LangKo / LangEs / LangDe / LangFr are the languages currently shipped. Adding more later means dropping {lang}.toml under ./locales (loader picks them up at init) plus a matching const here only if Go code needs to reference the new tag by name. The loader doesn't require it.
 	LangEn   = "en"
 	LangZh   = "zh"
 	LangZhTW = "zh-TW"
