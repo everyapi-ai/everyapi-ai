@@ -1,17 +1,173 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/tools"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
+
+func TestDecodeBenchmarkUploadReturnsAfterOneNewlineFrameWithoutEOF(t *testing.T) {
+	reader, writer := io.Pipe()
+	t.Cleanup(func() {
+		_ = reader.Close()
+		_ = writer.Close()
+	})
+	done := make(chan error, 1)
+	go func() {
+		_, _ = writer.Write([]byte("{\"run_id\":\"frame\"}\n"))
+	}()
+	go func() {
+		_, err := decodeBenchmarkUpload(reader)
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("decode waited for EOF after receiving a complete newline-delimited frame")
+	}
+}
+
+func TestBenchmarkUploadReadsContentFreeStdinAndUsesCredentialClient(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := config.Save(&config.Credentials{APIBase: "https://example.test", AccessToken: "secret", UserID: 42}); err != nil {
+		t.Fatal(err)
+	}
+	payload := `{"owner_user_id":42,"owner_api_base":"https://example.test","run_id":"11111111-1111-4111-8111-111111111111","repository_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","task_digest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","grader":"go test ./...","results":[{"harness":"codex","model":"gpt-5.6","score":100,"cost_usd":0.25,"duration_ms":1000},{"harness":"claude","model":"claude-sonnet","score":0,"duration_ms":2000}]}`
+	previousInput := benchmarkUploadInput
+	benchmarkUploadInput = strings.NewReader(payload)
+	t.Cleanup(func() { benchmarkUploadInput = previousInput })
+	previousSubmit := submitBenchmarkUpload
+	var got api.BenchmarkRunUpload
+	submitBenchmarkUpload = func(_ context.Context, client *api.Client, upload api.BenchmarkRunUpload) (*api.BenchmarkImportReceipt, error) {
+		got = upload
+		return &api.BenchmarkImportReceipt{RunID: upload.RunID, ImportedResults: len(upload.Results)}, nil
+	}
+	t.Cleanup(func() { submitBenchmarkUpload = previousSubmit })
+	var out bytes.Buffer
+	previousOut := cliout.Out
+	cliout.Out = &out
+	t.Cleanup(func() { cliout.Out = previousOut })
+
+	if err := BenchmarkUpload([]string{"--stdin", "--format=json"}); err != nil {
+		t.Fatal(err)
+	}
+	if got.RunID == "" || got.RepositoryDigest != strings.Repeat("a", 64) || got.TaskDigest != strings.Repeat("b", 64) || len(got.Results) != 2 {
+		t.Fatalf("upload = %#v", got)
+	}
+	if strings.TrimSpace(out.String()) != `{"ok":true,"run_id":"11111111-1111-4111-8111-111111111111","imported_results":2}` {
+		t.Fatalf("output = %q", out.String())
+	}
+}
+
+func TestBenchmarkUploadRejectsAReportFromAnotherCachedAccount(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := config.Save(&config.Credentials{APIBase: "https://example.test", AccessToken: "secret", UserID: 42}); err != nil {
+		t.Fatal(err)
+	}
+	previousInput := benchmarkUploadInput
+	benchmarkUploadInput = strings.NewReader(`{"owner_user_id":7,"owner_api_base":"https://example.test","run_id":"11111111-1111-4111-8111-111111111111"}` + "\n")
+	t.Cleanup(func() { benchmarkUploadInput = previousInput })
+	previousSubmit := submitBenchmarkUpload
+	called := false
+	submitBenchmarkUpload = func(context.Context, *api.Client, api.BenchmarkRunUpload) (*api.BenchmarkImportReceipt, error) {
+		called = true
+		return nil, nil
+	}
+	t.Cleanup(func() { submitBenchmarkUpload = previousSubmit })
+	var out bytes.Buffer
+	previousOut := cliout.Out
+	cliout.Out = &out
+	t.Cleanup(func() { cliout.Out = previousOut })
+
+	if err := BenchmarkUpload([]string{"--stdin", "--format=json"}); err == nil {
+		t.Fatal("expected owner mismatch")
+	}
+	if called || !strings.Contains(out.String(), `"code":"unavailable"`) {
+		t.Fatalf("called=%v output=%q", called, out.String())
+	}
+}
+
+func TestBenchmarkUploadRejectsUnknownOrOversizedInputBeforeNetwork(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := config.Save(&config.Credentials{AccessToken: "secret", UserID: 42}); err != nil {
+		t.Fatal(err)
+	}
+	previousSubmit := submitBenchmarkUpload
+	called := false
+	submitBenchmarkUpload = func(context.Context, *api.Client, api.BenchmarkRunUpload) (*api.BenchmarkImportReceipt, error) {
+		called = true
+		return nil, nil
+	}
+	t.Cleanup(func() { submitBenchmarkUpload = previousSubmit })
+
+	for name, payload := range map[string]string{
+		"unknown field": `{"run_id":"x","task":"private"}`,
+		"oversized":     strings.Repeat("x", maxBenchmarkUploadInputBytes+1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			previousInput := benchmarkUploadInput
+			benchmarkUploadInput = strings.NewReader(payload)
+			t.Cleanup(func() { benchmarkUploadInput = previousInput })
+			var out bytes.Buffer
+			previousOut := cliout.Out
+			cliout.Out = &out
+			t.Cleanup(func() { cliout.Out = previousOut })
+			if err := BenchmarkUpload([]string{"--stdin", "--format=json"}); err == nil {
+				t.Fatal("expected invalid input")
+			}
+			if !strings.Contains(out.String(), `"code":"invalid_benchmark"`) {
+				t.Fatalf("output = %q", out.String())
+			}
+		})
+	}
+	if called {
+		t.Fatal("invalid input reached the network")
+	}
+}
+
+func TestBenchmarkUploadReturnsOnlyStableFailureCode(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := config.Save(&config.Credentials{AccessToken: "secret", UserID: 42}); err != nil {
+		t.Fatal(err)
+	}
+	previousInput := benchmarkUploadInput
+	benchmarkUploadInput = strings.NewReader(`{"owner_user_id":42,"owner_api_base":"https://example.test","run_id":"11111111-1111-4111-8111-111111111111"}`)
+	t.Cleanup(func() { benchmarkUploadInput = previousInput })
+	previousSubmit := submitBenchmarkUpload
+	submitBenchmarkUpload = func(context.Context, *api.Client, api.BenchmarkRunUpload) (*api.BenchmarkImportReceipt, error) {
+		return nil, errors.New("PRIVATE upstream detail")
+	}
+	t.Cleanup(func() { submitBenchmarkUpload = previousSubmit })
+	var out bytes.Buffer
+	previousOut := cliout.Out
+	cliout.Out = &out
+	t.Cleanup(func() { cliout.Out = previousOut })
+
+	err := BenchmarkUpload([]string{"--stdin", "--format=json"})
+	if err == nil {
+		t.Fatal("expected failure")
+	}
+	if strings.Contains(out.String(), "PRIVATE") || !strings.Contains(out.String(), `"code":"unavailable"`) {
+		t.Fatalf("output = %q", out.String())
+	}
+}
 
 func TestBenchmarkAgentUseArgs(t *testing.T) {
 	taskFile := filepath.Join(t.TempDir(), "task.txt")

@@ -17,6 +17,7 @@ const statusMachineProtocolVersion = 1
 type statusMachineOutput struct {
 	Version  int    `json:"version"`
 	SignedIn bool   `json:"signed_in"`
+	UserID   int    `json:"user_id,omitempty"`
 	Username string `json:"username,omitempty"`
 	// AvatarURL is the account's profile picture on the backend's own /api/avatar/:id proxy — same origin as APIBase, never a third-party host. Read from the credential cache so the default (network-free) status call still reports it; refreshed by the --include-balance path below.
 	AvatarURL  string   `json:"avatar_url,omitempty"`
@@ -113,6 +114,7 @@ func statusMachine(includeBalance bool) error {
 		return credentialLoadMachineError(err)
 	}
 	out.SignedIn = true
+	out.UserID = creds.UserID
 	out.Username = strings.TrimSpace(cliout.Sanitize(creds.Username))
 	out.AvatarURL = strings.TrimSpace(cliout.Sanitize(creds.AvatarURL))
 	out.APIBase = config.ResolveAPIBaseForBase(creds.APIBase)

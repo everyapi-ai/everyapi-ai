@@ -61,6 +61,17 @@ func TestRenderUsageGatedByRole(t *testing.T) {
 	}
 }
 
+func TestPrivateDesktopCommandRegistryIncludesBenchmarkUploadWithoutPublicFallback(t *testing.T) {
+	for _, name := range []string{"desktop-install-tool", "desktop-benchmark-agent", "desktop-benchmark-catalog", "desktop-benchmark-upload"} {
+		if privateDesktopCommand(name) == nil {
+			t.Fatalf("privateDesktopCommand(%q) is nil", name)
+		}
+	}
+	if privateDesktopCommand("benchmark-upload") != nil {
+		t.Fatal("private benchmark upload leaked into an unscoped command name")
+	}
+}
+
 // withStdin swaps os.Stdin for a pipe preloaded with input for the duration of the test. The sub-picker's non-TTY path reads os.Stdin via fmt.Scanln, so this drives runSubPicker without a real terminal.
 func withStdin(t *testing.T, input string) {
 	t.Helper()

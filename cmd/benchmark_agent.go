@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -26,6 +29,19 @@ import (
 const maxBenchmarkTaskBytes = 4 * 64 * 1024
 const maxBenchmarkModelsPerHarness = 64
 const maxBenchmarkModelRunes = 256
+const maxBenchmarkUploadInputBytes = 16 * 1024
+
+var benchmarkUploadInput io.Reader = os.Stdin
+
+var submitBenchmarkUpload = func(ctx context.Context, client *api.Client, upload api.BenchmarkRunUpload) (*api.BenchmarkImportReceipt, error) {
+	return client.ImportBenchmarkRun(ctx, upload)
+}
+
+type benchmarkUploadInputFrame struct {
+	OwnerUserID  int    `json:"owner_user_id"`
+	OwnerAPIBase string `json:"owner_api_base"`
+	api.BenchmarkRunUpload
+}
 
 var benchmarkHarnessNames = []string{
 	"claude", "codex", "opencode", "aider", "goose", "crush", "cline", "openclaw",
@@ -104,6 +120,107 @@ func BenchmarkCatalog(args []string) error {
 		return err
 	}
 	return json.NewEncoder(cliout.Out).Encode(benchmarkCatalog(catalog))
+}
+
+// BenchmarkUpload is a private EveryAPI Connect surface. The content-free
+// report arrives over stdin so no repository/task metadata appears in the
+// process list; the SDK signs it with the credential that remains inside this
+// process and submits it to the authenticated import endpoint.
+func BenchmarkUpload(args []string) error {
+	flags := flag.NewFlagSet("desktop-benchmark-upload", flag.ContinueOnError)
+	flags.SetOutput(os.Stderr)
+	fromStdin := flags.Bool("stdin", false, "read the content-free benchmark report from stdin")
+	format := flags.String("format", "", "machine output format")
+	if err := flags.Parse(args); err != nil {
+		return reportBenchmarkUpload("invalid_benchmark", err)
+	}
+	if flags.NArg() != 0 || !*fromStdin || *format != "json" {
+		return reportBenchmarkUpload("invalid_benchmark", errors.New("desktop-benchmark-upload requires --stdin --format=json"))
+	}
+	input, err := decodeBenchmarkUpload(benchmarkUploadInput)
+	if err != nil {
+		return reportBenchmarkUpload("invalid_benchmark", err)
+	}
+	creds, err := config.Load()
+	if err != nil {
+		code := "unavailable"
+		if errors.Is(err, config.ErrNoCredentials) {
+			code = "not_signed_in"
+		}
+		return reportBenchmarkUpload(code, err)
+	}
+	if input.OwnerUserID <= 0 || creds.UserID != input.OwnerUserID ||
+		config.ResolveAPIBaseForBase(creds.APIBase) != input.OwnerAPIBase {
+		return reportBenchmarkUpload("unavailable", errors.New("benchmark owner changed"))
+	}
+	receipt, err := submitBenchmarkUpload(context.Background(), api.ForCredentials(creds), input.BenchmarkRunUpload)
+	if err != nil {
+		return reportBenchmarkUpload(benchmarkUploadErrorCode(err), err)
+	}
+	return json.NewEncoder(cliout.Out).Encode(struct {
+		OK              bool   `json:"ok"`
+		RunID           string `json:"run_id"`
+		ImportedResults int    `json:"imported_results"`
+	}{OK: true, RunID: receipt.RunID, ImportedResults: receipt.ImportedResults})
+}
+
+func decodeBenchmarkUpload(reader io.Reader) (benchmarkUploadInputFrame, error) {
+	encoded, err := bufio.NewReader(io.LimitReader(reader, maxBenchmarkUploadInputBytes+2)).ReadBytes('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return benchmarkUploadInputFrame{}, errors.New("invalid benchmark upload")
+	}
+	if len(encoded) == 0 || len(encoded) > maxBenchmarkUploadInputBytes+1 {
+		return benchmarkUploadInputFrame{}, errors.New("invalid benchmark upload")
+	}
+	if encoded[len(encoded)-1] == '\n' {
+		encoded = encoded[:len(encoded)-1]
+	}
+	if len(encoded) == 0 || len(encoded) > maxBenchmarkUploadInputBytes {
+		return benchmarkUploadInputFrame{}, errors.New("invalid benchmark upload")
+	}
+	var upload benchmarkUploadInputFrame
+	decoder := json.NewDecoder(strings.NewReader(string(encoded)))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&upload); err != nil {
+		return benchmarkUploadInputFrame{}, errors.New("invalid benchmark upload")
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return benchmarkUploadInputFrame{}, errors.New("invalid benchmark upload")
+	}
+	return upload, nil
+}
+
+func benchmarkUploadErrorCode(err error) string {
+	if api.IsUnauthorized(err) {
+		return "not_signed_in"
+	}
+	var apiError *api.APIError
+	if errors.As(err, &apiError) {
+		switch apiError.StatusCode {
+		case http.StatusBadRequest:
+			return "invalid_benchmark"
+		case http.StatusUnauthorized:
+			return "not_signed_in"
+		case http.StatusConflict:
+			return "benchmark_conflict"
+		}
+	}
+	var importError *api.BenchmarkImportError
+	if errors.As(err, &importError) {
+		switch importError.Code {
+		case "invalid_benchmark", "invalid_signature", "benchmark_conflict", "not_signed_in":
+			return importError.Code
+		}
+	}
+	return "unavailable"
+}
+
+func reportBenchmarkUpload(code string, err error) error {
+	_ = json.NewEncoder(cliout.Out).Encode(struct {
+		OK   bool   `json:"ok"`
+		Code string `json:"code"`
+	}{Code: code})
+	return err
 }
 
 // BenchmarkAgent is a private EveryAPI Connect surface. It translates one

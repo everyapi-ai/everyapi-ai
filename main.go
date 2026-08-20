@@ -49,6 +49,25 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
+// privateDesktopCommand returns fixed, non-discoverable sidecar surfaces used
+// by EveryAPI Connect. They bypass the public registry, interactive launcher,
+// login gate, and update prompt; unknown names never fall through to one of
+// these privileged adapters.
+func privateDesktopCommand(name string) func([]string) error {
+	switch name {
+	case "desktop-install-tool":
+		return cmd.InstallTool
+	case "desktop-benchmark-agent":
+		return cmd.BenchmarkAgent
+	case "desktop-benchmark-catalog":
+		return cmd.BenchmarkCatalog
+	case "desktop-benchmark-upload":
+		return cmd.BenchmarkUpload
+	default:
+		return nil
+	}
+}
+
 // command is a single top-level subcommand. The registry below replaces the older switch/case dispatch — adding a command is now one line in `commands`, and the help-flag handling stays uniform.
 type command struct {
 	name string
@@ -815,30 +834,8 @@ func main() {
 		}
 		os.Exit(exitCode)
 	}
-	// Private sidecar surface for EveryAPI Connect. It intentionally bypasses the public command registry, help, launcher, login gate, and update prompt: the desktop opens it in a terminal solely to run a registry-pinned tool installer. InstallTool never continues into `use` or launches the client.
-	if name == "desktop-install-tool" {
-		if err := cmd.InstallTool(args); err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), cliout.Sanitize(err.Error()))
-			os.Exit(1)
-		}
-		return
-	}
-	// Private headless harness surface for EveryAPI Connect's benchmark runner.
-	// The command package accepts only reviewed harness adapters and a task file;
-	// arbitrary executable names or argument vectors never cross the renderer
-	// boundary.
-	if name == "desktop-benchmark-agent" {
-		if err := cmd.BenchmarkAgent(args); err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), cliout.Sanitize(err.Error()))
-			os.Exit(1)
-		}
-		return
-	}
-	// Secret-free companion surface for the benchmark form. It returns the
-	// reviewed harnesses and each one's live compatible model IDs; the relay key
-	// used to obtain that catalogue never leaves this process.
-	if name == "desktop-benchmark-catalog" {
-		if err := cmd.BenchmarkCatalog(args); err != nil {
+	if runPrivate := privateDesktopCommand(name); runPrivate != nil {
+		if err := runPrivate(args); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), cliout.Sanitize(err.Error()))
 			os.Exit(1)
 		}
