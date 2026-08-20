@@ -68,10 +68,34 @@ Same flow as the shell script — resolves the latest tag, downloads `everyapi_w
 | `everyapi use <tool>` | Set env and exec into a third-party CLI (pointed at EveryAPI) |
 | `everyapi seller <sub>` | Marketplace seller commands (list / withdraw / add-key / setup) |
 | `everyapi edge <sub>` | One-command deploy for the BYO-GPU supplier agent (register / start / status / logs / models / stop / update / remove) |
+| `everyapi computer <sub>` | Read and control local macOS app windows through Accessibility |
 | `everyapi mcp` | Run as an MCP server (stdin/stdout JSON-RPC) |
 | `everyapi update` | Check for new versions and print the upgrade command for your install method |
 | `everyapi version` | Show build version |
 | `everyapi help` | Help |
+
+### `everyapi computer <sub>` — local macOS computer use
+
+The macOS CLI can discover running apps and windows, return a bounded Accessibility snapshot, and perform semantic or coordinate actions. This surface is local-only and is not registered in `everyapi mcp`. Linux and Windows builds return `unsupported_platform` explicitly.
+
+On macOS, `everyapi computer` drives a small, independently code-signed helper app (`EveryAPI Computer Use.app`, built from `clients/desktop/native/computer-use-macos`) over a local Unix socket, downloading and launching it automatically on first use if it is not already installed — including when EveryAPI Connect has already installed its own bundled copy, which this CLI reuses instead of downloading a second one. The helper reports screenshot support as false because macOS does not expose a reliable public window-scoped capture identifier through this provider; it never substitutes a screen-region capture that could contain an overlapping app.
+
+```bash
+everyapi computer capabilities --json
+everyapi computer permissions --json
+everyapi computer list-apps
+everyapi computer list-windows --app com.apple.TextEdit
+everyapi computer get-app-state --app com.apple.TextEdit --window-index 0 --json
+everyapi computer click --app com.apple.TextEdit --window-index 0 --element-index 12
+printf '%s' 'safe text' | everyapi computer set-value --app com.apple.TextEdit --window-index 0 --element-index 12 --value-stdin
+everyapi computer hotkey --app com.apple.TextEdit --window-index 0 --key cmd+a
+```
+
+Run `everyapi computer permissions --json` and grant Accessibility to **EveryAPI Computer Use** — not to `everyapi`, `osascript`, or your terminal — under System Settings > Privacy & Security > Accessibility. Because the helper is its own signed app with its own bundle identity, that grant is scoped to this one capability: it does not also authorize every AppleScript or JXA script on the machine, and it survives CLI and helper updates. `permissions` reports Accessibility directly and Automation as `unknown`, since this provider does not depend on System Events and has no separate Automation preflight to run.
+
+Element indexes come from the latest `get-app-state` snapshot and expire after two minutes. Windows are selected by index (`--window-index`) but identified internally by the real per-window id CoreGraphics assigns on screen where one is available, falling back to a snapshot-scoped synthetic id for minimized windows; either way the provider uses an internal fingerprint to detect observable changes, but public Accessibility attributes cannot prove that a replacement window or control with identical attributes is the same native instance. The cache stores only opaque application, process, window, path, role, frame, action-name, and fingerprint data under `~/.config/everyapi/computer-use/state/` with private permissions. Obtain a fresh snapshot after `app_stale`, `element_stale`, or `window_stale`. A successful GUI action remains successful when its best-effort state refresh fails; JSON then includes `refreshError` instead of returning a retryable action error. If the helper call is interrupted or returns an invalid receipt after an action is handed off, `action_outcome_unknown` means the action may already have occurred; refresh state before deciding whether to retry.
+
+A maintained list of known terminal apps, password managers, Keychain Access, Passwords, System Settings, and EveryAPI Connect is blocked as defense-in-depth friction. Bundle-ID blocking is not a comprehensive application classifier: unlisted apps, editors with integrated terminals, browsers, and renamed or newly released apps may expose equivalent capabilities. The explicit `--app` target, macOS TCC, and the caller's same-user authority remain the real trust boundary. Observed text is stripped of terminal control sequences and scanned for credentials before output; typed or set text that matches the built-in secret detectors is rejected. Prefer `--text-stdin` and `--value-stdin` to keep ordinary text out of shell history.
 
 ### `everyapi use <tool>` — exec into a third-party CLI (pointed at the EveryAPI gateway)
 

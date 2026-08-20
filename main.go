@@ -17,6 +17,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/admin"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/artifacts"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/checkin"
+	"github.com/everyapi-ai/everyapi-ai/v3/cmd/computer"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/demand"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/dispute"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/dm"
@@ -325,6 +326,7 @@ var commands = []command{
 	// admin has no static subs: bare `everyapi admin` on a TTY launches admin's own two-level operator console (area → action → inline arg prompts) inside the admin package, since the keyed actions need values a flat picker row can't carry. selfMenu earns it the usage <sub> tag; dispatchInteractive sees hasPicker()==false and calls admin.Run (not runSubPicker), which handles the TTY/non-TTY split.
 	{name: "admin", desc: "Operator commands", adminOnly: true, requireLogin: true, selfMenu: true, run: admin.Run},
 	{name: "proxy", desc: "Local sanitizer proxy (privacy filter for SDK requests)", run: proxy.Run, headerFn: proxyHeader, subsFn: proxyMenuSubs},
+	{name: "computer", desc: "Read and control macOS apps through accessibility", run: computer.Run},
 	{name: "mcp", desc: "MCP server for AI CLIs (Claude Code / Codex / Gemini)", run: runMCP, headerFn: mcpHeader, subs: mcpSubs},
 	{name: "doctor", desc: "Self-check (creds, gateway, sanitizer, tools)", run: doctor.Run},
 	{name: "events", desc: "Subscribe to the live event stream (SSE)", requireLogin: true, run: events.Run},
@@ -555,7 +557,7 @@ var commandGroup = map[string]string{
 	"market": "marketplace", "inbox": "marketplace",
 	"seller": "marketplace", "edge": "marketplace",
 	// Tools & settings
-	"mcp": "tools", "proxy": "tools",
+	"mcp": "tools", "proxy": "tools", "computer": "tools",
 	"doctor": "tools", "events": "tools", "settings": "tools", "artifacts": "tools",
 	// feedback sits with the tools rather than with account/billing: it is about the product, not about this user's money or session.
 	"feedback": "tools",
