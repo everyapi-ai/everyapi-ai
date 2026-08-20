@@ -191,6 +191,19 @@ func TestGetAppStateParsesNoScreenshot(t *testing.T) {
 	}
 }
 
+func TestGetAppStateParsesSession(t *testing.T) {
+	service := &fakeService{}
+	if err := run(context.Background(), []string{"get-app-state", "--app", "TextEdit", "--window-index", "0", "--session", "agent-a", "--json"}, service, strings.NewReader(""), &bytes.Buffer{}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(service.stateRequests) != 1 {
+		t.Fatalf("state requests = %d", len(service.stateRequests))
+	}
+	if req := service.stateRequests[0]; req.SessionID != "agent-a" {
+		t.Fatalf("state request = %+v, want SessionID=agent-a", req)
+	}
+}
+
 func TestGetAppStateRejectsWindowIDAndWindowIndexTogether(t *testing.T) {
 	service := &fakeService{}
 	err := run(context.Background(), []string{"get-app-state", "--app", "TextEdit", "--window-id", "7", "--window-index", "0"}, service, strings.NewReader(""), &bytes.Buffer{})
@@ -315,6 +328,9 @@ func TestActionCommandsDispatchExactRequestShape(t *testing.T) {
 		}},
 		{name: "click with no-screenshot", args: []string{"click", "--app", "TextEdit", "--x", "10", "--y", "20", "--no-screenshot", "--json"}, want: func(req computeruse.ActionRequest) bool {
 			return req.Kind == computeruse.ActionClick && req.NoScreenshot
+		}},
+		{name: "click with session", args: []string{"click", "--app", "TextEdit", "--x", "10", "--y", "20", "--session", "agent-a", "--json"}, want: func(req computeruse.ActionRequest) bool {
+			return req.Kind == computeruse.ActionClick && req.SessionID == "agent-a"
 		}},
 		{name: "type text", args: []string{"type-text", "--app", "TextEdit", "--text", "hello", "--json"}, want: func(req computeruse.ActionRequest) bool {
 			return req.Kind == computeruse.ActionTypeText && req.Text == "hello"

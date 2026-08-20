@@ -186,6 +186,7 @@ type StateRequest struct {
 	App          string
 	WindowIndex  *int
 	WindowID     *int
+	SessionID    string
 	NoScreenshot bool
 }
 
@@ -226,6 +227,7 @@ type ActionRequest struct {
 	ClickCount       *int
 	Modifiers        string
 	RestoreWindow    bool
+	SessionID        string
 	NoScreenshot     bool
 }
 
@@ -239,6 +241,7 @@ type CachedElement struct {
 }
 
 type SnapshotRecord struct {
+	SessionID         string          `json:"sessionId,omitempty"`
 	PID               int             `json:"pid"`
 	BundleID          string          `json:"bundleId"`
 	WindowID          int             `json:"windowId"`
@@ -247,9 +250,19 @@ type SnapshotRecord struct {
 	Elements          []CachedElement `json:"elements"`
 }
 
-func (r SnapshotRecord) Key() string { return snapshotKey(r.PID, r.WindowID) }
+func (r SnapshotRecord) Key() string { return snapshotKey(r.SessionID, r.PID, r.WindowID) }
 
-func snapshotKey(pid, windowID int) string { return fmt.Sprintf("%d-%d", pid, windowID) }
+// snapshotKey namespaces the cache by session so two concurrent computer-use
+// workflows driving the same app/window don't stomp on each other's element
+// indexes — the empty, unnamespaced session (the default when a caller never
+// passes --session) keeps its original two-part key so existing on-disk
+// caches from before session support remain valid.
+func snapshotKey(sessionID string, pid, windowID int) string {
+	if sessionID == "" {
+		return fmt.Sprintf("%d-%d", pid, windowID)
+	}
+	return fmt.Sprintf("%s_%d-%d", sessionID, pid, windowID)
+}
 
 type PerformRequest struct {
 	Target                    Target
@@ -287,8 +300,8 @@ type Provider interface {
 
 type SnapshotStore interface {
 	Save(context.Context, SnapshotRecord) error
-	Load(context.Context, int, int) (SnapshotRecord, error)
-	Delete(context.Context, int, int) error
+	Load(ctx context.Context, sessionID string, pid, windowID int) (SnapshotRecord, error)
+	Delete(ctx context.Context, sessionID string, pid, windowID int) error
 }
 
 type OperationLocker interface {

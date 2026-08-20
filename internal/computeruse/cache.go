@@ -25,8 +25,8 @@ func NewFileStore(root string) *FileStore {
 	return &FileStore{root: root, now: time.Now}
 }
 
-func (s *FileStore) path(pid, windowID int) string {
-	return filepath.Join(s.root, snapshotKey(pid, windowID)+".json")
+func (s *FileStore) path(sessionID string, pid, windowID int) string {
+	return filepath.Join(s.root, snapshotKey(sessionID, pid, windowID)+".json")
 }
 
 func (s *FileStore) Lock(ctx context.Context) (func(), error) {
@@ -81,7 +81,7 @@ func (s *FileStore) Save(ctx context.Context, record SnapshotRecord) error {
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("close snapshot temp file: %w", err)
 	}
-	if err := os.Rename(tmpPath, s.path(record.PID, record.WindowID)); err != nil {
+	if err := os.Rename(tmpPath, s.path(record.SessionID, record.PID, record.WindowID)); err != nil {
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("publish snapshot: %w", err)
 	}
@@ -113,11 +113,11 @@ func (s *FileStore) cleanupExpired(currentKey string) {
 	}
 }
 
-func (s *FileStore) Load(ctx context.Context, pid, windowID int) (SnapshotRecord, error) {
+func (s *FileStore) Load(ctx context.Context, sessionID string, pid, windowID int) (SnapshotRecord, error) {
 	if err := ctx.Err(); err != nil {
 		return SnapshotRecord{}, err
 	}
-	data, err := os.ReadFile(s.path(pid, windowID))
+	data, err := os.ReadFile(s.path(sessionID, pid, windowID))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return SnapshotRecord{}, ErrSnapshotNotFound
@@ -128,17 +128,17 @@ func (s *FileStore) Load(ctx context.Context, pid, windowID int) (SnapshotRecord
 	if err := json.Unmarshal(data, &record); err != nil {
 		return SnapshotRecord{}, fmt.Errorf("parse snapshot: %w", err)
 	}
-	if record.PID != pid || record.WindowID != windowID {
+	if record.SessionID != sessionID || record.PID != pid || record.WindowID != windowID {
 		return SnapshotRecord{}, fmt.Errorf("snapshot identity mismatch")
 	}
 	return record, nil
 }
 
-func (s *FileStore) Delete(ctx context.Context, pid, windowID int) error {
+func (s *FileStore) Delete(ctx context.Context, sessionID string, pid, windowID int) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	err := os.Remove(s.path(pid, windowID))
+	err := os.Remove(s.path(sessionID, pid, windowID))
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("delete snapshot: %w", err)
 	}

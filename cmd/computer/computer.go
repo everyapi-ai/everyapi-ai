@@ -46,6 +46,7 @@ Use 'everyapi computer <command> --help' for command flags. Add --json for machi
 	targetHelpFlags = `  --app <selector>       App name, bundle ID, or pid:<number> (required)
   --window-index <n>     Select an index from list-windows
   --window-id <id>       Select a window by id from list-windows (instead of --window-index)
+  --session <id>         Namespace the element-index cache for a concurrent workflow (letters, digits, '-', '_', '.')
 `
 	actionOutputHelpFlags = `  --restore-window       Bring the target window forward first; do not fail the action if that is not possible
   --no-screenshot        Skip the window screenshot normally attached to the result
@@ -240,7 +241,7 @@ func dispatch(ctx context.Context, command string, args []string, service comman
 		return result, *jsonOutput, err
 	case "get-app-state":
 		fs := newFlagSet(command)
-		app, windowIndex, windowID := addTargetFlags(fs)
+		app, windowIndex, windowID, session := addTargetFlags(fs)
 		noScreenshot := fs.Bool("no-screenshot", false, "skip the window screenshot normally attached to the result")
 		jsonOutput := fs.Bool("json", false, "print JSON")
 		if err := parseFlags(fs, args); err != nil {
@@ -249,7 +250,7 @@ func dispatch(ctx context.Context, command string, args []string, service comman
 		if err := validateTargetFlags(*app, windowIndex, windowID); err != nil {
 			return nil, *jsonOutput, err
 		}
-		result, err := service.GetAppState(ctx, computeruse.StateRequest{App: *app, WindowIndex: windowIndex.pointer(), WindowID: windowID.pointer(), NoScreenshot: *noScreenshot})
+		result, err := service.GetAppState(ctx, computeruse.StateRequest{App: *app, WindowIndex: windowIndex.pointer(), WindowID: windowID.pointer(), SessionID: *session, NoScreenshot: *noScreenshot})
 		return result, *jsonOutput, err
 	case "screenshot":
 		return dispatchScreenshot(ctx, args, service)
@@ -272,7 +273,7 @@ type screenshotResult struct {
 
 func dispatchScreenshot(ctx context.Context, args []string, service commandService) (any, bool, error) {
 	fs := newFlagSet("screenshot")
-	app, windowIndex, windowID := addTargetFlags(fs)
+	app, windowIndex, windowID, session := addTargetFlags(fs)
 	jsonOutput := fs.Bool("json", false, "print JSON")
 	outPath := fs.String("out", "", "write the PNG to this file path")
 	if err := parseFlags(fs, args); err != nil {
@@ -284,7 +285,7 @@ func dispatchScreenshot(ctx context.Context, args []string, service commandServi
 	if strings.TrimSpace(*outPath) == "" && !*jsonOutput {
 		return nil, *jsonOutput, invalid("screenshot requires --out <path> unless --json is used")
 	}
-	png, err := service.Screenshot(ctx, computeruse.StateRequest{App: *app, WindowIndex: windowIndex.pointer(), WindowID: windowID.pointer()})
+	png, err := service.Screenshot(ctx, computeruse.StateRequest{App: *app, WindowIndex: windowIndex.pointer(), WindowID: windowID.pointer(), SessionID: *session})
 	if err != nil {
 		return nil, *jsonOutput, err
 	}
@@ -302,7 +303,7 @@ func dispatchScreenshot(ctx context.Context, args []string, service commandServi
 
 func dispatchAction(ctx context.Context, command string, args []string, service commandService, in io.Reader) (any, bool, error) {
 	fs := newFlagSet(command)
-	app, windowIndex, windowID := addTargetFlags(fs)
+	app, windowIndex, windowID, session := addTargetFlags(fs)
 	jsonOutput := fs.Bool("json", false, "print JSON")
 	var elementIndex, fromElementIndex, toElementIndex, clickCount optionalInt
 	var x, y, fromX, fromY, toX, toY optionalInt
@@ -337,7 +338,7 @@ func dispatchAction(ctx context.Context, command string, args []string, service 
 	if err := validateTargetFlags(*app, windowIndex, windowID); err != nil {
 		return nil, *jsonOutput, err
 	}
-	request := computeruse.ActionRequest{App: *app, WindowIndex: windowIndex.pointer(), WindowID: windowID.pointer(), ElementIndex: elementIndex.pointer(), FromElementIndex: fromElementIndex.pointer(), ToElementIndex: toElementIndex.pointer(), X: x.pointer(), Y: y.pointer(), FromX: fromX.pointer(), FromY: fromY.pointer(), ToX: toX.pointer(), ToY: toY.pointer(), Key: *key, Direction: *direction, Amount: *amount, SecondaryAction: *secondaryAction, MouseButton: *mouseButton, ClickCount: clickCount.pointer(), Modifiers: *modifiers, RestoreWindow: *restoreWindow, NoScreenshot: *noScreenshot}
+	request := computeruse.ActionRequest{App: *app, WindowIndex: windowIndex.pointer(), WindowID: windowID.pointer(), ElementIndex: elementIndex.pointer(), FromElementIndex: fromElementIndex.pointer(), ToElementIndex: toElementIndex.pointer(), X: x.pointer(), Y: y.pointer(), FromX: fromX.pointer(), FromY: fromY.pointer(), ToX: toX.pointer(), ToY: toY.pointer(), Key: *key, Direction: *direction, Amount: *amount, SecondaryAction: *secondaryAction, MouseButton: *mouseButton, ClickCount: clickCount.pointer(), Modifiers: *modifiers, RestoreWindow: *restoreWindow, SessionID: *session, NoScreenshot: *noScreenshot}
 	switch command {
 	case "click":
 		request.Kind = computeruse.ActionClick
@@ -399,7 +400,7 @@ func parseJSONOnly(name string, args []string) (bool, error) {
 }
 
 func rejectIrrelevantActionFlags(fs *flag.FlagSet, command string) error {
-	allowed := map[string]bool{"app": true, "window-index": true, "window-id": true, "json": true, "restore-window": true, "no-screenshot": true}
+	allowed := map[string]bool{"app": true, "window-index": true, "window-id": true, "json": true, "restore-window": true, "no-screenshot": true, "session": true}
 	var commandFlags []string
 	switch command {
 	case "click":
@@ -447,13 +448,14 @@ func parseFlags(fs *flag.FlagSet, args []string) error {
 	return nil
 }
 
-func addTargetFlags(fs *flag.FlagSet) (*string, *optionalInt, *optionalInt) {
+func addTargetFlags(fs *flag.FlagSet) (*string, *optionalInt, *optionalInt, *string) {
 	app := fs.String("app", "", "application name, bundle ID, or pid:<number>")
 	windowIndex := &optionalInt{}
 	fs.Var(windowIndex, "window-index", "window index from list-windows")
 	windowID := &optionalInt{}
 	fs.Var(windowID, "window-id", "window id from list-windows")
-	return app, windowIndex, windowID
+	session := fs.String("session", "", "namespace the element-index cache for a concurrent workflow")
+	return app, windowIndex, windowID, session
 }
 
 func validateTargetFlags(app string, windowIndex, windowID *optionalInt) error {
@@ -650,7 +652,7 @@ func visitStandaloneArguments(args []string, visit func(string)) {
 		"--app": true, "--window-index": true, "--window-id": true, "--element-index": true, "--from-element-index": true, "--to-element-index": true,
 		"--x": true, "--y": true, "--from-x": true, "--from-y": true, "--to-x": true, "--to-y": true,
 		"--value": true, "--text": true, "--key": true, "--direction": true, "--amount": true, "--action": true,
-		"--mouse-button": true, "--click-count": true, "--modifiers": true, "--out": true,
+		"--mouse-button": true, "--click-count": true, "--modifiers": true, "--out": true, "--session": true,
 	}
 	for index := 0; index < len(args); index++ {
 		arg := args[index]

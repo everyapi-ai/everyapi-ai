@@ -129,16 +129,16 @@ func (s *memoryStore) Save(_ context.Context, record SnapshotRecord) error {
 	return nil
 }
 
-func (s *memoryStore) Load(_ context.Context, pid, windowID int) (SnapshotRecord, error) {
-	record, ok := s.records[snapshotKey(pid, windowID)]
+func (s *memoryStore) Load(_ context.Context, sessionID string, pid, windowID int) (SnapshotRecord, error) {
+	record, ok := s.records[snapshotKey(sessionID, pid, windowID)]
 	if !ok {
 		return SnapshotRecord{}, ErrSnapshotNotFound
 	}
 	return record, nil
 }
 
-func (s *memoryStore) Delete(_ context.Context, pid, windowID int) error {
-	delete(s.records, snapshotKey(pid, windowID))
+func (s *memoryStore) Delete(_ context.Context, sessionID string, pid, windowID int) error {
+	delete(s.records, snapshotKey(sessionID, pid, windowID))
 	return nil
 }
 
@@ -245,7 +245,7 @@ func TestGetAppStateCachesOnlyOpaqueElementIdentityAndRedactsSecrets(t *testing.
 	if state.Snapshot.Elements[0].Value != "[REDACTED:stripe_key]" {
 		t.Fatalf("element value = %q", state.Snapshot.Elements[0].Value)
 	}
-	record, err := store.Load(context.Background(), 42, 7)
+	record, err := store.Load(context.Background(), "", 42, 7)
 	if err != nil {
 		t.Fatalf("Load cached snapshot: %v", err)
 	}
@@ -633,6 +633,37 @@ func TestCoordinateActionValidatesFreshResolvedWindowFingerprint(t *testing.T) {
 	}
 }
 
+func TestConcurrentSessionsMaintainIndependentElementCaches(t *testing.T) {
+	provider := fixtureProvider()
+	service := NewService(provider, newMemoryStore(), time.Now)
+	if _, err := service.GetAppState(context.Background(), StateRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0), SessionID: "agent-a"}); err != nil {
+		t.Fatalf("GetAppState agent-a: %v", err)
+	}
+	// A second workflow observes the same window under a different session
+	// after the target's identity has moved on — this must land only in
+	// agent-b's namespace, not overwrite agent-a's cached element.
+	provider.state.Snapshot.Elements[0].Fingerprint = "different-fingerprint"
+	if _, err := service.GetAppState(context.Background(), StateRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0), SessionID: "agent-b"}); err != nil {
+		t.Fatalf("GetAppState agent-b: %v", err)
+	}
+	if _, err := service.Perform(context.Background(), ActionRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0), Kind: ActionClick, ElementIndex: intPtr(12), SessionID: "agent-a"}); err != nil {
+		t.Fatalf("Perform agent-a after agent-b's overlapping observation: %v", err)
+	}
+	request, ok := provider.lastPerform()
+	if !ok || request.ExpectedElement == nil || request.ExpectedElement.Fingerprint != "element-fingerprint" {
+		t.Fatalf("agent-a's action used %+v, want its own cached element-fingerprint fingerprint", request)
+	}
+}
+
+func TestSessionIDRejectsPathUnsafeCharacters(t *testing.T) {
+	provider := fixtureProvider()
+	service := NewService(provider, newMemoryStore(), time.Now)
+	_, err := service.GetAppState(context.Background(), StateRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0), SessionID: "../escape"})
+	if ErrorCode(err) != CodeInvalidArgument {
+		t.Fatalf("path-unsafe session id error = %v (%q), want %q", err, ErrorCode(err), CodeInvalidArgument)
+	}
+}
+
 func TestCachedElementRejectsBundleMismatchAfterPIDReuse(t *testing.T) {
 	provider := fixtureProvider()
 	store := newMemoryStore()
@@ -640,9 +671,9 @@ func TestCachedElementRejectsBundleMismatchAfterPIDReuse(t *testing.T) {
 	if _, err := service.GetAppState(context.Background(), StateRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0)}); err != nil {
 		t.Fatalf("GetAppState: %v", err)
 	}
-	record := store.records[snapshotKey(42, 7)]
+	record := store.records[snapshotKey("", 42, 7)]
 	record.BundleID = "example.reused.pid"
-	store.records[snapshotKey(42, 7)] = record
+	store.records[snapshotKey("", 42, 7)] = record
 	_, err := service.Perform(context.Background(), ActionRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0), Kind: ActionClick, ElementIndex: intPtr(12)})
 	if ErrorCode(err) != CodeElementStale {
 		t.Fatalf("PID reuse error = %v (%q)", err, ErrorCode(err))
@@ -666,7 +697,7 @@ func TestSuccessfulActionDoesNotBecomeFailureWhenRefreshFails(t *testing.T) {
 	provider := fixtureProvider()
 	provider.stateErr = NewError(CodeWindowNotFound, "window closed", nil)
 	store := newMemoryStore()
-	store.records[snapshotKey(42, 7)] = SnapshotRecord{PID: 42, BundleID: "com.apple.TextEdit", WindowID: 7, CreatedAt: time.Now()}
+	store.records[snapshotKey("", 42, 7)] = SnapshotRecord{PID: 42, BundleID: "com.apple.TextEdit", WindowID: 7, CreatedAt: time.Now()}
 	service := NewService(provider, store, time.Now)
 	x, y := 10, 20
 	state, err := service.Perform(context.Background(), ActionRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0), Kind: ActionClick, X: &x, Y: &y})
@@ -679,7 +710,7 @@ func TestSuccessfulActionDoesNotBecomeFailureWhenRefreshFails(t *testing.T) {
 	if _, ok := provider.lastPerform(); !ok {
 		t.Fatal("provider action was not performed")
 	}
-	if _, err := store.Load(context.Background(), 42, 7); !errors.Is(err, ErrSnapshotNotFound) {
+	if _, err := store.Load(context.Background(), "", 42, 7); !errors.Is(err, ErrSnapshotNotFound) {
 		t.Fatalf("old snapshot survived the action: %v", err)
 	}
 }

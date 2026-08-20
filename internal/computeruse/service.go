@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -185,6 +186,9 @@ func (s *Service) GetAppState(ctx context.Context, req StateRequest) (State, err
 	if err := validateTargetRequest(req.App, req.WindowIndex); err != nil {
 		return State{}, err
 	}
+	if err := validateSessionID(req.SessionID); err != nil {
+		return State{}, err
+	}
 	unlock, err := s.lock(ctx)
 	if err != nil {
 		return State{}, err
@@ -209,7 +213,7 @@ func (s *Service) getAppStateLocked(ctx context.Context, req StateRequest) (Stat
 		return State{}, NewError(CodeWindowStale, "the selected window identity changed during observation; run list-windows again", nil)
 	}
 	state.Snapshot.ElementCount = len(state.Snapshot.Elements)
-	record := SnapshotRecord{PID: state.App.PID, BundleID: state.App.BundleID, WindowID: state.Window.ID, WindowFingerprint: state.Window.Fingerprint, CreatedAt: s.now(), Elements: make([]CachedElement, 0, len(state.Snapshot.Elements))}
+	record := SnapshotRecord{SessionID: req.SessionID, PID: state.App.PID, BundleID: state.App.BundleID, WindowID: state.Window.ID, WindowFingerprint: state.Window.Fingerprint, CreatedAt: s.now(), Elements: make([]CachedElement, 0, len(state.Snapshot.Elements))}
 	for _, element := range state.Snapshot.Elements {
 		record.Elements = append(record.Elements, CachedElement{Index: element.Index, Path: append([]int(nil), element.Path...), Role: element.Role, Frame: element.Frame, Fingerprint: element.Fingerprint, Actions: append([]string(nil), element.Actions...)})
 	}
@@ -247,6 +251,9 @@ func (s *Service) Screenshot(ctx context.Context, req StateRequest) ([]byte, err
 	if err := validateTargetRequest(req.App, req.WindowIndex); err != nil {
 		return nil, err
 	}
+	if err := validateSessionID(req.SessionID); err != nil {
+		return nil, err
+	}
 	unlock, err := s.lock(ctx)
 	if err != nil {
 		return nil, err
@@ -259,8 +266,8 @@ func (s *Service) Screenshot(ctx context.Context, req StateRequest) ([]byte, err
 	return s.provider.Screenshot(ctx, target)
 }
 
-func (s *Service) cachedElement(ctx context.Context, target Target, index int) (SnapshotRecord, *CachedElement, error) {
-	record, err := s.store.Load(ctx, target.App.PID, target.Window.ID)
+func (s *Service) cachedElement(ctx context.Context, sessionID string, target Target, index int) (SnapshotRecord, *CachedElement, error) {
+	record, err := s.store.Load(ctx, sessionID, target.App.PID, target.Window.ID)
 	if err != nil {
 		if errors.Is(err, ErrSnapshotNotFound) {
 			return SnapshotRecord{}, nil, NewError(CodeElementStale, "no current element snapshot; run get-app-state again", err)
@@ -283,6 +290,9 @@ func (s *Service) cachedElement(ctx context.Context, target Target, index int) (
 
 func (s *Service) Perform(ctx context.Context, req ActionRequest) (State, error) {
 	if err := validateTargetRequest(req.App, req.WindowIndex); err != nil {
+		return State{}, err
+	}
+	if err := validateSessionID(req.SessionID); err != nil {
 		return State{}, err
 	}
 	if (req.Kind == ActionTypeText || req.Kind == ActionPasteText) && req.Text == "" {
@@ -310,7 +320,7 @@ func (s *Service) Perform(ctx context.Context, req ActionRequest) (State, error)
 	}
 	perform := PerformRequest{Target: target, Kind: req.Kind, ExpectedWindowFingerprint: target.Window.Fingerprint, X: req.X, Y: req.Y, FromX: req.FromX, FromY: req.FromY, ToX: req.ToX, ToY: req.ToY, Text: req.Text, Key: req.Key, Direction: req.Direction, Amount: req.Amount, SecondaryAction: req.SecondaryAction, MouseButton: req.MouseButton, ClickCount: req.ClickCount, Modifiers: req.Modifiers, RestoreWindow: req.RestoreWindow}
 	if req.ElementIndex != nil {
-		record, element, cacheErr := s.cachedElement(ctx, target, *req.ElementIndex)
+		record, element, cacheErr := s.cachedElement(ctx, req.SessionID, target, *req.ElementIndex)
 		if cacheErr != nil {
 			return State{}, cacheErr
 		}
@@ -321,7 +331,7 @@ func (s *Service) Perform(ctx context.Context, req ActionRequest) (State, error)
 		}
 	}
 	if req.FromElementIndex != nil {
-		record, element, cacheErr := s.cachedElement(ctx, target, *req.FromElementIndex)
+		record, element, cacheErr := s.cachedElement(ctx, req.SessionID, target, *req.FromElementIndex)
 		if cacheErr != nil {
 			return State{}, cacheErr
 		}
@@ -329,20 +339,20 @@ func (s *Service) Perform(ctx context.Context, req ActionRequest) (State, error)
 		perform.ExpectedFromElement = element
 	}
 	if req.ToElementIndex != nil {
-		record, element, cacheErr := s.cachedElement(ctx, target, *req.ToElementIndex)
+		record, element, cacheErr := s.cachedElement(ctx, req.SessionID, target, *req.ToElementIndex)
 		if cacheErr != nil {
 			return State{}, cacheErr
 		}
 		perform.ExpectedWindowFingerprint = record.WindowFingerprint
 		perform.ExpectedToElement = element
 	}
-	if err := s.store.Delete(ctx, target.App.PID, target.Window.ID); err != nil {
+	if err := s.store.Delete(ctx, req.SessionID, target.App.PID, target.Window.ID); err != nil {
 		return State{}, NewError(CodeInternal, "invalidate computer-use snapshot before action: "+err.Error(), err)
 	}
 	if err := s.provider.Perform(ctx, perform); err != nil {
 		return State{}, err
 	}
-	state, refreshErr := s.getAppStateLocked(ctx, StateRequest{App: req.App, NoScreenshot: req.NoScreenshot})
+	state, refreshErr := s.getAppStateLocked(ctx, StateRequest{App: req.App, SessionID: req.SessionID, NoScreenshot: req.NoScreenshot})
 	if refreshErr != nil {
 		return redactState(State{App: target.App, Window: target.Window, RefreshError: codedError(refreshErr)}), nil
 	}
@@ -372,6 +382,18 @@ func validateTargetRequest(selector string, windowIndex *int) error {
 	}
 	if windowIndex != nil && *windowIndex < 0 {
 		return NewError(CodeInvalidArgument, "window-index must be zero or greater", nil)
+	}
+	return nil
+}
+
+// sessionIDPattern excludes path separators, "..", and other characters that
+// could turn a caller-supplied session id into a path traversal once it is
+// folded into a cache file name by snapshotKey.
+var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]*$`)
+
+func validateSessionID(sessionID string) error {
+	if !sessionIDPattern.MatchString(sessionID) {
+		return NewError(CodeInvalidArgument, "session id may only contain letters, digits, '-', '_', and '.'", nil)
 	}
 	return nil
 }

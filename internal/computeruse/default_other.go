@@ -13,11 +13,11 @@ func (unsupportedSnapshotStore) Save(context.Context, SnapshotRecord) error {
 	return unsupportedPlatformError()
 }
 
-func (unsupportedSnapshotStore) Load(context.Context, int, int) (SnapshotRecord, error) {
+func (unsupportedSnapshotStore) Load(context.Context, string, int, int) (SnapshotRecord, error) {
 	return SnapshotRecord{}, unsupportedPlatformError()
 }
 
-func (unsupportedSnapshotStore) Delete(context.Context, int, int) error {
+func (unsupportedSnapshotStore) Delete(context.Context, string, int, int) error {
 	return unsupportedPlatformError()
 }
 
