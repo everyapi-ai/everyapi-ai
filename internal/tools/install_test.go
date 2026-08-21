@@ -40,22 +40,22 @@ func TestNewDesktopInstallersUseOfficialCommandsAndDeterministicOutputs(t *testi
 		extraBinDir string
 	}{
 		"goose": {
-			unix:        "curl -fsSL https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash || curl -fsSL https://dl.everyapi.ai/cli-mirrors/install.sh | bash -s -- goose",
+			unix:        "curl -fsSL --connect-timeout 5 https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash || curl -fsSL https://dl.everyapi.ai/cli-mirrors/install.sh | bash -s -- goose",
 			windows:     []string{"powershell", "-ExecutionPolicy", "ByPass", "-Command", "& ([scriptblock]::Create((irm https://dl.everyapi.ai/cli-mirrors/install.ps1))) -Tool goose"},
 			extraBinDir: ".local/bin",
 		},
 		"vibe": {
-			unix:        "curl -LsSf https://mistral.ai/vibe/install.sh | bash || (curl -fsSL https://dl.everyapi.ai/cli-mirrors/uv/install.sh | sh && UV_PYTHON_INSTALL_MIRROR=https://dl.everyapi.ai/cli-mirrors/python UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/ \"$HOME/.local/bin/uv\" tool install --python 3.12 mistral-vibe)",
+			unix:        "curl -LsSf --connect-timeout 5 https://mistral.ai/vibe/install.sh | bash || (curl -fsSL https://dl.everyapi.ai/cli-mirrors/uv/install.sh | sh && UV_PYTHON_INSTALL_MIRROR=https://dl.everyapi.ai/cli-mirrors/python UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/ \"$HOME/.local/bin/uv\" tool install --python 3.12 mistral-vibe)",
 			windows:     []string{"powershell", "-ExecutionPolicy", "ByPass", "-Command", "irm https://dl.everyapi.ai/cli-mirrors/uv/install.ps1 | iex; $env:UV_PYTHON_INSTALL_MIRROR='https://dl.everyapi.ai/cli-mirrors/python'; $env:UV_DEFAULT_INDEX='https://mirrors.aliyun.com/pypi/simple/'; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install --python 3.12 mistral-vibe"},
 			extraBinDir: ".local/bin",
 		},
 		"librefang": {
-			unix:        "curl -fsSL https://librefang.ai/install.sh | LIBREFANG_AUTO_START=0 sh || curl -fsSL https://dl.everyapi.ai/cli-mirrors/install.sh | bash -s -- librefang",
+			unix:        "curl -fsSL --connect-timeout 5 https://librefang.ai/install.sh | LIBREFANG_AUTO_START=0 sh || curl -fsSL https://dl.everyapi.ai/cli-mirrors/install.sh | bash -s -- librefang",
 			windows:     []string{"powershell", "-ExecutionPolicy", "ByPass", "-Command", "& ([scriptblock]::Create((irm https://dl.everyapi.ai/cli-mirrors/install.ps1))) -Tool librefang"},
 			extraBinDir: ".librefang/bin",
 		},
 		"open-webui": {
-			unix:        "(curl -LsSf https://astral.sh/uv/install.sh | sh && \"$HOME/.local/bin/uv\" tool install --python 3.11 open-webui) || (curl -fsSL https://dl.everyapi.ai/cli-mirrors/uv/install.sh | sh && UV_PYTHON_INSTALL_MIRROR=https://dl.everyapi.ai/cli-mirrors/python UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/ \"$HOME/.local/bin/uv\" tool install --python 3.11 open-webui)",
+			unix:        "(curl -LsSf --connect-timeout 5 https://astral.sh/uv/install.sh | sh && \"$HOME/.local/bin/uv\" tool install --python 3.11 open-webui) || (curl -fsSL https://dl.everyapi.ai/cli-mirrors/uv/install.sh | sh && UV_PYTHON_INSTALL_MIRROR=https://dl.everyapi.ai/cli-mirrors/python UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/ \"$HOME/.local/bin/uv\" tool install --python 3.11 open-webui)",
 			windows:     []string{"powershell", "-ExecutionPolicy", "ByPass", "-Command", "irm https://dl.everyapi.ai/cli-mirrors/uv/install.ps1 | iex; $env:UV_PYTHON_INSTALL_MIRROR='https://dl.everyapi.ai/cli-mirrors/python'; $env:UV_DEFAULT_INDEX='https://mirrors.aliyun.com/pypi/simple/'; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install --python 3.11 open-webui"},
 			extraBinDir: ".local/bin",
 		},
@@ -109,7 +109,7 @@ func TestClaudeInstallerUsesTheChinaMirrorFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantUnix := "curl -fsSL https://claude.ai/install.sh | bash || curl -fsSL https://dl.everyapi.ai/claude-code/install.sh | bash"
+	wantUnix := "curl -fsSL --connect-timeout 5 https://claude.ai/install.sh | bash || curl -fsSL https://dl.everyapi.ai/claude-code/install.sh | bash"
 	if tool.InstallCmd != wantUnix {
 		t.Errorf("claude InstallCmd = %q, want %q", tool.InstallCmd, wantUnix)
 	}
@@ -168,6 +168,29 @@ func TestEveryRegisteredAutoInstallerHasAChinaReachablePath(t *testing.T) {
 			windows := strings.Join(tool.InstallCmdWindows, " ")
 			if !strings.Contains(windows, "https://dl.everyapi.ai/") && !strings.Contains(windows, "npm install") {
 				t.Errorf("%s Windows installer has no China-reachable path: %q", name, tool.InstallCmdWindows)
+			}
+		}
+	}
+}
+
+// A vendor-origin curl without --connect-timeout makes the mirror fallback unreachable in practice: when the vendor host blackholes TCP (claude.ai, raw.githubusercontent.com and astral.sh all do from mainland China) curl waits out the OS default connect timeout — ~75s on macOS — before `||` reaches the mirror, so the installer looks frozen rather than falling back. Mirror-side curls are exempt: dl.everyapi.ai is the last resort and gets the OS default retry behavior.
+func TestVendorOriginInstallersBoundTheirConnectTimeout(t *testing.T) {
+	for name, tool := range Registry {
+		if strings.TrimSpace(tool.InstallCmd) == "" {
+			continue
+		}
+		for _, stage := range strings.Split(tool.InstallCmd, " || ") {
+			if !strings.Contains(stage, "curl ") || strings.Contains(stage, "dl.everyapi.ai") {
+				continue
+			}
+			if !strings.Contains(stage, "--connect-timeout 5") {
+				t.Errorf("%s fetches a vendor origin without --connect-timeout 5, so a blackholed host stalls before the mirror fallback: %q", name, stage)
+			}
+			// curl blocks writing into the pipe once a script exceeds the ~64 KiB pipe buffer (astral.sh/uv/install.sh is ~71 KiB), so a wall-clock or throughput bound kills installers that are running normally. Only the connect phase may be bounded.
+			for _, banned := range []string{"--max-time", "--speed-limit", "--speed-time"} {
+				if strings.Contains(stage, banned) {
+					t.Errorf("%s uses %s on a piped installer, which can kill a healthy install once the script exceeds the pipe buffer: %q", name, banned, stage)
+				}
 			}
 		}
 	}

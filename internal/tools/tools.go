@@ -29,6 +29,10 @@ type Tool struct {
 	// InstallCmd is the shell command 'everyapi use' offers to run on the user's behalf when ExecName isn't on $PATH. Executed via `sh -c` on Unix and `cmd /C` on Windows; an empty value disables the auto-install prompt and the user falls back to reading InstallHint and running the installer themselves. For tools whose canonical installer is Unix-only (e.g. a `curl | bash` script), InstallCmdUnixOnly should be true so Windows users see the hint instead of a guaranteed-to-fail shell pipeline.
 	//
 	// SECURITY INVARIANT: this string MUST be a compile-time literal embedded in the Registry below. It is passed verbatim to `sh -c` / `cmd /C` with no escaping — sourcing it from user input, env vars, config files, or any network response would be RCE. If you find yourself wanting to make this dynamic, design a per-tool installer function instead.
+	//
+	// TIMEOUT INVARIANT: every curl that fetches from a vendor origin (the primary source in a `primary || dl.everyapi.ai mirror` chain) MUST carry `--connect-timeout 5`. Without it, a vendor host that blackholes TCP — the normal case for claude.ai, raw.githubusercontent.com, and astral.sh from mainland China — makes curl wait out the OS default connect timeout (~75s on macOS) before the `||` hands over to the mirror, and the user sees a frozen installer rather than a fallback. Match install.sh, which already hardens every fetch this way.
+	//
+	// Only --connect-timeout is safe here. Do NOT add --max-time or --speed-limit to a `curl | sh` stage: curl blocks writing into the pipe once the script exceeds the ~64 KiB pipe buffer (astral.sh/uv/install.sh is ~71 KiB), so a wall-clock or throughput bound would kill installers that are running normally. --connect-timeout only bounds TCP/TLS setup, which completes before the first pipe write.
 	InstallCmd string
 	// InstallCmdWindows overrides InstallCmd on Windows when the vendor publishes a separate native installer command. The first element is the executable and the rest are passed as argv directly, never through cmd.exe. It has the same security invariant as InstallCmd and every element must remain a compile-time literal.
 	InstallCmdWindows []string
@@ -347,7 +351,7 @@ var Registry = map[string]*Tool{
 		Name:        "claude",
 		ExecName:    "claude",
 		InstallHint: "Install Claude Code: https://docs.claude.com/en/docs/claude-code/setup",
-		InstallCmd:  "curl -fsSL https://claude.ai/install.sh | bash || curl -fsSL https://dl.everyapi.ai/claude-code/install.sh | bash",
+		InstallCmd:  "curl -fsSL --connect-timeout 5 https://claude.ai/install.sh | bash || curl -fsSL https://dl.everyapi.ai/claude-code/install.sh | bash",
 		InstallCmdWindows: []string{
 			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
 			"irm https://dl.everyapi.ai/claude-code/install.ps1 | iex",
@@ -443,7 +447,7 @@ var Registry = map[string]*Tool{
 		// Antigravity's own installer, per the install docs above. It writes the binary to ~/.local/bin/agy — hence ExtraBinDirs, so the post-install re-check finds it even when the user's shell only puts that dir on $PATH from an rc file we never source.
 		//
 		// The official Unix script remains first. Windows and the Unix fallback use the reviewed OSS mirror and install into EveryAPI's discovered local bin directory.
-		InstallCmd:                 "curl -fsSL https://antigravity.google/cli/install.sh | bash || curl -fsSL https://dl.everyapi.ai/cli-mirrors/install.sh | bash -s -- antigravity",
+		InstallCmd:                 "curl -fsSL --connect-timeout 5 https://antigravity.google/cli/install.sh | bash || curl -fsSL https://dl.everyapi.ai/cli-mirrors/install.sh | bash -s -- antigravity",
 		InstallCmdWindows:          []string{"powershell", "-ExecutionPolicy", "ByPass", "-Command", "& ([scriptblock]::Create((irm https://dl.everyapi.ai/cli-mirrors/install.ps1))) -Tool antigravity"},
 		InstallCmdUnixOnly:         true,
 		ExtraBinDirs:               []string{".local/bin"},
@@ -461,7 +465,7 @@ var Registry = map[string]*Tool{
 		Name:        "aider",
 		ExecName:    "aider",
 		InstallHint: "Install Aider: https://aider.chat/docs/install.html",
-		InstallCmd:  "curl -LsSf https://aider.chat/install.sh | sh || (curl -fsSL https://dl.everyapi.ai/cli-mirrors/uv/install.sh | sh && UV_PYTHON_INSTALL_MIRROR=https://dl.everyapi.ai/cli-mirrors/python UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/ \"$HOME/.local/bin/uv\" tool install --python 3.12 aider-chat)",
+		InstallCmd:  "curl -LsSf --connect-timeout 5 https://aider.chat/install.sh | sh || (curl -fsSL https://dl.everyapi.ai/cli-mirrors/uv/install.sh | sh && UV_PYTHON_INSTALL_MIRROR=https://dl.everyapi.ai/cli-mirrors/python UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/ \"$HOME/.local/bin/uv\" tool install --python 3.12 aider-chat)",
 		InstallCmdWindows: []string{
 			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
 			"irm https://dl.everyapi.ai/cli-mirrors/uv/install.ps1 | iex; $env:UV_PYTHON_INSTALL_MIRROR='https://dl.everyapi.ai/cli-mirrors/python'; $env:UV_DEFAULT_INDEX='https://mirrors.aliyun.com/pypi/simple/'; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install --python 3.12 aider-chat",
@@ -487,7 +491,7 @@ var Registry = map[string]*Tool{
 		Name:        "goose",
 		ExecName:    "goose",
 		InstallHint: "Install Goose CLI: https://block.github.io/goose/docs/getting-started/installation/",
-		InstallCmd:  "curl -fsSL https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash || curl -fsSL https://dl.everyapi.ai/cli-mirrors/install.sh | bash -s -- goose",
+		InstallCmd:  "curl -fsSL --connect-timeout 5 https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash || curl -fsSL https://dl.everyapi.ai/cli-mirrors/install.sh | bash -s -- goose",
 		InstallCmdWindows: []string{
 			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
 			"& ([scriptblock]::Create((irm https://dl.everyapi.ai/cli-mirrors/install.ps1))) -Tool goose",
@@ -575,7 +579,7 @@ var Registry = map[string]*Tool{
 		Name:        "open-webui",
 		ExecName:    "open-webui",
 		InstallHint: "Install Open WebUI: https://docs.openwebui.com/getting-started/quick-start/",
-		InstallCmd:  "(curl -LsSf https://astral.sh/uv/install.sh | sh && \"$HOME/.local/bin/uv\" tool install --python 3.11 open-webui) || (curl -fsSL https://dl.everyapi.ai/cli-mirrors/uv/install.sh | sh && UV_PYTHON_INSTALL_MIRROR=https://dl.everyapi.ai/cli-mirrors/python UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/ \"$HOME/.local/bin/uv\" tool install --python 3.11 open-webui)",
+		InstallCmd:  "(curl -LsSf --connect-timeout 5 https://astral.sh/uv/install.sh | sh && \"$HOME/.local/bin/uv\" tool install --python 3.11 open-webui) || (curl -fsSL https://dl.everyapi.ai/cli-mirrors/uv/install.sh | sh && UV_PYTHON_INSTALL_MIRROR=https://dl.everyapi.ai/cli-mirrors/python UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/ \"$HOME/.local/bin/uv\" tool install --python 3.11 open-webui)",
 		InstallCmdWindows: []string{
 			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
 			"irm https://dl.everyapi.ai/cli-mirrors/uv/install.ps1 | iex; $env:UV_PYTHON_INSTALL_MIRROR='https://dl.everyapi.ai/cli-mirrors/python'; $env:UV_DEFAULT_INDEX='https://mirrors.aliyun.com/pypi/simple/'; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install --python 3.11 open-webui",
@@ -657,7 +661,7 @@ var Registry = map[string]*Tool{
 		Name:        "vibe",
 		ExecName:    "vibe",
 		InstallHint: "Install Mistral Vibe: https://github.com/mistralai/mistral-vibe#installation",
-		InstallCmd:  "curl -LsSf https://mistral.ai/vibe/install.sh | bash || (curl -fsSL https://dl.everyapi.ai/cli-mirrors/uv/install.sh | sh && UV_PYTHON_INSTALL_MIRROR=https://dl.everyapi.ai/cli-mirrors/python UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/ \"$HOME/.local/bin/uv\" tool install --python 3.12 mistral-vibe)",
+		InstallCmd:  "curl -LsSf --connect-timeout 5 https://mistral.ai/vibe/install.sh | bash || (curl -fsSL https://dl.everyapi.ai/cli-mirrors/uv/install.sh | sh && UV_PYTHON_INSTALL_MIRROR=https://dl.everyapi.ai/cli-mirrors/python UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/ \"$HOME/.local/bin/uv\" tool install --python 3.12 mistral-vibe)",
 		InstallCmdWindows: []string{
 			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
 			"irm https://dl.everyapi.ai/cli-mirrors/uv/install.ps1 | iex; $env:UV_PYTHON_INSTALL_MIRROR='https://dl.everyapi.ai/cli-mirrors/python'; $env:UV_DEFAULT_INDEX='https://mirrors.aliyun.com/pypi/simple/'; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install --python 3.12 mistral-vibe",
@@ -713,7 +717,7 @@ var Registry = map[string]*Tool{
 		Name:        "openhands",
 		ExecName:    "openhands",
 		InstallHint: "Install OpenHands CLI: https://github.com/OpenHands/OpenHands-CLI#installation",
-		InstallCmd:  "curl -fsSL https://install.openhands.dev/install.sh | sh || curl -fsSL https://dl.everyapi.ai/cli-mirrors/install.sh | bash -s -- openhands",
+		InstallCmd:  "curl -fsSL --connect-timeout 5 https://install.openhands.dev/install.sh | sh || curl -fsSL https://dl.everyapi.ai/cli-mirrors/install.sh | bash -s -- openhands",
 		InstallCmdWindows: []string{
 			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
 			"irm https://dl.everyapi.ai/cli-mirrors/uv/install.ps1 | iex; $env:UV_PYTHON_INSTALL_MIRROR='https://dl.everyapi.ai/cli-mirrors/python'; $env:UV_DEFAULT_INDEX='https://mirrors.aliyun.com/pypi/simple/'; & \"$env:USERPROFILE\\.local\\bin\\uv.exe\" tool install openhands --python 3.12",
@@ -737,7 +741,7 @@ var Registry = map[string]*Tool{
 		Name:        "forge",
 		ExecName:    "forge",
 		InstallHint: "Install ForgeCode: https://github.com/antinomyhq/forge#installation",
-		InstallCmd:  "curl -fsSL https://forgecode.dev/cli | sh || curl -fsSL https://dl.everyapi.ai/cli-mirrors/install.sh | bash -s -- forge",
+		InstallCmd:  "curl -fsSL --connect-timeout 5 https://forgecode.dev/cli | sh || curl -fsSL https://dl.everyapi.ai/cli-mirrors/install.sh | bash -s -- forge",
 		InstallCmdWindows: []string{
 			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
 			"& ([scriptblock]::Create((irm https://dl.everyapi.ai/cli-mirrors/install.ps1))) -Tool forge",
@@ -838,7 +842,7 @@ var Registry = map[string]*Tool{
 		ExecName:    "hermes",
 		InstallHint: "Install Hermes Agent: https://github.com/NousResearch/hermes-agent (or: pip install hermes-agent)",
 		// Pin the third-party script to an immutable commit. Updating Hermes requires reviewing the new script and deliberately changing this SHA; never point an auto-executed installer at main/master/HEAD.
-		InstallCmd: "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/e444d165807f489b5c1ab8e4a612c8d09c2e67a2/scripts/install.sh | bash -s -- --non-interactive --skip-setup || curl -fsSL https://dl.everyapi.ai/cli-mirrors/hermes/install.sh | bash -s -- --non-interactive --skip-setup",
+		InstallCmd: "curl -fsSL --connect-timeout 5 https://raw.githubusercontent.com/NousResearch/hermes-agent/e444d165807f489b5c1ab8e4a612c8d09c2e67a2/scripts/install.sh | bash -s -- --non-interactive --skip-setup || curl -fsSL https://dl.everyapi.ai/cli-mirrors/hermes/install.sh | bash -s -- --non-interactive --skip-setup",
 		InstallCmdWindows: []string{
 			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
 			"& ([scriptblock]::Create((irm https://dl.everyapi.ai/cli-mirrors/hermes/install.ps1))) -NonInteractive",
@@ -864,7 +868,7 @@ var Registry = map[string]*Tool{
 		Name:        "librefang",
 		ExecName:    "librefang",
 		InstallHint: "Install LibreFang: https://github.com/librefang/librefang#quick-start",
-		InstallCmd:  "curl -fsSL https://librefang.ai/install.sh | LIBREFANG_AUTO_START=0 sh || curl -fsSL https://dl.everyapi.ai/cli-mirrors/install.sh | bash -s -- librefang",
+		InstallCmd:  "curl -fsSL --connect-timeout 5 https://librefang.ai/install.sh | LIBREFANG_AUTO_START=0 sh || curl -fsSL https://dl.everyapi.ai/cli-mirrors/install.sh | bash -s -- librefang",
 		InstallCmdWindows: []string{
 			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
 			"& ([scriptblock]::Create((irm https://dl.everyapi.ai/cli-mirrors/install.ps1))) -Tool librefang",
