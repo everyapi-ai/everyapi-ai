@@ -1608,6 +1608,7 @@ everyapi feedback — 버그 신고나 기능 제안을 팀에 보내기
 [tmux]
 none = "실행 중인 EveryAPI tmux 세션이 없습니다."
 tool_unknown = "알 수 없음"
+no_directory = "(디렉터리 없음)"
 idle_now = "방금"
 state_attached = "연결됨"
 state_detached = "분리됨"
@@ -1627,7 +1628,7 @@ usage = '''
 everyapi tmux — `everyapi use`가 남긴 tmux 세션
 
 사용법
-  everyapi tmux                      목록을 보고 하나를 골라 재연결
+  everyapi tmux                      관리 중인 모든 세션 목록
   everyapi tmux list [--format=json] 연결하지 않고 목록만 출력
   everyapi tmux attach [<session>]   세션에 연결 (생략하면 선택 화면)
   everyapi tmux kill <session>...    세션 종료 (안의 도구도 함께 종료)

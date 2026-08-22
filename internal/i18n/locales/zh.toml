@@ -1587,6 +1587,7 @@ everyapi feedback — 向团队反馈问题或提交功能建议
 [tmux]
 none = "当前没有正在运行的 EveryAPI tmux 会话。"
 tool_unknown = "未知"
+no_directory = "（无目录）"
 idle_now = "刚刚"
 state_attached = "已连接"
 state_detached = "已分离"
@@ -1606,7 +1607,7 @@ usage = '''
 everyapi tmux — `everyapi use` 留下的那些 tmux 会话
 
 用法
-  everyapi tmux                      列出会话，然后选一个重连
+  everyapi tmux                      列出全部托管会话
   everyapi tmux list [--format=json] 只列出，不连接
   everyapi tmux attach [<会话名>]     连接到某个会话（省略则进入选择界面）
   everyapi tmux kill <会话名>...      关闭会话（会终止其中的工具）

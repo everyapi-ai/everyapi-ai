@@ -1586,6 +1586,7 @@ everyapi feedback — 向團隊回報問題或提交功能建議
 [tmux]
 none = "目前沒有正在執行的 EveryAPI tmux 工作階段。"
 tool_unknown = "未知"
+no_directory = "（無目錄）"
 idle_now = "剛剛"
 state_attached = "已連線"
 state_detached = "已分離"
@@ -1605,7 +1606,7 @@ usage = '''
 everyapi tmux — `everyapi use` 留下的那些 tmux 工作階段
 
 用法
-  everyapi tmux                      列出工作階段，然後選一個重新連線
+  everyapi tmux                      列出全部託管工作階段
   everyapi tmux list [--format=json] 只列出，不連線
   everyapi tmux attach [<名稱>]       連線到某個工作階段（省略則進入選擇介面）
   everyapi tmux kill <名稱>...        關閉工作階段（會終止其中的工具）

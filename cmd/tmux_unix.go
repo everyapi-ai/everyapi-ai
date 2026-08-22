@@ -128,7 +128,7 @@ func tmuxSessionRows(sessions []managedTmuxSession, now time.Time) []string {
 			tmuxPad(session.tool, toolWidth),
 			tmuxPad(idles[index], idleWidth),
 			tmuxPad(states[index], stateWidth),
-			session.directory,
+			tmuxDirectoryLabel(session.directory),
 		}, "  "), " "))
 	}
 	return rows
@@ -143,6 +143,16 @@ func tmuxStateLabel(session managedTmuxSession) string {
 	default:
 		return style.Dim(i18n.T("tmux.state_detached"))
 	}
+}
+
+// tmuxDirectoryLabel fills in for a session that reports no working directory.
+// A dead pane's pane_current_path is empty, so that row would otherwise end after
+// the state column and read as truncated rather than as "there is nothing here".
+func tmuxDirectoryLabel(directory string) string {
+	if directory == "" {
+		return i18n.T("tmux.no_directory")
+	}
+	return directory
 }
 
 func tmuxPad(value string, width int) string {
@@ -245,6 +255,23 @@ func parseTmuxInventory(output string) ([]managedTmuxSession, error) {
 	return sessions, nil
 }
 
+// tmuxServerAbsent reports whether a non-zero tmux exit means "there is no
+// server" — a legitimate answer to a listing, not a failure. tmux has no
+// distinct exit code for it, so the message is the only signal; it prints one of
+// these two spellings depending on version and on whether the socket exists at
+// all. tmux does not localize its messages, so matching English is safe.
+//
+// Empty stderr stays on the "absent" side. A non-zero exit that explains nothing
+// cannot be reported usefully anyway, and treating it as a failure would newly
+// break any tmux build that exits quietly when no server is running.
+func tmuxServerAbsent(stderr []byte) bool {
+	text := strings.TrimSpace(string(stderr))
+	if text == "" {
+		return true
+	}
+	return strings.Contains(text, "no server running") || strings.Contains(text, "error connecting to")
+}
+
 func managedTmuxSessions() ([]managedTmuxSession, error) {
 	tmuxPath, err := exec.LookPath("tmux")
 	if err != nil {
@@ -257,10 +284,15 @@ func managedTmuxSessions() ([]managedTmuxSession, error) {
 		"-F", tmuxInventoryFormat(),
 	).Output()
 	if err != nil {
-		// tmux exits non-zero with no server running, and "no sessions" is a
-		// legitimate answer to this command, not a failure.
 		var exitError *exec.ExitError
 		if errors.As(err, &exitError) {
+			if !tmuxServerAbsent(exitError.Stderr) {
+				// A tmux that failed for any other reason must not be reported as
+				// "no sessions": that is the "your sessions are gone" misreading the
+				// Windows stub exists to avoid, and it would hide an unsupported
+				// flag or a broken format behind a reassuring empty list.
+				return nil, fmt.Errorf("list tmux sessions: %s", strings.TrimSpace(string(exitError.Stderr)))
+			}
 			return nil, nil
 		}
 		return nil, fmt.Errorf("list tmux sessions: %w", err)
@@ -268,23 +300,12 @@ func managedTmuxSessions() ([]managedTmuxSession, error) {
 	return parseTmuxInventory(string(output))
 }
 
-// runTmuxDefault is what bare `everyapi tmux` does. On a terminal the listing
-// alone would just be a table of names to copy by hand, which is the problem
-// this command exists to remove — so it lists and then offers to reattach.
+// runTmuxDefault is what bare `everyapi tmux` does: it shows the state and stops
+// there. It used to drop straight into a picker, which meant a stray Return
+// while you were only looking handed your terminal to some session. Reaching for
+// one is now an explicit act — `attach` with no argument offers the same picker.
 func runTmuxDefault() error {
-	sessions, err := managedTmuxSessions()
-	if err != nil {
-		return err
-	}
-	if len(sessions) == 0 {
-		cliout.Println(i18n.T("tmux.none"))
-		return nil
-	}
-	if !cliprompt.IsInteractive() {
-		printTmuxSessions(sessions)
-		return nil
-	}
-	return pickAndAttachTmuxSession(sessions)
+	return runTmuxList(nil)
 }
 
 func runTmuxList(args []string) error {
@@ -448,7 +469,16 @@ func attachTmuxSession(session managedTmuxSession) error {
 		return errors.New(i18n.T("use.tmux_not_found"))
 	}
 	target := exactTmuxSessionTarget(session.name)
-	command := exec.Command(tmuxPath, tmuxAttachAction(os.Getenv("TMUX")), "-t", target)
+	// -d detaches whatever client is already on this session. Without it tmux
+	// attaches you as an ADDITIONAL client: two terminals then share one view and
+	// the window is clamped to the smaller of them. "Get me back to my agent"
+	// means take it over, not squeeze in beside a client that may be on another
+	// machine. switch-client moves this client and needs no such flag.
+	arguments := []string{tmuxAttachAction(os.Getenv("TMUX")), "-t", target}
+	if arguments[0] == "attach-session" {
+		arguments = []string{"attach-session", "-d", "-t", target}
+	}
+	command := exec.Command(tmuxPath, arguments...)
 	command.Stdin = os.Stdin
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr

@@ -1602,6 +1602,7 @@ NOTES
 [tmux]
 none = "No EveryAPI tmux sessions are running."
 tool_unknown = "unknown"
+no_directory = "(no directory)"
 idle_now = "now"
 state_attached = "attached"
 state_detached = "detached"
@@ -1621,7 +1622,7 @@ usage = '''
 everyapi tmux — the tmux sessions `everyapi use` left running
 
 USAGE
-  everyapi tmux                      list, then pick one to reattach to
+  everyapi tmux                      list every managed session
   everyapi tmux list [--format=json] list without attaching
   everyapi tmux attach [<session>]   attach to a session (picker when omitted)
   everyapi tmux kill <session>...    close sessions (ends the tool in each)

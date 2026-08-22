@@ -1620,6 +1620,7 @@ HINWEISE
 [tmux]
 none = "Es laufen keine EveryAPI-tmux-Sitzungen."
 tool_unknown = "unbekannt"
+no_directory = "(kein Verzeichnis)"
 idle_now = "jetzt"
 state_attached = "verbunden"
 state_detached = "getrennt"
@@ -1639,7 +1640,7 @@ usage = '''
 everyapi tmux — die tmux-Sitzungen, die `everyapi use` laufen ließ
 
 VERWENDUNG
-  everyapi tmux                      auflisten und eine zum Verbinden wählen
+  everyapi tmux                      jede verwaltete Sitzung auflisten
   everyapi tmux list [--format=json] nur auflisten, nicht verbinden
   everyapi tmux attach [<Sitzung>]   mit einer Sitzung verbinden (sonst Auswahl)
   everyapi tmux kill <Sitzung>...    Sitzungen schließen (beendet das Werkzeug)

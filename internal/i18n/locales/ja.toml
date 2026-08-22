@@ -1611,6 +1611,7 @@ everyapi feedback — 不具合の報告や機能のご要望をチームへ送�
 [tmux]
 none = "実行中の EveryAPI tmux セッションはありません。"
 tool_unknown = "不明"
+no_directory = "（ディレクトリなし）"
 idle_now = "たった今"
 state_attached = "接続中"
 state_detached = "デタッチ済み"
@@ -1630,7 +1631,7 @@ usage = '''
 everyapi tmux — `everyapi use` が残した tmux セッション
 
 使い方
-  everyapi tmux                      一覧を表示し、選んで再接続する
+  everyapi tmux                      管理下の全セッションを一覧表示する
   everyapi tmux list [--format=json] 接続せず一覧だけ表示する
   everyapi tmux attach [<session>]   セッションに接続する（省略時は選択画面）
   everyapi tmux kill <session>...    セッションを終了する（中のツールも終了）

@@ -1622,6 +1622,7 @@ NOTAS
 [tmux]
 none = "No hay sesiones tmux de EveryAPI en ejecución."
 tool_unknown = "desconocida"
+no_directory = "(sin directorio)"
 idle_now = "ahora"
 state_attached = "conectada"
 state_detached = "separada"
@@ -1641,7 +1642,7 @@ usage = '''
 everyapi tmux — las sesiones tmux que `everyapi use` dejó corriendo
 
 USO
-  everyapi tmux                      listar y elegir una para reconectar
+  everyapi tmux                      listar todas las sesiones gestionadas
   everyapi tmux list [--format=json] listar sin conectar
   everyapi tmux attach [<sesión>]    conectar a una sesión (si se omite, elige)
   everyapi tmux kill <sesión>...     cerrar sesiones (termina la herramienta)

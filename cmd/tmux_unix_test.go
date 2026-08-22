@@ -353,3 +353,45 @@ func TestTmuxAttachTreatsHelpTokensAsHelp(t *testing.T) {
 		}
 	}
 }
+
+// "There is no server" is a legitimate answer to a listing. Anything else tmux
+// says is a failure, and reporting it as an empty list is the "your sessions are
+// gone" misreading the Windows stub exists to avoid.
+func TestTmuxServerAbsentSeparatesNoServerFromRealFailures(t *testing.T) {
+	absent := []string{
+		"",
+		"   \n",
+		"no server running on /private/tmp/tmux-501/default",
+		"error connecting to /private/tmp/tmux-501/default (No such file or directory)",
+	}
+	for _, stderr := range absent {
+		if !tmuxServerAbsent([]byte(stderr)) {
+			t.Errorf("stderr %q treated as a failure, want no-server", stderr)
+		}
+	}
+	failures := []string{
+		"command list-panes: invalid flag --",
+		"unknown option: -f",
+		"usage: list-panes [-as]",
+	}
+	for _, stderr := range failures {
+		if tmuxServerAbsent([]byte(stderr)) {
+			t.Errorf("stderr %q treated as no-server, want a reported failure", stderr)
+		}
+	}
+}
+
+// A dead pane reports no cwd, so that row would end after the state column and
+// read as truncated rather than as "there is nothing here".
+func TestTmuxSessionRowsLabelTheMissingDirectory(t *testing.T) {
+	now := time.Date(2026, 8, 22, 19, 35, 0, 0, time.UTC)
+	row := tmuxSessionRows([]managedTmuxSession{{tool: "codex", dead: true, activity: now}}, now)[0]
+	if !strings.Contains(row, i18n.T("tmux.no_directory")) {
+		t.Fatalf("row = %q, want the missing-directory label", row)
+	}
+	// A session that does have one still shows it verbatim.
+	row = tmuxSessionRows([]managedTmuxSession{{tool: "codex", directory: "/w/api", activity: now}}, now)[0]
+	if !strings.Contains(row, "/w/api") || strings.Contains(row, i18n.T("tmux.no_directory")) {
+		t.Fatalf("row = %q, want the real directory and no placeholder", row)
+	}
+}
