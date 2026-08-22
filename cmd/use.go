@@ -125,32 +125,75 @@ func Use(args []string) error {
 	return use(args, true)
 }
 
-// usePreflight runs every launch check that is knowable locally, and it must
-// stay on this side of relaunchUseInTerminal. The tmux relaunch replaces the
-// user's terminal with a tmux client whose only window runs the re-entered
-// `use`, so an error raised after it is written to a pane tmux destroys the
-// instant that process exits: the user is left with the launch banner, tmux's
-// own "[exited]", and a reattach hint for a session that no longer exists —
-// never the line that says what to fix. Only cheap, side-effect-free checks
-// belong here. Interactive pickers deliberately stay after the relaunch, so a
-// choice is made inside the session that will actually use it.
-func usePreflight(toolName, group string, pickGroup bool) (*config.Credentials, *tools.Tool, error) {
+// The launch preflight is split in two because the two halves belong on
+// opposite sides of the tool picker, and both belong before
+// relaunchUseInTerminal. That relaunch replaces the user's terminal with a tmux
+// client whose only window runs the re-entered `use`, so an error raised after
+// it is written to a pane tmux destroys the instant that process exits: the user
+// is left with the launch banner, tmux's own "[exited]", and a reattach hint for
+// a session that no longer exists — never the line that says what to fix.
+//
+// The rule both halves keep: if a launch cannot succeed and we can know that
+// from local state alone, say so before anything is prompted for and before the
+// terminal is handed away. Prompts that need the answer to be made *inside* the
+// session — the group picker, the installer offer — stay on the far side.
+
+// useCredentialPreflight runs the checks that do not need to know which tool was
+// asked for, so it can sit ahead of the tool picker: being told to log in should
+// not cost the user a scroll through a tool list first.
+func useCredentialPreflight(group string, pickGroup bool) (*config.Credentials, error) {
 	creds, err := config.Load()
 	if errors.Is(err, config.ErrNoCredentials) {
-		return nil, nil, errors.New(i18n.T("auth.not_logged_in"))
+		return nil, errors.New(i18n.T("auth.not_logged_in"))
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	// OAuth2 (relay-key) logins carry no management credential, so the per-group relay-key lookup (uncached ListTokens path) 401s and the downstream handler mistranslates that into "session expired — re-login", which re-login cannot fix. Refuse --group/--channel up front with an actionable message. The default-group path works off the cached relay key, so only guard when a group was explicitly requested (flag value or the interactive picker).
 	if creds.OAuthClientID != "" && (group != "" || pickGroup) {
-		return nil, nil, errors.New(i18n.T("use.relay_key_mode_group"))
+		return nil, errors.New(i18n.T("use.relay_key_mode_group"))
 	}
+	return creds, nil
+}
+
+// useToolPreflight resolves the tool and rejects every argument combination the
+// registry alone proves cannot work. Each check here is a pure function of the
+// parsed arguments and the tool's own metadata — no network, no prompts — which
+// is what makes them safe to run before the boundary and wrong to run after it.
+func useToolPreflight(toolName string, extraArgs []string, model string, transparentFlag *bool, sanitize bool) (*tools.Tool, error) {
 	t, err := tools.Lookup(toolName)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return creds, t, nil
+	// Checked against the raw extraArgs, before toolArgsForLaunch rewrites them.
+	if unavailable := nativeUnavailableModelArgument(t, extraArgs); unavailable != "" {
+		return nil, fmt.Errorf(
+			"model %q cannot be selected through %s's native flags; choose an available model with `everyapi use %s --model <id>` before `--`",
+			unavailable, t.ExecName, t.ExecName,
+		)
+	}
+	// A tool with no transparent adapter has no third-party origin to preserve. Defaulting silently keeps the injected path for such a tool, but an explicit --transparent still fails: the user asked for something that cannot be delivered.
+	if transparentFlag != nil && *transparentFlag {
+		if !t.SupportsTransparent() {
+			return nil, fmt.Errorf("transparent mode is not supported for %s", t.Name)
+		}
+		// Same principle applied to the network: when ALL_PROXY is the user's only proxy variable neither side reads it, so transparent mode strands every request. The default path downgrades with a note (see below); an explicit --transparent fails loudly, because silently doing something other than what was asked is worse.
+		if envVar := allProxyOnlyEgressVar(); envVar != "" {
+			return nil, fmt.Errorf(
+				"--transparent cannot use the proxy configured in %s: the local\n"+
+					"connector resolves proxies the way Go does, which ignores %s. Set\n"+
+					"HTTPS_PROXY instead, or drop --transparent to launch through the\n"+
+					"gateway Base URL.", envVar, envVar)
+		}
+	}
+	// --model applies to tools EveryAPI picks a model for: hermes and the official qwen-code/kimi-code clients (ModelEnv), plus the clients whose boot model EveryAPI can steer without an env var (claude, codex, opencode, and grok — see toolRemembersModel).
+	if model != "" && t.ModelEnv == "" && !toolRemembersModel(t) {
+		return nil, fmt.Errorf(i18n.T("use.model_unsupported"), t.ExecName, t.ExecName)
+	}
+	if t.Native && sanitize {
+		return nil, fmt.Errorf("--sanitize is not supported for native %s", t.ExecName)
+	}
+	return t, nil
 }
 
 // use owns the launch flow. persistModelSelection is false only for Connect's
@@ -166,6 +209,10 @@ func use(args []string, persistModelSelection bool) error {
 	if err != nil {
 		return err
 	}
+	creds, err := useCredentialPreflight(group, pickGroup)
+	if err != nil {
+		return err
+	}
 	if toolName == "" {
 		toolName, err = interactivePicker()
 		if err != nil {
@@ -173,7 +220,7 @@ func use(args []string, persistModelSelection bool) error {
 		}
 		args = useArgsWithSelectedTool(args, toolName)
 	}
-	creds, t, err := usePreflight(toolName, group, pickGroup)
+	t, err := useToolPreflight(toolName, extraArgs, model, transparentFlag, sanitize)
 	if err != nil {
 		return err
 	}
@@ -191,41 +238,20 @@ func use(args []string, persistModelSelection bool) error {
 		}
 	}
 
-	if unavailable := nativeUnavailableModelArgument(t, extraArgs); unavailable != "" {
-		return fmt.Errorf(
-			"model %q cannot be selected through %s's native flags; choose an available model with `everyapi use %s --model <id>` before `--`",
-			unavailable, t.ExecName, t.ExecName,
-		)
-	}
 	extraArgs = toolArgsForLaunch(t, extraArgs)
-	// Transparent mode is the default wherever a tool has an adapter for it: the tool keeps talking to its vendor's official origin and the relay key never reaches the child's env or config. A tool without an adapter has no third-party origin to preserve (hermes is EveryAPI-native and routes at <apiBase>/v1 by design), so it silently keeps the injected path — defaulting must not break it. An explicit --transparent on such a tool still fails: the user asked for something that cannot be delivered.
+	// Transparent mode is the default wherever a tool has an adapter for it: the tool keeps talking to its vendor's official origin and the relay key never reaches the child's env or config. A tool without an adapter has no third-party origin to preserve (hermes is EveryAPI-native and routes at <apiBase>/v1 by design), so it silently keeps the injected path — defaulting must not break it. An explicit --transparent on such a tool already failed in useToolPreflight.
 	transparent := t.SupportsTransparent()
 	if transparentFlag != nil {
-		if *transparentFlag && !t.SupportsTransparent() {
-			return fmt.Errorf("transparent mode is not supported for %s", t.Name)
-		}
 		transparent = *transparentFlag
 	}
-	// Same principle as an unsupported tool, applied to an unsupported network. When ALL_PROXY is the user's only proxy variable, neither side honors it: http.ProxyFromEnvironment ignores ALL_PROXY so the connector dials direct, and TransparentEnv strips it from the child. On a network where direct egress is firewalled that hangs every request. Defaulting must not break a setup that works today, so fall back to the injected path, where the child reads ALL_PROXY itself exactly as before. An explicit --transparent still fails loudly: silently doing something other than what was asked is worse.
+	// When ALL_PROXY is the user's only proxy variable, neither side honors it: http.ProxyFromEnvironment ignores ALL_PROXY so the connector dials direct, and TransparentEnv strips it from the child. On a network where direct egress is firewalled that hangs every request. Defaulting must not break a setup that works today, so fall back to the injected path, where the child reads ALL_PROXY itself exactly as before. Only the default path reaches here — an explicit --transparent was already refused in useToolPreflight.
 	if transparent {
 		if envVar := allProxyOnlyEgressVar(); envVar != "" {
-			if transparentFlag != nil && *transparentFlag {
-				return fmt.Errorf(
-					"--transparent cannot use the proxy configured in %s: the local\n"+
-						"connector resolves proxies the way Go does, which ignores %s. Set\n"+
-						"HTTPS_PROXY instead, or drop --transparent to launch through the\n"+
-						"gateway Base URL.", envVar, envVar)
-			}
 			cliout.Printf(
 				"Note: %s is your only proxy setting, which the transparent connector does\n"+
 					"not read — launching %s on the injected path instead.\n", envVar, t.ExecName)
 			transparent = false
 		}
-	}
-
-	// --model applies to tools EveryAPI picks a model for: hermes and the official qwen-code/kimi-code clients (ModelEnv), plus the clients whose boot model EveryAPI can steer without an env var (claude, codex, opencode, and grok — see toolRemembersModel).
-	if model != "" && t.ModelEnv == "" && !toolRemembersModel(t) {
-		return fmt.Errorf(i18n.T("use.model_unsupported"), t.ExecName, t.ExecName)
 	}
 
 	// Preflight: if the tool's binary isn't on PATH, offer to run its installer. This runs BEFORE the relay-key probe + sanitizer boot so a buyer who's never installed the agent doesn't pay for two network round-trips just to hit "not installed" at the very end. Non-interactive callers (CI, piped stdin) get the original ErrToolNotFound — we're not going to start writing to npm's global prefix from a script that didn't ask for it.
@@ -234,9 +260,7 @@ func use(args []string, persistModelSelection bool) error {
 	}
 	maybeNotifyClaudeUpdate(toolName)
 	if t.Native {
-		if sanitize {
-			return fmt.Errorf("--sanitize is not supported for native %s", t.ExecName)
-		}
+		// --sanitize on a native tool was already refused in useToolPreflight.
 		return launchNativeTool(t, extraArgs)
 	}
 

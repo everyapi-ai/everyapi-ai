@@ -900,4 +900,15 @@ func TestTmuxSessionEndedNoticeSpeaksOnlyForFailures(t *testing.T) {
 	if strings.Contains(notice, "%!") {
 		t.Fatalf("notice = %q, want every format argument consumed", notice)
 	}
+	// A signalled tool did not fail — somebody ended it, in a pane they were
+	// looking at. commandExitCode renders that as 128+signo.
+	for _, signalled := range []int{130, 143, 128 + 1, 128 + 31} {
+		if notice := tmuxSessionEndedNotice(session, signalled); notice != "" {
+			t.Errorf("exit %d notice = %q, want silence for a signalled tool", signalled, notice)
+		}
+	}
+	// A real failure code just above the signal range still gets the hint.
+	if notice := tmuxSessionEndedNotice(session, 128+32); notice == "" {
+		t.Error("exit 160 produced no notice, want the failure hint")
+	}
 }

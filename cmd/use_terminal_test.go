@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -217,16 +218,19 @@ func writeTestCredentials(t *testing.T, credentials string) {
 	}
 }
 
-// stubTerminalRelaunch replaces the tmux boundary and reports whether a launch
-// crossed it.
-func stubTerminalRelaunch(t *testing.T) *bool {
+// stubTerminalRelaunch replaces the tmux boundary with a stub that returns
+// result, and reports whether a launch crossed it. Passing a sentinel error
+// lets a caller assert the boundary was reached while stopping the flow right
+// there, so the test never falls through into installer prompts or network
+// calls.
+func stubTerminalRelaunch(t *testing.T, result error) *bool {
 	t.Helper()
 	crossed := false
 	previous := relaunchUseInTerminal
 	t.Cleanup(func() { relaunchUseInTerminal = previous })
 	relaunchUseInTerminal = func([]string) error {
 		crossed = true
-		return nil
+		return result
 	}
 	return &crossed
 }
@@ -247,6 +251,13 @@ func TestUseRejectsKnownFailuresBeforeCrossingTheTmuxBoundary(t *testing.T) {
 		{name: "logged out", useArgs: []string{"codex"}, wantError: i18n.T("auth.not_logged_in")},
 		{name: "unknown tool", credentials: validCredentials, useArgs: []string{"nosuchtool"}, wantError: `unknown tool "nosuchtool"`},
 		{name: "relay key group", credentials: oauthCredentials, useArgs: []string{"codex", "--group", "g"}, wantError: i18n.T("use.relay_key_mode_group")},
+		// Every one of these is a pure function of the parsed arguments and the
+		// tool registry, so every one of them used to be written into a pane
+		// tmux was about to destroy.
+		{name: "transparent unsupported", credentials: validCredentials, useArgs: []string{"gemini", "--transparent"}, wantError: "transparent mode is not supported for gemini"},
+		{name: "model unsupported", credentials: validCredentials, useArgs: []string{"pi-web", "--model", "gpt-5"}, wantError: fmt.Sprintf(i18n.T("use.model_unsupported"), "pi-web", "pi-web")},
+		{name: "sanitize on a native tool", credentials: validCredentials, useArgs: []string{"librefang", "--sanitize"}, wantError: "--sanitize is not supported for native librefang"},
+		{name: "native model flag after the separator", credentials: validCredentials, useArgs: []string{"grok", "--", "--model", "grok-4"}, wantError: "cannot be selected through grok's native flags"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -254,7 +265,7 @@ func TestUseRejectsKnownFailuresBeforeCrossingTheTmuxBoundary(t *testing.T) {
 			if test.credentials != "" {
 				writeTestCredentials(t, test.credentials)
 			}
-			crossed := stubTerminalRelaunch(t)
+			crossed := stubTerminalRelaunch(t, nil)
 			err := use(test.useArgs, true)
 			if err == nil || !strings.Contains(err.Error(), test.wantError) {
 				t.Fatalf("error = %v, want it to contain %q", err, test.wantError)
@@ -271,14 +282,59 @@ func TestUseRejectsKnownFailuresBeforeCrossingTheTmuxBoundary(t *testing.T) {
 func TestUsePreflightPassesThroughToTheTerminalRelaunch(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	writeTestCredentials(t, `{"api_base":"https://api.everyapi.ai","access_token":"t","relay_key":"sk-everyapi-test"}`)
-	creds, tool, err := usePreflight("codex", "", false)
+	creds, err := useCredentialPreflight("", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if creds == nil || creds.RelayKey != "sk-everyapi-test" {
 		t.Fatalf("credentials = %+v, want the planted relay key", creds)
 	}
+	tool, err := useToolPreflight("codex", nil, "", nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if tool == nil || tool.ExecName != "codex" {
 		t.Fatalf("tool = %+v, want codex", tool)
+	}
+	// The gate has to hand control on, not stand in for the relaunch. A
+	// sentinel out of the stubbed boundary proves use() reached it on a launch
+	// the preflight accepted, and stops the flow before the installer prompt
+	// and the relay-key round-trip.
+	reachedBoundary := errors.New("reached the terminal relaunch")
+	crossed := stubTerminalRelaunch(t, reachedBoundary)
+	if err := use([]string{"codex"}, true); !errors.Is(err, reachedBoundary) {
+		t.Fatalf("error = %v, want the stubbed relaunch sentinel", err)
+	}
+	if !*crossed {
+		t.Fatal("an accepted launch never reached the tmux boundary")
+	}
+}
+
+// An explicit --transparent that cannot reach the network is knowable from the
+// environment alone, so it belongs on this side of the boundary too.
+func TestUseRejectsUnreachableTransparentProxyBeforeTheTmuxBoundary(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	writeTestCredentials(t, `{"api_base":"https://api.everyapi.ai","access_token":"t","relay_key":"sk-everyapi-test"}`)
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("https_proxy", "")
+	t.Setenv("ALL_PROXY", "socks5://127.0.0.1:1080")
+	crossed := stubTerminalRelaunch(t, nil)
+	err := use([]string{"codex", "--transparent"}, true)
+	if err == nil || !strings.Contains(err.Error(), "ALL_PROXY") {
+		t.Fatalf("error = %v, want the ALL_PROXY refusal", err)
+	}
+	if *crossed {
+		t.Fatal("launch crossed the tmux boundary before reporting a locally knowable failure")
+	}
+}
+
+// Being told to log in must not cost a scroll through the tool picker first.
+// The credential half of the preflight therefore takes no tool name at all,
+// which is what lets it run ahead of the picker.
+func TestUseCredentialPreflightNeedsNoToolName(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if _, err := useCredentialPreflight("", false); err == nil ||
+		!strings.Contains(err.Error(), i18n.T("auth.not_logged_in")) {
+		t.Fatalf("error = %v, want the not-logged-in message", err)
 	}
 }

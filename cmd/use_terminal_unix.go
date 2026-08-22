@@ -608,6 +608,14 @@ func tmuxSessionEndedNotice(sessionName string, exitCode int) string {
 	if exitCode == 0 {
 		return ""
 	}
+	// commandExitCode maps a signalled child to 128+signo, so Ctrl-C arrives as
+	// 130 and a targeted kill as 143. In those cases the tool did not fail —
+	// somebody ended it, and watched it end in the pane. Telling them to switch
+	// terminal modes "to see failures" would be advice for a failure that never
+	// happened. A tool that genuinely exits in this range loses only a hint.
+	if exitCode > 128 && exitCode <= 128+31 {
+		return ""
+	}
 	return fmt.Sprintf(i18n.T("use.tmux_session_ended"), sessionName, exitCode)
 }
 
