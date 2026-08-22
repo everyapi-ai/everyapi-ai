@@ -75,7 +75,7 @@ Gleicher Ablauf wie beim Shell-Skript: neuesten Tag auflösen, `everyapi_windows
 | `everyapi inbox <sub>` | In-App-Benachrichtigungen und Direktnachrichten |
 | `everyapi seller <sub>` | Marketplace-Verkäuferbefehle (list / setup / withdraw / add-key / add-oauth) |
 | `everyapi edge <sub>` | Ein-Befehl-Deployment des BYO-GPU-Supplier-Agents (register / start / status / logs / models / rename / pause / resume / stop / update / remove) |
-| `everyapi artifacts <sub>` | Eigenständige HTML-Reports veröffentlichen und verwalten (`share` / `update` / `delete`) |
+| `everyapi artifacts <sub>` | Eigenständige HTML-Reports veröffentlichen und verwalten (`share` / `list` / `update` / `delete`) |
 | `everyapi events` | Den Live-Event-Stream abonnieren (SSE) |
 | `everyapi feedback` | Einen Fehlerbericht oder Feature-Wunsch ans Team schicken |
 | `everyapi proxy <sub>` | Lokaler Sanitizer-Proxy (`start` / `stop` / `status` / `configure`) |

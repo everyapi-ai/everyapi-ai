@@ -561,7 +561,7 @@ func TestNativeLaunchNoticeDoesNotMislabelLibreFangAsAntigravity(t *testing.T) {
 	}
 }
 
-func TestNativeLaunchEnvPointsLibreFangAtTheCurrentEveryAPIExecutable(t *testing.T) {
+func TestNativeLaunchEnvExposesTheCurrentEveryAPIExecutable(t *testing.T) {
 	librefang, err := tools.Lookup("librefang")
 	if err != nil {
 		t.Fatal(err)
@@ -586,8 +586,8 @@ func TestNativeLaunchEnvPointsLibreFangAtTheCurrentEveryAPIExecutable(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := env["EVERYAPI_CLI_PATH"]; ok {
-		t.Fatalf("Antigravity inherited LibreFang credential-process override: %v", env)
+	if got := env[tools.CLIPathEnvironment]; got != want {
+		t.Fatalf("Antigravity %s = %q, want current executable %q", tools.CLIPathEnvironment, got, want)
 	}
 }
 
@@ -964,7 +964,7 @@ func TestForgeResponseOnlyModelReachesResponsesProvider(t *testing.T) {
 	}
 }
 
-func TestApplyTmuxAgentContextMergesClaudeSystemPrompt(t *testing.T) {
+func TestApplyAgentContextMergesClaudeSystemPrompt(t *testing.T) {
 	t.Setenv("TMUX", "/tmp/tmux-501/default,1,0")
 	t.Setenv(tools.TerminalModeEnvironment, "tmux")
 	t.Setenv(tools.TmuxSessionEnvironment, "everyapi-123-456")
@@ -973,27 +973,28 @@ func TestApplyTmuxAgentContextMergesClaudeSystemPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := applyTmuxAgentContext(claude, []string{"--append-system-prompt", "User instructions", "resume"})
-	want := []string{"--append-system-prompt", "User instructions\n\n" + tools.TmuxAgentInstructions(), "resume"}
+	got := applyAgentContext(claude, []string{"--append-system-prompt", "User instructions", "resume"})
+	want := []string{"--append-system-prompt", "User instructions\n\n" + tools.AgentInstructions(), "resume"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Claude args = %#v, want %#v", got, want)
 	}
-	got = applyTmuxAgentContext(claude, []string{"--append-system-prompt=Inline instructions", "resume"})
-	want = []string{"--append-system-prompt=Inline instructions\n\n" + tools.TmuxAgentInstructions(), "resume"}
+	got = applyAgentContext(claude, []string{"--append-system-prompt=Inline instructions", "resume"})
+	want = []string{"--append-system-prompt=Inline instructions\n\n" + tools.AgentInstructions(), "resume"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Claude inline-prompt args = %#v, want %#v", got, want)
 	}
-	got = applyTmuxAgentContext(claude, []string{"resume"})
-	want = []string{"--append-system-prompt", tools.TmuxAgentInstructions(), "resume"}
+	got = applyAgentContext(claude, []string{"resume"})
+	want = []string{"--append-system-prompt", tools.AgentInstructions(), "resume"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Claude args without user prompt = %#v, want %#v", got, want)
 	}
-	if got := applyTmuxAgentContext(claude, []string{"--help"}); !reflect.DeepEqual(got, []string{"--help"}) {
+	if got := applyAgentContext(claude, []string{"--help"}); !reflect.DeepEqual(got, []string{"--help"}) {
 		t.Fatalf("Claude help args = %#v, want unchanged", got)
 	}
 	t.Setenv("TMUX", "")
-	if got := applyTmuxAgentContext(claude, []string{"resume"}); !reflect.DeepEqual(got, []string{"resume"}) {
-		t.Fatalf("Claude native args = %#v, want unchanged", got)
+	want = []string{"--append-system-prompt", tools.AgentInstructions(), "resume"}
+	if got := applyAgentContext(claude, []string{"resume"}); !reflect.DeepEqual(got, want) {
+		t.Fatalf("Claude native args = %#v, want artifact standard %#v", got, want)
 	}
 }
 

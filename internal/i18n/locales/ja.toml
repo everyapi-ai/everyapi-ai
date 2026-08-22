@@ -133,8 +133,8 @@ uninstall = "このマシンから everyapi の状態とバイナリを削除"
 version = "ビルドバージョン · update · uninstall"
 
 [artifacts]
-usage = "使用法: everyapi artifacts share [--json] <file.html> | everyapi artifacts update [--json] <url> <file.html> | everyapi artifacts delete [--json] <url>"
-unknown_sub = "不明な artifacts サブコマンド %q（share、update、delete のいずれかを指定してください）"
+usage = "使用法: everyapi artifacts share [--json] <file.html> | everyapi artifacts list [--json] | everyapi artifacts update [--json] <url> <file.html> | everyapi artifacts delete [--json] <url>"
+unknown_sub = "不明な artifacts サブコマンド %q（share、list、update、delete のいずれかを指定してください）"
 html_required = "artifact は .html または .htm ファイルである必要があります"
 regular_required = "artifact は通常ファイルである必要があります"
 too_large = "artifact は %d バイトです。上限は %d バイトです"
@@ -1347,6 +1347,7 @@ hook_trust_prompt = "Codex が事前確認なしでリポジトリの hooks を�
 launching = "%s を %s に対して起動中"
 launching_via = "%s を %s 経由で %s に対して起動中"
 tmux_launching = "tmux セッション %s で起動中（Ctrl-b d でデタッチ、`tmux attach -t %s` で再接続）"
+tmux_session_ended = "tmux セッション %s は終了コード %d で終了しました。ツールが失敗時に出力した内容はセッションとともに閉じられています。`everyapi settings set terminal_mode native` を実行すると、エラーがこの端末に直接表示されます。"
 tmux_not_found = "tmux がインストールされていません。tmux をインストールするか、`everyapi settings set terminal_mode native` を実行してください"
 tmux_windows_unsupported = "Windows では tmux ターミナルモードを使用できません。`everyapi settings set terminal_mode native` を実行してください"
 tmux_unavailable_option = "（tmux がインストールされていません）"

@@ -597,6 +597,27 @@ type tmuxExitStatusResult struct {
 	err      error
 }
 
+// tmuxSessionEndedNotice is what the outer process says once the wrapper has
+// reported the tool's status, or "" when nothing needs saying. A non-zero
+// status is the one case worth a word: the tool is gone, so the reattach hint
+// printed at launch can now only answer "can't find session", and whatever the
+// tool printed as it failed went to a pane tmux has already destroyed. Name the
+// status and point at the terminal mode that would have shown the message. A
+// clean exit stays silent — that is just the user quitting their tool.
+func tmuxSessionEndedNotice(sessionName string, exitCode int) string {
+	if exitCode == 0 {
+		return ""
+	}
+	return fmt.Sprintf(i18n.T("use.tmux_session_ended"), sessionName, exitCode)
+}
+
+func exitAfterTmuxSession(sessionName string, exitCode int) {
+	if notice := tmuxSessionEndedNotice(sessionName, exitCode); notice != "" {
+		fmt.Fprintln(os.Stderr, notice)
+	}
+	os.Exit(exitCode)
+}
+
 func relaunchUseInTmux(useArgs []string) error {
 	tmuxPath, err := exec.LookPath("tmux")
 	if err != nil {
@@ -708,7 +729,7 @@ func relaunchUseInTmux(useArgs []string) error {
 			_ = tmuxCommand.Process.Signal(syscall.SIGHUP)
 			<-tmuxResult
 			cleanup(true)
-			os.Exit(status.exitCode)
+			exitAfterTmuxSession(sessionName, status.exitCode)
 		case runErr := <-tmuxResult:
 			// Status can race with the tmux client shutdown. Consume an already-delivered result before treating a still-live session as an intentional detach.
 			select {
@@ -717,7 +738,7 @@ func relaunchUseInTmux(useArgs []string) error {
 					return fmt.Errorf("wait for tmux session %s: %w", sessionName, status.err)
 				}
 				cleanup(true)
-				os.Exit(status.exitCode)
+				exitAfterTmuxSession(sessionName, status.exitCode)
 			default:
 			}
 			if exec.Command(tmuxPath, "has-session", "-t", sessionName).Run() == nil {
@@ -736,7 +757,7 @@ func relaunchUseInTmux(useArgs []string) error {
 				return fmt.Errorf("wait for tmux session %s: %w", sessionName, status.err)
 			}
 			cleanup(true)
-			os.Exit(status.exitCode)
+			exitAfterTmuxSession(sessionName, status.exitCode)
 		case received := <-terminationSignals:
 			// Closing the host terminal is equivalent to detaching from the persistent session. Signal only the tmux client, clean the private IPC path explicitly because os.Exit skips defers, and leave the server-side session running.
 			_ = tmuxCommand.Process.Signal(received)

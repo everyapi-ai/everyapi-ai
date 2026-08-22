@@ -197,7 +197,7 @@ func TestEnv_OpenCodeUsesOfficialCompatibleProviderWithoutPersistingTheKey(t *te
 	}
 }
 
-func TestPrepareOpenCodeAddsProcessScopedTmuxInstructions(t *testing.T) {
+func TestPrepareOpenCodeAddsProcessScopedAgentInstructions(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("TMUX", "/tmp/tmux-501/default,1,0")
 	t.Setenv(TerminalModeEnvironment, "tmux")
@@ -224,16 +224,16 @@ func TestPrepareOpenCodeAddsProcessScopedTmuxInstructions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(body) != TmuxAgentInstructions()+"\n" {
-		t.Fatalf("OpenCode tmux instructions = %q", body)
+	if string(body) != AgentInstructions()+"\n" {
+		t.Fatalf("OpenCode agent instructions = %q", body)
 	}
 	cleanup := TakePreparedCleanup(extra)
 	if cleanup == nil {
-		t.Fatal("OpenCode tmux instruction file has no lifecycle cleanup")
+		t.Fatal("OpenCode agent instruction file has no lifecycle cleanup")
 	}
 	cleanup()
 	if _, err := os.Stat(config.Instructions[0]); !os.IsNotExist(err) {
-		t.Fatalf("OpenCode tmux instruction file remained after cleanup: %v", err)
+		t.Fatalf("OpenCode agent instruction file remained after cleanup: %v", err)
 	}
 }
 

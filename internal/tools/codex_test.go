@@ -128,7 +128,7 @@ func TestPrepareCodex_WritesFiles(t *testing.T) {
 	}
 }
 
-func TestPrepareCodexAddsOnlyCurrentTmuxContext(t *testing.T) {
+func TestPrepareCodexAddsArtifactStandardAndOnlyCurrentTmuxContext(t *testing.T) {
 	_, codexHome := codexTestHome(t)
 	t.Setenv("TMUX", "/tmp/tmux-501/default,1,0")
 	t.Setenv(TerminalModeEnvironment, "tmux")
@@ -141,8 +141,11 @@ func TestPrepareCodexAddsOnlyCurrentTmuxContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), `developer_instructions = "You are running inside tmux session everyapi-123-456 for an EveryAPI tmux-mode launch.`) {
+	if !strings.Contains(string(body), "You are running inside tmux session everyapi-123-456") {
 		t.Fatalf("Codex config missing tmux developer instructions:\n%s", body)
+	}
+	if !strings.Contains(string(body), "EveryAPI Artifact delivery standard") {
+		t.Fatalf("Codex config missing artifact delivery standard:\n%s", body)
 	}
 
 	t.Setenv("TMUX", "")
@@ -154,7 +157,10 @@ func TestPrepareCodexAddsOnlyCurrentTmuxContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(body), "developer_instructions") {
+	if !strings.Contains(string(body), "developer_instructions") || !strings.Contains(string(body), "EveryAPI Artifact delivery standard") {
+		t.Fatalf("Codex native config lost artifact delivery instructions:\n%s", body)
+	}
+	if strings.Contains(string(body), "You are running inside tmux session") {
 		t.Fatalf("Codex native config retained stale tmux instructions:\n%s", body)
 	}
 }

@@ -176,13 +176,13 @@ func prepareOpenCodeWithModels(apiBase, _ string, models []Model, bootModel stri
 		config.Model = selected
 	}
 	preparedHome := ""
-	if instructions := TmuxAgentInstructions(); instructions != "" {
+	if instructions := AgentInstructions(); instructions != "" {
 		home, err := newPreparedHome("opencode")
 		if err != nil {
 			return nil, err
 		}
 		preparedHome = home
-		instructionsPath := filepath.Join(preparedHome, "tmux-context.md")
+		instructionsPath := filepath.Join(preparedHome, "agent-instructions.md")
 		if err := writeFileAtomic(instructionsPath, []byte(instructions+"\n"), 0o600); err != nil {
 			removePreparedHomeAfterQuiet(preparedHome)
 			return nil, err

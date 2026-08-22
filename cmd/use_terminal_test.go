@@ -5,8 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
@@ -196,5 +198,87 @@ func TestShouldReuseTmuxSessionOnlyForBareCodexResume(t *testing.T) {
 				t.Fatalf("shouldReuseTmuxSession(%#v) = %v, want %v", tt.useArgs, got, tt.want)
 			}
 		})
+	}
+}
+
+// writeTestCredentials plants a minimal legacy-flow credentials file in the
+// XDG config dir the caller has already redirected to a temp directory.
+func writeTestCredentials(t *testing.T, credentials string) {
+	t.Helper()
+	dir, err := config.ConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "credentials.json"), []byte(credentials), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// stubTerminalRelaunch replaces the tmux boundary and reports whether a launch
+// crossed it.
+func stubTerminalRelaunch(t *testing.T) *bool {
+	t.Helper()
+	crossed := false
+	previous := relaunchUseInTerminal
+	t.Cleanup(func() { relaunchUseInTerminal = previous })
+	relaunchUseInTerminal = func([]string) error {
+		crossed = true
+		return nil
+	}
+	return &crossed
+}
+
+// A failure the outer process can see locally must be reported there. Crossing
+// into tmux first writes it to a pane tmux destroys on exit, so the user gets
+// the launch banner, "[exited]", and a dead reattach hint instead of the one
+// line that says what to fix.
+func TestUseRejectsKnownFailuresBeforeCrossingTheTmuxBoundary(t *testing.T) {
+	const validCredentials = `{"api_base":"https://api.everyapi.ai","access_token":"t","relay_key":"sk-everyapi-test"}`
+	const oauthCredentials = `{"api_base":"https://api.everyapi.ai","relay_key":"sk-everyapi-test","oauth_client_id":"client"}`
+	tests := []struct {
+		name        string
+		credentials string
+		useArgs     []string
+		wantError   string
+	}{
+		{name: "logged out", useArgs: []string{"codex"}, wantError: i18n.T("auth.not_logged_in")},
+		{name: "unknown tool", credentials: validCredentials, useArgs: []string{"nosuchtool"}, wantError: `unknown tool "nosuchtool"`},
+		{name: "relay key group", credentials: oauthCredentials, useArgs: []string{"codex", "--group", "g"}, wantError: i18n.T("use.relay_key_mode_group")},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			if test.credentials != "" {
+				writeTestCredentials(t, test.credentials)
+			}
+			crossed := stubTerminalRelaunch(t)
+			err := use(test.useArgs, true)
+			if err == nil || !strings.Contains(err.Error(), test.wantError) {
+				t.Fatalf("error = %v, want it to contain %q", err, test.wantError)
+			}
+			if *crossed {
+				t.Fatal("launch crossed the tmux boundary before reporting a locally knowable failure")
+			}
+		})
+	}
+}
+
+// The happy path must still reach the relaunch: the preflight is a gate, not a
+// replacement for it.
+func TestUsePreflightPassesThroughToTheTerminalRelaunch(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	writeTestCredentials(t, `{"api_base":"https://api.everyapi.ai","access_token":"t","relay_key":"sk-everyapi-test"}`)
+	creds, tool, err := usePreflight("codex", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if creds == nil || creds.RelayKey != "sk-everyapi-test" {
+		t.Fatalf("credentials = %+v, want the planted relay key", creds)
+	}
+	if tool == nil || tool.ExecName != "codex" {
+		t.Fatalf("tool = %+v, want codex", tool)
 	}
 }

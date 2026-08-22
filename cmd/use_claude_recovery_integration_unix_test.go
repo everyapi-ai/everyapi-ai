@@ -76,7 +76,7 @@ func TestUseExecReceivesRecoveredClaudeSessionID(t *testing.T) {
 	bodyPath := filepath.Join(t.TempDir(), "body")
 	shimPath := filepath.Join(shimDir, "claude")
 	shim := "#!/bin/sh\n" +
-		"printf '%s\\n' \"$@\" > \"$EVERYAPI_TEST_USE_ARGV_FILE\"\n" +
+		"printf '%s\\000' \"$@\" > \"$EVERYAPI_TEST_USE_ARGV_FILE\"\n" +
 		useClaudeRecoveryShimEnv + "=1 exec \"$EVERYAPI_TEST_USE_TEST_BINARY\" -test.run=^TestUseExecReceivesRecoveredClaudeSessionID$\n"
 	if err := os.WriteFile(shimPath, []byte(shim), 0o755); err != nil {
 		t.Fatal(err)
@@ -99,17 +99,18 @@ func TestUseExecReceivesRecoveredClaudeSessionID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := strings.Fields(string(argv))
-	if len(got) != 2 || got[0] != "--resume" {
+	got := strings.Split(strings.TrimSuffix(string(argv), "\x00"), "\x00")
+	if len(got) != 4 || got[0] != "--append-system-prompt" ||
+		!strings.Contains(got[1], "EveryAPI Artifact delivery standard") || got[2] != "--resume" {
 		t.Fatalf("exec argv = %#v, want --resume with a fresh session ID", got)
 	}
-	if got[1] == oldID {
-		t.Fatalf("exec resume ID = %q, want the recovered session ID", got[1])
+	if got[3] == oldID {
+		t.Fatalf("exec resume ID = %q, want the recovered session ID", got[3])
 	}
-	if !claudeSessionIDPattern.MatchString(got[1]) {
-		t.Fatalf("exec resume ID = %q, want UUID", got[1])
+	if !claudeSessionIDPattern.MatchString(got[3]) {
+		t.Fatalf("exec resume ID = %q, want UUID", got[3])
 	}
-	if _, err := os.Stat(filepath.Join(filepath.Dir(oldPath), got[1]+".jsonl")); err != nil {
+	if _, err := os.Stat(filepath.Join(filepath.Dir(oldPath), got[3]+".jsonl")); err != nil {
 		t.Fatalf("recovered transcript for exec ID: %v", err)
 	}
 

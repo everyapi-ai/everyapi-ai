@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -22,7 +23,11 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-const maxArtifactBytes int64 = 5 << 20
+const (
+	maxArtifactBytes             int64 = 5 << 20
+	maxArtifactListResponseBytes int64 = 1 << 20
+	maxArtifactListPages               = 100
+)
 
 var artifactURLPath = regexp.MustCompile(`^/[A-Za-z0-9_-]{12}$`)
 
@@ -45,18 +50,37 @@ type deleteResult struct {
 	Deleted bool   `json:"deleted"`
 }
 
+type artifactListItem struct {
+	URL       string `json:"url"`
+	Filename  string `json:"filename"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+	ExpiresAt string `json:"expires_at"`
+}
+
+type artifactListPage struct {
+	Artifacts  []artifactListItem `json:"artifacts"`
+	NextCursor string             `json:"next_cursor,omitempty"`
+}
+
+type artifactListResult struct {
+	Artifacts []artifactListItem `json:"artifacts"`
+}
+
 func Run(args []string) error {
 	if len(args) == 0 || (len(args) == 1 && isHelp(args[0])) {
 		cliout.Println(i18n.T("artifacts.usage"))
 		return nil
 	}
-	if args[0] != "share" && args[0] != "update" && args[0] != "delete" {
+	if args[0] != "share" && args[0] != "update" && args[0] != "delete" && args[0] != "list" {
 		return fmt.Errorf(i18n.T("artifacts.unknown_sub"), args[0])
 	}
 	operands, asJSON := artifactOperands(args[1:])
 	expected := 1
 	if args[0] == "update" {
 		expected = 2
+	} else if args[0] == "list" {
+		expected = 0
 	}
 	if len(operands) != expected {
 		return errors.New(i18n.T("artifacts.usage"))
@@ -86,6 +110,12 @@ func Run(args []string) error {
 			return err
 		}
 		return printDeleteResult(result, asJSON)
+	case "list":
+		result, err := listArtifacts(ctx, httpClient, serviceBaseURL, creds)
+		if err != nil {
+			return err
+		}
+		return printListResult(result, asJSON)
 	}
 	return errors.New(i18n.T("artifacts.usage"))
 }
@@ -226,6 +256,66 @@ func deleteArtifact(ctx context.Context, client *http.Client, baseURL string, cr
 	return deleteResult{URL: artifactURL, Deleted: true}, nil
 }
 
+func listArtifacts(ctx context.Context, client *http.Client, baseURL string, creds *config.Credentials) (artifactListResult, error) {
+	authOrigin, err := artifactAuthOrigin(creds)
+	if err != nil {
+		return artifactListResult{}, err
+	}
+	result := artifactListResult{Artifacts: []artifactListItem{}}
+	cursor := ""
+	seenCursors := map[string]struct{}{}
+	for pageNumber := 0; pageNumber < maxArtifactListPages; pageNumber++ {
+		endpoint := strings.TrimRight(baseURL, "/") + "/api/artifacts"
+		if cursor != "" {
+			endpoint += "?" + url.Values{"cursor": []string{cursor}}.Encode()
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			return artifactListResult{}, fmt.Errorf("create artifact list request: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+creds.AccessToken)
+		req.Header.Set("EveryAPI-User-Id", strconv.Itoa(creds.UserID))
+		req.Header.Set("X-EveryAPI-Auth-Origin", authOrigin)
+		resp, err := client.Do(req)
+		if err != nil {
+			return artifactListResult{}, fmt.Errorf("list artifacts: %w", err)
+		}
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxArtifactListResponseBytes))
+		_ = resp.Body.Close()
+		if readErr != nil {
+			return artifactListResult{}, fmt.Errorf("read artifact list response: %w", readErr)
+		}
+		if resp.StatusCode != http.StatusOK {
+			return artifactListResult{}, artifactServiceError(resp.StatusCode, body)
+		}
+		var page artifactListPage
+		if err := json.Unmarshal(body, &page); err != nil {
+			return artifactListResult{}, fmt.Errorf("decode artifact list response: %w", err)
+		}
+		for _, artifact := range page.Artifacts {
+			if err := validateArtifactListItem(artifact); err != nil {
+				return artifactListResult{}, err
+			}
+		}
+		result.Artifacts = append(result.Artifacts, page.Artifacts...)
+		if page.NextCursor == "" {
+			sort.SliceStable(result.Artifacts, func(i, j int) bool {
+				return result.Artifacts[i].CreatedAt > result.Artifacts[j].CreatedAt
+			})
+			return result, nil
+		}
+		if len(page.NextCursor) > 4096 {
+			return artifactListResult{}, errors.New("artifact service returned an invalid list cursor")
+		}
+		if _, repeated := seenCursors[page.NextCursor]; repeated {
+			return artifactListResult{}, errors.New("artifact service repeated a list cursor")
+		}
+		seenCursors[page.NextCursor] = struct{}{}
+		cursor = page.NextCursor
+	}
+	return artifactListResult{}, fmt.Errorf("artifact list exceeded %d pages", maxArtifactListPages)
+}
+
 func artifactAuthOrigin(creds *config.Credentials) (string, error) {
 	if creds == nil || strings.TrimSpace(creds.AccessToken) == "" || creds.UserID <= 0 {
 		return "", config.ErrNoCredentials
@@ -269,12 +359,46 @@ func printDeleteResult(result deleteResult, asJSON bool) error {
 	return nil
 }
 
+func printListResult(result artifactListResult, asJSON bool) error {
+	if asJSON {
+		if err := json.NewEncoder(cliout.Out).Encode(result); err != nil {
+			return fmt.Errorf("write artifact list JSON: %w", err)
+		}
+		return nil
+	}
+	for _, artifact := range result.Artifacts {
+		cliout.Println(cliout.Sanitize(artifact.URL))
+	}
+	return nil
+}
+
 func validatePublishResult(result publishResult) error {
 	if _, err := artifactIDFromURL(result.URL); err != nil {
 		return errors.New("artifact service returned an invalid public URL")
 	}
 	if _, err := time.Parse(time.RFC3339, result.ExpiresAt); err != nil {
 		return errors.New("artifact service returned an invalid expiration time")
+	}
+	return nil
+}
+
+func validateArtifactListItem(item artifactListItem) error {
+	if _, err := artifactIDFromURL(item.URL); err != nil {
+		return errors.New("artifact service returned an invalid URL in the artifact list")
+	}
+	if strings.TrimSpace(item.Filename) == "" {
+		return errors.New("artifact service returned an empty filename in the artifact list")
+	}
+	if _, err := time.Parse(time.RFC3339, item.CreatedAt); err != nil {
+		return errors.New("artifact service returned an invalid creation time in the artifact list")
+	}
+	if item.UpdatedAt != "" {
+		if _, err := time.Parse(time.RFC3339, item.UpdatedAt); err != nil {
+			return errors.New("artifact service returned an invalid update time in the artifact list")
+		}
+	}
+	if _, err := time.Parse(time.RFC3339, item.ExpiresAt); err != nil {
+		return errors.New("artifact service returned an invalid expiration time in the artifact list")
 	}
 	return nil
 }

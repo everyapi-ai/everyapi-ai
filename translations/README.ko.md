@@ -75,7 +75,7 @@ TTY 에서 인자 없이 `everyapi` 를 실행하면 같은 명령 집합을 대
 | `everyapi inbox <sub>` | 인앱 알림과 다이렉트 메시지 |
 | `everyapi seller <sub>` | Marketplace 판매자 명령(list / setup / withdraw / add-key / add-oauth) |
 | `everyapi edge <sub>` | BYO-GPU supplier agent 원커맨드 배포(register / start / status / logs / models / rename / pause / resume / stop / update / remove) |
-| `everyapi artifacts <sub>` | 자체 완결형 HTML 리포트 발행 및 관리(`share` / `update` / `delete`) |
+| `everyapi artifacts <sub>` | 자체 완결형 HTML 리포트 발행 및 관리(`share` / `list` / `update` / `delete`) |
 | `everyapi events` | 실시간 이벤트 스트림(SSE) 구독 |
 | `everyapi feedback` | 버그 리포트나 기능 요청을 팀에 전송 |
 | `everyapi proxy <sub>` | 로컬 sanitizer proxy(`start` / `stop` / `status` / `configure`) |

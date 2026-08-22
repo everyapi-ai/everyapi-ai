@@ -79,7 +79,7 @@ enable dangerous mode (and, for Codex, whether to bypass hook trust review).
 Your choices are saved in settings.json and reused without prompting. The
 prompt defaults to Yes, but no dangerous option is enabled before you confirm.
 
-Terminal preference: the first interactive launch asks whether to use the native terminal or a persistent tmux session, then saves 'terminal_mode' in settings.json. Tmux launches expose the session name and attach command to every client; Codex, Claude Code, OpenCode, and Kilo also receive proactive model context. A bare Codex resume reattaches the sole live tmux session for the same project instead of starting a duplicate; dead EveryAPI sessions are pruned before launch. A non-interactive launch always uses the native terminal. Change it later with 'everyapi settings set terminal_mode native|tmux'.
+Terminal preference: the first interactive launch asks whether to use the native terminal or a persistent tmux session, then saves 'terminal_mode' in settings.json. Tmux launches expose the session name and attach command to every client. Codex, Claude Code, OpenCode, and Kilo receive the EveryAPI Artifact delivery standard on every launch, plus proactive tmux context when applicable. A bare Codex resume reattaches the sole live tmux session for the same project instead of starting a duplicate; dead EveryAPI sessions are pruned before launch. A non-interactive launch always uses the native terminal. Change it later with 'everyapi settings set terminal_mode native|tmux'.
 
 EXAMPLES
   everyapi use claude                  (transparent by default)
@@ -125,6 +125,34 @@ func Use(args []string) error {
 	return use(args, true)
 }
 
+// usePreflight runs every launch check that is knowable locally, and it must
+// stay on this side of relaunchUseInTerminal. The tmux relaunch replaces the
+// user's terminal with a tmux client whose only window runs the re-entered
+// `use`, so an error raised after it is written to a pane tmux destroys the
+// instant that process exits: the user is left with the launch banner, tmux's
+// own "[exited]", and a reattach hint for a session that no longer exists —
+// never the line that says what to fix. Only cheap, side-effect-free checks
+// belong here. Interactive pickers deliberately stay after the relaunch, so a
+// choice is made inside the session that will actually use it.
+func usePreflight(toolName, group string, pickGroup bool) (*config.Credentials, *tools.Tool, error) {
+	creds, err := config.Load()
+	if errors.Is(err, config.ErrNoCredentials) {
+		return nil, nil, errors.New(i18n.T("auth.not_logged_in"))
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	// OAuth2 (relay-key) logins carry no management credential, so the per-group relay-key lookup (uncached ListTokens path) 401s and the downstream handler mistranslates that into "session expired — re-login", which re-login cannot fix. Refuse --group/--channel up front with an actionable message. The default-group path works off the cached relay key, so only guard when a group was explicitly requested (flag value or the interactive picker).
+	if creds.OAuthClientID != "" && (group != "" || pickGroup) {
+		return nil, nil, errors.New(i18n.T("use.relay_key_mode_group"))
+	}
+	t, err := tools.Lookup(toolName)
+	if err != nil {
+		return nil, nil, err
+	}
+	return creds, t, nil
+}
+
 // use owns the launch flow. persistModelSelection is false only for Connect's
 // benchmark candidates: an experiment may select six models concurrently, and
 // none of them should race to become the user's normal next-launch default.
@@ -145,24 +173,17 @@ func use(args []string, persistModelSelection bool) error {
 		}
 		args = useArgsWithSelectedTool(args, toolName)
 	}
-	if err := maybeRelaunchUseInTerminal(args); err != nil {
-		return err
-	}
-
-	creds, err := config.Load()
-	if errors.Is(err, config.ErrNoCredentials) {
-		return errors.New(i18n.T("auth.not_logged_in"))
-	}
+	creds, t, err := usePreflight(toolName, group, pickGroup)
 	if err != nil {
 		return err
 	}
+	if err := relaunchUseInTerminal(args); err != nil {
+		return err
+	}
+
 	// The gateway to dial: settings.gateway_region is applied here (not just at login) so `everyapi settings set gateway_region cn/global` takes effect without a re-login. creds.APIBase stays the login value — login is its only author — so the RelayKey cache Save below never rewrites the stored api_base. A self-hosted --api-base survives because ResolveAPIBaseForBase returns a non-official creds base as-is.
 	gw := config.ResolveAPIBaseForBase(creds.APIBase)
 
-	// OAuth2 (relay-key) logins carry no management credential, so the per-group relay-key lookup (uncached ListTokens path) 401s and the downstream handler mistranslates that into "session expired — re-login", which re-login cannot fix. Refuse --group/--channel up front with an actionable message. The default-group path works off the cached relay key, so only guard when a group was explicitly requested (flag value or the interactive picker).
-	if creds.OAuthClientID != "" && (group != "" || pickGroup) {
-		return errors.New(i18n.T("use.relay_key_mode_group"))
-	}
 	if pickGroup {
 		group, err = pickGroupInteractive(creds)
 		if err != nil {
@@ -170,10 +191,6 @@ func use(args []string, persistModelSelection bool) error {
 		}
 	}
 
-	t, err := tools.Lookup(toolName)
-	if err != nil {
-		return err
-	}
 	if unavailable := nativeUnavailableModelArgument(t, extraArgs); unavailable != "" {
 		return fmt.Errorf(
 			"model %q cannot be selected through %s's native flags; choose an available model with `everyapi use %s --model <id>` before `--`",
@@ -437,6 +454,9 @@ func use(args []string, persistModelSelection bool) error {
 			env["no_proxy"] = exempt
 		}
 	}
+	if err := exposeEveryAPIExecutable(env); err != nil {
+		return err
+	}
 
 	// Both preference-driven flags below are prepended to argv, and both can already be there without appearing in extraArgs: the `codex` on $PATH may be a wrapper that injects flags of its own before the real binary parses them. The probe asks the binary we are about to exec whether it would accept one more copy. See tools.FlagProbe.
 	flagProbe := tools.NewFlagProbe(t)
@@ -513,7 +533,7 @@ func use(args []string, persistModelSelection bool) error {
 		return fmt.Errorf("prepare %s: %w", t.ExecName, err)
 	}
 	extraArgs = append(tools.TakePreparedArgs(extraEnv), extraArgs...)
-	extraArgs = applyTmuxAgentContext(t, extraArgs)
+	extraArgs = applyAgentContext(t, extraArgs)
 	preparedCleanup := tools.TakePreparedCleanup(extraEnv)
 	if preparedCleanup != nil {
 		defer preparedCleanup()
@@ -569,8 +589,8 @@ func useArgsWithSelectedTool(args []string, toolName string) []string {
 	return append(result, args[separator:]...)
 }
 
-func applyTmuxAgentContext(t *tools.Tool, args []string) []string {
-	instructions := tools.TmuxAgentInstructions()
+func applyAgentContext(t *tools.Tool, args []string) []string {
+	instructions := tools.AgentInstructions()
 	if t == nil || t.Name != "claude" || instructions == "" || !toolInvocationNeedsEndpoint(args) {
 		return args
 	}
@@ -945,17 +965,23 @@ func launchNativeTool(t *tools.Tool, args []string) error {
 	return tools.Exec(t, env, args)
 }
 
-// nativeLaunchEnv preserves each native client's credential boundary. In particular, LibreFang resolves EveryAPI credentials through the documented EVERYAPI_CLI_PATH credential-process hook. Pointing it at this executable is what makes the integration work when Connect's bundled `everyapi-sidecar` is the only EveryAPI binary installed on the machine.
-func nativeLaunchEnv(t *tools.Tool) (map[string]string, error) {
-	env := map[string]string{}
-	if t.Name != "librefang" {
-		return env, nil
-	}
+// exposeEveryAPIExecutable gives launched agents a stable way to invoke
+// `artifacts share` even when Connect's bundled sidecar is not on PATH.
+func exposeEveryAPIExecutable(env map[string]string) error {
 	executable, err := os.Executable()
 	if err != nil {
-		return nil, fmt.Errorf("resolve EveryAPI credential-process executable for LibreFang: %w", err)
+		return fmt.Errorf("resolve EveryAPI executable for artifact delivery: %w", err)
 	}
-	env["EVERYAPI_CLI_PATH"] = executable
+	env[tools.CLIPathEnvironment] = executable
+	return nil
+}
+
+// nativeLaunchEnv preserves each native client's credential boundary. LibreFang additionally consumes EVERYAPI_CLI_PATH as its documented credential-process hook; exporting the same non-secret executable path to every native child keeps the artifact delivery integration available without exposing an EveryAPI relay key.
+func nativeLaunchEnv(t *tools.Tool) (map[string]string, error) {
+	env := map[string]string{}
+	if err := exposeEveryAPIExecutable(env); err != nil {
+		return nil, err
+	}
 	return env, nil
 }
 

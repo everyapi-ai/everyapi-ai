@@ -881,3 +881,23 @@ func TestRelaunchUseInTmuxReportsMissingBinary(t *testing.T) {
 		t.Fatalf("error = %v, want missing-tmux guidance", err)
 	}
 }
+
+// A clean exit is the user quitting their tool and needs no commentary. A
+// non-zero one has to say something: the reattach hint printed at launch is
+// stale by then, and the tool's own failure output died with the pane.
+func TestTmuxSessionEndedNoticeSpeaksOnlyForFailures(t *testing.T) {
+	const session = "everyapi-v3-codex-3256d52ef013-8704e3c7ee40fd964014c218388c7be6"
+	if notice := tmuxSessionEndedNotice(session, 0); notice != "" {
+		t.Fatalf("clean exit notice = %q, want silence", notice)
+	}
+	notice := tmuxSessionEndedNotice(session, 1)
+	if !strings.Contains(notice, session) {
+		t.Fatalf("notice = %q, want it to name session %q", notice, session)
+	}
+	if !strings.Contains(notice, "1") {
+		t.Fatalf("notice = %q, want it to report the exit status", notice)
+	}
+	if strings.Contains(notice, "%!") {
+		t.Fatalf("notice = %q, want every format argument consumed", notice)
+	}
+}

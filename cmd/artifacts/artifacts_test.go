@@ -183,6 +183,10 @@ func TestArtifactHTTPClientRefusesRedirects(t *testing.T) {
 			_, err := deleteArtifact(context.Background(), httpClient, source.URL, creds, "https://artifacts.everyapi.ai/TK4tBA9HQErZ")
 			return err
 		}},
+		{name: "list", run: func() error {
+			_, err := listArtifacts(context.Background(), httpClient, source.URL, creds)
+			return err
+		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -312,6 +316,86 @@ func TestRunDeleteRevokesTheOwnedArtifact(t *testing.T) {
 	}
 	if got := strings.TrimSpace(out.String()); got != "deleted https://artifacts.everyapi.ai/TK4tBA9HQErZ" {
 		t.Errorf("stdout = %q", got)
+	}
+}
+
+func TestRunListFollowsPaginationAndPrintsNewestFirst(t *testing.T) {
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.Method != http.MethodGet || r.URL.Path != "/api/artifacts" {
+			t.Errorf("request = %s %s, want GET /api/artifacts", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer access-token" || r.Header.Get("EveryAPI-User-Id") != "42" {
+			t.Errorf("listing credentials were not forwarded")
+		}
+		if r.Header.Get("X-EveryAPI-Auth-Origin") != config.DefaultAPIBase {
+			t.Errorf("auth origin = %q", r.Header.Get("X-EveryAPI-Auth-Origin"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("cursor") {
+		case "":
+			_, _ = w.Write([]byte(`{"artifacts":[],"next_cursor":"opaque cursor/+"}`))
+		case "opaque cursor/+":
+			_, _ = w.Write([]byte(`{"artifacts":[{"url":"https://artifacts.everyapi.ai/TK4tBA9HQErZ","filename":"older.html","created_at":"2026-08-18T12:00:00Z","expires_at":"2026-09-17T12:00:00Z"},{"url":"https://artifacts.everyapi.ai/NJR7itv46u5X","filename":"newer.html","created_at":"2026-08-19T12:00:00Z","updated_at":"2026-08-20T12:00:00Z","expires_at":"2026-09-18T12:00:00Z"}]}`))
+		default:
+			t.Errorf("unexpected cursor %q", r.URL.Query().Get("cursor"))
+		}
+	}))
+	defer server.Close()
+	configureRunTest(t, server)
+	out := captureArtifactOutput(t)
+
+	if err := Run([]string{"list"}); err != nil {
+		t.Fatalf("Run list: %v", err)
+	}
+	if requests != 2 {
+		t.Fatalf("requests = %d, want 2", requests)
+	}
+	want := "https://artifacts.everyapi.ai/NJR7itv46u5X\nhttps://artifacts.everyapi.ai/TK4tBA9HQErZ\n"
+	if out.String() != want {
+		t.Errorf("stdout = %q, want %q", out.String(), want)
+	}
+}
+
+func TestRunListJSONIncludesManagementMetadata(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"artifacts":[{"url":"https://artifacts.everyapi.ai/TK4tBA9HQErZ","filename":"report.html","created_at":"2026-08-18T12:00:00Z","expires_at":"2026-09-17T12:00:00Z"}]}`))
+	}))
+	defer server.Close()
+	configureRunTest(t, server)
+	out := captureArtifactOutput(t)
+
+	if err := Run([]string{"list", "--json"}); err != nil {
+		t.Fatalf("Run list --json: %v", err)
+	}
+	var got artifactListResult
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not JSON: %q: %v", out.String(), err)
+	}
+	if len(got.Artifacts) != 1 || got.Artifacts[0].Filename != "report.html" {
+		t.Fatalf("JSON = %#v", got)
+	}
+}
+
+func TestListRejectsInvalidServicePages(t *testing.T) {
+	creds := &config.Credentials{APIBase: config.DefaultAPIBase, AccessToken: "access-token", UserID: 42}
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "untrusted URL", body: `{"artifacts":[{"url":"https://evil.example/TK4tBA9HQErZ","filename":"report.html","created_at":"2026-08-18T12:00:00Z","expires_at":"2026-09-17T12:00:00Z"}]}`},
+		{name: "invalid expiry", body: `{"artifacts":[{"url":"https://artifacts.everyapi.ai/TK4tBA9HQErZ","filename":"report.html","created_at":"2026-08-18T12:00:00Z","expires_at":"never"}]}`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(test.body)) }))
+			defer server.Close()
+			if _, err := listArtifacts(context.Background(), server.Client(), server.URL, creds); err == nil {
+				t.Fatal("want an error for an invalid list response")
+			}
+		})
 	}
 }
 

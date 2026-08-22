@@ -75,7 +75,7 @@ Ejecutar `everyapi` sin argumentos en un TTY abre un lanzador interactivo sobre 
 | `everyapi inbox <sub>` | Notificaciones dentro de la app y mensajes directos |
 | `everyapi seller <sub>` | Comandos de vendedor del marketplace (list / setup / withdraw / add-key / add-oauth) |
 | `everyapi edge <sub>` | Despliegue en un comando del agente proveedor BYO-GPU (register / start / status / logs / models / rename / pause / resume / stop / update / remove) |
-| `everyapi artifacts <sub>` | Publica y gestiona informes HTML autocontenidos (`share` / `update` / `delete`) |
+| `everyapi artifacts <sub>` | Publica y gestiona informes HTML autocontenidos (`share` / `list` / `update` / `delete`) |
 | `everyapi events` | Suscríbete al flujo de eventos en vivo (SSE) |
 | `everyapi feedback` | Envía un informe de error o una petición de función al equipo |
 | `everyapi proxy <sub>` | Proxy sanitizador local (`start` / `stop` / `status` / `configure`) |

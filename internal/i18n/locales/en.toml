@@ -124,8 +124,8 @@ uninstall = "Remove everyapi **state and binary** from this machine"
 version = "Build version · update · uninstall"
 
 [artifacts]
-usage = "usage: everyapi artifacts share [--json] <file.html> | everyapi artifacts update [--json] <url> <file.html> | everyapi artifacts delete [--json] <url>"
-unknown_sub = "unknown artifacts subcommand %q (try: share, update, delete)"
+usage = "usage: everyapi artifacts share [--json] <file.html> | everyapi artifacts list [--json] | everyapi artifacts update [--json] <url> <file.html> | everyapi artifacts delete [--json] <url>"
+unknown_sub = "unknown artifacts subcommand %q (try: share, list, update, delete)"
 html_required = "artifact must be an .html or .htm file"
 regular_required = "artifact must be a regular file"
 too_large = "artifact is %d bytes; maximum is %d bytes"
@@ -1338,6 +1338,7 @@ hook_trust_prompt = "Allow Codex to run repository hooks without reviewing them 
 launching = "Launching %s against %s"
 launching_via = "Launching %s against %s → %s"
 tmux_launching = "Launching in tmux session %s (detach with Ctrl-b d; reattach with `tmux attach -t %s`)"
+tmux_session_ended = "tmux session %s ended with status %d. Anything the tool printed as it failed closed with the session; run `everyapi settings set terminal_mode native` to see failures in this terminal instead."
 tmux_not_found = "tmux is not installed; install tmux or run `everyapi settings set terminal_mode native`"
 tmux_windows_unsupported = "tmux terminal mode is not supported on Windows; run `everyapi settings set terminal_mode native`"
 tmux_unavailable_option = "(tmux is not installed)"

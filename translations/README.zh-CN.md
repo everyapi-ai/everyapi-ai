@@ -75,7 +75,7 @@ irm https://dl.everyapi.ai/install.ps1 | iex
 | `everyapi inbox <sub>` | 站内通知与私信 |
 | `everyapi seller <sub>` | Marketplace 卖家端命令（list / setup / withdraw / add-key / add-oauth） |
 | `everyapi edge <sub>` | BYO-GPU supplier agent 一键部署（register / start / status / logs / models / rename / pause / resume / stop / update / remove） |
-| `everyapi artifacts <sub>` | 发布与管理自包含 HTML 报告（`share` / `update` / `delete`） |
+| `everyapi artifacts <sub>` | 发布与管理自包含 HTML 报告（`share` / `list` / `update` / `delete`） |
 | `everyapi events` | 订阅实时事件流（SSE） |
 | `everyapi feedback` | 向团队提交 bug 反馈或功能建议 |
 | `everyapi proxy <sub>` | 本地脱敏代理（`start` / `stop` / `status` / `configure`） |

@@ -121,6 +121,11 @@ func pickTerminalMode() (string, error) {
 	return values[idx], nil
 }
 
+// relaunchUseInTerminal is the tmux boundary as a package var so tests can
+// observe whether a launch crossed it, and in what order relative to
+// usePreflight. Production always points at maybeRelaunchUseInTerminal.
+var relaunchUseInTerminal = maybeRelaunchUseInTerminal
+
 func maybeRelaunchUseInTerminal(useArgs []string) error {
 	if !cliprompt.IsInteractive() {
 		return nil

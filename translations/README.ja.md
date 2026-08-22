@@ -75,7 +75,7 @@ TTY 上で引数なしに `everyapi` を実行すると、同じコマンド群�
 | `everyapi inbox <sub>` | アプリ内通知とダイレクトメッセージ |
 | `everyapi seller <sub>` | Marketplace セラー側コマンド（list / setup / withdraw / add-key / add-oauth） |
 | `everyapi edge <sub>` | BYO-GPU supplier agent のワンコマンド展開（register / start / status / logs / models / rename / pause / resume / stop / update / remove） |
-| `everyapi artifacts <sub>` | 自己完結型 HTML レポートの公開と管理（`share` / `update` / `delete`） |
+| `everyapi artifacts <sub>` | 自己完結型 HTML レポートの公開と管理（`share` / `list` / `update` / `delete`） |
 | `everyapi events` | ライブイベントストリーム（SSE）を購読 |
 | `everyapi feedback` | バグ報告や機能要望をチームへ送信 |
 | `everyapi proxy <sub>` | ローカル sanitizer proxy（`start` / `stop` / `status` / `configure`） |
