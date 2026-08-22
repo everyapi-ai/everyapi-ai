@@ -97,6 +97,7 @@ feedback = "向团队反馈**问题**或提交功能建议"
 user = "个人信息 / 2FA / passkey / OAuth 绑定 / 推广码"
 subscription = "订阅计划 / 我的订阅 / 计费偏好"
 use = "通过 EveryAPI 启动第三方 CLI（claude / codex / gemini / hermes）"
+tmux = "列出 / 重连 / 关闭 `use` 留下的 **tmux 会话**"
 token = "管理 relay API token（list / create / key / revoke / …）"
 log = "请求日志：list / stat / summary"
 usage = "按日额度用量"
@@ -247,6 +248,10 @@ configure = "交互式检测器 + 自定义模式配置"
 install = "自动注册 everyapi 为 MCP 服务器（默认：claude）"
 uninstall = "移除 MCP 注册"
 status = "查看哪些 MCP 客户端注册了 everyapi"
+
+[launcher.subs.tmux]
+list = "列出全部托管会话及其工具、工作目录和空闲时长"
+attach = "选一个会话，把当前终端交给它"
 
 [settings]
 saved = "设置已保存。"
@@ -1577,4 +1582,36 @@ everyapi feedback — 向团队反馈问题或提交功能建议
 说明
   内容直接送到团队群，服务端不留副本；发送失败即表示没人收到，
   请保留你的文字后重试。
+'''
+
+[tmux]
+none = "当前没有正在运行的 EveryAPI tmux 会话。"
+tool_unknown = "未知"
+idle_now = "刚刚"
+state_attached = "已连接"
+state_detached = "已分离"
+state_dead = "已退出"
+pick_prompt = "重连到哪个会话？"
+attach_needs_name = "请指定要连接的会话名，或在终端里运行以进入选择界面"
+attach_dead = "tmux 会话 %s 已经退出；用 `everyapi tmux kill %s` 关闭它"
+unknown_session = "没有名为 %s 的托管 tmux 会话 —— 运行 `everyapi tmux list` 查看正在运行的会话"
+vanished = "tmux 会话 %s 在连接之前就结束了"
+kill_needs_target = "请指定要关闭的会话名，或使用 --all"
+kill_all_with_name = "--all 会关闭全部会话，不要同时指定会话名"
+kill_all_needs_confirmation = "--all 会关闭全部托管会话并终止其中所有工具；请加上 --yes 以在无交互的情况下确认"
+kill_confirm = "关闭 %d 个会话？每个会话中正在运行的工具都会被终止。"
+kill_cancelled = "未关闭任何会话。"
+killed = "已关闭 %d 个会话。"
+usage = '''
+everyapi tmux — `everyapi use` 留下的那些 tmux 会话
+
+用法
+  everyapi tmux                      列出会话，然后选一个重连
+  everyapi tmux list [--format=json] 只列出，不连接
+  everyapi tmux attach [<会话名>]     连接到某个会话（省略则进入选择界面）
+  everyapi tmux kill <会话名>...      关闭会话（会终止其中的工具）
+  everyapi tmux kill --all [--yes]   关闭全部托管会话
+
+tmux 模式启动的会话在你 detach 之后会继续运行，而重连命令只在启动时打印一次。
+这个命令就是用来把它们重新找回来的。
 '''

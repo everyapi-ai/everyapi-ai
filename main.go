@@ -291,6 +291,10 @@ var commands = []command{
 		{name: "self", desc: "Show your subscriptions", args: []string{"self"}},
 	}},
 	{name: "use", desc: "Launch a third-party CLI (claude / codex / opencode / gemini / grok / qwen-code / kimi-code / hermes) via EveryAPI", requireLogin: true, run: cmd.Use},
+	{name: "tmux", desc: "List / reattach / close the tmux sessions `use` left running", run: cmd.TmuxSessions, subs: []subcommand{
+		{name: "list", desc: "Every managed session with its tool, workspace and idle time", args: []string{"list"}},
+		{name: "attach", desc: "Pick a session and hand this terminal to it", args: []string{"attach"}},
+	}},
 	{name: "token", desc: "Manage relay API tokens (list / create / key / revoke / …)", requireLogin: true, run: token.Run, subs: []subcommand{
 		// Only flag-free verbs surface in the launcher picker; the rest (create/update/key/revoke/enable/disable/show) need flags or an id and stay command-line-only.
 		{name: "list", desc: "List your tokens (masked keys)", args: []string{"list"}},
@@ -570,6 +574,8 @@ var commandGroup = map[string]string{
 	"auth": "account", "account": "account", "wallet": "account", "checkin": "account",
 	// Using the API
 	"use": "api", "token": "api", "models": "api",
+	// tmux sits next to `use` rather than with the tools: it exists only to manage the sessions `use` leaves running, and that adjacency is where someone looking for "the session I walked away from" will look.
+	"tmux": "api",
 	// (stats merged into the API/data category — no separate insights group)
 	"stats": "api",
 	// Marketplace · messages · supply (market/inbox + seller/edge)

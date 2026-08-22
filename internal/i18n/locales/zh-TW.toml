@@ -97,6 +97,7 @@ feedback = "向團隊回報**問題**或提交功能建議"
 user = "個人資訊 / 2FA / passkey / OAuth 綁定 / 推廣碼"
 subscription = "訂閱方案 / 我的訂閱 / 計費偏好"
 use = "透過 EveryAPI 啟動第三方 CLI（claude / codex / gemini / hermes）"
+tmux = "列出 / 重新連線 / 關閉 `use` 留下的 **tmux 工作階段**"
 token = "管理 relay API token（list / create / key / revoke / …）"
 log = "請求日誌：list / stat / summary"
 usage = "按日額度用量"
@@ -247,6 +248,10 @@ configure = "互動式偵測器 + 自訂模式設定"
 install = "自動註冊 everyapi 為 MCP 伺服器（預設：claude）"
 uninstall = "移除 MCP 註冊"
 status = "查看哪些 MCP 客戶端註冊了 everyapi"
+
+[launcher.subs.tmux]
+list = "列出全部託管工作階段及其工具、工作目錄和閒置時長"
+attach = "選一個工作階段，把目前終端交給它"
 
 [settings]
 saved = "設定已儲存。"
@@ -1576,4 +1581,36 @@ everyapi feedback — 向團隊回報問題或提交功能建議
 說明
   內容直接送到團隊群組，伺服器不留副本；傳送失敗即表示沒人收到，
   請保留你的文字後重試。
+'''
+
+[tmux]
+none = "目前沒有正在執行的 EveryAPI tmux 工作階段。"
+tool_unknown = "未知"
+idle_now = "剛剛"
+state_attached = "已連線"
+state_detached = "已分離"
+state_dead = "已結束"
+pick_prompt = "要重新連線到哪個工作階段？"
+attach_needs_name = "請指定要連線的工作階段名稱，或在終端裡執行以進入選擇介面"
+attach_dead = "tmux 工作階段 %s 已經結束；用 `everyapi tmux kill %s` 關閉它"
+unknown_session = "沒有名為 %s 的託管 tmux 工作階段 —— 執行 `everyapi tmux list` 查看正在執行的工作階段"
+vanished = "tmux 工作階段 %s 在連線之前就結束了"
+kill_needs_target = "請指定要關閉的工作階段名稱，或使用 --all"
+kill_all_with_name = "--all 會關閉全部工作階段，不要同時指定名稱"
+kill_all_needs_confirmation = "--all 會關閉全部託管工作階段並終止其中所有工具；請加上 --yes 以在無互動的情況下確認"
+kill_confirm = "關閉 %d 個工作階段？每個工作階段中正在執行的工具都會被終止。"
+kill_cancelled = "未關閉任何工作階段。"
+killed = "已關閉 %d 個工作階段。"
+usage = '''
+everyapi tmux — `everyapi use` 留下的那些 tmux 工作階段
+
+用法
+  everyapi tmux                      列出工作階段，然後選一個重新連線
+  everyapi tmux list [--format=json] 只列出，不連線
+  everyapi tmux attach [<名稱>]       連線到某個工作階段（省略則進入選擇介面）
+  everyapi tmux kill <名稱>...        關閉工作階段（會終止其中的工具）
+  everyapi tmux kill --all [--yes]   關閉全部託管工作階段
+
+tmux 模式啟動的工作階段在你分離之後會繼續執行，而重新連線指令只在啟動時印出一次。
+這個指令就是用來把它們重新找回來的。
 '''

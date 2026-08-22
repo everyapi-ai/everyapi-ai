@@ -107,6 +107,7 @@ feedback = "**不具合の報告**や機能のご要望をチームへ送信"
 user = "プロフィール / 2FA / passkey / OAuth 連携 / アフィリエイトコード"
 subscription = "サブスクリプションプラン / 自分の契約 / 課金設定"
 use = "EveryAPI 経由でサードパーティ CLI を起動 (claude / codex / gemini / hermes)"
+tmux = "`use` が残した **tmux セッション** の一覧 / 再接続 / 終了"
 token = "リレー API トークン管理 (list / create / key / revoke / …)"
 log = "リクエストログ: list / stat / summary"
 usage = "日別のクォータ使用量"
@@ -257,6 +258,10 @@ configure = "インタラクティブな検出器 + カスタムパターンの�
 install = "everyapi を MCP サーバーとして自動登録（既定: claude）"
 uninstall = "MCP 登録を削除"
 status = "everyapi が登録されている MCP クライアントを表示"
+
+[launcher.subs.tmux]
+list = "管理下の全セッションと、そのツール・作業ディレクトリ・アイドル時間"
+attach = "セッションを選び、この端末を渡す"
 
 [settings]
 saved = "設定を保存しました。"
@@ -1601,4 +1606,36 @@ everyapi feedback — 不具合の報告や機能のご要望をチームへ送�
 補足
   チームのチャットへ直接送られ、サーバーに控えは残りません。送信に失敗した
   場合は誰にも届いていないので、本文を控えたうえで再試行してください。
+'''
+
+[tmux]
+none = "実行中の EveryAPI tmux セッションはありません。"
+tool_unknown = "不明"
+idle_now = "たった今"
+state_attached = "接続中"
+state_detached = "デタッチ済み"
+state_dead = "終了済み"
+pick_prompt = "どのセッションに再接続しますか？"
+attach_needs_name = "接続するセッション名を指定するか、端末上で実行して選択してください"
+attach_dead = "tmux セッション %s はすでに終了しています。`everyapi tmux kill %s` で片付けてください"
+unknown_session = "%s という名前の管理下 tmux セッションはありません。`everyapi tmux list` で実行中のものを確認してください"
+vanished = "tmux セッション %s は接続する前に終了しました"
+kill_needs_target = "終了するセッション名を指定するか、--all を渡してください"
+kill_all_with_name = "--all は全セッションを終了します。同時にセッション名を指定しないでください"
+kill_all_needs_confirmation = "--all は管理下の全セッションを閉じ、それぞれのツールも終了します。プロンプトなしで確認するには --yes を渡してください"
+kill_confirm = "%d 個のセッションを終了しますか？それぞれで実行中のツールも終了します。"
+kill_cancelled = "何も終了しませんでした。"
+killed = "%d 個のセッションを終了しました。"
+usage = '''
+everyapi tmux — `everyapi use` が残した tmux セッション
+
+使い方
+  everyapi tmux                      一覧を表示し、選んで再接続する
+  everyapi tmux list [--format=json] 接続せず一覧だけ表示する
+  everyapi tmux attach [<session>]   セッションに接続する（省略時は選択画面）
+  everyapi tmux kill <session>...    セッションを終了する（中のツールも終了）
+  everyapi tmux kill --all [--yes]   管理下の全セッションを終了する
+
+tmux モードで起動したセッションはデタッチ後も動き続け、再接続コマンドは起動時に
+一度だけ表示されます。このコマンドはそれらを見つけ直すためのものです。
 '''

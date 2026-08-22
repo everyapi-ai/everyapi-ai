@@ -113,6 +113,7 @@ feedback = "Informar de un **error** o pedir una función"
 user = "Perfil / 2FA / passkey / vínculos OAuth / código de afiliado"
 subscription = "Planes de suscripción / mi cuenta / preferencia de facturación"
 use = "Iniciar un CLI de terceros (claude / codex / gemini / hermes) vía EveryAPI"
+tmux = "Listar / reconectar / cerrar las **sesiones tmux** que dejó `use`"
 token = "Gestionar tokens de relay (list / create / key / revoke / …)"
 log = "Registro de peticiones: list / stat / summary"
 usage = "Uso de cuota por día"
@@ -263,6 +264,10 @@ configure = "Detector interactivo + configuración de patrones personalizados"
 install = "Registrar automáticamente everyapi como servidor MCP (por defecto: claude)"
 uninstall = "Eliminar el registro de MCP"
 status = "Mostrar qué clientes MCP tienen registrado everyapi"
+
+[launcher.subs.tmux]
+list = "Cada sesión gestionada con su herramienta, directorio y tiempo inactivo"
+attach = "Elegir una sesión y entregarle esta terminal"
 
 [settings]
 saved = "Configuración guardada."
@@ -1612,4 +1617,36 @@ USO
 NOTAS
   Va directo al chat del equipo y no se guarda ninguna copia: si falla, no lo
   ha recibido nadie — conserva tu texto e inténtalo de nuevo.
+'''
+
+[tmux]
+none = "No hay sesiones tmux de EveryAPI en ejecución."
+tool_unknown = "desconocida"
+idle_now = "ahora"
+state_attached = "conectada"
+state_detached = "separada"
+state_dead = "terminada"
+pick_prompt = "¿A qué sesión quieres reconectar?"
+attach_needs_name = "indica una sesión, o ejecuta esto en una terminal para elegir una"
+attach_dead = "la sesión tmux %s ya terminó; ciérrala con `everyapi tmux kill %s`"
+unknown_session = "no hay ninguna sesión tmux gestionada llamada %s — usa `everyapi tmux list` para ver las activas"
+vanished = "la sesión tmux %s terminó antes de poder conectarse"
+kill_needs_target = "indica una sesión que cerrar, o pasa --all"
+kill_all_with_name = "--all cierra todas las sesiones; no indiques también una"
+kill_all_needs_confirmation = "--all cierra todas las sesiones gestionadas y termina la herramienta de cada una; pasa --yes para confirmar sin preguntar"
+kill_confirm = "¿Cerrar %d sesión(es)? Se termina la herramienta que corre en cada una."
+kill_cancelled = "No se cerró nada."
+killed = "Se cerraron %d sesión(es)."
+usage = '''
+everyapi tmux — las sesiones tmux que `everyapi use` dejó corriendo
+
+USO
+  everyapi tmux                      listar y elegir una para reconectar
+  everyapi tmux list [--format=json] listar sin conectar
+  everyapi tmux attach [<sesión>]    conectar a una sesión (si se omite, elige)
+  everyapi tmux kill <sesión>...     cerrar sesiones (termina la herramienta)
+  everyapi tmux kill --all [--yes]   cerrar todas las sesiones gestionadas
+
+Un lanzamiento en modo tmux sigue corriendo después de separarte, y solo imprime
+su comando de reconexión una vez. Así vuelves a encontrar esas sesiones.
 '''

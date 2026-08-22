@@ -98,6 +98,7 @@ feedback = "Send a **bug report** or feature request to the team"
 user = "**Profile** / 2FA / passkey / oauth bindings / aff code"
 subscription = "**Subscription** plans / self / billing preference"
 use = "Launch a **third-party CLI** (claude / codex / gemini / hermes) via EveryAPI"
+tmux = "List / reattach / close the **tmux sessions** `use` left running"
 token = "Manage relay **API tokens** (list / create / key / revoke / …)"
 log = "**Request log**: list / stat / summary"
 usage = "**Day-by-day** quota usage"
@@ -248,6 +249,10 @@ configure = "Interactive detector + custom-pattern setup"
 install = "Auto-register everyapi as an MCP server (default: claude)"
 uninstall = "Remove the MCP registration"
 status = "Show which MCP clients have everyapi registered"
+
+[launcher.subs.tmux]
+list = "Every managed session with its tool, workspace and idle time"
+attach = "Pick a session and hand this terminal to it"
 
 [settings]
 saved = "Settings saved."
@@ -1592,4 +1597,36 @@ USAGE
 NOTES
   Goes straight to the team chat; nothing stores a copy, so a failure here
   means it reached nobody — keep your text and try again.
+'''
+
+[tmux]
+none = "No EveryAPI tmux sessions are running."
+tool_unknown = "unknown"
+idle_now = "now"
+state_attached = "attached"
+state_detached = "detached"
+state_dead = "exited"
+pick_prompt = "Reattach to which session?"
+attach_needs_name = "name a session to attach to, or run this on a terminal to pick one"
+attach_dead = "tmux session %s has already exited; close it with `everyapi tmux kill %s`"
+unknown_session = "no managed tmux session named %s — run `everyapi tmux list` to see what is running"
+vanished = "tmux session %s ended before it could be attached"
+kill_needs_target = "name a session to close, or pass --all"
+kill_all_with_name = "--all closes every session; do not also name one"
+kill_all_needs_confirmation = "--all closes every managed session and ends the tool in each; pass --yes to confirm without a prompt"
+kill_confirm = "Close %d session(s)? The tool running in each one is terminated."
+kill_cancelled = "Nothing was closed."
+killed = "Closed %d session(s)."
+usage = '''
+everyapi tmux — the tmux sessions `everyapi use` left running
+
+USAGE
+  everyapi tmux                      list, then pick one to reattach to
+  everyapi tmux list [--format=json] list without attaching
+  everyapi tmux attach [<session>]   attach to a session (picker when omitted)
+  everyapi tmux kill <session>...    close sessions (ends the tool in each)
+  everyapi tmux kill --all [--yes]   close every managed session
+
+A tmux-mode launch keeps running after you detach, and prints its reattach
+command only once. This is how you find those sessions again.
 '''

@@ -111,6 +111,7 @@ feedback = "**Fehler** melden oder eine Funktion vorschlagen"
 user = "Profil / 2FA / Passkey / OAuth-Bindungen / Affiliate-Code"
 subscription = "Abopläne / eigene Abos / Abrechnungspräferenz"
 use = "Drittanbieter-CLI über EveryAPI starten (claude / codex / gemini / hermes)"
+tmux = "**tmux-Sitzungen**, die `use` hinterlassen hat: auflisten / wieder verbinden / schließen"
 token = "Relay-API-Tokens verwalten (list / create / key / revoke / …)"
 log = "Anfrage-Log: list / stat / summary"
 usage = "Tag-für-Tag Quota-Nutzung"
@@ -261,6 +262,10 @@ configure = "Interaktive Detektor- + Custom-Pattern-Konfiguration"
 install = "everyapi automatisch als MCP-Server registrieren (Standard: claude)"
 uninstall = "MCP-Registrierung entfernen"
 status = "Anzeigen, welche MCP-Clients everyapi registriert haben"
+
+[launcher.subs.tmux]
+list = "Jede verwaltete Sitzung mit Werkzeug, Arbeitsverzeichnis und Leerlaufzeit"
+attach = "Eine Sitzung wählen und dieses Terminal an sie übergeben"
 
 [settings]
 saved = "Einstellungen gespeichert."
@@ -1610,4 +1615,36 @@ VERWENDUNG
 HINWEISE
   Geht direkt in den Team-Chat; es wird keine Kopie gespeichert. Ein Fehler
   bedeutet, dass niemand die Meldung erhalten hat — Text behalten, erneut senden.
+'''
+
+[tmux]
+none = "Es laufen keine EveryAPI-tmux-Sitzungen."
+tool_unknown = "unbekannt"
+idle_now = "jetzt"
+state_attached = "verbunden"
+state_detached = "getrennt"
+state_dead = "beendet"
+pick_prompt = "Mit welcher Sitzung wieder verbinden?"
+attach_needs_name = "Gib eine Sitzung an oder führe dies in einem Terminal aus, um eine zu wählen"
+attach_dead = "tmux-Sitzung %s ist bereits beendet; schließe sie mit `everyapi tmux kill %s`"
+unknown_session = "keine verwaltete tmux-Sitzung namens %s — `everyapi tmux list` zeigt, was läuft"
+vanished = "tmux-Sitzung %s endete, bevor eine Verbindung möglich war"
+kill_needs_target = "Gib eine Sitzung zum Schließen an oder übergib --all"
+kill_all_with_name = "--all schließt jede Sitzung; benenne dann keine einzelne"
+kill_all_needs_confirmation = "--all schließt jede verwaltete Sitzung und beendet das darin laufende Werkzeug; übergib --yes, um ohne Rückfrage zu bestätigen"
+kill_confirm = "%d Sitzung(en) schließen? Das darin laufende Werkzeug wird jeweils beendet."
+kill_cancelled = "Es wurde nichts geschlossen."
+killed = "%d Sitzung(en) geschlossen."
+usage = '''
+everyapi tmux — die tmux-Sitzungen, die `everyapi use` laufen ließ
+
+VERWENDUNG
+  everyapi tmux                      auflisten und eine zum Verbinden wählen
+  everyapi tmux list [--format=json] nur auflisten, nicht verbinden
+  everyapi tmux attach [<Sitzung>]   mit einer Sitzung verbinden (sonst Auswahl)
+  everyapi tmux kill <Sitzung>...    Sitzungen schließen (beendet das Werkzeug)
+  everyapi tmux kill --all [--yes]   jede verwaltete Sitzung schließen
+
+Ein tmux-Start läuft weiter, nachdem du dich getrennt hast, und gibt seinen
+Verbindungsbefehl nur einmal aus. Hiermit findest du diese Sitzungen wieder.
 '''

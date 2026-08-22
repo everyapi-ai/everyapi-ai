@@ -112,6 +112,7 @@ feedback = "Signaler un **bug** ou demander une fonctionnalité"
 user = "Profil / 2FA / passkey / liaisons OAuth / code d'affiliation"
 subscription = "Plans d'abonnement / mon compte / préférence de facturation"
 use = "Lancer un CLI tiers (claude / codex / gemini / hermes) via EveryAPI"
+tmux = "Lister / rattacher / fermer les **sessions tmux** laissées par `use`"
 token = "Gérer les tokens de relais (list / create / key / revoke / …)"
 log = "Journal des requêtes : list / stat / summary"
 usage = "Utilisation de quota jour par jour"
@@ -262,6 +263,10 @@ configure = "Détecteur interactif + configuration de patterns personnalisés"
 install = "Enregistrer automatiquement everyapi comme serveur MCP (par défaut : claude)"
 uninstall = "Retirer l'enregistrement MCP"
 status = "Afficher quels clients MCP ont enregistré everyapi"
+
+[launcher.subs.tmux]
+list = "Chaque session gérée avec son outil, son répertoire et son temps d'inactivité"
+attach = "Choisir une session et lui confier ce terminal"
 
 [settings]
 saved = "Paramètres enregistrés."
@@ -1615,4 +1620,36 @@ UTILISATION
 REMARQUES
   Envoyé directement dans le chat de l'équipe, sans copie conservée : un échec
   signifie que personne ne l'a reçu — gardez votre texte et réessayez.
+'''
+
+[tmux]
+none = "Aucune session tmux EveryAPI en cours."
+tool_unknown = "inconnu"
+idle_now = "maintenant"
+state_attached = "rattachée"
+state_detached = "détachée"
+state_dead = "terminée"
+pick_prompt = "À quelle session se rattacher ?"
+attach_needs_name = "nommez une session, ou lancez ceci dans un terminal pour en choisir une"
+attach_dead = "la session tmux %s est déjà terminée ; fermez-la avec `everyapi tmux kill %s`"
+unknown_session = "aucune session tmux gérée nommée %s — lancez `everyapi tmux list` pour voir celles en cours"
+vanished = "la session tmux %s s'est terminée avant le rattachement"
+kill_needs_target = "nommez une session à fermer, ou passez --all"
+kill_all_with_name = "--all ferme toutes les sessions ; n'en nommez pas une en plus"
+kill_all_needs_confirmation = "--all ferme toutes les sessions gérées et arrête l'outil de chacune ; passez --yes pour confirmer sans invite"
+kill_confirm = "Fermer %d session(s) ? L'outil qui y tourne est arrêté à chaque fois."
+kill_cancelled = "Rien n'a été fermé."
+killed = "%d session(s) fermée(s)."
+usage = '''
+everyapi tmux — les sessions tmux laissées par `everyapi use`
+
+UTILISATION
+  everyapi tmux                      lister, puis en choisir une à rattacher
+  everyapi tmux list [--format=json] lister sans se rattacher
+  everyapi tmux attach [<session>]   se rattacher (sélecteur si omis)
+  everyapi tmux kill <session>...    fermer des sessions (arrête l'outil)
+  everyapi tmux kill --all [--yes]   fermer toutes les sessions gérées
+
+Un lancement en mode tmux continue après un détachement, et n'affiche sa
+commande de rattachement qu'une seule fois. Voici comment les retrouver.
 '''
