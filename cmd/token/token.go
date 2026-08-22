@@ -542,29 +542,9 @@ func runUpdate(args []string) error {
 	if err != nil {
 		return classifyErr(err)
 	}
-	req := api.TokenUpdate{
-		ID:                  cur.ID,
-		Name:                cur.Name,
-		Status:              cur.Status,
-		ExpiredTime:         cur.ExpiredTime,
-		RemainQuota:         cur.RemainQuota,
-		UnlimitedQuota:      cur.UnlimitedQuota,
-		ModelLimitsEnabled:  cur.ModelLimitsEnabled,
-		ModelLimits:         cur.ModelLimits,
-		AllowIPs:            cur.AllowIPs,
-		Group:               cur.Group,
-		CrossGroupRetry:     cur.CrossGroupRetry,
-		AutoGroupExclusions: cur.AutoGroupExclusions,
-		SpecificChannelID:   cur.SpecificChannelID,
-		// Echoed verbatim: the backend PUT is a full overwrite, so any field this struct leaves at its zero value is not "unchanged", it is cleared. Before these were carried, `everyapi token update --name foo` silently wiped a key's scopes, supplier strategy and budget caps.
-		Scopes:               cur.Scopes,
-		SupplierStrategy:     cur.SupplierStrategy,
-		SupplierSellerIDs:    cur.SupplierSellerIDs,
-		BudgetEnabled:        cur.BudgetEnabled,
-		DailyBudget:          cur.DailyBudget,
-		MonthlyBudget:        cur.MonthlyBudget,
-		BudgetAlertThreshold: cur.BudgetAlertThreshold,
-	}
+	// Echoed verbatim: the backend PUT is a full overwrite, so a narrow update
+	// starts from the SDK-owned complete mapping before changing its own fields.
+	req := cur.UpdateRequest()
 	if tf.seen["name"] {
 		req.Name = tf.name
 	}

@@ -30,6 +30,8 @@ func Auth(args []string) error {
 		return DiagnosticChatMachine(args[1:])
 	case "overview":
 		return OverviewMachine(args[1:])
+	case "budget":
+		return BudgetMachine(args[1:])
 	case "referral":
 		return ReferralMachine(args[1:])
 	default:
