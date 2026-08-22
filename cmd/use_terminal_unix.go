@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/tools"
 )
@@ -654,6 +655,72 @@ func exitAfterTmuxSessionWithMessage(sessionName string, exitCode int, message s
 	os.Exit(exitCode)
 }
 
+// tmuxSessionToAdopt decides whether this launch steps into the live session it
+// found, or leaves it alone and starts a new one.
+//
+// autoAdopt is the one case that needs no permission: `codex -- resume` is the
+// user explicitly asking to go back to a session, so taking one is the whole
+// point. Anything else must ask, because adopting silently is worse than a extra
+// session — the user asked to launch a tool and would land in an existing
+// conversation with no sign it was not fresh.
+//
+// Without a terminal there is nobody to ask, so a script gets exactly the old
+// behaviour: a new session every time. That is deliberate, not a fallback.
+func tmuxSessionToAdopt(
+	candidate tmuxSessionReference,
+	autoAdopt, interactive bool,
+	ask func(tmuxSessionReference) (bool, error),
+) (tmuxSessionReference, error) {
+	if candidate.name == "" || autoAdopt {
+		return candidate, nil
+	}
+	if !interactive {
+		return tmuxSessionReference{}, nil
+	}
+	adopt, err := ask(candidate)
+	if err != nil {
+		return tmuxSessionReference{}, err
+	}
+	if !adopt {
+		return tmuxSessionReference{}, nil
+	}
+	return candidate, nil
+}
+
+// askAdoptTmuxSession offers the one live session this launch could step back
+// into. It names what is actually in there — the tool, how long since anyone
+// touched it — because "reattach or start fresh" is unanswerable without that.
+//
+// Cancelling the picker (Esc) means neither: the error propagates and nothing is
+// launched, which is the same thing Esc does at every other picker in the CLI.
+func askAdoptTmuxSession(tmuxPath string, session tmuxSessionReference) (bool, error) {
+	idle := tmuxSessionIdleLabel(tmuxPath, session.name)
+	labels := []string{
+		fmt.Sprintf(i18n.T("use.tmux_adopt_existing"), idle),
+		i18n.T("use.tmux_adopt_new"),
+	}
+	index, err := cliprompt.Pick(i18n.T("use.tmux_adopt_prompt"), labels)
+	if err != nil {
+		return false, err
+	}
+	return index == 0, nil
+}
+
+// tmuxSessionIdleLabel asks tmux how long the session has been untouched. Best
+// effort: the prompt is still answerable without it, so a tmux that cannot say
+// degrades to an unknown marker rather than failing the launch.
+func tmuxSessionIdleLabel(tmuxPath, sessionName string) string {
+	output, err := exec.Command(tmuxPath, "display-message", "-p", "-t", exactTmuxSessionTarget(sessionName), "#{session_activity}").Output()
+	if err != nil {
+		return i18n.T("use.tmux_adopt_idle_unknown")
+	}
+	activity, err := strconv.ParseInt(strings.TrimSpace(string(output)), 10, 64)
+	if err != nil {
+		return i18n.T("use.tmux_adopt_idle_unknown")
+	}
+	return tmuxIdleLabel(time.Unix(activity, 0), time.Now())
+}
+
 func relaunchUseInTmux(useArgs []string) error {
 	tmuxPath, err := exec.LookPath("tmux")
 	if err != nil {
@@ -680,11 +747,20 @@ func relaunchUseInTmux(useArgs []string) error {
 		return parseErr
 	}
 	sessionPrefix := tmuxSessionPrefix(toolName, workingDirectory)
-	var targetPrefixes []string
-	if shouldReuseTmuxSession(useArgs) {
-		targetPrefixes = []string{sessionPrefix, previousTmuxSessionPrefix(toolName, workingDirectory)}
+	// Always ask for the candidate now. Only `codex -- resume` adopts one without
+	// asking; every other launch used to skip the lookup entirely, which is why a
+	// second `everyapi use claude` in a directory that already had a live session
+	// silently started a third one and left the second detached forever.
+	reusableSession, err := reusableTmuxSession(tmuxPath, sessionPrefix, previousTmuxSessionPrefix(toolName, workingDirectory))
+	if err != nil {
+		return err
 	}
-	reusableSession, err := reusableTmuxSession(tmuxPath, targetPrefixes...)
+	reusableSession, err = tmuxSessionToAdopt(
+		reusableSession,
+		shouldReuseTmuxSession(useArgs),
+		cliprompt.IsInteractive(),
+		func(candidate tmuxSessionReference) (bool, error) { return askAdoptTmuxSession(tmuxPath, candidate) },
+	)
 	if err != nil {
 		return err
 	}

@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/tools"
 )
 
@@ -1009,5 +1010,69 @@ func TestTmuxChildEnvironmentCarriesTheErrorFile(t *testing.T) {
 	value, ok := environmentValue(child, tmuxErrorFileEnv)
 	if !ok || value != "/tmp/everyapi-tmux-abc/error.txt" {
 		t.Fatalf("child env %s = %q (present=%v), want the wrapper's value", tmuxErrorFileEnv, value, ok)
+	}
+}
+
+// Adopting a live session silently would drop the user into an existing
+// conversation while they thought they were launching a tool. Only an explicit
+// resume may do that; everything else asks, and a script — which has nobody to
+// ask — keeps the old behaviour of always starting fresh.
+func TestTmuxSessionToAdoptAsksBeforeSteppingIntoALiveSession(t *testing.T) {
+	candidate := tmuxSessionReference{name: "everyapi-v3-codex-3256d52ef013-0000000000000000000000000000000a", paneID: "%1"}
+	refuse := func(tmuxSessionReference) (bool, error) { return false, nil }
+	accept := func(tmuxSessionReference) (bool, error) { return true, nil }
+	mustNotAsk := func(tmuxSessionReference) (bool, error) {
+		t.Fatal("a launch asked when it should not have")
+		return false, nil
+	}
+
+	tests := []struct {
+		name        string
+		candidate   tmuxSessionReference
+		autoAdopt   bool
+		interactive bool
+		ask         func(tmuxSessionReference) (bool, error)
+		want        string
+	}{
+		{name: "nothing to adopt", ask: mustNotAsk},
+		{name: "explicit resume takes it silently", candidate: candidate, autoAdopt: true, interactive: true, ask: mustNotAsk, want: candidate.name},
+		// A resume from a script still adopts: the argv already said what to do.
+		{name: "explicit resume from a script", candidate: candidate, autoAdopt: true, ask: mustNotAsk, want: candidate.name},
+		{name: "script never adopts otherwise", candidate: candidate, ask: mustNotAsk},
+		{name: "terminal asks and may accept", candidate: candidate, interactive: true, ask: accept, want: candidate.name},
+		{name: "terminal asks and may refuse", candidate: candidate, interactive: true, ask: refuse},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := tmuxSessionToAdopt(test.candidate, test.autoAdopt, test.interactive, test.ask)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.name != test.want {
+				t.Fatalf("adopted %q, want %q", got.name, test.want)
+			}
+		})
+	}
+}
+
+// Cancelling the prompt (Esc) launches nothing, the same thing Esc does at every
+// other picker in the CLI.
+func TestTmuxSessionToAdoptPropagatesACancelledPrompt(t *testing.T) {
+	candidate := tmuxSessionReference{name: "everyapi-v3-codex-3256d52ef013-0000000000000000000000000000000a"}
+	want := errors.New("cancelled")
+	_, err := tmuxSessionToAdopt(candidate, false, true, func(tmuxSessionReference) (bool, error) {
+		return false, want
+	})
+	if !errors.Is(err, want) {
+		t.Fatalf("error = %v, want %v", err, want)
+	}
+}
+
+// The idle figure only decorates the prompt, so a tmux that cannot answer must
+// degrade rather than fail the launch.
+func TestTmuxSessionIdleLabelDegradesWhenTmuxCannotAnswer(t *testing.T) {
+	got := tmuxSessionIdleLabel("/nonexistent/tmux", "everyapi-v3-codex-3256d52ef013-0000000000000000000000000000000a")
+	if got != i18n.T("use.tmux_adopt_idle_unknown") {
+		t.Fatalf("idle label = %q, want the unknown marker", got)
 	}
 }
