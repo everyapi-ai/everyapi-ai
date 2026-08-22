@@ -35,10 +35,11 @@ func TestTmuxLaunchArgsPreserveUseArgumentsWithoutShellJoining(t *testing.T) {
 		payload,
 		"/tmp/everyapi-status.sock",
 		"/tmp/everyapi-environment.json",
+		"/tmp/everyapi-tmux-abc/error.txt",
 	)
 	want := []string{
 		"tmux", "new-session", "-s", "everyapi-123-456", "-c", "/tmp/project with spaces",
-		"/usr/bin/env", tmuxUseArgsEnv + "=" + payload, tmuxStatusSocketEnv + "=/tmp/everyapi-status.sock", tmuxEnvironmentFileEnv + "=/tmp/everyapi-environment.json", tools.TerminalModeEnvironment + "=tmux", tools.TmuxSessionEnvironment + "=everyapi-123-456", tools.TmuxAttachCommandEnvironment + "=tmux attach -t everyapi-123-456", "/Applications/Every API/everyapi", tmuxUseWrapperCommand,
+		"/usr/bin/env", tmuxUseArgsEnv + "=" + payload, tmuxStatusSocketEnv + "=/tmp/everyapi-status.sock", tmuxEnvironmentFileEnv + "=/tmp/everyapi-environment.json", tmuxErrorFileEnv + "=/tmp/everyapi-tmux-abc/error.txt", tools.TerminalModeEnvironment + "=tmux", tools.TmuxSessionEnvironment + "=everyapi-123-456", tools.TmuxAttachCommandEnvironment + "=tmux attach -t everyapi-123-456", "/Applications/Every API/everyapi", tmuxUseWrapperCommand,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("tmux args = %#v, want %#v", got, want)
@@ -910,5 +911,103 @@ func TestTmuxSessionEndedNoticeSpeaksOnlyForFailures(t *testing.T) {
 	// A real failure code just above the signal range still gets the hint.
 	if notice := tmuxSessionEndedNotice(session, 128+32); notice == "" {
 		t.Error("exit 160 produced no notice, want the failure hint")
+	}
+}
+
+// The recorded path is honoured only in the shape validateTmuxRuntimePaths
+// demands of the socket and the environment file. A tampered environment must
+// not be able to aim the write at an arbitrary file.
+func TestRecordTmuxFatalErrorRefusesPathsOutsideItsRuntimeDirectory(t *testing.T) {
+	directory, err := os.MkdirTemp("/tmp", "everyapi-tmux-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(directory) })
+
+	accepted := filepath.Join(directory, tmuxErrorFileName)
+	refused := []string{
+		"",
+		filepath.Join(directory, "somewhere-else.txt"),    // wrong name
+		filepath.Join("/tmp/not-ours", tmuxErrorFileName), // wrong directory prefix
+		filepath.Join("/tmp", tmuxErrorFileName),          // no per-launch directory
+		filepath.Join(os.TempDir(), "sub", "dir", "error.txt"),
+	}
+	for _, path := range refused {
+		if validTmuxErrorFilePath(path) {
+			t.Errorf("path %q accepted, want refusal", path)
+		}
+	}
+	if !validTmuxErrorFilePath(accepted) {
+		t.Fatalf("path %q refused, want acceptance", accepted)
+	}
+
+	// End to end through the package var, the way main.go reaches it.
+	previous := tmuxErrorFile
+	t.Cleanup(func() { tmuxErrorFile = previous })
+	tmuxErrorFile = accepted
+	RecordTmuxFatalError("not logged in — run 'everyapi auth login'")
+	if got := readTmuxFatalError(accepted); got != "not logged in — run 'everyapi auth login'" {
+		t.Fatalf("read back %q", got)
+	}
+
+	// A refused path must leave nothing behind.
+	tmuxErrorFile = filepath.Join(directory, "somewhere-else.txt")
+	RecordTmuxFatalError("should not be written")
+	if _, err := os.Stat(tmuxErrorFile); err == nil {
+		t.Fatal("a refused path was written anyway")
+	}
+}
+
+// The relayed text reaches a real terminal, so escape sequences in it — a
+// backend-relayed message is untrusted — must be neutralized, and the size
+// bounded.
+func TestReadTmuxFatalErrorSanitizesAndBounds(t *testing.T) {
+	directory, err := os.MkdirTemp("/tmp", "everyapi-tmux-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(directory) })
+	path := filepath.Join(directory, tmuxErrorFileName)
+
+	if err := os.WriteFile(path, []byte("\x1b[2Jcleared your screen\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := readTmuxFatalError(path)
+	if strings.Contains(got, "\x1b") {
+		t.Fatalf("read back %q, want the escape neutralized", got)
+	}
+	if !strings.Contains(got, "cleared your screen") {
+		t.Fatalf("read back %q, want the message text kept", got)
+	}
+
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", tmuxFatalErrorLimit*2)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(readTmuxFatalError(path)); n > tmuxFatalErrorLimit {
+		t.Fatalf("read back %d bytes, want at most %d", n, tmuxFatalErrorLimit)
+	}
+
+	// Nothing recorded, and a path that does not exist, both mean "no message" —
+	// the generic session-ended notice covers those.
+	if got := readTmuxFatalError(filepath.Join(directory, "missing.txt")); got != "" {
+		t.Fatalf("missing file returned %q", got)
+	}
+	if got := readTmuxFatalError(""); got != "" {
+		t.Fatalf("empty path returned %q", got)
+	}
+}
+
+// The wrapper must hand the recorded path down to the process that actually
+// raises the error, alongside the other pane-scoped variables.
+func TestTmuxChildEnvironmentCarriesTheErrorFile(t *testing.T) {
+	child := tmuxChildEnvironment(
+		[]string{"HOME=/Users/e"},
+		[]string{"TERM=xterm", tmuxErrorFileEnv + "=/tmp/everyapi-tmux-abc/error.txt"},
+		"payload",
+		"/tmp/everyapi-tmux-abc/status.sock",
+	)
+	value, ok := environmentValue(child, tmuxErrorFileEnv)
+	if !ok || value != "/tmp/everyapi-tmux-abc/error.txt" {
+		t.Fatalf("child env %s = %q (present=%v), want the wrapper's value", tmuxErrorFileEnv, value, ok)
 	}
 }

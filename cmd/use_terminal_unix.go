@@ -34,8 +34,8 @@ const (
 	previousTmuxPrefix      = "everyapi-v2-"
 )
 
-func tmuxLaunchArgs(envExecutable, executable, workingDirectory, sessionName, encodedUseArgs, statusSocket, environmentFile string) []string {
-	return []string{"tmux", "new-session", "-s", sessionName, "-c", workingDirectory, envExecutable, tmuxUseArgsEnv + "=" + encodedUseArgs, tmuxStatusSocketEnv + "=" + statusSocket, tmuxEnvironmentFileEnv + "=" + environmentFile, tools.TerminalModeEnvironment + "=tmux", tools.TmuxSessionEnvironment + "=" + sessionName, tools.TmuxAttachCommandEnvironment + "=" + tools.TmuxAttachCommand(sessionName), executable, tmuxUseWrapperCommand}
+func tmuxLaunchArgs(envExecutable, executable, workingDirectory, sessionName, encodedUseArgs, statusSocket, environmentFile, errorFile string) []string {
+	return []string{"tmux", "new-session", "-s", sessionName, "-c", workingDirectory, envExecutable, tmuxUseArgsEnv + "=" + encodedUseArgs, tmuxStatusSocketEnv + "=" + statusSocket, tmuxEnvironmentFileEnv + "=" + environmentFile, tmuxErrorFileEnv + "=" + errorFile, tools.TerminalModeEnvironment + "=tmux", tools.TmuxSessionEnvironment + "=" + sessionName, tools.TmuxAttachCommandEnvironment + "=" + tools.TmuxAttachCommand(sessionName), executable, tmuxUseWrapperCommand}
 }
 
 func tmuxSessionPrefix(toolName, workingDirectory string) string {
@@ -510,7 +510,7 @@ func tmuxChildEnvironment(outerEnvironment, wrapperEnvironment []string, payload
 	childEnvironment = setEnvironmentValue(childEnvironment, tmuxUseArgsEnv, payload)
 	childEnvironment = setEnvironmentValue(childEnvironment, tmuxStatusSocketEnv, statusSocket)
 	childEnvironment = removeEnvironmentValue(childEnvironment, tmuxEnvironmentFileEnv)
-	for _, name := range []string{"TERM", "TMUX", "TMUX_PANE", tools.TerminalModeEnvironment, tools.TmuxSessionEnvironment, tools.TmuxAttachCommandEnvironment} {
+	for _, name := range []string{"TERM", "TMUX", "TMUX_PANE", tmuxErrorFileEnv, tools.TerminalModeEnvironment, tools.TmuxSessionEnvironment, tools.TmuxAttachCommandEnvironment} {
 		if value, ok := environmentValue(wrapperEnvironment, name); ok {
 			childEnvironment = setEnvironmentValue(childEnvironment, name, value)
 		}
@@ -604,6 +604,24 @@ type tmuxExitStatusResult struct {
 // tool printed as it failed went to a pane tmux has already destroyed. Name the
 // status and point at the terminal mode that would have shown the message. A
 // clean exit stays silent — that is just the user quitting their tool.
+// readTmuxFatalError returns what the process inside the session recorded as its
+// fatal error, or "" when it recorded nothing. Sanitized because a relayed
+// backend message can carry attacker-chosen escape sequences, and this text is
+// about to be printed to a real terminal.
+func readTmuxFatalError(errorFile string) string {
+	if errorFile == "" {
+		return ""
+	}
+	data, err := os.ReadFile(errorFile)
+	if err != nil {
+		return ""
+	}
+	if len(data) > tmuxFatalErrorLimit {
+		data = data[:tmuxFatalErrorLimit]
+	}
+	return cliout.Sanitize(strings.TrimSpace(string(data)))
+}
+
 func tmuxSessionEndedNotice(sessionName string, exitCode int) string {
 	if exitCode == 0 {
 		return ""
@@ -619,7 +637,17 @@ func tmuxSessionEndedNotice(sessionName string, exitCode int) string {
 	return fmt.Sprintf(i18n.T("use.tmux_session_ended"), sessionName, exitCode)
 }
 
-func exitAfterTmuxSession(sessionName string, exitCode int) {
+// exitAfterTmuxSession ends the outer process with the tool's status, having
+// first said whatever the session could not. When the process inside recorded a
+// fatal error, that message IS the answer — print it and skip the generic notice,
+// which exists only for the case where nothing was recorded.
+func exitAfterTmuxSessionWithMessage(sessionName string, exitCode int, message string) {
+	if exitCode != 0 {
+		if message != "" {
+			fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), message)
+			os.Exit(exitCode)
+		}
+	}
 	if notice := tmuxSessionEndedNotice(sessionName, exitCode); notice != "" {
 		fmt.Fprintln(os.Stderr, notice)
 	}
@@ -684,6 +712,7 @@ func relaunchUseInTmux(useArgs []string) error {
 	}
 	statusSocket := filepath.Join(statusDirectory, tmuxStatusSocketName)
 	environmentFile := filepath.Join(statusDirectory, tmuxEnvironmentFileName)
+	errorFile := filepath.Join(statusDirectory, tmuxErrorFileName)
 	if err := writeTmuxEnvironment(environmentFile, os.Environ()); err != nil {
 		_ = os.Remove(statusDirectory)
 		return err
@@ -700,6 +729,10 @@ func relaunchUseInTmux(useArgs []string) error {
 			_ = os.Remove(environmentFile)
 		}
 		_ = os.Remove(statusSocket)
+		// Removed last, and only here: every exit path that prints the recorded
+		// error has already read it by the time cleanup runs. A detach leaves the
+		// directory in place along with the still-running session.
+		_ = os.Remove(errorFile)
 		_ = os.Remove(statusDirectory)
 	}
 	defer cleanup(true)
@@ -710,7 +743,7 @@ func relaunchUseInTmux(useArgs []string) error {
 	}
 	cliout.Printf(i18n.T("use.tmux_launching")+"\n", sessionName, sessionName)
 	tmuxCommand := exec.Command(tmuxPath)
-	tmuxCommand.Args = tmuxLaunchArgs(envExecutable, executable, workingDirectory, sessionName, encodedUseArgs, statusSocket, environmentFile)
+	tmuxCommand.Args = tmuxLaunchArgs(envExecutable, executable, workingDirectory, sessionName, encodedUseArgs, statusSocket, environmentFile, errorFile)
 	tmuxCommand.Stdin = os.Stdin
 	tmuxCommand.Stdout = os.Stdout
 	tmuxCommand.Stderr = os.Stderr
@@ -736,8 +769,9 @@ func relaunchUseInTmux(useArgs []string) error {
 			_ = exec.Command(tmuxPath, "detach-client", "-s", sessionName).Run()
 			_ = tmuxCommand.Process.Signal(syscall.SIGHUP)
 			<-tmuxResult
+			message := readTmuxFatalError(errorFile)
 			cleanup(true)
-			exitAfterTmuxSession(sessionName, status.exitCode)
+			exitAfterTmuxSessionWithMessage(sessionName, status.exitCode, message)
 		case runErr := <-tmuxResult:
 			// Status can race with the tmux client shutdown. Consume an already-delivered result before treating a still-live session as an intentional detach.
 			select {
@@ -745,8 +779,9 @@ func relaunchUseInTmux(useArgs []string) error {
 				if status.err != nil {
 					return fmt.Errorf("wait for tmux session %s: %w", sessionName, status.err)
 				}
+				message := readTmuxFatalError(errorFile)
 				cleanup(true)
-				exitAfterTmuxSession(sessionName, status.exitCode)
+				exitAfterTmuxSessionWithMessage(sessionName, status.exitCode, message)
 			default:
 			}
 			if exec.Command(tmuxPath, "has-session", "-t", sessionName).Run() == nil {
@@ -764,8 +799,9 @@ func relaunchUseInTmux(useArgs []string) error {
 				}
 				return fmt.Errorf("wait for tmux session %s: %w", sessionName, status.err)
 			}
+			message := readTmuxFatalError(errorFile)
 			cleanup(true)
-			exitAfterTmuxSession(sessionName, status.exitCode)
+			exitAfterTmuxSessionWithMessage(sessionName, status.exitCode, message)
 		case received := <-terminationSignals:
 			// Closing the host terminal is equivalent to detaching from the persistent session. Signal only the tmux client, clean the private IPC path explicitly because os.Exit skips defers, and leave the server-side session running.
 			_ = tmuxCommand.Process.Signal(received)

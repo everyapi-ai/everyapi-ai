@@ -833,7 +833,11 @@ func main() {
 	if cmd.IsTmuxUseWrapperCommand(name) {
 		exitCode, err := cmd.RunTmuxUseWrapper()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), cliout.Sanitize(err.Error()))
+			message := cliout.Sanitize(err.Error())
+			fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), message)
+			// The wrapper IS the pane's process, so its own failures are the most
+			// invisible of all: the session dies before it ever drew anything.
+			cmd.RecordTmuxFatalError(message)
 			if exitCode == 0 {
 				exitCode = 1
 			}
@@ -888,7 +892,12 @@ func main() {
 		return
 	}
 	// Backend-relayed error messages can carry attacker-chosen ESC/CSI/OSC bytes (cliout.Sanitize's doc lists "error messages" as untrusted). Neutralize here so every command's server-error output is safe, regardless of whether the command sanitized its own error path.
-	fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), cliout.Sanitize(err.Error()))
+	message := cliout.Sanitize(err.Error())
+	fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), message)
+	// Inside a tmux-mode launch this stderr belongs to a pane tmux destroys as
+	// this process exits, so the line above reaches nobody. Hand it to the outer
+	// process, which still owns the user's real terminal. No-op everywhere else.
+	cmd.RecordTmuxFatalError(message)
 	os.Exit(1)
 }
 
