@@ -97,11 +97,12 @@ func piProviderNode(apiBase string, models []Model) map[string]any {
 			api = "openai-responses"
 		}
 		entry := map[string]any{"api": api, "id": model.ID, "name": name}
-		// Pi defaults an undeclared model to reasoning:false, which is not "unknown" to it — it is a statement, and it disables the thinking-level control (shift+tab) for that model entirely. Every EveryAPI model therefore arrived level-less, including the GPT-5.x line whose whole point is a selectable effort. Declared only where the gateway has verified the model takes one, so a model of unknown shape keeps the safe answer rather than gaining a control that would send reasoning_effort upstream and 400.
-		//
-		// thinkingLevelMap is deliberately absent: omitting it maps off → high onto pi's default provider values, while xhigh and max stay hidden. Naming those two would need a per-model claim about which extended efforts the upstream accepts (gpt-5.6-sol takes ultra, o4-mini stops at high), and the gateway publishes no such list — supports_thinking is one bit.
+		// Most verified models use Pi's standard off→high provider defaults. Models with a narrower or extended upstream contract provide a model-specific map from the same source used by EveryAPI's launch picker, keeping both controls from offering an effort the API rejects.
 		if model.SupportsThinking {
 			entry["reasoning"] = true
+			if levelMap := piThinkingSupportForModel(model).levelMap; levelMap != nil {
+				entry["thinkingLevelMap"] = levelMap
+			}
 		}
 		// Pi's own fallbacks are 128000/16384 for a custom provider, so a model with a larger window silently lost most of it — pi compacts against the number it holds, not the one the gateway serves.
 		if model.ContextWindow > 0 {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -70,10 +71,17 @@ func TestReasoningLevelsForPiFollowGatewayThinkingSupport(t *testing.T) {
 	}
 	levels, preferred := ReasoningLevels(pi, Model{ID: "gpt-5.6-terra", SupportsThinking: true})
 	if want := []string{"off", "minimal", "low", "medium", "high"}; !slices.Equal(levels, want) {
-		t.Fatalf("pi levels = %v, want %v", levels, want)
+		t.Fatalf("pi standard levels = %v, want %v", levels, want)
 	}
 	if preferred != "medium" {
 		t.Fatalf("pi default level = %q, want medium", preferred)
+	}
+	lunaLevels, preferred := ReasoningLevels(pi, Model{ID: "gpt-5.6-luna", SupportsThinking: true})
+	if want := []string{"off", "low", "medium", "high", "xhigh", "max"}; !slices.Equal(lunaLevels, want) {
+		t.Fatalf("pi Luna levels = %v, want %v", lunaLevels, want)
+	}
+	if preferred != "medium" {
+		t.Fatalf("pi Luna default level = %q, want medium", preferred)
 	}
 	// Unverified support is not a denial, but it is not permission either: an effort sent to a model the gateway has not confirmed can 400 the first request.
 	if levels, _ := ReasoningLevels(pi, Model{ID: "mystery-model"}); len(levels) != 0 {
@@ -166,6 +174,7 @@ func TestPiPrepareDeclaresThinkingSupportAndWindows(t *testing.T) {
 
 	models := []Model{
 		{ID: "gpt-5.6-terra", SupportedEndpointTypes: []string{"openai-response"}, SupportsThinking: true, ContextWindow: 400000, MaxOutput: 128000},
+		{ID: "gpt-5.6-luna", SupportedEndpointTypes: []string{"openai-response"}, SupportsThinking: true},
 		{ID: "mystery-model", SupportedEndpointTypes: []string{"openai"}},
 	}
 	extra, err := tool.PrepareWithModels("https://api.everyapi.ai", "secret-relay-key", models, "")
@@ -197,9 +206,17 @@ func TestPiPrepareDeclaresThinkingSupportAndWindows(t *testing.T) {
 	if thinking["contextWindow"] != float64(400000) || thinking["maxTokens"] != float64(128000) {
 		t.Fatalf("model window/output not carried through: %#v", thinking)
 	}
-	// thinkingLevelMap stays absent so pi maps off→high onto its own provider defaults and keeps xhigh/max hidden, which nothing here has verified.
+	// Standard models omit thinkingLevelMap so pi maps off→high onto its own provider defaults and keeps unverified xhigh/max hidden.
 	if _, declared := thinking["thinkingLevelMap"]; declared {
-		t.Fatalf("model declared a thinking level map: %#v", thinking)
+		t.Fatalf("standard model declared a thinking level map: %#v", thinking)
+	}
+	luna := byID["gpt-5.6-luna"]
+	wantLunaLevels := map[string]any{
+		"off": "none", "minimal": nil, "low": "low", "medium": "medium",
+		"high": "high", "xhigh": "xhigh", "max": "max",
+	}
+	if got := luna["thinkingLevelMap"]; !reflect.DeepEqual(got, wantLunaLevels) {
+		t.Fatalf("Luna thinking level map = %#v, want %#v", got, wantLunaLevels)
 	}
 	if _, declared := byID["mystery-model"]["reasoning"]; declared {
 		t.Fatalf("unverified model declared reasoning support: %#v", byID["mystery-model"])

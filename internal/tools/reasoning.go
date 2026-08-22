@@ -14,8 +14,30 @@ import (
 // Because it travels as a real environment variable, it also reaches the launched tool's own children — a nested `everyapi use` inside a Codex or pi session inherits whatever the outer launch exported. The levels are per-client vocabularies ("off" means something to pi and nothing to codex), so an inherited value must never be forwarded. resolveReasoningLevel is therefore the sole author of this variable and clears it on every path that does not resolve a level of its own.
 const ReasoningLevelEnv = "EVERYAPI_REASONING_LEVEL"
 
-// piThinkingLevels are the levels `everyapi use pi` offers, matching what the generated models.json actually declares. Pi's own scale runs off → minimal → low → medium → high → xhigh → max, but the extended pair is opt-in: pi hides xhigh/max unless a model's thinkingLevelMap names a provider value for them, and preparePiWithModels deliberately omits that map (see its comment). Adding the extended levels here without also declaring them there would offer a level pi then clamps away.
-var piThinkingLevels = []string{"off", "minimal", "low", "medium", "high"}
+// piThinkingSupport is the single source for both the EveryAPI launcher's level picker and the thinkingLevelMap written into Pi's model catalogue. A nil levelMap uses Pi's standard provider mapping.
+type piThinkingSupport struct {
+	levels   []string
+	levelMap map[string]any
+}
+
+// piStandardThinkingLevels are Pi's non-extended defaults. The extended pair is opt-in: Pi hides xhigh/max unless thinkingLevelMap names provider values for them.
+var piStandardThinkingLevels = []string{"off", "minimal", "low", "medium", "high"}
+
+// Luna's Responses API rejects "minimal" and explicitly accepts none, low, medium, high, xhigh, and max. Keep the unsupported Pi level as null so Shift+Tab skips it instead of sending a request that the upstream rejects with 400.
+var piLunaThinkingSupport = piThinkingSupport{
+	levels: []string{"off", "low", "medium", "high", "xhigh", "max"},
+	levelMap: map[string]any{
+		"off": "none", "minimal": nil, "low": "low", "medium": "medium",
+		"high": "high", "xhigh": "xhigh", "max": "max",
+	},
+}
+
+func piThinkingSupportForModel(model Model) piThinkingSupport {
+	if model.ID == "gpt-5.6-luna" {
+		return piLunaThinkingSupport
+	}
+	return piThinkingSupport{levels: piStandardThinkingLevels}
+}
 
 // piDefaultThinkingLevel is where the picker's cursor starts for a first launch, and it is EveryAPI's own choice rather than a value read back from pi. Unlike codex — whose bundled catalogue publishes a default_reasoning_level per slug — pi ships no per-model default for a custom provider, so there is no "what the tool would have done by itself" to land on. The middle of the offered range is the least surprising stand-in: it matches what the reasoning models themselves apply when no effort is sent.
 const piDefaultThinkingLevel = "medium"
@@ -77,7 +99,8 @@ func piReasoningLevels(model Model) ([]string, string) {
 	if !model.SupportsThinking {
 		return nil, ""
 	}
-	return append([]string(nil), piThinkingLevels...), piDefaultThinkingLevel
+	support := piThinkingSupportForModel(model)
+	return append([]string(nil), support.levels...), piDefaultThinkingLevel
 }
 
 // codexReasoningLevels reports the efforts Codex's bundled catalogue publishes for a slug. A model EveryAPI routes but Codex has never heard of returns nil, which matches what writeCodexModelCatalog writes for it: an entry with supported_reasoning_levels emptied, so Codex's own picker offers no effort step either.
