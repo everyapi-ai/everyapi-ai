@@ -68,6 +68,7 @@ services:
       EVERYAPI_NODE_ID: "{{.NodeID}}"
       EVERYAPI_REGISTRATION_TOKEN: {{.RegistrationToken | yamlStr}}
       OLLAMA_URL: http://ollama:11434
+      EVERYAPI_OLLAMA_STORAGE_PATH: /models
       EVERYAPI_IDENTITY_PATH: /var/lib/everyapi-edge/identity.json
       EVERYAPI_NODE_NAME: {{.NodeName | yamlStr}}
       {{- if .Workloads }}
@@ -75,6 +76,7 @@ services:
       {{- end }}
     volumes:
       - ./data/agent:/var/lib/everyapi-edge
+      - ./data/ollama/models:/models
 {{- else }}
 
 # macOS variant: ollama runs natively on the host (Metal acceleration
@@ -93,6 +95,7 @@ services:
       EVERYAPI_NODE_ID: "{{.NodeID}}"
       EVERYAPI_REGISTRATION_TOKEN: {{.RegistrationToken | yamlStr}}
       OLLAMA_URL: http://host.docker.internal:11434
+      EVERYAPI_OLLAMA_STORAGE_PATH: /models
       EVERYAPI_IDENTITY_PATH: /var/lib/everyapi-edge/identity.json
       EVERYAPI_NODE_NAME: {{.NodeName | yamlStr}}
       EVERYAPI_GPU_MODEL: "Apple Silicon"
@@ -105,6 +108,7 @@ services:
       {{- end }}
     volumes:
       - ./data/agent:/var/lib/everyapi-edge
+      - ${EVERYAPI_MODEL_PATH:-${OLLAMA_MODELS:-${HOME}/.ollama/models}}:/models
 {{- end }}
 `
 

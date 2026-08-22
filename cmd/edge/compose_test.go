@@ -29,6 +29,8 @@ func TestRenderComposeNVIDIA(t *testing.T) {
 		`EVERYAPI_REGISTRATION_TOKEN: "rt_abc123"`,
 		`EVERYAPI_NODE_NAME: "rtx-4090-tokyo"`,
 		"OLLAMA_URL: http://ollama:11434",
+		"EVERYAPI_OLLAMA_STORAGE_PATH: /models",
+		"- ./data/ollama/models:/models",
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("missing %q in rendered compose:\n%s", want, s)
@@ -88,6 +90,8 @@ func TestRenderComposeMacOS(t *testing.T) {
 		`EVERYAPI_GPU_MODEL: "Apple Silicon"`,
 		`EVERYAPI_VRAM_GB: "48"`,
 		`EVERYAPI_PLATFORM: "darwin/arm64"`,
+		"EVERYAPI_OLLAMA_STORAGE_PATH: /models",
+		"- ${EVERYAPI_MODEL_PATH:-${OLLAMA_MODELS:-${HOME}/.ollama/models}}:/models",
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("missing %q in macos render", want)
