@@ -82,6 +82,7 @@ Running `everyapi` with no arguments on a TTY opens an interactive launcher over
 | `everyapi computer <sub>` | Read and control local macOS app windows through Accessibility |
 | `everyapi mcp` | Run as an MCP server (stdin/stdout JSON-RPC) |
 | `everyapi doctor` | Self-check: credentials, gateway, sanitizer, installed tools |
+| `everyapi docs <topic>` | The platform handbook, embedded in the binary (`list` / `<topic>` / `search` / `open`) |
 | `everyapi settings <sub>` | View / change CLI preferences (language, terminal mode) |
 | `everyapi admin` | Operator console — shown only to admin accounts |
 | `everyapi version [update\|uninstall]` | Build version; check for and run an upgrade; remove the CLI |
@@ -233,6 +234,33 @@ This mode is experimental and intentionally process-scoped:
 - it is not undetectable: clients can inspect proxy variables, the local certificate chain, sockets, timing, or response differences;
 - the Connector sees decrypted model content. Its CA signing key is never written or uploaded, and the public CA file is removed on exit;
 - the relay key is absent from the child environment and generated client configs, but the existing `~/.config/everyapi/credentials.json` is still readable by any process running as the same OS user. Transparent mode is credential-injection isolation, not a sandbox against a hostile child process.
+
+### `everyapi docs <topic>` — the platform handbook, offline
+
+The whole platform documented inside the binary: gateway API, model catalog and routing groups, keys, `use`, billing, MCP, sanitizer proxy, desktop, dashboard, marketplace, edge nodes, self-hosting, and troubleshooting.
+
+```bash
+everyapi docs                    # topic picker (list when not a TTY)
+everyapi docs list               # every topic with a one-line summary
+everyapi docs quickstart         # read one topic
+everyapi docs quick              # abbreviations resolve while they stay unambiguous
+everyapi docs search "routing group"
+everyapi docs open               # https://docs.everyapi.ai/ in a browser
+```
+
+It ships embedded rather than fetched, so it answers offline, behind a firewall, and before the user has logged in — which is exactly when the questions it answers come up. The same pages are also served at [docs.everyapi.ai](https://docs.everyapi.ai/), generated from these very files by [`infra/docs-site`](../../infra/docs-site) — one source, two surfaces, and a test in that directory pins `SiteURL` to the domain the site actually deploys to so `docs open` cannot drift from it.
+
+It is also wired into what `everyapi use` tells the agents it launches. The injected text is a capability list, not just a pointer: an agent that knows `auth status`, `stats usage`, `models list`, and `docs search` exist runs them, and one that does not asks the user to go look it up or answers from training data this platform is not in. The read-only set is enumerated and runnable unprompted; everything outside it is declared state-changing and needs an explicit yes naming the command, because `token revoke` / `wallet topup` / `seller withdraw` / `edge remove` move money and destroy access, and `token key` prints a credential while changing nothing.
+
+The text comes from one place — `tools.AgentInstructions()` — and reaches clients three ways, in descending order of certainty:
+
+- **A named configuration surface**, guaranteed to be read: `claude` (`--append-system-prompt`), `codex` (`developer_instructions`), `opencode` and `kilo` (instructions file), `crush` (`options.context_paths`), `aider` (`--read`), `continue` (`rules`), `gemini` (`context.includeDirectories` in the settings overlay EveryAPI already owns).
+- **The AGENTS.md convention**, best-effort: `newPreparedHome` writes `EVERYAPI.md` and `AGENTS.md` into every process-scoped client home, so any client that reads the convention out of its own home picks it up — and a client added later inherits it with no wiring, since that function is the single door all prepared homes come through.
+- **A managed block**, for a client whose only documented surface is a file the user owns. Goose is the case (`~/.config/goose/.goosehints`; `CONTEXT_FILE_NAME` selects a name, not a redirectable path). The launch writes a delimited block and removes exactly that block on exit, preserves the file's other content and mode, refuses to create the config directory, and converges on one block after a launch that was killed before its cleanup ran.
+
+GitHub Copilot CLI and OpenHands get nothing: their documented surface is a BYOK environment and a model override, with no instruction channel. `EVERYAPI_NO_AGENT_CONTEXT=1` opts a launch out entirely.
+
+The pages live under [`cmd/docs/topics/`](cmd/docs/topics/) as plain markdown, so they read correctly on GitHub too; `cmd/docs/render.go` renders that subset for the terminal (wrapped prose, verbatim code blocks, aligned tables, bold and inline code where the terminal supports them, backticks kept where it does not). Adding a page is dropping the `.md` in and adding its slug to `topicOrder` — a file that is embedded but unregistered, or registered but missing, fails a test rather than disappearing quietly.
 
 ### `everyapi auth login` — Device Authorization Grant + QR sign-in
 

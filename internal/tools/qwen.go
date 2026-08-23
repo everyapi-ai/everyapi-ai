@@ -35,6 +35,8 @@ func prepareQwenCodeWithModels(apiBase, _ string, models []Model) (map[string]st
 	if err := os.MkdirAll(qwenHome, 0o700); err != nil {
 		return nil, fmt.Errorf("create qwen-home: %w", err)
 	}
+	// Same reasoning as kimi-code: EveryAPI owns this directory whether or not this launch needed a temporary one.
+	addAgentContextToHome(qwenHome)
 	extra := map[string]string{"QWEN_HOME": qwenHome}
 	if len(models) > 0 {
 		if err := writeQwenModelCatalog(qwenHome, apiBase, models); err != nil {

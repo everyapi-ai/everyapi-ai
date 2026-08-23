@@ -562,6 +562,10 @@ func use(args []string, persistModelSelection bool) error {
 	if preparedCleanup != nil {
 		defer preparedCleanup()
 	}
+	// Clients whose only documented instruction surface is a user-owned file get a delimited block instead of a process-scoped copy; this is what takes it back out. Same defer discipline as the prepared home, so a normal exit, a tool that fails to start, and a child killed by a signal all converge on the file the user had before.
+	if blockCleanup := tools.TakeManagedBlockCleanup(extraEnv); blockCleanup != nil {
+		defer blockCleanup()
+	}
 	for k, v := range extraEnv {
 		env[k] = v
 	}

@@ -129,6 +129,7 @@ doctor = "자가 진단 (인증 정보, 게이트웨이, 새너타이저, 도구
 events = "라이브 이벤트 스트림 구독 (SSE)"
 settings = "CLI 환경설정 조회 / 변경 (언어 등)"
 artifacts = "독립 실행형 HTML 보고서 게시 및 관리"
+docs = "플랫폼 **핸드북**: 터미널에서 오프라인으로 읽기"
 update = "새 릴리스 확인 후 해당 업그레이드 실행"
 uninstall = "이 머신에서 everyapi 상태와 바이너리 제거"
 version = "빌드 버전 · update · uninstall"
@@ -1641,3 +1642,38 @@ everyapi tmux — `everyapi use`가 남긴 tmux 세션
 tmux 모드로 띄운 세션은 분리한 뒤에도 계속 실행되며, 재연결 명령은 시작할 때
 한 번만 출력됩니다. 이 명령은 그 세션들을 다시 찾기 위한 것입니다.
 '''
+
+[docs]
+usage = '''
+everyapi docs — EveryAPI 핸드북을 터미널에서 오프라인으로
+
+사용법
+  everyapi docs                    주제 선택 (TTY가 아니면 list와 동일)
+  everyapi docs list               모든 주제와 한 줄 요약
+  everyapi docs <topic>            한 주제 읽기
+  everyapi docs search <query>     모든 주제 전문 검색
+  everyapi docs open               호스팅된 핸드북을 브라우저로 열기
+
+주제
+  모호하지 않다면 주제 이름을 줄여 쓸 수 있습니다:
+  'everyapi docs quick' 은 quickstart 를 엽니다.
+
+참고
+  핸드북은 바이너리에 포함되어 있어 오프라인에서도, 로그인 전에도
+  읽을 수 있습니다. 'everyapi use' 가 실행하는 AI 클라이언트도
+  추측하지 말고 이 문서를 읽어야 합니다.
+'''
+list_header = "EveryAPI 핸드북 — %d개 주제"
+list_hint = "\n'everyapi docs <topic>' 로 읽고, 'everyapi docs search <query>' 로 전문 검색하세요."
+footer = "전체 핸드북: %s"
+pick_topic = "everyapi docs — 주제를 선택하세요:"
+pick_search = "search…                 모든 주제 전문 검색"
+pick_open = "open…                   호스팅된 핸드북을 브라우저로 열기"
+search_prompt = "핸드북에서 검색"
+search_usage = "사용법: everyapi docs search <query>"
+search_none = "%q 를 언급한 주제가 없습니다."
+search_header = "%d개 주제가 %q 를 언급합니다:"
+search_count = "%d개 일치"
+search_more = "… 그 외 %d줄"
+search_hint = "'everyapi docs <topic>' 로 주제 전체를 읽을 수 있습니다."
+opening = "%s 여는 중"

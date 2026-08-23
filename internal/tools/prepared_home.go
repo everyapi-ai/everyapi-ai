@@ -59,6 +59,10 @@ func newPreparedHome(prefix string) (string, error) {
 	}
 	// Stamp ownership immediately: from here on, a hard kill leaves a home the next launch can identify as orphaned instead of one that has to age out. A failed write is not fatal — the home just falls back to the unowned age rule.
 	_ = os.WriteFile(filepath.Join(home, preparedHomeOwnerFile), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600)
+	// Every process-scoped home gets the agent context files, here rather than in each adapter, because this is the single door all of them come through: a client added later inherits the reach without anyone remembering to wire it.
+	//
+	// This is reach, not a support claim. A client that reads the AGENTS.md convention out of its own home picks it up for free; one that does not sees an extra markdown file in a directory deleted when it exits. Clients whose documented surface is a named configuration field still point at EVERYAPI.md explicitly — that is the path that is actually guaranteed to be read.
+	addAgentContextToHome(home)
 	return home, nil
 }
 

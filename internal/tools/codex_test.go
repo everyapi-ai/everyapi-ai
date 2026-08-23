@@ -147,6 +147,10 @@ func TestPrepareCodexAddsArtifactStandardAndOnlyCurrentTmuxContext(t *testing.T)
 	if !strings.Contains(string(body), "EveryAPI Artifact delivery standard") {
 		t.Fatalf("Codex config missing artifact delivery standard:\n%s", body)
 	}
+	// The capability list travels the same developer_instructions path; assert it here too, because AgentInstructions growing a section that never reaches Codex is a silent regression.
+	if !strings.Contains(string(body), "EveryAPI CLI") {
+		t.Fatalf("Codex config missing the capability list:\n%s", body)
+	}
 
 	t.Setenv("TMUX", "")
 	t.Setenv(TerminalModeEnvironment, "native")

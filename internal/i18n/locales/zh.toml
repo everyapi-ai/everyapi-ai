@@ -119,6 +119,7 @@ doctor = "本机自检（凭证、网关、代理、工具）"
 events = "订阅实时事件流（SSE）"
 settings = "查看 / 修改 CLI 偏好（语言等）"
 artifacts = "发布和管理自包含 HTML 报告"
+docs = "平台**使用手册**：在终端离线阅读"
 update = "检查新版本并执行匹配的升级"
 uninstall = "从此机器移除 everyapi 状态和二进制"
 version = "版本 · 升级 · 卸载"
@@ -1620,3 +1621,38 @@ everyapi tmux — `everyapi use` 留下的那些 tmux 会话
 tmux 模式启动的会话在你 detach 之后会继续运行，而重连命令只在启动时打印一次。
 这个命令就是用来把它们重新找回来的。
 '''
+
+[docs]
+usage = '''
+everyapi docs — EveryAPI 使用手册，离线可读
+
+用法
+  everyapi docs                    选择一个主题（非终端环境下等同 list）
+  everyapi docs list               列出全部主题及一句话简介
+  everyapi docs <topic>            阅读某个主题
+  everyapi docs search <query>     在全部主题中做全文搜索
+  everyapi docs open               在浏览器中打开在线手册
+
+主题
+  主题名可以缩写，只要不产生歧义：
+  'everyapi docs quick' 即可读到 quickstart。
+
+说明
+  手册内置在二进制文件中，离线可用，未登录也能读。
+  被 'everyapi use' 启动的 AI 客户端也应当直接读它，
+  而不是凭猜测描述本平台。
+'''
+list_header = "EveryAPI 使用手册 — 共 %d 个主题"
+list_hint = "\n用 'everyapi docs <topic>' 阅读；用 'everyapi docs search <query>' 全文搜索。"
+footer = "完整手册：%s"
+pick_topic = "everyapi docs — 选择一个主题："
+pick_search = "search…                 在全部主题中做全文搜索"
+pick_open = "open…                   在浏览器中打开在线手册"
+search_prompt = "在手册中搜索"
+search_usage = "用法: everyapi docs search <query>"
+search_none = "没有主题提到 %q。"
+search_header = "%d 个主题提到 %q："
+search_count = "%d 处匹配"
+search_more = "… 另有 %d 行"
+search_hint = "用 'everyapi docs <topic>' 阅读完整主题。"
+opening = "正在打开 %s"

@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
+	docscmd "github.com/everyapi-ai/everyapi-ai/v3/cmd/docs"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/style"
@@ -151,6 +152,50 @@ func TestArtifactsCommandIsRegisteredAsAnAuthenticatedTool(t *testing.T) {
 	}
 	if got := groupOf("artifacts"); got != "tools" {
 		t.Errorf("artifacts group = %q, want tools", got)
+	}
+}
+
+// TestDocsCommandIsReachableWithoutCredentials pins the one property that makes an embedded handbook worth shipping: it answers before there is an account, and before the network works. A requireLogin gate here would hide the page that explains how to log in.
+func TestDocsCommandIsReachableWithoutCredentials(t *testing.T) {
+	c, ok := lookup("docs")
+	if !ok {
+		t.Fatal("docs command missing")
+	}
+	if c.requireLogin {
+		t.Fatal("docs must stay visible signed out — it documents how to sign in")
+	}
+	if c.adminOnly {
+		t.Fatal("docs must not be admin-only")
+	}
+	if c.run == nil {
+		t.Fatal("docs command has no handler")
+	}
+	// No sub-picker: docs.Run renders the topic list itself, so dispatchInteractive must hand it the bare invocation rather than a four-row menu.
+	if c.hasSubmenu() {
+		t.Error("docs declares a sub-menu; its own topic picker is the menu")
+	}
+	if got := groupOf("docs"); got != "tools" {
+		t.Errorf("docs group = %q, want tools", got)
+	}
+}
+
+// TestEveryCommandIsDocumented closes the loop between the registry and the handbook. Adding a top-level command is one line in `commands`; nothing else forces the handbook to learn about it, and a command nobody documented is one users only find by reading `everyapi help` and guessing.
+//
+// The check is for "everyapi <name>" rather than the bare name because several command names — use, stats, docs, account — are ordinary English words that appear throughout the prose, and a bare-substring check would pass for a command the handbook never mentions.
+func TestEveryCommandIsDocumented(t *testing.T) {
+	topics, err := docscmd.Topics()
+	if err != nil {
+		t.Fatalf("load handbook: %v", err)
+	}
+	var handbook strings.Builder
+	for _, topic := range topics {
+		handbook.WriteString(topic.Body)
+	}
+	text := strings.ToLower(handbook.String())
+	for _, c := range commands {
+		if !strings.Contains(text, "everyapi "+c.name) {
+			t.Errorf("command %q is registered but never appears in the handbook — add it to a topic under cmd/docs/topics/", c.name)
+		}
 	}
 }
 

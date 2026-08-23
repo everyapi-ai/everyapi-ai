@@ -60,3 +60,21 @@ func TestWidth_CJK(t *testing.T) {
 		t.Errorf("Width(未注册) = %d, want 6", got)
 	}
 }
+
+// TestEnabledTracksTheColorProfile: Enabled is the switch the docs renderer uses to decide whether backticks still have a job, so it has to agree with whether Bold actually does anything.
+func TestEnabledTracksTheColorProfile(t *testing.T) {
+	styletest.WithColorProfile(t, termenv.Ascii)
+	if style.Enabled() {
+		t.Error("Enabled() is true on an Ascii profile")
+	}
+	if style.Bold("x") != "x" {
+		t.Error("Bold styled text on an Ascii profile — Enabled and Bold disagree")
+	}
+	styletest.WithColorProfile(t, termenv.TrueColor)
+	if !style.Enabled() {
+		t.Error("Enabled() is false on a TrueColor profile")
+	}
+	if style.Bold("x") == "x" {
+		t.Error("Bold left text unstyled on a TrueColor profile — Enabled and Bold disagree")
+	}
+}

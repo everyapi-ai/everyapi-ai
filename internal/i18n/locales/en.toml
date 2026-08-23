@@ -120,6 +120,7 @@ doctor = "**Self-check** (creds, gateway, sanitizer, tools)"
 events = "Subscribe to the **live event stream** (SSE)"
 settings = "View / change **CLI preferences** (language, …)"
 artifacts = "Publish and manage self-contained **HTML reports**"
+docs = "Platform **handbook**: read it offline in the terminal"
 update = "Check for a **newer release** and run the matching upgrade"
 uninstall = "Remove everyapi **state and binary** from this machine"
 version = "Build version · update · uninstall"
@@ -1635,3 +1636,38 @@ USAGE
 A tmux-mode launch keeps running after you detach, and prints its reattach
 command only once. This is how you find those sessions again.
 '''
+
+[docs]
+usage = '''
+everyapi docs — the EveryAPI handbook, offline in your terminal
+
+USAGE
+  everyapi docs                    Pick a topic (list when not a terminal)
+  everyapi docs list               Every topic with a one-line summary
+  everyapi docs <topic>            Read one topic
+  everyapi docs search <query>     Full-text search across every topic
+  everyapi docs open               Open the hosted handbook in a browser
+
+TOPICS
+  A topic name can be abbreviated as long as it stays unambiguous:
+  'everyapi docs quick' reads quickstart.
+
+NOTES
+  The handbook ships inside the binary, so it works offline and before
+  you have logged in. It is also what an AI client launched by
+  'everyapi use' should read instead of guessing at the platform.
+'''
+list_header = "EveryAPI handbook — %d topics"
+list_hint = "\nRead one with 'everyapi docs <topic>'; search them all with 'everyapi docs search <query>'."
+footer = "Full handbook: %s"
+pick_topic = "everyapi docs — pick a topic:"
+pick_search = "search…                 Full-text search across every topic"
+pick_open = "open…                   Open the hosted handbook in a browser"
+search_prompt = "Search the handbook for"
+search_usage = "usage: everyapi docs search <query>"
+search_none = "No topic mentions %q."
+search_header = "%d topic(s) mention %q:"
+search_count = "%d match(es)"
+search_more = "… and %d more line(s)"
+search_hint = "Read a topic in full with 'everyapi docs <topic>'."
+opening = "Opening %s"

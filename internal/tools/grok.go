@@ -35,6 +35,8 @@ func prepareGrokWithModels(_, _ string, models []Model) (map[string]string, erro
 	if err := os.Remove(filepath.Join(grokHome, "auth.json")); err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("remove EveryAPI Grok OAuth cache: %w", err)
 	}
+	// GROK_HOME is redirected here precisely so EveryAPI-routed sessions stay out of ~/.grok; the directory is ours, so it carries the context files like every other home we own.
+	addAgentContextToHome(grokHome)
 	return map[string]string{
 		"GROK_HOME": grokHome,
 	}, nil

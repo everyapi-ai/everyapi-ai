@@ -47,6 +47,13 @@ models:
 	for _, model := range models {
 		appendModel(model.ID)
 	}
+	// Continue concatenates `rules` into the system message for agent, chat, and edit requests — its documented surface for exactly this. The value is inlined into the generated config rather than referenced as a file, because this config is already process-scoped and dies with the launch; the user's own ~/.continue/config.yaml is never opened.
+	if agentContextFileEnabled() {
+		if instructions := AgentInstructions(); instructions != "" {
+			body.WriteString("rules:\n")
+			fmt.Fprintf(&body, "  - %s\n", yamlDoubleQuote(instructions))
+		}
+	}
 	if err := writeFileAtomic(path, []byte(body.String()), 0o600); err != nil {
 		removePreparedHomeAfterQuiet(home)
 		return nil, err

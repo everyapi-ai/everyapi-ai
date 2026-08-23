@@ -21,6 +21,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/demand"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/dispute"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/dm"
+	docscmd "github.com/everyapi-ai/everyapi-ai/v3/cmd/docs"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/doctor"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/edge"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/events"
@@ -352,6 +353,8 @@ var commands = []command{
 	{name: "computer", desc: "Read and control macOS apps through accessibility", run: computer.Run},
 	{name: "mcp", desc: "MCP server for AI CLIs (Claude Code / Codex / Gemini)", run: runMCP, headerFn: mcpHeader, subs: mcpSubs},
 	{name: "doctor", desc: "Self-check (creds, gateway, sanitizer, tools)", run: doctor.Run},
+	// No subs: the topic list IS this command's menu, and docs.Run renders it itself on a TTY (a four-row list/search/open sub-picker would bury the content the user came for). Not requireLogin — the handbook is embedded in the binary and answers before there is an account.
+	{name: "docs", desc: "Platform handbook: read it offline in the terminal", run: docscmd.Run},
 	{name: "events", desc: "Subscribe to the live event stream (SSE)", requireLogin: true, run: events.Run},
 	{name: "settings", desc: "View / change CLI preferences (language, …)", run: settings.Run},
 	{name: "artifacts", desc: "Publish and manage self-contained HTML reports", requireLogin: true, run: artifacts.Run},
@@ -584,6 +587,8 @@ var commandGroup = map[string]string{
 	// Tools & settings
 	"mcp": "tools", "proxy": "tools", "computer": "tools",
 	"doctor": "tools", "events": "tools", "settings": "tools", "artifacts": "tools",
+	// docs sits with the tools: it is a reference surface, not an account or money action, and it is the one row that works with no credentials at all.
+	"docs": "tools",
 	// feedback sits with the tools rather than with account/billing: it is about the product, not about this user's money or session.
 	"feedback": "tools",
 	"version":  "tools", // version namespace = build version + update/uninstall

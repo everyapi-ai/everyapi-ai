@@ -119,6 +119,7 @@ doctor = "本機自我檢查（憑證、閘道、代理、工具）"
 events = "訂閱即時事件串流（SSE）"
 settings = "查看 / 修改 CLI 偏好（語言等）"
 artifacts = "發布和管理自包含 HTML 報告"
+docs = "平台**使用手冊**：在終端離線閱讀"
 update = "檢查新版本並執行對應的升級"
 uninstall = "從此機器移除 everyapi 狀態和二進位"
 version = "版本 · 升級 · 解除安裝"
@@ -1619,3 +1620,38 @@ everyapi tmux — `everyapi use` 留下的那些 tmux 工作階段
 tmux 模式啟動的工作階段在你分離之後會繼續執行，而重新連線指令只在啟動時印出一次。
 這個指令就是用來把它們重新找回來的。
 '''
+
+[docs]
+usage = '''
+everyapi docs — EveryAPI 使用手冊，離線可讀
+
+用法
+  everyapi docs                    選擇一個主題（非終端環境下等同 list）
+  everyapi docs list               列出全部主題及一句話簡介
+  everyapi docs <topic>            閱讀某個主題
+  everyapi docs search <query>     在全部主題中做全文搜尋
+  everyapi docs open               在瀏覽器中開啟線上手冊
+
+主題
+  主題名可以縮寫，只要不產生歧義：
+  'everyapi docs quick' 即可讀到 quickstart。
+
+說明
+  手冊內建在二進位檔中，離線可用，未登入也能讀。
+  被 'everyapi use' 啟動的 AI 用戶端也應當直接讀它，
+  而不是憑猜測描述本平台。
+'''
+list_header = "EveryAPI 使用手冊 — 共 %d 個主題"
+list_hint = "\n用 'everyapi docs <topic>' 閱讀；用 'everyapi docs search <query>' 全文搜尋。"
+footer = "完整手冊：%s"
+pick_topic = "everyapi docs — 選擇一個主題："
+pick_search = "search…                 在全部主題中做全文搜尋"
+pick_open = "open…                   在瀏覽器中開啟線上手冊"
+search_prompt = "在手冊中搜尋"
+search_usage = "用法: everyapi docs search <query>"
+search_none = "沒有主題提到 %q。"
+search_header = "%d 個主題提到 %q："
+search_count = "%d 處符合"
+search_more = "… 另有 %d 行"
+search_hint = "用 'everyapi docs <topic>' 閱讀完整主題。"
+opening = "正在開啟 %s"

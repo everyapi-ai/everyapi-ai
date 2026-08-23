@@ -134,6 +134,7 @@ doctor = "Auto-vérification (identifiants, gateway, sanitizer, outils)"
 events = "S'abonner au flux d'événements en direct (SSE)"
 settings = "Voir / modifier les préférences du CLI (langue, …)"
 artifacts = "Publier et gérer des rapports HTML autonomes"
+docs = "**Manuel** de la plateforme : à lire hors ligne dans le terminal"
 update = "Vérifier une version plus récente et lancer la mise à niveau correspondante"
 uninstall = "Supprimer l'état everyapi et le binaire de cette machine"
 version = "Version · update · uninstall"
@@ -1658,3 +1659,38 @@ UTILISATION
 Un lancement en mode tmux continue après un détachement, et n'affiche sa
 commande de rattachement qu'une seule fois. Voici comment les retrouver.
 '''
+
+[docs]
+usage = '''
+everyapi docs — le manuel EveryAPI, hors ligne, dans votre terminal
+
+UTILISATION
+  everyapi docs                    Choisir un sujet (équivaut à list hors TTY)
+  everyapi docs list               Tous les sujets avec un résumé d'une ligne
+  everyapi docs <topic>            Lire un sujet
+  everyapi docs search <query>     Recherche plein texte sur tous les sujets
+  everyapi docs open               Ouvrir le manuel hébergé dans un navigateur
+
+SUJETS
+  Un nom de sujet peut être abrégé tant qu'il reste non ambigu :
+  'everyapi docs quick' ouvre quickstart.
+
+NOTES
+  Le manuel est embarqué dans le binaire : il fonctionne hors ligne et
+  avant toute connexion. C'est aussi ce qu'un client IA lancé par
+  'everyapi use' devrait lire plutôt que de deviner.
+'''
+list_header = "Manuel EveryAPI — %d sujets"
+list_hint = "\nLisez-en un avec 'everyapi docs <topic>' ; cherchez partout avec 'everyapi docs search <query>'."
+footer = "Manuel complet : %s"
+pick_topic = "everyapi docs — choisissez un sujet :"
+pick_search = "search…                 Recherche plein texte sur tous les sujets"
+pick_open = "open…                   Ouvrir le manuel hébergé dans un navigateur"
+search_prompt = "Rechercher dans le manuel"
+search_usage = "utilisation : everyapi docs search <query>"
+search_none = "Aucun sujet ne mentionne %q."
+search_header = "%d sujet(s) mentionnent %q :"
+search_count = "%d correspondance(s)"
+search_more = "… et %d ligne(s) de plus"
+search_hint = "Lisez un sujet en entier avec 'everyapi docs <topic>'."
+opening = "Ouverture de %s"

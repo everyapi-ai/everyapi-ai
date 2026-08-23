@@ -502,11 +502,16 @@ var Registry = map[string]*Tool{
 		ModelEnv:                   "GOOSE_MODEL",
 		RequiredEndpoint:           "openai",
 		envFn: func(apiBase, token string) map[string]string {
-			return map[string]string{
+			env := map[string]string{
 				"GOOSE_PROVIDER":  "openai",
 				"OPENAI_API_KEY":  token,
 				"OPENAI_BASE_URL": joinBase(apiBase, "/v1"),
 			}
+			// Goose has no configuration root EveryAPI can redirect: its documented global hints live in the user's own ~/.config/goose, and CONTEXT_FILE_NAME selects a file NAME searched for in that hierarchy, not a path we could point elsewhere. So this is the managed-block path — write a delimited block at launch, remove exactly that block at exit. See managed_block.go.
+			if blocks := applyManagedBlocks(gooseHintsPath()); blocks != "" {
+				env[managedBlockMarker] = blocks
+			}
+			return env
 		},
 	},
 

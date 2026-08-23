@@ -133,6 +133,7 @@ doctor = "Selbsttest (Anmeldedaten, Gateway, Sanitizer, Tools)"
 events = "Live-Event-Stream abonnieren (SSE)"
 settings = "CLI-Einstellungen anzeigen / ändern (Sprache, …)"
 artifacts = "Eigenständige HTML-Berichte veröffentlichen und verwalten"
+docs = "Plattform-**Handbuch**: offline im Terminal lesen"
 update = "Auf neuere Version prüfen und das passende Upgrade ausführen"
 uninstall = "everyapi state and binary entfernen"
 version = "Version · update · uninstall"
@@ -1653,3 +1654,38 @@ VERWENDUNG
 Ein tmux-Start läuft weiter, nachdem du dich getrennt hast, und gibt seinen
 Verbindungsbefehl nur einmal aus. Hiermit findest du diese Sitzungen wieder.
 '''
+
+[docs]
+usage = '''
+everyapi docs — das EveryAPI-Handbuch, offline im Terminal
+
+VERWENDUNG
+  everyapi docs                    Thema wählen (außerhalb eines TTY wie list)
+  everyapi docs list               Alle Themen mit einer Zeile Zusammenfassung
+  everyapi docs <topic>            Ein Thema lesen
+  everyapi docs search <query>     Volltextsuche über alle Themen
+  everyapi docs open               Das gehostete Handbuch im Browser öffnen
+
+THEMEN
+  Ein Themenname darf abgekürzt werden, solange er eindeutig bleibt:
+  'everyapi docs quick' öffnet quickstart.
+
+HINWEISE
+  Das Handbuch steckt in der Binärdatei, funktioniert also offline und
+  noch vor der Anmeldung. Ein von 'everyapi use' gestarteter KI-Client
+  sollte es lesen, statt zu raten.
+'''
+list_header = "EveryAPI-Handbuch — %d Themen"
+list_hint = "\nMit 'everyapi docs <topic>' lesen; mit 'everyapi docs search <query>' alle durchsuchen."
+footer = "Vollständiges Handbuch: %s"
+pick_topic = "everyapi docs — Thema wählen:"
+pick_search = "search…                 Volltextsuche über alle Themen"
+pick_open = "open…                   Das gehostete Handbuch im Browser öffnen"
+search_prompt = "Im Handbuch suchen nach"
+search_usage = "Verwendung: everyapi docs search <query>"
+search_none = "Kein Thema erwähnt %q."
+search_header = "%d Thema/Themen erwähnen %q:"
+search_count = "%d Treffer"
+search_more = "… und %d weitere Zeile(n)"
+search_hint = "Ein Thema vollständig lesen mit 'everyapi docs <topic>'."
+opening = "Öffne %s"

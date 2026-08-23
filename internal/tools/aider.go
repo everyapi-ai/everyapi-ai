@@ -22,9 +22,19 @@ func prepareAider(_, _ string) (map[string]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Aider requires Git, but git is not available: %w", err)
 	}
-	return map[string]string{
+	env := map[string]string{
 		"AIDER_MODEL":               "openai/" + model,
 		"GIT_PYTHON_GIT_EXECUTABLE": gitPath,
 		"PYTHON_DOTENV_DISABLED":    "1",
-	}, nil
+	}
+	// Aider's documented read-only context surface is `--read <file>`, which adds a file to the chat without making it editable. Passing it on the command line rather than writing `read:` into .aider.conf.yml keeps this to the launch: the user's own conventions file and config stay untouched.
+	home, argv, err := agentContextArgv("aider", "--read")
+	if err != nil {
+		return nil, err
+	}
+	if home != "" {
+		env[preparedHomeMarker] = home
+		env[preparedArgvMarker] = argv
+	}
+	return env, nil
 }

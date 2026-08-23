@@ -37,6 +37,17 @@ func prepareCrushWithModels(apiBase, _ string, models []Model) (map[string]strin
 		}},
 		"models": map[string]any{"large": map[string]any{"provider": "everyapi", "model": selected}},
 	}
+	// Crush's documented `options.context_paths` loads extra context files as "personal additions to the system prompt". Pointing it at a file inside this launch's own prepared home keeps the injection process-scoped: the user's ~/.config/crush/CRUSH.md is neither read nor written, and the whole home is removed when the child exits.
+	if agentContextFileEnabled() {
+		contextPath, err := writeAgentContextFile(home)
+		if err != nil {
+			removePreparedHomeAfterQuiet(home)
+			return nil, err
+		}
+		if contextPath != "" {
+			config["options"] = map[string]any{"context_paths": []string{contextPath}}
+		}
+	}
 	body, err := json.Marshal(config)
 	if err != nil {
 		removePreparedHomeAfterQuiet(home)

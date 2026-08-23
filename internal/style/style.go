@@ -83,3 +83,8 @@ func Dim(s string) string {
 	}
 	return "\x1b[2m" + s + "\x1b[0m"
 }
+
+// Enabled reports whether the output supports ANSI styling — false when piped, under NO_COLOR, or on a dumb terminal. Callers that need to CHANGE their markup (not just drop it) use this: the docs renderer keeps `backticks` around inline code on an unstyled terminal because there is no bold to carry the distinction, and drops them when there is. Bold/Color/Dim already self-disable, so a caller that only wants "style if possible" should just call them and ignore this.
+func Enabled() bool {
+	return lipgloss.ColorProfile() != termenv.Ascii
+}

@@ -26,15 +26,19 @@ func prepareGemini(_, _ string) (map[string]string, error) {
 	}
 	auth["selectedType"] = "gemini-api-key"
 
-	body, err := json.MarshalIndent(settings, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal Gemini system settings overlay: %w", err)
-	}
 	cfgDir, err := config.ConfigDir()
 	if err != nil {
 		return nil, fmt.Errorf("resolve everyapi config dir: %w", err)
 	}
 	dir := filepath.Join(cfgDir, "gemini")
+	if err := applyGeminiAgentContext(settings, dir); err != nil {
+		return nil, err
+	}
+
+	body, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal Gemini system settings overlay: %w", err)
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("create Gemini config directory: %w", err)
 	}
@@ -96,4 +100,64 @@ func objectField(parent map[string]any, key string) (map[string]any, error) {
 		return nil, fmt.Errorf("Gemini system setting %q must be an object", key)
 	}
 	return child, nil
+}
+
+// applyGeminiAgentContext points Gemini CLI at an EveryAPI-owned context directory through `context.includeDirectories`, its documented mechanism for sourcing context files from outside the workspace.
+//
+// This is the one adapter where the injection is NOT written into a temporary prepared home, and the reason is the same one that shapes the rest of this file: Gemini CLI's context hierarchy reads ~/.gemini/GEMINI.md and the workspace's own files, and prepareGemini exists precisely to leave both alone. The settings overlay at GEMINI_CLI_SYSTEM_SETTINGS_PATH is a file EveryAPI already creates and owns, so adding a directory it also owns keeps every user-owned path untouched.
+//
+// The directory is appended, never assigned: a system-scope settings file wins over the user's, so replacing includeDirectories would silently drop directories the user configured. loadFromIncludeDirectories has to be enabled for the entry to be read at all, and that is a real behaviour change worth knowing about — a user who had configured include directories with loading off will now see them loaded. It is documented rather than hidden.
+func applyGeminiAgentContext(settings map[string]any, everyapiDir string) error {
+	if !agentContextFileEnabled() {
+		return nil
+	}
+	instructions := AgentInstructions()
+	if instructions == "" {
+		return nil
+	}
+	contextDir := filepath.Join(everyapiDir, "context")
+	if err := os.MkdirAll(contextDir, 0o700); err != nil {
+		return fmt.Errorf("create Gemini context directory: %w", err)
+	}
+	if err := writeFileAtomic(filepath.Join(contextDir, "GEMINI.md"), []byte(instructions+"\n"), 0o600); err != nil {
+		return err
+	}
+	contextSettings, err := objectField(settings, "context")
+	if err != nil {
+		return err
+	}
+	existing, err := stringSliceField(contextSettings, "includeDirectories")
+	if err != nil {
+		return err
+	}
+	for _, dir := range existing {
+		if dir == contextDir {
+			contextSettings["loadFromIncludeDirectories"] = true
+			return nil
+		}
+	}
+	contextSettings["includeDirectories"] = append(existing, contextDir)
+	contextSettings["loadFromIncludeDirectories"] = true
+	return nil
+}
+
+// stringSliceField reads an existing string array out of decoded JSON, where every element arrives as `any`. A field holding something else is an error rather than a silent reset — the file may be the user's own system-scope settings.
+func stringSliceField(parent map[string]any, key string) ([]string, error) {
+	value, ok := parent[key]
+	if !ok || value == nil {
+		return nil, nil
+	}
+	items, ok := value.([]any)
+	if !ok {
+		return nil, fmt.Errorf("Gemini system setting %q must be an array", key)
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		text, ok := item.(string)
+		if !ok {
+			return nil, fmt.Errorf("Gemini system setting %q must hold strings", key)
+		}
+		out = append(out, text)
+	}
+	return out, nil
 }

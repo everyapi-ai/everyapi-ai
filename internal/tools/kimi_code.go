@@ -30,6 +30,8 @@ func prepareKimiCodeWithModels(_, _ string, models []Model) (map[string]string, 
 	if err := os.MkdirAll(kimiHome, 0o700); err != nil {
 		return nil, fmt.Errorf("create kimi-code-home: %w", err)
 	}
+	// A durable EveryAPI-owned home rather than a temporary one, but the ownership is the same, so it gets the same context files. (A prepared home already has them from newPreparedHome; this covers the no-catalog path.)
+	addAgentContextToHome(kimiHome)
 	if len(models) > 0 {
 		if err := writeKimiModelCatalog(kimiHome, models); err != nil {
 			removePreparedHomeAfterQuiet(kimiHome)

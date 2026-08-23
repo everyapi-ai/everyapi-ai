@@ -129,6 +129,7 @@ doctor = "セルフチェック（認証情報、ゲートウェイ、サニタ�
 events = "ライブイベントストリームを購読 (SSE)"
 settings = "CLI 設定を表示 / 変更（言語など）"
 artifacts = "自己完結型 HTML レポートを公開・管理"
+docs = "プラットフォーム**ハンドブック**: ターミナルでオフライン閲覧"
 update = "新しいリリースを確認し、対応するアップグレードを実行"
 uninstall = "このマシンから everyapi の状態とバイナリを削除"
 version = "ビルドバージョン · update · uninstall"
@@ -1644,3 +1645,38 @@ everyapi tmux — `everyapi use` が残した tmux セッション
 tmux モードで起動したセッションはデタッチ後も動き続け、再接続コマンドは起動時に
 一度だけ表示されます。このコマンドはそれらを見つけ直すためのものです。
 '''
+
+[docs]
+usage = '''
+everyapi docs — EveryAPI ハンドブックをオフラインでターミナルから
+
+使い方
+  everyapi docs                    トピックを選ぶ（非 TTY では list と同じ）
+  everyapi docs list               全トピックと一行要約
+  everyapi docs <topic>            トピックを読む
+  everyapi docs search <query>     全トピックを全文検索
+  everyapi docs open               ホスト版ハンドブックをブラウザで開く
+
+トピック
+  一意に定まる限り、トピック名は省略できます：
+  'everyapi docs quick' で quickstart が読めます。
+
+注記
+  ハンドブックはバイナリに同梱されているため、オフラインでも
+  ログイン前でも読めます。'everyapi use' が起動する AI クライアントも、
+  推測ではなくこれを読むべきです。
+'''
+list_header = "EveryAPI ハンドブック — %d トピック"
+list_hint = "\n'everyapi docs <topic>' で読み、'everyapi docs search <query>' で全文検索します。"
+footer = "完全版ハンドブック: %s"
+pick_topic = "everyapi docs — トピックを選択:"
+pick_search = "search…                 全トピックを全文検索"
+pick_open = "open…                   ホスト版ハンドブックをブラウザで開く"
+search_prompt = "ハンドブックを検索"
+search_usage = "使い方: everyapi docs search <query>"
+search_none = "%q に言及しているトピックはありません。"
+search_header = "%d 件のトピックが %q に言及しています:"
+search_count = "%d 件一致"
+search_more = "… 他 %d 行"
+search_hint = "'everyapi docs <topic>' でトピック全文を読めます。"
+opening = "%s を開いています"

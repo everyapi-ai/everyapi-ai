@@ -135,6 +135,7 @@ doctor = "Auto-chequeo (credenciales, gateway, sanitizador, herramientas)"
 events = "Suscribirse al stream de eventos en vivo (SSE)"
 settings = "Ver / cambiar preferencias del CLI (idioma, …)"
 artifacts = "Publicar y administrar informes HTML autocontenidos"
+docs = "**Manual** de la plataforma: léelo sin conexión en la terminal"
 update = "Buscar una versión más nueva y ejecutar la actualización correspondiente"
 uninstall = "Eliminar el estado y el binario de everyapi de esta máquina"
 version = "Versión · update · uninstall"
@@ -1655,3 +1656,38 @@ USO
 Un lanzamiento en modo tmux sigue corriendo después de separarte, y solo imprime
 su comando de reconexión una vez. Así vuelves a encontrar esas sesiones.
 '''
+
+[docs]
+usage = '''
+everyapi docs — el manual de EveryAPI, sin conexión, en tu terminal
+
+USO
+  everyapi docs                    Elegir un tema (equivale a list fuera de un TTY)
+  everyapi docs list               Todos los temas con un resumen de una línea
+  everyapi docs <topic>            Leer un tema
+  everyapi docs search <query>     Búsqueda de texto completo en todos los temas
+  everyapi docs open               Abrir el manual alojado en el navegador
+
+TEMAS
+  El nombre de un tema puede abreviarse mientras siga siendo inequívoco:
+  'everyapi docs quick' abre quickstart.
+
+NOTAS
+  El manual va dentro del binario, así que funciona sin conexión y antes
+  de iniciar sesión. También es lo que debería leer un cliente de IA
+  lanzado por 'everyapi use', en lugar de adivinar.
+'''
+list_header = "Manual de EveryAPI — %d temas"
+list_hint = "\nLee uno con 'everyapi docs <topic>'; búscalos todos con 'everyapi docs search <query>'."
+footer = "Manual completo: %s"
+pick_topic = "everyapi docs — elige un tema:"
+pick_search = "search…                 Búsqueda de texto completo en todos los temas"
+pick_open = "open…                   Abrir el manual alojado en el navegador"
+search_prompt = "Buscar en el manual"
+search_usage = "uso: everyapi docs search <query>"
+search_none = "Ningún tema menciona %q."
+search_header = "%d tema(s) mencionan %q:"
+search_count = "%d coincidencia(s)"
+search_more = "… y %d línea(s) más"
+search_hint = "Lee un tema completo con 'everyapi docs <topic>'."
+opening = "Abriendo %s"
