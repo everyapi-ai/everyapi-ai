@@ -432,7 +432,7 @@ per_model = "按模型用量（共 %d 個模型）："
 [models]
 no_models = "你的分組無可路由模型。請聯絡管理員啟用。"
 count = "可用 %d 個模型："
-promotional_only = "此帳戶目前只有贈送額度。充值付費餘額前，CLI 只顯示 %s 分組中的 smart-everyapi。請求使用 OpenAI Chat Completions，由智慧路由從贈送額度可用模型中選擇，並受單次額度、共享每日額度與並發限制。"
+promotional_only = "此帳戶目前只有贈送額度。充值付費餘額前，CLI 只顯示 %s 分組中的 smart-everyapi。為避免 HTTP 403，請將模型指定為 smart-everyapi；直接指定不在贈送額度白名單中的模型會返回 HTTP 403。請求使用 OpenAI Chat Completions，由智慧路由從贈送額度可用模型中選擇，並受單次額度、共享每日額度與並發限制。"
 no_pricing = "無比對的定價紀錄。"
 no_groups = "你的帳戶無可用路由分組。"
 usage = '''
@@ -1321,8 +1321,8 @@ choice_skip = "跳過此版本"
 
 [use]
 no_selectable_models = "此 relay key/group 沒有可供 %s 選擇的模型。"
-promotional_only = "此帳戶目前只有贈送額度。充值付費餘額前，CLI 只開放 %s 分組中的 smart-everyapi。請求使用 OpenAI Chat Completions，由智慧路由從贈送額度可用模型中選擇，並受單次額度、共享每日額度與並發限制。"
-promotional_only_group = "此帳戶目前只有贈送額度。請使用 %s 分組中的 smart-everyapi，或充值付費餘額後再選擇其他分組。"
+promotional_only = "此帳戶目前只有贈送額度。充值付費餘額前，CLI 只開放 %s 分組中的 smart-everyapi。為避免 HTTP 403，請將模型指定為 smart-everyapi；直接指定不在贈送額度白名單中的模型會返回 HTTP 403。請求使用 OpenAI Chat Completions，由智慧路由從贈送額度可用模型中選擇，並受單次額度、共享每日額度與並發限制。"
+promotional_only_group = "此帳戶目前只有贈送額度。為避免 HTTP 403，請使用 %s 分組並將模型指定為 smart-everyapi；直接指定不在贈送額度白名單中的模型會返回 HTTP 403。充值付費餘額後才能選擇其他分組。"
 sanitize_bad_value = "--sanitize=%q 不是有效的 true/false 值 — 請使用 --sanitize 或 --sanitize=false"
 tool_picker = "選一個工具："
 group_picker = "選一個路由分組："

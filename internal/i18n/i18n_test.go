@@ -206,6 +206,30 @@ func TestInstallDiagnosticsAreNotNpmSpecific(t *testing.T) {
 	}
 }
 
+func TestPromotionalOnlyMessagesRequireSmartAndWarn403(t *testing.T) {
+	keys := []string{"models.promotional_only", "use.promotional_only", "use.promotional_only_group"}
+	for lang, tbl := range locales {
+		for _, key := range keys {
+			message, ok := tbl[key]
+			if !ok {
+				t.Errorf("%s: missing key %q", lang, key)
+				continue
+			}
+			if !strings.Contains(message, "smart-everyapi") || !strings.Contains(message, "HTTP 403") {
+				t.Errorf("%s/%s must require smart-everyapi and warn about HTTP 403: %q", lang, key, message)
+			}
+		}
+	}
+	for _, key := range keys {
+		if message := locales[LangEn][key]; !strings.Contains(message, "not promotion-eligible") || strings.Contains(message, "any other model") {
+			t.Errorf("en/%s must limit HTTP 403 to models outside the promotional policy: %q", key, message)
+		}
+		if message := locales[LangZh][key]; !strings.Contains(message, "不在赠送额度白名单") {
+			t.Errorf("zh/%s must limit HTTP 403 to models outside the promotional allowlist: %q", key, message)
+		}
+	}
+}
+
 // TestLocaleMarkersBalanced ensures every locale value has an even number of ** emphasis markers. An unclosed marker would bold the rest of the string on a styled terminal, or leave a stray ** when piped. Presence of markers is NOT required (locales are marked incrementally), only balance.
 func TestLocaleMarkersBalanced(t *testing.T) {
 	for lang, tbl := range locales {
