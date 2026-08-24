@@ -292,20 +292,10 @@ func use(args []string, persistModelSelection bool) error {
 
 	// Confirm the relay key actually works before exec'ing the tool. /v1/models runs the same TokenAuth/ValidateUserToken as the real traffic, so a 401 here means the tool would just loop on "401 Invalid token" (invalid / expired / disabled / out of quota key) with no hint why. Bail with an actionable message. Only a definitive 401 is fatal: non-401 probe errors (network, 5xx, the transient SystemPerformanceCheck gate) are left to the tool's own retry — false-blocking a working setup on a flaky probe is worse than letting it through.
 	//
-	relayDirectory, catalogErr := api.New(gw, relayKey).GetRelayModelDirectory(cliout.WithCtx())
-	var relayCatalog []api.RelayModel
-	if relayDirectory != nil {
-		relayCatalog = relayDirectory.Models
-	}
+	relayCatalog, catalogErr := api.New(gw, relayKey).RelayModelCatalog(cliout.WithCtx())
 	if catalogErr != nil && api.IsUnauthorized(catalogErr) {
 		invalidateCachedKeyOnReject(creds, group)
 		return relayKeyRejectedErr(t.ExecName, gw)
-	}
-	if catalogErr == nil && relayDirectory.PromotionalOnly {
-		if group != "" && group != relayDirectory.RequiredGroup {
-			return fmt.Errorf(i18n.T("use.promotional_only_group"), cliout.Sanitize(relayDirectory.RequiredGroup))
-		}
-		cliout.Printf(i18n.T("use.promotional_only")+"\n", cliout.Sanitize(relayDirectory.RequiredGroup))
 	}
 	if toolInvocationNeedsEndpoint(extraArgs) {
 		if catalogErr != nil {
@@ -1612,8 +1602,8 @@ func launchModelsForTool(t *tools.Tool, catalog []api.RelayModel, preferred stri
 		if !chatCapable(model.SupportedEndpointTypes) {
 			continue
 		}
-		if requiredEndpoint != "" && !supportsEndpoint(model.SupportedEndpointTypes, requiredEndpoint) &&
-			(t.AlternativeEndpoint == "" || !supportsEndpoint(model.SupportedEndpointTypes, t.AlternativeEndpoint)) {
+		if requiredEndpoint != "" && !relayModelSupportsEndpoint(model, requiredEndpoint) &&
+			(t.AlternativeEndpoint == "" || !relayModelSupportsEndpoint(model, t.AlternativeEndpoint)) {
 			continue
 		}
 		id := cliout.Sanitize(model.ID)
@@ -1687,7 +1677,10 @@ var nonChatEndpoints = map[string]bool{
 	"openai-video":     true,
 }
 
-// chatModels returns all unique chat-capable ids in lexical order. When a tool declares a required wire endpoint, models that only expose a different chat protocol are excluded; missing metadata still fails open for older gateways.
+// chatModels returns all unique chat-capable ids in lexical order. When a tool
+// declares a required wire endpoint, models that only expose a different chat
+// protocol are excluded unless the gateway explicitly advertises a safe
+// protocol bridge; missing metadata still fails open for older gateways.
 func chatModels(catalog []api.RelayModel, requiredEndpoint string) []string {
 	seen := make(map[string]struct{}, len(catalog))
 	ids := make([]string, 0, len(catalog))
@@ -1695,7 +1688,7 @@ func chatModels(catalog []api.RelayModel, requiredEndpoint string) []string {
 		if !chatCapable(model.SupportedEndpointTypes) {
 			continue
 		}
-		if requiredEndpoint != "" && !supportsEndpoint(model.SupportedEndpointTypes, requiredEndpoint) {
+		if requiredEndpoint != "" && !relayModelSupportsEndpoint(model, requiredEndpoint) {
 			continue
 		}
 		id := cliout.Sanitize(model.ID)
@@ -1886,6 +1879,15 @@ func supportsEndpoint(types []string, required string) bool {
 	return false
 }
 
+// relayModelSupportsEndpoint includes gateway-declared protocol translations. A
+// Responses-native model with ChatCompletionsBridge can safely serve an
+// OpenAI Chat Completions client even though its native endpoint list does not
+// contain "openai".
+func relayModelSupportsEndpoint(model api.RelayModel, required string) bool {
+	return supportsEndpoint(model.SupportedEndpointTypes, required) ||
+		(strings.EqualFold(required, "openai") && model.ChatCompletionsBridge)
+}
+
 // chatCapable reports whether a model serving these endpoint types can be driven as a Claude Code chat model. A nil slice means an older gateway omitted the field and remains fail-open; a non-nil empty slice is an explicit statement that this key has no callable protocol for the model.
 func chatCapable(types []string) bool {
 	if types == nil {
@@ -1907,13 +1909,8 @@ func chatCapable(types []string) bool {
 // catalogSupportsEndpoint reports whether at least one routable model can serve the wire protocol required by a tool. Missing endpoint metadata fails open for compatibility with older gateways; an empty catalog or a catalog where every model explicitly declares only other endpoints fails closed.
 func catalogSupportsEndpoint(catalog []api.RelayModel, endpoint string) bool {
 	for _, model := range catalog {
-		if model.SupportedEndpointTypes == nil {
+		if relayModelSupportsEndpoint(model, endpoint) {
 			return true
-		}
-		for _, supported := range model.SupportedEndpointTypes {
-			if strings.EqualFold(supported, endpoint) {
-				return true
-			}
 		}
 	}
 	return false
@@ -1924,8 +1921,8 @@ func catalogSupportsToolEndpoint(catalog []api.RelayModel, tool *tools.Tool) boo
 		if !chatCapable(model.SupportedEndpointTypes) {
 			continue
 		}
-		if supportsEndpoint(model.SupportedEndpointTypes, tool.RequiredEndpoint) ||
-			(tool.AlternativeEndpoint != "" && supportsEndpoint(model.SupportedEndpointTypes, tool.AlternativeEndpoint)) {
+		if relayModelSupportsEndpoint(model, tool.RequiredEndpoint) ||
+			(tool.AlternativeEndpoint != "" && relayModelSupportsEndpoint(model, tool.AlternativeEndpoint)) {
 			return true
 		}
 	}
@@ -2126,10 +2123,6 @@ func pickModelInteractive(t *tools.Tool, creds *config.Credentials, relayKey str
 // pickGroupInteractive lists the distinct routing groups the account's ENABLED relay tokens are bound to and asks the user to pick one. The buyer CLI has no channel-listing endpoint (that's admin-only), so "available channels" is necessarily expressed as the groups the user already holds a key for. The empty group (default tokens) shows as "(default — resolve automatically)" and selecting it returns "" — the normal default path, which prefers the account's auto key. It is NOT a way to pin the group=="" token: pinning one specific key is what `everyapi token switch` is for, and the label says "resolve automatically" rather than naming a key so the two do not read as the same thing.
 func pickGroupInteractive(creds *config.Credentials) (string, error) {
 	client := api.ForCredentials(creds)
-	directory, err := client.GetUserModelDirectory(cliout.WithCtx())
-	if err != nil {
-		return "", fmt.Errorf("load model access for the group picker: %w", err)
-	}
 	tokens, err := client.ListTokens(cliout.WithCtx())
 	if err != nil {
 		return "", fmt.Errorf("list tokens for the group picker: %w", err)
@@ -2138,9 +2131,6 @@ func pickGroupInteractive(creds *config.Credentials) (string, error) {
 	var groups []string
 	for i := range tokens {
 		if tokens[i].Status != api.TokenStatusEnabled {
-			continue
-		}
-		if directory.PromotionalOnly && tokens[i].Group != directory.RequiredGroup {
 			continue
 		}
 		if g := tokens[i].Group; !seen[g] {

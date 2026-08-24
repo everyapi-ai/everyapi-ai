@@ -152,7 +152,7 @@ func TestCredentialCanIncludeTheRelayScopedModelCatalog(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer sk-everyapi-models" {
 			t.Fatalf("Authorization = %q", got)
 		}
-		_, _ = w.Write([]byte(`{"data":[{"id":"image-only","owned_by":"vendor","supported_endpoint_types":["image-generation"]},{"id":"chat-model","owned_by":"vendor","supported_endpoint_types":["openai"],"chat_completions_bridge":true},{"id":"no-endpoint","owned_by":"vendor","supported_endpoint_types":[]}]}`))
+		_, _ = w.Write([]byte(`{"promotional_only":true,"required_group":"auto","data":[{"id":"image-only","owned_by":"vendor","supported_endpoint_types":["image-generation"]},{"id":"gpt-5.6-luna","owned_by":"openai","supported_endpoint_types":["openai-response"],"chat_completions_bridge":true},{"id":"smart-everyapi","owned_by":"everyapi","supported_endpoint_types":["openai"]},{"id":"no-endpoint","owned_by":"vendor","supported_endpoint_types":[]}]}`))
 	}))
 	defer srv.Close()
 	if err := config.Save(&config.Credentials{
@@ -176,7 +176,7 @@ func TestCredentialCanIncludeTheRelayScopedModelCatalog(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Models) != 3 || got.Models[0].ID != "chat-model" || got.Models[0].SupportedEndpointTypes[0] != "openai" {
+	if len(got.Models) != 4 || got.Models[0].ID != "gpt-5.6-luna" || got.Models[0].SupportedEndpointTypes[0] != "openai-response" || got.Models[3].ID != "smart-everyapi" {
 		t.Fatalf("models = %#v", got.Models)
 	}
 	if !got.Models[0].ChatCompletionsBridge {

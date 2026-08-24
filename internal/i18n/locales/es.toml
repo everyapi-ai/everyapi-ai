@@ -449,7 +449,6 @@ per_model = "Uso por modelo (%d modelo(s)):"
 [models]
 no_models = "Ningún modelo enrutable desde tu grupo. Pide a un admin que habilite uno."
 count = "%d modelo(s) accesibles:"
-promotional_only = "Esta cuenta solo tiene saldo promocional. Hasta que añadas saldo de pago, la CLI muestra únicamente smart-everyapi en el grupo %s; solo admite solicitudes de texto sin herramientas, búsqueda, archivos ni razonamiento, con límites por solicitud y diarios compartidos."
 no_pricing = "No hay filas de tarifas que coincidan."
 no_groups = "No hay grupos de enrutado disponibles para tu cuenta."
 usage = '''
@@ -1357,8 +1356,6 @@ choice_skip = "Omitir esta versión"
 
 [use]
 no_selectable_models = "No hay modelos seleccionables para %s con esta clave/grupo de relay."
-promotional_only = "Esta cuenta solo tiene saldo promocional. Hasta que añadas saldo de pago, la CLI ofrece únicamente smart-everyapi en el grupo %s; solo solicitudes de texto sin herramientas, búsqueda, archivos ni razonamiento, con límites por solicitud y diarios compartidos."
-promotional_only_group = "Esta cuenta solo tiene saldo promocional. Usa smart-everyapi en el grupo %s o añade saldo de pago antes de seleccionar otro grupo."
 sanitize_bad_value = "--sanitize=%q no es un valor true/false válido — usa --sanitize o --sanitize=false"
 tool_picker = "Elige una herramienta:"
 group_picker = "Elige un grupo de enrutado:"

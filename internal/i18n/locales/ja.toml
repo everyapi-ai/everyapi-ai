@@ -442,7 +442,6 @@ per_model = "モデル別使用量 (%d モデル):"
 [models]
 no_models = "あなたのグループからルーティング可能なモデルはありません。管理者に有効化を依頼してください。"
 count = "利用可能なモデル %d 個:"
-promotional_only = "このアカウントにはプロモーション残高しかありません。有料残高を追加するまで、CLI には %s グループの smart-everyapi のみ表示されます。ツール、検索、ファイル、推論を含まないテキスト要求のみが対象で、リクエスト単位および共有日次上限が適用されます。"
 no_pricing = "条件に一致する価格行はありません。"
 no_groups = "このアカウントで利用可能なルーティンググループはありません。"
 usage = '''
@@ -1346,8 +1345,6 @@ choice_skip = "このバージョンをスキップ"
 
 [use]
 no_selectable_models = "この relay key/group では %s が選択できるモデルはありません。"
-promotional_only = "このアカウントにはプロモーション残高しかありません。有料残高を追加するまで、CLI は %s グループの smart-everyapi のみを公開します。ツール、検索、ファイル、推論を含まないテキスト要求のみが対象で、リクエスト単位および共有日次上限が適用されます。"
-promotional_only_group = "このアカウントにはプロモーション残高しかありません。%s グループの smart-everyapi を使用するか、有料残高を追加してから別のグループを選択してください。"
 sanitize_bad_value = "--sanitize=%q は有効な true/false の値ではありません — --sanitize または --sanitize=false を使用してください"
 tool_picker = "ツールを選択:"
 group_picker = "ルーティンググループを選択:"

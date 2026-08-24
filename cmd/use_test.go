@@ -766,16 +766,17 @@ func TestResolveToolModel(t *testing.T) {
 		}
 	})
 
-	t.Run("no flag, no env, non-interactive resolves from live catalog", func(t *testing.T) {
+	t.Run("legacy promotional metadata cannot hide an allowlisted live model", func(t *testing.T) {
 		t.Setenv(env, "")
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/v1/models" {
 				http.NotFound(w, r)
 				return
 			}
-			_, _ = io.WriteString(w, `{"data":[`+
+			_, _ = io.WriteString(w, `{"promotional_only":true,"required_group":"auto","data":[`+
 				`{"id":"z-image","supported_endpoint_types":["image-generation"]},`+
-				`{"id":"b-openai-chat","supported_endpoint_types":["openai"]},`+
+				`{"id":"gpt-5.6-luna","supported_endpoint_types":["openai-response"],"chat_completions_bridge":true},`+
+				`{"id":"smart-everyapi","supported_endpoint_types":["openai"]},`+
 				`{"id":"a-anthropic-only","supported_endpoint_types":["anthropic"]},`+
 				`{"id":"aa-responses-only","supported_endpoint_types":["openai-response"]}`+
 				`]}`)
@@ -785,8 +786,8 @@ func TestResolveToolModel(t *testing.T) {
 		if err := resolveToolModel(hermes, catalogCreds, "relay-key", ""); err != nil {
 			t.Fatal(err)
 		}
-		if got := os.Getenv(env); got != "b-openai-chat" {
-			t.Errorf("%s = %q, want first model compatible with hermes' chat_completions transport", env, got)
+		if got := os.Getenv(env); got != "gpt-5.6-luna" {
+			t.Errorf("%s = %q, want allowlisted bridged Luna despite legacy restriction metadata", env, got)
 		}
 	})
 
@@ -858,6 +859,31 @@ func TestResolveToolModelFromCatalogAcceptsAlternativeEndpoint(t *testing.T) {
 	}
 	if got := os.Getenv(tool.ModelEnv); got != "responses-only" {
 		t.Fatalf("%s = %q, want responses-only", tool.ModelEnv, got)
+	}
+}
+
+func TestResolveToolModelFromCatalogAcceptsChatCompletionsBridge(t *testing.T) {
+	tool, err := tools.Lookup("qwen-code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(tool.ModelEnv, "")
+	catalog := []api.RelayModel{{
+		ID:                     "gpt-5.6-luna",
+		SupportedEndpointTypes: []string{"openai-response"},
+		ChatCompletionsBridge:  true,
+	}}
+	if !catalogSupportsToolEndpoint(catalog, tool) {
+		t.Fatal("bridged Luna did not satisfy the tool endpoint preflight")
+	}
+	if models := launchModelsForTool(tool, catalog, ""); len(models) != 1 || models[0].ID != "gpt-5.6-luna" {
+		t.Fatalf("bridged Luna launch catalog = %#v", models)
+	}
+	if err := resolveToolModelFromCatalog(tool, catalog, nil, "gpt-5.6-luna"); err != nil {
+		t.Fatalf("bridged Luna was rejected by an OpenAI Chat Completions tool: %v", err)
+	}
+	if got := os.Getenv(tool.ModelEnv); got != "gpt-5.6-luna" {
+		t.Fatalf("%s = %q, want gpt-5.6-luna", tool.ModelEnv, got)
 	}
 }
 
@@ -1424,6 +1450,7 @@ func TestCatalogSupportsEndpoint(t *testing.T) {
 	}{
 		{"matching model", []api.RelayModel{{ID: "gemini-pro", SupportedEndpointTypes: []string{"gemini"}}}, "gemini", true},
 		{"case insensitive", []api.RelayModel{{ID: "gemini-pro", SupportedEndpointTypes: []string{"Gemini"}}}, "gemini", true},
+		{"chat completions bridge", []api.RelayModel{{ID: "gpt-5.6-luna", SupportedEndpointTypes: []string{"openai-response"}, ChatCompletionsBridge: true}}, "openai", true},
 		{"explicitly incompatible", []api.RelayModel{{ID: "claude", SupportedEndpointTypes: []string{"anthropic", "openai"}}}, "gemini", false},
 		{"missing metadata fails open", []api.RelayModel{{ID: "legacy"}}, "gemini", true},
 		{"explicit empty metadata fails closed", []api.RelayModel{{ID: "unroutable", SupportedEndpointTypes: []string{}}}, "gemini", false},

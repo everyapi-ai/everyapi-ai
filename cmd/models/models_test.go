@@ -24,7 +24,7 @@ func TestRunWithNoArgsDoesNotPanic(t *testing.T) {
 	}
 }
 
-func TestRunListExplainsPromotionalOnlyRestriction(t *testing.T) {
+func TestRunListTreatsServerModelsAsAuthoritativeDespiteLegacyRestrictionFields(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	i18n.SetLanguage(i18n.LangEn)
 	t.Cleanup(func() { i18n.SetLanguage(i18n.LangEn) })
@@ -34,7 +34,7 @@ func TestRunListExplainsPromotionalOnlyRestriction(t *testing.T) {
 			t.Fatalf("request path = %q, want /api/user/models", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"success":true,"promotional_only":true,"required_group":"auto","data":[{"id":"smart-everyapi","vendor":"EveryAPI"}]}`))
+		_, _ = w.Write([]byte(`{"success":true,"promotional_only":true,"required_group":"auto","data":[{"id":"smart-everyapi","vendor":"EveryAPI"},{"id":"gpt-5.6-luna","vendor":"OpenAI"}]}`))
 	}))
 	defer server.Close()
 	requireNoError(t, config.Save(&config.Credentials{APIBase: server.URL, AccessToken: "account-token", UserID: 7}))
@@ -46,19 +46,19 @@ func TestRunListExplainsPromotionalOnlyRestriction(t *testing.T) {
 
 	requireNoError(t, runList(nil))
 	got := output.String()
-	if !strings.Contains(got, "promotional balance only") || !strings.Contains(got, "auto") || !strings.Contains(got, "smart-everyapi") {
-		t.Fatalf("output does not explain the promotional-only restriction:\n%s", got)
+	if !strings.Contains(got, "smart-everyapi") || !strings.Contains(got, "gpt-5.6-luna") || strings.Contains(got, "promotional balance only") {
+		t.Fatalf("server-authoritative model output =\n%s", got)
 	}
 }
 
-func TestRunListExplainsPromotionalRestrictionWhenSmartModelIsUnavailable(t *testing.T) {
+func TestRunListShowsNoModelsWhenDirectoryIsEmpty(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	i18n.SetLanguage(i18n.LangEn)
 	t.Cleanup(func() { i18n.SetLanguage(i18n.LangEn) })
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"success":true,"promotional_only":true,"required_group":"auto","data":[]}`))
+		_, _ = w.Write([]byte(`{"success":true,"data":[]}`))
 	}))
 	defer server.Close()
 	requireNoError(t, config.Save(&config.Credentials{APIBase: server.URL, AccessToken: "account-token", UserID: 7}))
@@ -69,12 +69,12 @@ func TestRunListExplainsPromotionalRestrictionWhenSmartModelIsUnavailable(t *tes
 	t.Cleanup(func() { cliout.Out = originalOut })
 
 	requireNoError(t, runList(nil))
-	if got := output.String(); !strings.Contains(got, "promotional balance only") || !strings.Contains(got, "No models") {
-		t.Fatalf("empty promotional-only model output =\n%s", got)
+	if got := output.String(); !strings.Contains(got, "No models") {
+		t.Fatalf("empty model output =\n%s", got)
 	}
 }
 
-func TestRunGroupsShowsOnlyRequiredGroupForPromotionalOnlyAccount(t *testing.T) {
+func TestRunGroupsUsesAuthoritativeGroupDirectory(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	i18n.SetLanguage(i18n.LangEn)
 	t.Cleanup(func() { i18n.SetLanguage(i18n.LangEn) })
@@ -82,8 +82,6 @@ func TestRunGroupsShowsOnlyRequiredGroupForPromotionalOnlyAccount(t *testing.T) 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/user/models":
-			_, _ = w.Write([]byte(`{"success":true,"promotional_only":true,"required_group":"auto","data":[{"id":"smart-everyapi","vendor":"EveryAPI"}]}`))
 		case "/api/user/groups":
 			_, _ = w.Write([]byte(`{"success":true,"data":{"auto":{"id":"auto","name":"Automatic","ratio":"Auto","usable":true},"default":{"id":"default","name":"Standard","ratio":1,"usable":true}}}`))
 		default:
@@ -100,12 +98,12 @@ func TestRunGroupsShowsOnlyRequiredGroupForPromotionalOnlyAccount(t *testing.T) 
 
 	requireNoError(t, runGroups(nil))
 	got := output.String()
-	if !strings.Contains(got, "id=auto") || strings.Contains(got, "id=default") {
-		t.Fatalf("promotional-only group output =\n%s", got)
+	if !strings.Contains(got, "id=auto") || !strings.Contains(got, "id=default") {
+		t.Fatalf("authoritative group output =\n%s", got)
 	}
 }
 
-func TestRunPricingShowsOnlySmartAutoForPromotionalOnlyAccount(t *testing.T) {
+func TestRunPricingShowsAllServerModelsAndGroups(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	i18n.SetLanguage(i18n.LangEn)
 	t.Cleanup(func() { i18n.SetLanguage(i18n.LangEn) })
@@ -113,10 +111,8 @@ func TestRunPricingShowsOnlySmartAutoForPromotionalOnlyAccount(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/user/models":
-			_, _ = w.Write([]byte(`{"success":true,"promotional_only":true,"required_group":"auto","data":[{"id":"smart-everyapi","vendor":"EveryAPI"}]}`))
 		case "/api/pricing":
-			_, _ = w.Write([]byte(`{"data":[{"model_name":"smart-everyapi","model_ratio":1},{"model_name":"gpt-paid","model_ratio":2}],"group_ratio":{"auto":1,"default":1},"usable_group":{"auto":"Automatic","default":"Standard"}}`))
+			_, _ = w.Write([]byte(`{"data":[{"model_name":"smart-everyapi","model_ratio":1},{"model_name":"gpt-5.6-luna","model_ratio":2}],"group_ratio":{"auto":1,"default":1},"usable_group":{"auto":"Automatic","default":"Standard"}}`))
 		default:
 			t.Fatalf("unexpected request path %q", r.URL.Path)
 		}
@@ -131,20 +127,17 @@ func TestRunPricingShowsOnlySmartAutoForPromotionalOnlyAccount(t *testing.T) {
 
 	requireNoError(t, runPricing(nil))
 	got := output.String()
-	if !strings.Contains(got, "smart-everyapi") || !strings.Contains(got, "id=auto") || strings.Contains(got, "gpt-paid") || strings.Contains(got, "id=default") {
-		t.Fatalf("promotional-only pricing output =\n%s", got)
+	if !strings.Contains(got, "smart-everyapi") || !strings.Contains(got, "gpt-5.6-luna") || !strings.Contains(got, "id=auto") || !strings.Contains(got, "id=default") {
+		t.Fatalf("authoritative pricing output =\n%s", got)
 	}
 }
 
-func TestRunGroupsPreservesRelayOnlyCredentialFallback(t *testing.T) {
+func TestRunGroupsSupportsRelayOnlyCredentials(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/user/models":
-			w.WriteHeader(http.StatusUnauthorized)
-			_, _ = w.Write([]byte(`{"success":false,"message":"unauthorized"}`))
 		case "/api/user/groups":
 			_, _ = w.Write([]byte(`{"success":true,"data":{"default":{"id":"default","name":"Standard","ratio":1,"usable":true}}}`))
 		default:
