@@ -70,9 +70,20 @@ func runList(args []string) error {
 	if err != nil {
 		return err
 	}
-	ms, err := client.UserModels(cliout.WithCtx())
+	directory, err := loadModelDirectory(client)
 	if err != nil {
 		return classifyErr(err)
+	}
+	ms := directory.Models
+	if directory.PromotionalOnly {
+		filtered := ms[:0]
+		for _, model := range ms {
+			if model.ID == "smart-everyapi" {
+				filtered = append(filtered, model)
+			}
+		}
+		ms = filtered
+		cliout.Printf(i18n.T("models.promotional_only")+"\n", cliout.Sanitize(requiredPromotionalGroup(directory.RequiredGroup)))
 	}
 	if len(ms) == 0 {
 		cliout.Println(i18n.T("models.no_models"))
@@ -103,11 +114,36 @@ func runPricing(args []string) error {
 	if err != nil {
 		return err
 	}
+	directory, err := loadModelDirectory(client)
+	if err != nil {
+		return classifyErr(err)
+	}
 	p, err := client.GetPricing(cliout.WithCtx())
 	if err != nil {
 		return classifyErr(err)
 	}
 	rows := p.Rows
+	if directory.PromotionalOnly {
+		filtered := rows[:0]
+		for _, row := range rows {
+			if row.ModelName == "smart-everyapi" {
+				filtered = append(filtered, row)
+			}
+		}
+		rows = filtered
+		requiredGroup := requiredPromotionalGroup(directory.RequiredGroup)
+		for group := range p.UsableGroup {
+			if group != requiredGroup {
+				delete(p.UsableGroup, group)
+			}
+		}
+		for group := range p.GroupRatio {
+			if group != requiredGroup {
+				delete(p.GroupRatio, group)
+			}
+		}
+		cliout.Printf(i18n.T("models.promotional_only")+"\n", cliout.Sanitize(requiredGroup))
+	}
 	if *modelFilter != "" {
 		filtered := rows[:0]
 		for _, r := range rows {
@@ -166,10 +202,23 @@ func runGroups(args []string) error {
 	if err != nil {
 		return err
 	}
+	directory, err := loadModelDirectory(client)
+	if err != nil {
+		return classifyErr(err)
+	}
 	// UserGroups is the anonymous mount, so the usable column below describes the anonymous tier rather than this account — a real bug, but not one to fix by switching to SelfGroups here: that mount is behind UserAuth, and an OAuth2 relay-key login carries no user id, so every such install would get a 401 rendered as "session expired, log in again" — which re-login cannot clear. Fixing it properly means falling back to this mount for credentials that cannot reach the authenticated one.
 	groups, err := client.UserGroups(cliout.WithCtx())
 	if err != nil {
 		return classifyErr(err)
+	}
+	if directory.PromotionalOnly {
+		requiredGroup := requiredPromotionalGroup(directory.RequiredGroup)
+		for id := range groups {
+			if id != requiredGroup {
+				delete(groups, id)
+			}
+		}
+		cliout.Printf(i18n.T("models.promotional_only")+"\n", cliout.Sanitize(requiredGroup))
 	}
 	if len(groups) == 0 {
 		cliout.Println(i18n.T("models.no_groups"))
@@ -199,6 +248,42 @@ func runGroups(args []string) error {
 			cliout.Sanitize(g.Name), cliout.Sanitize(id), ratio, availability)
 	}
 	return nil
+}
+
+func requiredPromotionalGroup(group string) string {
+	if group == "" {
+		return "auto"
+	}
+	return group
+}
+
+func loadModelDirectory(client *api.Client) (*api.UserModelDirectory, error) {
+	directory, err := client.GetUserModelDirectory(cliout.WithCtx())
+	if err == nil {
+		return directory, nil
+	}
+	if !api.IsUnauthorized(err) {
+		return nil, err
+	}
+	creds, loadErr := config.Load()
+	if loadErr != nil {
+		return nil, loadErr
+	}
+	if creds.UserID != 0 {
+		return nil, err
+	}
+	if creds.OAuthClientID == "" || creds.RelayKey == "" {
+		return &api.UserModelDirectory{}, nil
+	}
+	relayDirectory, relayErr := api.New(config.ResolveAPIBaseForBase(creds.APIBase), creds.RelayKey).GetRelayModelDirectory(cliout.WithCtx())
+	if relayErr != nil {
+		return nil, relayErr
+	}
+	models := make([]api.UserModel, 0, len(relayDirectory.Models))
+	for _, model := range relayDirectory.Models {
+		models = append(models, api.UserModel{ID: model.ID, Vendor: model.OwnedBy})
+	}
+	return &api.UserModelDirectory{Models: models, PromotionalOnly: relayDirectory.PromotionalOnly, RequiredGroup: relayDirectory.RequiredGroup}, nil
 }
 
 func ratioOrOne(r float64) float64 {

@@ -292,10 +292,21 @@ func use(args []string, persistModelSelection bool) error {
 
 	// Confirm the relay key actually works before exec'ing the tool. /v1/models runs the same TokenAuth/ValidateUserToken as the real traffic, so a 401 here means the tool would just loop on "401 Invalid token" (invalid / expired / disabled / out of quota key) with no hint why. Bail with an actionable message. Only a definitive 401 is fatal: non-401 probe errors (network, 5xx, the transient SystemPerformanceCheck gate) are left to the tool's own retry — false-blocking a working setup on a flaky probe is worse than letting it through.
 	//
-	relayCatalog, catalogErr := api.New(gw, relayKey).RelayModelCatalog(cliout.WithCtx())
+	relayDirectory, catalogErr := api.New(gw, relayKey).GetRelayModelDirectory(cliout.WithCtx())
+	var relayCatalog []api.RelayModel
+	if relayDirectory != nil {
+		relayCatalog = promotionalRelayCatalog(relayDirectory)
+	}
 	if catalogErr != nil && api.IsUnauthorized(catalogErr) {
 		invalidateCachedKeyOnReject(creds, group)
 		return relayKeyRejectedErr(t.ExecName, gw)
+	}
+	if catalogErr == nil && relayDirectory != nil && relayDirectory.PromotionalOnly {
+		requiredGroup := requiredPromotionalRouteGroup(relayDirectory.RequiredGroup)
+		if group != "" && group != requiredGroup {
+			return fmt.Errorf(i18n.T("use.promotional_only_group"), cliout.Sanitize(requiredGroup))
+		}
+		cliout.Printf(i18n.T("use.promotional_only")+"\n", cliout.Sanitize(requiredGroup))
 	}
 	if toolInvocationNeedsEndpoint(extraArgs) {
 		if catalogErr != nil {
@@ -1469,8 +1480,11 @@ func resolveToolModel(t *tools.Tool, creds *config.Credentials, relayKey, modelF
 	if os.Getenv(t.ModelEnv) != "" {
 		return nil
 	}
-	catalog, err := api.New(config.ResolveAPIBaseForBase(creds.APIBase), relayKey).RelayModelCatalog(cliout.WithCtx())
-	return resolveToolModelFromCatalog(t, catalog, err, modelFlag)
+	directory, err := api.New(config.ResolveAPIBaseForBase(creds.APIBase), relayKey).GetRelayModelDirectory(cliout.WithCtx())
+	if directory == nil {
+		return resolveToolModelFromCatalog(t, nil, err, modelFlag)
+	}
+	return resolveToolModelFromCatalog(t, promotionalRelayCatalog(directory), err, modelFlag)
 }
 
 func resolveToolModelFromCatalog(t *tools.Tool, catalog []api.RelayModel, catalogErr error, modelFlag string) error {
@@ -1523,10 +1537,11 @@ func resolveToolModelFromCatalog(t *tools.Tool, catalog []api.RelayModel, catalo
 // toolChatModels returns the chat-capable model ids the relay key can actually route to. A missing catalog is fatal because ModelEnv tools have no vendor-side model default; callers can always bypass catalog discovery explicitly with --model or the tool's model environment.
 func toolChatModels(t *tools.Tool, creds *config.Credentials, relayKey string) ([]string, error) {
 	gw := config.ResolveAPIBaseForBase(creds.APIBase)
-	catalog, err := api.New(gw, relayKey).RelayModelCatalog(cliout.WithCtx())
+	directory, err := api.New(gw, relayKey).GetRelayModelDirectory(cliout.WithCtx())
 	if err != nil {
 		return nil, fmt.Errorf("could not resolve a model for %s from the live catalog (%w); pass --model <id> to select one explicitly", t.ExecName, err)
 	}
+	catalog := promotionalRelayCatalog(directory)
 	models := chatModelsForTool(catalog, t)
 	if len(models) == 0 {
 		return nil, fmt.Errorf("no chat-capable models are reachable for %s with this key/group; add a compatible channel or pass --model <id>", t.ExecName)
@@ -2123,6 +2138,13 @@ func pickModelInteractive(t *tools.Tool, creds *config.Credentials, relayKey str
 // pickGroupInteractive lists the distinct routing groups the account's ENABLED relay tokens are bound to and asks the user to pick one. The buyer CLI has no channel-listing endpoint (that's admin-only), so "available channels" is necessarily expressed as the groups the user already holds a key for. The empty group (default tokens) shows as "(default — resolve automatically)" and selecting it returns "" — the normal default path, which prefers the account's auto key. It is NOT a way to pin the group=="" token: pinning one specific key is what `everyapi token switch` is for, and the label says "resolve automatically" rather than naming a key so the two do not read as the same thing.
 func pickGroupInteractive(creds *config.Credentials) (string, error) {
 	client := api.ForCredentials(creds)
+	directory, err := client.GetUserModelDirectory(cliout.WithCtx())
+	if err != nil && !api.IsUnauthorized(err) {
+		return "", fmt.Errorf("load model access for the group picker: %w", err)
+	}
+	if directory == nil {
+		directory = &api.UserModelDirectory{}
+	}
 	tokens, err := client.ListTokens(cliout.WithCtx())
 	if err != nil {
 		return "", fmt.Errorf("list tokens for the group picker: %w", err)
@@ -2131,6 +2153,9 @@ func pickGroupInteractive(creds *config.Credentials) (string, error) {
 	var groups []string
 	for i := range tokens {
 		if tokens[i].Status != api.TokenStatusEnabled {
+			continue
+		}
+		if directory.PromotionalOnly && tokens[i].Group != requiredPromotionalRouteGroup(directory.RequiredGroup) {
 			continue
 		}
 		if g := tokens[i].Group; !seen[g] {
@@ -2154,6 +2179,29 @@ func pickGroupInteractive(creds *config.Credentials) (string, error) {
 		return "", err
 	}
 	return groups[idx], nil
+}
+
+func promotionalRelayCatalog(directory *api.RelayModelDirectory) []api.RelayModel {
+	if directory == nil || !directory.PromotionalOnly {
+		if directory == nil {
+			return nil
+		}
+		return directory.Models
+	}
+	filtered := make([]api.RelayModel, 0, 1)
+	for _, model := range directory.Models {
+		if model.ID == "smart-everyapi" {
+			filtered = append(filtered, model)
+		}
+	}
+	return filtered
+}
+
+func requiredPromotionalRouteGroup(group string) string {
+	if group == "" {
+		return "auto"
+	}
+	return group
 }
 
 // ensureToolInstalled is the preflight gate between Lookup and the network probes. If the tool is already on PATH it's a no-op. If it's missing and the session is non-interactive (CI / piped stdin), or the tool has no usable auto-installer for this platform, the caller sees the original ErrToolNotFound — same behavior as before this helper existed. If it's missing AND we have a TTY AND CanAutoInstall returns true, we surface a yes/no confirm. Default is YES for routine package-manager installs and NO for installers that pipe a remote shell script into bash — pressing Enter shouldn't ever run untrusted code fetched at install time. On Yes we stream the installer's output to the terminal so npm / curl progress reaches the user live, then return nil so the caller proceeds to launch.

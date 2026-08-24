@@ -766,7 +766,7 @@ func TestResolveToolModel(t *testing.T) {
 		}
 	})
 
-	t.Run("legacy promotional metadata cannot hide an allowlisted live model", func(t *testing.T) {
+	t.Run("promotional metadata exposes only smart", func(t *testing.T) {
 		t.Setenv(env, "")
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/v1/models" {
@@ -786,8 +786,8 @@ func TestResolveToolModel(t *testing.T) {
 		if err := resolveToolModel(hermes, catalogCreds, "relay-key", ""); err != nil {
 			t.Fatal(err)
 		}
-		if got := os.Getenv(env); got != "gpt-5.6-luna" {
-			t.Errorf("%s = %q, want allowlisted bridged Luna despite legacy restriction metadata", env, got)
+		if got := os.Getenv(env); got != "smart-everyapi" {
+			t.Errorf("%s = %q, want smart-everyapi for a promotional-only catalog", env, got)
 		}
 	})
 

@@ -433,6 +433,7 @@ per_model = "Per-model usage (%d model(s)):"
 [models]
 no_models = "No models routable from your group. Ask an admin to enable one."
 count = "%d model(s) accessible:"
+promotional_only = "This account has promotional balance only. Until you add paid balance, the CLI shows only smart-everyapi in the %s group. Requests use OpenAI Chat Completions; smart routing selects from promotion-eligible models, subject to per-request, shared daily, and concurrency limits."
 no_pricing = "No pricing rows match."
 no_groups = "No routing groups available to your account."
 usage = '''
@@ -1336,6 +1337,8 @@ choice_skip = "Skip this version"
 
 [use]
 no_selectable_models = "No selectable models are available to %s with this relay key/group."
+promotional_only = "This account has promotional balance only. Until you add paid balance, the CLI exposes only smart-everyapi in the %s group. Requests use OpenAI Chat Completions; smart routing selects from promotion-eligible models, subject to per-request, shared daily, and concurrency limits."
+promotional_only_group = "This account has promotional balance only. Use the %s group with smart-everyapi, or add paid balance before selecting another group."
 sanitize_bad_value = "--sanitize=%q is not a valid true/false value — use --sanitize or --sanitize=false"
 tool_picker = "Pick a tool:"
 group_picker = "Pick a routing group:"
