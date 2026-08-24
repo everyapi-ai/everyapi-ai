@@ -292,10 +292,20 @@ func use(args []string, persistModelSelection bool) error {
 
 	// Confirm the relay key actually works before exec'ing the tool. /v1/models runs the same TokenAuth/ValidateUserToken as the real traffic, so a 401 here means the tool would just loop on "401 Invalid token" (invalid / expired / disabled / out of quota key) with no hint why. Bail with an actionable message. Only a definitive 401 is fatal: non-401 probe errors (network, 5xx, the transient SystemPerformanceCheck gate) are left to the tool's own retry — false-blocking a working setup on a flaky probe is worse than letting it through.
 	//
-	relayCatalog, catalogErr := api.New(gw, relayKey).RelayModelCatalog(cliout.WithCtx())
+	relayDirectory, catalogErr := api.New(gw, relayKey).GetRelayModelDirectory(cliout.WithCtx())
+	var relayCatalog []api.RelayModel
+	if relayDirectory != nil {
+		relayCatalog = relayDirectory.Models
+	}
 	if catalogErr != nil && api.IsUnauthorized(catalogErr) {
 		invalidateCachedKeyOnReject(creds, group)
 		return relayKeyRejectedErr(t.ExecName, gw)
+	}
+	if catalogErr == nil && relayDirectory.PromotionalOnly {
+		if group != "" && group != relayDirectory.RequiredGroup {
+			return fmt.Errorf(i18n.T("use.promotional_only_group"), cliout.Sanitize(relayDirectory.RequiredGroup))
+		}
+		cliout.Printf(i18n.T("use.promotional_only")+"\n", cliout.Sanitize(relayDirectory.RequiredGroup))
 	}
 	if toolInvocationNeedsEndpoint(extraArgs) {
 		if catalogErr != nil {
@@ -2116,6 +2126,10 @@ func pickModelInteractive(t *tools.Tool, creds *config.Credentials, relayKey str
 // pickGroupInteractive lists the distinct routing groups the account's ENABLED relay tokens are bound to and asks the user to pick one. The buyer CLI has no channel-listing endpoint (that's admin-only), so "available channels" is necessarily expressed as the groups the user already holds a key for. The empty group (default tokens) shows as "(default — resolve automatically)" and selecting it returns "" — the normal default path, which prefers the account's auto key. It is NOT a way to pin the group=="" token: pinning one specific key is what `everyapi token switch` is for, and the label says "resolve automatically" rather than naming a key so the two do not read as the same thing.
 func pickGroupInteractive(creds *config.Credentials) (string, error) {
 	client := api.ForCredentials(creds)
+	directory, err := client.GetUserModelDirectory(cliout.WithCtx())
+	if err != nil {
+		return "", fmt.Errorf("load model access for the group picker: %w", err)
+	}
 	tokens, err := client.ListTokens(cliout.WithCtx())
 	if err != nil {
 		return "", fmt.Errorf("list tokens for the group picker: %w", err)
@@ -2124,6 +2138,9 @@ func pickGroupInteractive(creds *config.Credentials) (string, error) {
 	var groups []string
 	for i := range tokens {
 		if tokens[i].Status != api.TokenStatusEnabled {
+			continue
+		}
+		if directory.PromotionalOnly && tokens[i].Group != directory.RequiredGroup {
 			continue
 		}
 		if g := tokens[i].Group; !seen[g] {

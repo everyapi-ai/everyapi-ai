@@ -448,6 +448,7 @@ per_model = "Utilisation par modèle (%d modèle(s)) :"
 [models]
 no_models = "Aucun modèle routable depuis votre groupe. Demandez à un admin d'en activer un."
 count = "%d modèle(s) accessibles :"
+promotional_only = "Ce compte dispose uniquement d’un solde promotionnel. Tant qu’aucun solde payé n’est ajouté, la CLI affiche seulement smart-everyapi dans le groupe %s ; seules les requêtes texte sans outils, recherche, fichiers ni raisonnement sont prises en charge, avec des limites par requête et quotidiennes partagées."
 no_pricing = "Aucune ligne de tarif ne correspond."
 no_groups = "Aucun groupe de routage disponible pour votre compte."
 usage = '''
@@ -1359,6 +1360,8 @@ choice_skip = "Ignorer cette version"
 
 [use]
 no_selectable_models = "Aucun modèle sélectionnable n’est disponible pour %s avec cette clé/ce groupe de relais."
+promotional_only = "Ce compte dispose uniquement d’un solde promotionnel. Tant qu’aucun solde payé n’est ajouté, la CLI expose seulement smart-everyapi dans le groupe %s ; requêtes texte uniquement, sans outils, recherche, fichiers ni raisonnement, avec des limites par requête et quotidiennes partagées."
+promotional_only_group = "Ce compte dispose uniquement d’un solde promotionnel. Utilisez smart-everyapi dans le groupe %s ou ajoutez un solde payé avant de sélectionner un autre groupe."
 sanitize_bad_value = "--sanitize=%q n'est pas une valeur true/false valide — utilisez --sanitize ou --sanitize=false"
 tool_picker = "Choisissez un outil :"
 group_picker = "Choisissez un groupe de routage :"

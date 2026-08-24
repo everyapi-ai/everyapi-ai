@@ -442,6 +442,7 @@ per_model = "모델별 사용량 (%d 모델):"
 [models]
 no_models = "해당 그룹에서 라우팅 가능한 모델이 없습니다. 관리자에게 활성화를 요청하세요."
 count = "사용 가능한 모델 %d 개:"
+promotional_only = "이 계정에는 프로모션 잔액만 있습니다. 유료 잔액을 충전하기 전에는 CLI에 %s 그룹의 smart-everyapi만 표시됩니다. 도구, 검색, 파일, 추론이 없는 텍스트 요청만 지원하며 요청별 한도와 공유 일일 한도가 적용됩니다."
 no_pricing = "조건에 맞는 가격 행이 없습니다."
 no_groups = "이 계정에서 사용 가능한 라우팅 그룹이 없습니다."
 usage = '''
@@ -1342,6 +1343,8 @@ choice_skip = "이 버전 건너뛰기"
 
 [use]
 no_selectable_models = "이 relay key/group에서 %s에 선택 가능한 모델이 없습니다."
+promotional_only = "이 계정에는 프로모션 잔액만 있습니다. 유료 잔액을 충전하기 전에는 CLI가 %s 그룹의 smart-everyapi만 제공합니다. 도구, 검색, 파일, 추론이 없는 텍스트 요청만 지원하며 요청별 한도와 공유 일일 한도가 적용됩니다."
+promotional_only_group = "이 계정에는 프로모션 잔액만 있습니다. %s 그룹의 smart-everyapi를 사용하거나 유료 잔액을 충전한 뒤 다른 그룹을 선택하세요."
 sanitize_bad_value = "--sanitize=%q 은(는) 유효한 true/false 값이 아닙니다 — --sanitize 또는 --sanitize=false 를 사용하세요"
 tool_picker = "도구 선택:"
 group_picker = "라우팅 그룹 선택:"
