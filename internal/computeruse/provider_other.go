@@ -23,6 +23,10 @@ func (unsupportedProvider) Permissions(context.Context) (PermissionStatus, error
 	return PermissionStatus{}, unsupportedPlatformError()
 }
 
+func (unsupportedProvider) RequestPermission(context.Context, string) error {
+	return unsupportedPlatformError()
+}
+
 func (unsupportedProvider) ListApps(context.Context) ([]App, error) {
 	return nil, unsupportedPlatformError()
 }

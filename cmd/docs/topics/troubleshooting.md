@@ -79,7 +79,14 @@ The sanitizer is masking something. It replaces detected secrets with stable pla
 
 ## macOS: `everyapi computer` cannot see anything
 
-Accessibility must be granted to **EveryAPI Computer Use** — not to `everyapi`, not to `osascript`, not to your terminal. The helper never calls the prompting Accessibility API, so it will not appear in the list on its own and no system dialog will ever offer it. Add it yourself under System Settings → Privacy & Security → Accessibility with the **+** button:
+Accessibility must be granted to **EveryAPI Computer Use** — not to `everyapi`, not to `osascript`, not to your terminal. Ask macOS to register the signed helper and show its consent flow:
+
+```
+everyapi computer permissions --request accessibility
+everyapi computer permissions --request screen-recording
+```
+
+If a previously dismissed prompt does not reappear, add it manually under System Settings → Privacy & Security with the **+** button:
 
 ```
 ~/Library/Application Support/everyapi/computer-use/

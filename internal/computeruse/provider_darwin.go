@@ -60,8 +60,8 @@ func newPlatformProvider(_ string) (Provider, error) {
 	return &darwinProvider{stateDir: stateDir}, nil
 }
 
-func (p *darwinProvider) socketPath() string { return filepath.Join(p.stateDir, "helper.sock") }
-func (p *darwinProvider) tokenPath() string  { return filepath.Join(p.stateDir, "helper.token") }
+func (p *darwinProvider) socketPath() string { return filepath.Join(p.stateDir, "helper-v2.sock") }
+func (p *darwinProvider) tokenPath() string  { return filepath.Join(p.stateDir, "helper-v2.token") }
 func (p *darwinProvider) managedAppPath() string {
 	return filepath.Join(p.stateDir, darwinHelperAppName)
 }
@@ -106,6 +106,20 @@ func (p *darwinProvider) Permissions(ctx context.Context) (PermissionStatus, err
 		return PermissionStatus{}, err
 	}
 	return PermissionStatus{Accessibility: wire.Accessibility, Automation: wire.Automation, Screenshot: wire.Screenshot}, nil
+}
+
+func (p *darwinProvider) RequestPermission(ctx context.Context, kind string) error {
+	method := ""
+	switch kind {
+	case "accessibility":
+		method = "requestAccessibility"
+	case "screen-recording":
+		method = "requestScreenCapture"
+	default:
+		return NewError(CodeInvalidArgument, "permission must be accessibility or screen-recording", nil)
+	}
+	var ignored bool
+	return p.call(ctx, method, nil, &ignored, 30*time.Second)
 }
 
 func (p *darwinProvider) ListApps(ctx context.Context) ([]App, error) {
@@ -448,10 +462,10 @@ func (p *darwinProvider) call(ctx context.Context, method string, params, result
 		return NewError(CodeInternal, "read from computer-use helper: "+err.Error(), err)
 	}
 	var envelope struct {
-		OK     bool            `json:"ok"`
-		Code   string          `json:"code"`
-		Message string         `json:"message"`
-		Result json.RawMessage `json:"result"`
+		OK      bool            `json:"ok"`
+		Code    string          `json:"code"`
+		Message string          `json:"message"`
+		Result  json.RawMessage `json:"result"`
 	}
 	if err := json.Unmarshal(line, &envelope); err != nil {
 		return NewError(CodeInternal, "decode computer-use helper response: "+err.Error(), err)
@@ -515,11 +529,25 @@ func (p *darwinProvider) socketReachable() bool {
 
 func (p *darwinProvider) locateOrInstallHelperApp(ctx context.Context) (string, error) {
 	for _, candidate := range []string{darwinConnectResourcePath, p.managedAppPath()} {
-		if info, err := os.Stat(filepath.Join(candidate, "Contents", "MacOS", darwinHelperExecutable)); err == nil && !info.IsDir() {
+		if helperSupportsProtocol(ctx, candidate) {
 			return candidate, nil
 		}
 	}
 	return p.installHelperApp(ctx)
+}
+
+// A protocol bump uses a new socket so an upgraded CLI never talks to an old
+// daemon. It must also reject an old helper bundle, otherwise `open` starts
+// that binary on its v1 default socket and the v2 caller waits until timeout.
+// The command is local, secret-free, and absent from v1, which makes a failed
+// or mismatched probe an unambiguous signal to install the current artifact.
+func helperSupportsProtocol(ctx context.Context, appPath string) bool {
+	executable := filepath.Join(appPath, "Contents", "MacOS", darwinHelperExecutable)
+	if info, err := os.Stat(executable); err != nil || info.IsDir() {
+		return false
+	}
+	output, err := exec.CommandContext(ctx, executable, "protocol-version").Output()
+	return err == nil && strings.TrimSpace(string(output)) == fmt.Sprint(computerProtocolVersion)
 }
 
 func (p *darwinProvider) installHelperApp(ctx context.Context) (string, error) {

@@ -36,6 +36,15 @@ func (s *Service) Permissions(ctx context.Context) (PermissionStatus, error) {
 	return s.provider.Permissions(ctx)
 }
 
+func (s *Service) RequestPermission(ctx context.Context, kind string) error {
+	switch kind {
+	case "accessibility", "screen-recording":
+		return s.provider.RequestPermission(ctx, kind)
+	default:
+		return NewError(CodeInvalidArgument, "permission must be accessibility or screen-recording", nil)
+	}
+}
+
 func (s *Service) ListApps(ctx context.Context) ([]App, error) {
 	unlock, err := s.lock(ctx)
 	if err != nil {

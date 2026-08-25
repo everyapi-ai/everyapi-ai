@@ -22,7 +22,7 @@ const (
 
 Commands:
   capabilities                  Show provider and supported operations
-  permissions                   Show Accessibility, Automation, and Screen Recording status
+  permissions                   Show or request Accessibility and Screen Recording status
   list-apps                     List running desktop applications
   list-windows                  List windows for --app
   get-app-state                 Read the accessibility tree
@@ -61,6 +61,7 @@ Flags:
 type commandService interface {
 	Capabilities(context.Context) (computeruse.Capabilities, error)
 	Permissions(context.Context) (computeruse.PermissionStatus, error)
+	RequestPermission(context.Context, string) error
 	ListApps(context.Context) ([]computeruse.App, error)
 	ListWindows(context.Context, string) ([]computeruse.Window, error)
 	GetAppState(context.Context, computeruse.StateRequest) (computeruse.State, error)
@@ -143,8 +144,11 @@ func run(ctx context.Context, args []string, service commandService, in io.Reade
 func writeSubcommandHelp(out io.Writer, command string) error {
 	var flags string
 	switch command {
-	case "capabilities", "permissions", "list-apps":
+	case "capabilities", "list-apps":
 		flags = jsonHelpFlags
+	case "permissions":
+		flags = `  --request <permission> Request accessibility or screen-recording through macOS
+` + jsonHelpFlags
 	case "list-windows":
 		flags = appHelpFlags + jsonHelpFlags
 	case "get-app-state":
@@ -214,12 +218,19 @@ func dispatch(ctx context.Context, command string, args []string, service comman
 		result, err := service.Capabilities(ctx)
 		return result, jsonOutput, err
 	case "permissions":
-		jsonOutput, err := parseJSONOnly(command, args)
-		if err != nil {
-			return nil, jsonOutput, err
+		fs := newFlagSet(command)
+		request := fs.String("request", "", "request accessibility or screen-recording through macOS")
+		jsonOutput := fs.Bool("json", false, "print JSON")
+		if err := parseFlags(fs, args); err != nil {
+			return nil, jsonRequested(args), err
+		}
+		if *request != "" {
+			if err := service.RequestPermission(ctx, *request); err != nil {
+				return nil, *jsonOutput, err
+			}
 		}
 		result, err := service.Permissions(ctx)
-		return result, jsonOutput, err
+		return result, *jsonOutput, err
 	case "list-apps":
 		jsonOutput, err := parseJSONOnly(command, args)
 		if err != nil {

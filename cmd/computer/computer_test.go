@@ -14,11 +14,12 @@ import (
 )
 
 type fakeService struct {
-	stateRequests      []computeruse.StateRequest
-	actionRequests     []computeruse.ActionRequest
-	screenshotRequests []computeruse.StateRequest
-	listAppsErr        error
-	screenshotPNG      []byte
+	stateRequests       []computeruse.StateRequest
+	actionRequests      []computeruse.ActionRequest
+	screenshotRequests  []computeruse.StateRequest
+	listAppsErr         error
+	screenshotPNG       []byte
+	requestedPermission string
 }
 
 func (f *fakeService) Capabilities(context.Context) (computeruse.Capabilities, error) {
@@ -27,6 +28,11 @@ func (f *fakeService) Capabilities(context.Context) (computeruse.Capabilities, e
 
 func (f *fakeService) Permissions(context.Context) (computeruse.PermissionStatus, error) {
 	return computeruse.PermissionStatus{Accessibility: computeruse.PermissionGranted}, nil
+}
+
+func (f *fakeService) RequestPermission(_ context.Context, kind string) error {
+	f.requestedPermission = kind
+	return nil
 }
 
 func (f *fakeService) ListApps(context.Context) ([]computeruse.App, error) {
@@ -75,6 +81,20 @@ func TestCapabilitiesJSONEnvelope(t *testing.T) {
 	}
 	if !envelope.OK || envelope.Result.Provider != "fake" {
 		t.Fatalf("envelope = %+v", envelope)
+	}
+}
+
+func TestPermissionsCanRequestMacOSConsent(t *testing.T) {
+	service := &fakeService{}
+	var out bytes.Buffer
+	if err := run(context.Background(), []string{"permissions", "--request", "screen-recording", "--json"}, service, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if service.requestedPermission != "screen-recording" {
+		t.Fatalf("requested permission = %q", service.requestedPermission)
+	}
+	if !strings.Contains(out.String(), `"accessibility":"granted"`) {
+		t.Fatalf("JSON output = %q", out.String())
 	}
 }
 

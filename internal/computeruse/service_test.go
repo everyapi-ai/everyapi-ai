@@ -15,17 +15,18 @@ import (
 )
 
 type fakeProvider struct {
-	apps            []App
-	windows         []Window
-	state           State
-	stateErr        error
-	performErr      error
-	performed       []PerformRequest
-	screenshotPNG   []byte
-	screenshotErr   error
-	screenshotCalls int
-	mu              sync.Mutex
-	listCalls       int
+	apps                []App
+	windows             []Window
+	state               State
+	stateErr            error
+	performErr          error
+	performed           []PerformRequest
+	screenshotPNG       []byte
+	screenshotErr       error
+	screenshotCalls     int
+	mu                  sync.Mutex
+	listCalls           int
+	requestedPermission string
 }
 
 func (f *fakeProvider) Capabilities(context.Context) (Capabilities, error) {
@@ -34,6 +35,11 @@ func (f *fakeProvider) Capabilities(context.Context) (Capabilities, error) {
 
 func (f *fakeProvider) Permissions(context.Context) (PermissionStatus, error) {
 	return PermissionStatus{Accessibility: PermissionGranted}, nil
+}
+
+func (f *fakeProvider) RequestPermission(_ context.Context, kind string) error {
+	f.requestedPermission = kind
+	return nil
 }
 
 func (f *fakeProvider) ListApps(context.Context) ([]App, error) {
@@ -172,6 +178,20 @@ func TestCapabilitiesAndPermissionsDoNotRequireOperationLock(t *testing.T) {
 	}
 	if _, err := service.Permissions(context.Background()); err != nil {
 		t.Fatalf("Permissions acquired the operation lock: %v", err)
+	}
+}
+
+func TestRequestPermissionValidatesTheClosedPermissionSet(t *testing.T) {
+	provider := &fakeProvider{}
+	service := NewService(provider, newMemoryStore(), time.Now)
+	if err := service.RequestPermission(context.Background(), "screen-recording"); err != nil {
+		t.Fatalf("request permission: %v", err)
+	}
+	if provider.requestedPermission != "screen-recording" {
+		t.Fatalf("requested permission = %q", provider.requestedPermission)
+	}
+	if err := service.RequestPermission(context.Background(), "camera"); ErrorCode(err) != CodeInvalidArgument {
+		t.Fatalf("camera request error = %v", err)
 	}
 }
 

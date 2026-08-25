@@ -14,11 +14,15 @@ The helper being its own signed app is the point: the Accessibility grant is sco
 
 ```
 everyapi computer permissions --json
+everyapi computer permissions --request accessibility
+everyapi computer permissions --request screen-recording
 ```
 
 Accessibility must be granted to **EveryAPI Computer Use** — not to `everyapi`, not to `osascript`, not to your terminal.
 
-The helper will not appear in the permission list on its own. It only ever calls `AXIsProcessTrusted()` and never the prompting variant, so it never registers itself and no system dialog will ever offer it. Add it yourself under System Settings → Privacy & Security → Accessibility with the **+** button:
+The `--request` form asks the separately signed helper to register itself with macOS and presents Apple's consent flow. It cannot approve itself: confirm the system prompt or enable **EveryAPI Computer Use** in System Settings, then run `permissions` again. Connect exposes the same user-initiated flow with a **Grant** button.
+
+If the system prompt has been dismissed before, you can still add the helper manually under System Settings → Privacy & Security with the **+** button:
 
 ```
 ~/Library/Application Support/everyapi/computer-use/
@@ -29,7 +33,7 @@ The helper will not appear in the permission list on its own. It only ever calls
 
 The first is the CLI's own copy, the second is Connect's bundled one. `permissions` reports the grants but does not currently say which of the two it is using.
 
-`permissions` reports three things: Accessibility directly; Automation as `unknown`, since this provider does not depend on System Events and has no separate Automation preflight; and Screen Recording — needed only for `screenshot` — through the non-prompting `CGPreflightScreenCaptureAccess` check, granted the same way under Privacy & Security → Screen Recording.
+`permissions` reports three things: Accessibility directly; Automation as `unknown`, since this provider does not depend on System Events and has no separate Automation preflight; and Screen Recording — needed only for `screenshot` — through `CGPreflightScreenCaptureAccess`.
 
 ## Reading
 

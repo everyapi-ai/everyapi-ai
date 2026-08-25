@@ -27,7 +27,7 @@ const (
 	CodeActionOutcomeUnknown = "action_outcome_unknown"
 	CodeSensitiveText        = "sensitive_text"
 	CodeInternal             = "internal_error"
-	computerProtocolVersion  = 1
+	computerProtocolVersion  = 2
 	computerProviderVersion  = "1.0.0"
 	snapshotTTL              = 2 * time.Minute
 )
@@ -291,6 +291,7 @@ type PerformRequest struct {
 type Provider interface {
 	Capabilities(context.Context) (Capabilities, error)
 	Permissions(context.Context) (PermissionStatus, error)
+	RequestPermission(context.Context, string) error
 	ListApps(context.Context) ([]App, error)
 	ListWindows(context.Context, App) ([]Window, error)
 	GetState(context.Context, Target) (State, error)
