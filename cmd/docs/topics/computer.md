@@ -119,6 +119,8 @@ Anything beyond a plain single left click — a different button, a click count,
 
 `screenshot` captures the target window only — never the full screen, never another window — via `CGWindowListCreateImage` scoped to that window's id. It needs the Screen Recording grant. Write the PNG with `--out <path>`, or get it base64-encoded in `--json` output.
 
+Some Accessibility surfaces do not have a corresponding CoreGraphics window id. Finder's desktop and certain minimized windows are examples. They remain readable and actionable through Accessibility, but `screenshot` returns `screenshot_unavailable` instead of using a screen-region fallback that could capture unrelated overlapping windows.
+
 Separately, `get-app-state` and every mutating action attach a screenshot of the target window to their result by default, taken after the operation completes. Pass `--no-screenshot` to skip it. This is best-effort on top of the accessibility snapshot: it never fails the action it is attached to, so a missing Screen Recording grant surfaces as `screenshotError` in JSON (or a `screenshot unavailable: ...` line in plain output) rather than blocking the click that requested it. On success the PNG is written under the OS temp directory and referenced by path, not inlined — copy it out promptly, since files older than an hour are swept the next time a screenshot is taken.
 
 ## When an action's outcome is unknown

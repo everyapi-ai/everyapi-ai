@@ -20,6 +20,11 @@ import (
 
 func TestPublishUploadsHTMLWithTheCurrentSession(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	projectDir := filepath.Join(t.TempDir(), "everyapi-project")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(projectDir)
 	const html = "<!doctype html><title>验收报告</title>"
 	var received bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -46,6 +51,14 @@ func TestPublishUploadsHTMLWithTheCurrentSession(t *testing.T) {
 		}
 		if string(decodedName) != "报告.html" {
 			t.Errorf("filename = %q", decodedName)
+		}
+		encodedProject := r.Header.Get("X-Artifact-Project")
+		decodedProject, err := base64.RawURLEncoding.DecodeString(encodedProject)
+		if err != nil {
+			t.Fatalf("decode project: %v", err)
+		}
+		if string(decodedProject) != "everyapi-project" {
+			t.Errorf("project = %q", decodedProject)
 		}
 		body := new(bytes.Buffer)
 		if _, err := body.ReadFrom(r.Body); err != nil {
@@ -151,6 +164,19 @@ func TestPublishRejectsInvalidServiceResponses(t *testing.T) {
 func TestArtifactHTTPClientHasATimeout(t *testing.T) {
 	if httpClient.Timeout <= 0 || httpClient.Timeout > 2*time.Minute {
 		t.Fatalf("httpClient.Timeout = %v, want a positive timeout no longer than two minutes", httpClient.Timeout)
+	}
+}
+
+func TestArtifactProjectFromRemote(t *testing.T) {
+	tests := map[string]string{
+		"git@github.com:everyapi-ai/everyapi.git":     "everyapi",
+		"https://github.com/everyapi-ai/everyapi.git": "everyapi",
+		"https://example.com/团队/验收项目.git":             "验收项目",
+	}
+	for remote, want := range tests {
+		if got := artifactProjectFromRemote(remote); got != want {
+			t.Errorf("artifactProjectFromRemote(%q) = %q, want %q", remote, got, want)
+		}
 	}
 }
 
@@ -361,7 +387,7 @@ func TestRunListFollowsPaginationAndPrintsNewestFirst(t *testing.T) {
 func TestRunListJSONIncludesManagementMetadata(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"artifacts":[{"url":"https://artifacts.everyapi.ai/TK4tBA9HQErZ","filename":"report.html","created_at":"2026-08-18T12:00:00Z","expires_at":"2026-09-17T12:00:00Z"}]}`))
+		_, _ = w.Write([]byte(`{"artifacts":[{"url":"https://artifacts.everyapi.ai/TK4tBA9HQErZ","filename":"report.html","title":"Release report","project":"everyapi","created_at":"2026-08-18T12:00:00Z","expires_at":"2026-09-17T12:00:00Z"}]}`))
 	}))
 	defer server.Close()
 	configureRunTest(t, server)
@@ -374,7 +400,7 @@ func TestRunListJSONIncludesManagementMetadata(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not JSON: %q: %v", out.String(), err)
 	}
-	if len(got.Artifacts) != 1 || got.Artifacts[0].Filename != "report.html" {
+	if len(got.Artifacts) != 1 || got.Artifacts[0].Filename != "report.html" || got.Artifacts[0].Title != "Release report" || got.Artifacts[0].Project != "everyapi" {
 		t.Fatalf("JSON = %#v", got)
 	}
 }

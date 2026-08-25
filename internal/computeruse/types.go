@@ -8,28 +8,29 @@ import (
 )
 
 const (
-	CodeUnsupportedPlatform  = "unsupported_platform"
-	CodeDependencyMissing    = "dependency_missing"
-	CodeAccessibilityDenied  = "accessibility_denied"
-	CodeAutomationDenied     = "automation_denied"
-	CodeAppNotFound          = "app_not_found"
-	CodeAppStale             = "app_stale"
-	CodeAppAmbiguous         = "app_ambiguous"
-	CodeAppBlocked           = "app_blocked"
-	CodeWindowNotFound       = "window_not_found"
-	CodeWindowStale          = "window_stale"
-	CodeWindowNotFocused     = "window_not_focused"
-	CodeElementNotFound      = "element_not_found"
-	CodeElementStale         = "element_stale"
-	CodeInvalidArgument      = "invalid_argument"
-	CodeActionNotSupported   = "action_not_supported"
-	CodeActionTimeout        = "action_timeout"
-	CodeActionOutcomeUnknown = "action_outcome_unknown"
-	CodeSensitiveText        = "sensitive_text"
-	CodeInternal             = "internal_error"
-	computerProtocolVersion  = 2
-	computerProviderVersion  = "1.0.0"
-	snapshotTTL              = 2 * time.Minute
+	CodeUnsupportedPlatform   = "unsupported_platform"
+	CodeDependencyMissing     = "dependency_missing"
+	CodeAccessibilityDenied   = "accessibility_denied"
+	CodeAutomationDenied      = "automation_denied"
+	CodeAppNotFound           = "app_not_found"
+	CodeAppStale              = "app_stale"
+	CodeAppAmbiguous          = "app_ambiguous"
+	CodeAppBlocked            = "app_blocked"
+	CodeWindowNotFound        = "window_not_found"
+	CodeWindowStale           = "window_stale"
+	CodeWindowNotFocused      = "window_not_focused"
+	CodeElementNotFound       = "element_not_found"
+	CodeElementStale          = "element_stale"
+	CodeScreenshotUnavailable = "screenshot_unavailable"
+	CodeInvalidArgument       = "invalid_argument"
+	CodeActionNotSupported    = "action_not_supported"
+	CodeActionTimeout         = "action_timeout"
+	CodeActionOutcomeUnknown  = "action_outcome_unknown"
+	CodeSensitiveText         = "sensitive_text"
+	CodeInternal              = "internal_error"
+	computerProtocolVersion   = 2
+	computerProviderVersion   = "1.0.0"
+	snapshotTTL               = 2 * time.Minute
 )
 
 type Error struct {

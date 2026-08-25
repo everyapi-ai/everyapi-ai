@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -27,6 +28,7 @@ const (
 	maxArtifactBytes             int64 = 5 << 20
 	maxArtifactListResponseBytes int64 = 1 << 20
 	maxArtifactListPages               = 100
+	maxArtifactProjectBytes            = 128
 )
 
 var artifactURLPath = regexp.MustCompile(`^/[A-Za-z0-9_-]{12}$`)
@@ -53,6 +55,8 @@ type deleteResult struct {
 type artifactListItem struct {
 	URL       string `json:"url"`
 	Filename  string `json:"filename"`
+	Title     string `json:"title,omitempty"`
+	Project   string `json:"project,omitempty"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at,omitempty"`
 	ExpiresAt string `json:"expires_at"`
@@ -199,6 +203,9 @@ func uploadArtifact(ctx context.Context, client *http.Client, creds *config.Cred
 	req.Header.Set("Content-Type", "text/html; charset=utf-8")
 	req.Header.Set("X-EveryAPI-Auth-Origin", authOrigin)
 	req.Header.Set("X-Artifact-Filename", base64.RawURLEncoding.EncodeToString([]byte(filepath.Base(filePath))))
+	if project := currentArtifactProject(ctx); project != "" {
+		req.Header.Set("X-Artifact-Project", base64.RawURLEncoding.EncodeToString([]byte(project)))
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return publishResult{}, fmt.Errorf("publish artifact: %w", err)
@@ -222,6 +229,50 @@ func uploadArtifact(ctx context.Context, client *http.Client, creds *config.Cred
 		return publishResult{}, err
 	}
 	return result, nil
+}
+
+func currentArtifactProject(ctx context.Context) string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	root := cwd
+	if output, commandErr := exec.CommandContext(ctx, "git", "-C", cwd, "rev-parse", "--show-toplevel").Output(); commandErr == nil {
+		if candidate := strings.TrimSpace(string(output)); candidate != "" {
+			root = candidate
+		}
+	}
+	project := ""
+	if output, commandErr := exec.CommandContext(ctx, "git", "-C", root, "config", "--get", "remote.origin.url").Output(); commandErr == nil {
+		project = artifactProjectFromRemote(string(output))
+	}
+	if project == "" {
+		project = filepath.Base(filepath.Clean(root))
+	}
+	return normalizeArtifactProject(project)
+}
+
+func artifactProjectFromRemote(remote string) string {
+	value := strings.TrimRight(strings.TrimSpace(remote), "/\\")
+	if separator := strings.LastIndexAny(value, "/\\:"); separator >= 0 {
+		value = value[separator+1:]
+	}
+	return strings.TrimSuffix(value, ".git")
+}
+
+func normalizeArtifactProject(value string) string {
+	value = strings.Join(strings.Fields(value), " ")
+	if value == "" || value == "." || value == string(filepath.Separator) {
+		return ""
+	}
+	var normalized strings.Builder
+	for _, character := range value {
+		if normalized.Len()+len(string(character)) > maxArtifactProjectBytes {
+			break
+		}
+		normalized.WriteRune(character)
+	}
+	return normalized.String()
 }
 
 func deleteArtifact(ctx context.Context, client *http.Client, baseURL string, creds *config.Credentials, artifactURL string) (deleteResult, error) {
