@@ -151,6 +151,9 @@ func TestPrepareCodexAddsArtifactStandardAndOnlyCurrentTmuxContext(t *testing.T)
 	if !strings.Contains(string(body), "EveryAPI CLI") {
 		t.Fatalf("Codex config missing the capability list:\n%s", body)
 	}
+	if !strings.Contains(string(body), "EveryAPI Computer Use") || !strings.Contains(string(body), "computer get-app-state") {
+		t.Fatalf("Codex config missing computer-use instructions:\n%s", body)
+	}
 
 	t.Setenv("TMUX", "")
 	t.Setenv(TerminalModeEnvironment, "native")

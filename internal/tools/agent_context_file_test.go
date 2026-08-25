@@ -16,6 +16,8 @@ func requireAgentInstructions(t *testing.T, body, where string) {
 		"docs list",
 		"auth status",
 		"changes state",
+		"EveryAPI Computer Use",
+		"computer get-app-state",
 		"EveryAPI Artifact delivery standard",
 	} {
 		if !strings.Contains(body, required) {

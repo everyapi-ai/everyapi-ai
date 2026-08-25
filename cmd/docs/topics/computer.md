@@ -138,3 +138,5 @@ Observed text is stripped of terminal control sequences and scanned for credenti
 ## Not exposed over MCP
 
 This surface is local-only and is deliberately not registered in `everyapi mcp`. See the `mcp` topic for what is.
+
+Agents launched through `everyapi use` receive process-scoped instructions that advertise this local CLI surface directly. They proactively observe only when the user's task puts a desktop app in scope. GUI actions require a concrete requested outcome, permission requests require authorization, and an unknown action outcome must be inspected before retrying. This prompt integration does not add an MCP tool or broaden the helper's operating-system permissions.

@@ -64,6 +64,63 @@ func TestAgentInstructionsListRunnableCapabilities(t *testing.T) {
 	}
 }
 
+// TestAgentInstructionsAdvertiseComputerUse makes the local desktop capability discoverable to launched agents. Observation is proactive only when the user's task puts a desktop app in scope; GUI mutation remains separately authorized.
+func TestAgentInstructionsAdvertiseComputerUse(t *testing.T) {
+	t.Setenv("TMUX", "")
+	t.Setenv(TerminalModeEnvironment, "native")
+
+	instructions := AgentInstructions()
+	for _, required := range []string{
+		"EveryAPI Computer Use",
+		"Do not wait for the user to mention",
+		"computer capabilities --json",
+		"computer permissions --json",
+		"computer list-apps --json",
+		"computer list-windows --app <selector> --json",
+		"computer get-app-state --app <selector>",
+		"computer screenshot --app <selector>",
+		"explicitly involves a local desktop app",
+		"only the app and window the user put in scope",
+	} {
+		if !strings.Contains(instructions, required) {
+			t.Errorf("computer-use instructions are missing %q: %s", required, instructions)
+		}
+	}
+}
+
+// TestAgentInstructionsFenceComputerUseMutations keeps proactive inspection from silently becoming proactive clicking or typing.
+func TestAgentInstructionsFenceComputerUseMutations(t *testing.T) {
+	t.Setenv("TMUX", "")
+	t.Setenv(TerminalModeEnvironment, "native")
+
+	instructions := AgentInstructions()
+	observationStart := strings.Index(instructions, "Observation commands")
+	actionStart := strings.Index(instructions, "GUI actions")
+	if observationStart < 0 || actionStart < 0 || observationStart >= actionStart {
+		t.Fatalf("computer-use safety sections are missing or out of order: %s", instructions)
+	}
+	observationSet := instructions[observationStart:actionStart]
+	for _, forbidden := range []string{
+		"computer click", "computer set-value", "computer type-text",
+		"computer paste-text", "computer press-key", "computer hotkey",
+		"computer scroll", "computer drag", "computer perform-secondary-action",
+	} {
+		if strings.Contains(observationSet, forbidden) {
+			t.Errorf("%q is listed as safe proactive observation:\n%s", forbidden, observationSet)
+		}
+	}
+	for _, required := range []string{
+		"explicitly requested the concrete UI outcome",
+		"permissions --request",
+		"action_outcome_unknown",
+		"refresh state before retrying",
+	} {
+		if !strings.Contains(instructions, required) {
+			t.Errorf("computer-use mutation fence is missing %q: %s", required, instructions)
+		}
+	}
+}
+
 // TestAgentInstructionsFenceOffStateChangingCommands is the safety property, and the one worth breaking a build over. `everyapi` is not a read-only tool — token revoke, wallet topup, seller withdraw, and edge remove move money and destroy access — so an agent handed the CLI as a uniform information source will eventually run one of them to "check" something. The read-only set has to be enumerated, everything else declared state-changing, and `token key` called out on its own: it changes nothing and still prints a credential.
 func TestAgentInstructionsFenceOffStateChangingCommands(t *testing.T) {
 	t.Setenv("TMUX", "")
@@ -74,7 +131,7 @@ func TestAgentInstructionsFenceOffStateChangingCommands(t *testing.T) {
 		t.Error("the safe set is not marked read-only")
 	}
 	for _, required := range []string{
-		"Every other subcommand changes state",
+		"Every other account or platform subcommand changes state",
 		"explicit yes",
 		"token key <id>",
 		"plaintext",
@@ -84,7 +141,11 @@ func TestAgentInstructionsFenceOffStateChangingCommands(t *testing.T) {
 		}
 	}
 	// A command that moves money or destroys access must never appear in the runnable list.
-	safeSet := instructions[strings.Index(instructions, "Read-only"):strings.Index(instructions, "Every other subcommand")]
+	safeSetEnd := strings.Index(instructions, "Every other account or platform subcommand")
+	if safeSetEnd < 0 {
+		t.Fatalf("account/platform mutation fence is missing: %s", instructions)
+	}
+	safeSet := instructions[strings.Index(instructions, "Read-only"):safeSetEnd]
 	for _, forbidden := range []string{
 		"token revoke", "token create", "wallet topup", "wallet redeem",
 		"seller withdraw", "seller add-key", "edge remove", "edge start",
@@ -121,6 +182,7 @@ func TestAgentInstructionsSectionsStaySeparated(t *testing.T) {
 
 	instructions := AgentInstructions()
 	for _, section := range []string{
+		"EveryAPI Computer Use",
 		"EveryAPI Artifact delivery standard",
 		"You are running inside tmux session",
 	} {
