@@ -24,10 +24,16 @@ import (
 const SiteURL = "https://docs.everyapi.ai/"
 
 func Run(args []string) error {
+	return run(args, cliprompt.OpenBrowser)
+}
+
+// run keeps the browser launcher injectable so command-dispatch tests never
+// hand a real URL to the host OS. Production always enters through Run.
+func run(args []string, openBrowser func(string) error) error {
 	if len(args) == 0 {
 		// Bare `everyapi docs` on a TTY → the topic picker, which IS this command's menu (a four-row list/search/open sub-menu would bury the actual content). Piped or scripted → the list, so it stays useful in a non-interactive shell.
 		if cliprompt.IsInteractive() {
-			return runPicker()
+			return runPicker(openBrowser)
 		}
 		return runList()
 	}
@@ -40,7 +46,7 @@ func Run(args []string) error {
 	case "search", "find":
 		return runSearch(args[1:])
 	case "open":
-		return runOpen()
+		return runOpen(openBrowser)
 	default:
 		// Anything else is read as a topic name — `everyapi docs billing` is the common case and should not need a `show` verb in front of it.
 		return runShow(args[0])
@@ -138,16 +144,16 @@ func truncate(s string, n int) string {
 }
 
 // runOpen hands the hosted handbook to the OS browser. A launcher that isn't there (headless Linux, no xdg-open) is not an error: the URL is already on screen to copy.
-func runOpen() error {
+func runOpen(openBrowser func(string) error) error {
 	cliout.Printf("%s\n", fmt.Sprintf(i18n.T("docs.opening"), SiteURL))
-	if err := cliprompt.OpenBrowser(SiteURL); err != nil {
+	if err := openBrowser(SiteURL); err != nil {
 		cliout.Println(i18n.T("common.browser_open_failed"))
 	}
 	return nil
 }
 
 // runPicker is the interactive entry point: pick a topic, read it, come back. Esc / Ctrl-C returns ErrPickCancelled, which main and the launcher both read as "up one level".
-func runPicker() error {
+func runPicker(openBrowser func(string) error) error {
 	all, err := topics()
 	if err != nil {
 		return err
@@ -178,7 +184,7 @@ func runPicker() error {
 		case searchIdx:
 			err = runSearch(nil)
 		case openIdx:
-			err = runOpen()
+			err = runOpen(openBrowser)
 		default:
 			printTopic(all[idx])
 			err = nil

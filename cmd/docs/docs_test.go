@@ -163,14 +163,18 @@ func TestTruncate(t *testing.T) {
 // TestOpenIsAVerbAgain: `docs open` must dispatch, not fall through to topic resolution and fail as an unknown topic.
 func TestOpenIsAVerbAgain(t *testing.T) {
 	out := capture(t)
-	// runOpen prints the URL and then best-effort hands it to the OS launcher; a
-	// missing launcher is deliberately not an error, so this asserts the printed
-	// URL rather than the browser call.
-	if err := Run([]string{"open"}); err != nil {
+	var opened string
+	if err := run([]string{"open"}, func(rawURL string) error {
+		opened = rawURL
+		return nil
+	}); err != nil {
 		t.Fatalf("docs open: %v", err)
 	}
 	if !strings.Contains(out.String(), SiteURL) {
 		t.Errorf("docs open did not print the site URL:\n%s", out.String())
+	}
+	if opened != SiteURL {
+		t.Errorf("docs open launched %q, want %q", opened, SiteURL)
 	}
 }
 
