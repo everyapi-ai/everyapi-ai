@@ -416,7 +416,7 @@ func TestToolArgsForLaunchPinsQwenToOpenAI(t *testing.T) {
 	}
 }
 
-func TestToolArgsForLaunchMakesBareCodexResumeGlobal(t *testing.T) {
+func TestToolArgsForLaunchPreservesCodexResumeScope(t *testing.T) {
 	codex, err := tools.Lookup("codex")
 	if err != nil {
 		t.Fatal(err)
@@ -426,7 +426,7 @@ func TestToolArgsForLaunchMakesBareCodexResumeGlobal(t *testing.T) {
 		args []string
 		want []string
 	}{
-		{"bare picker", []string{"resume"}, []string{"resume", "--all"}},
+		{"bare picker", []string{"resume"}, []string{"resume"}},
 		{"explicit all", []string{"resume", "--all"}, []string{"resume", "--all"}},
 		{"last session", []string{"resume", "--last"}, []string{"resume", "--last"}},
 		{"specific session", []string{"resume", "session-id"}, []string{"resume", "session-id"}},

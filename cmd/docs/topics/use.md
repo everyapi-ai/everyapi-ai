@@ -170,3 +170,5 @@ everyapi use hermes -- --tui
 ```
 
 Everything after `--` is forwarded to the tool verbatim.
+For Codex, `resume` keeps the native current-directory filter; pass
+`resume --all` explicitly when you want its global picker.

@@ -85,7 +85,7 @@ EXAMPLES
   everyapi use claude                  (transparent by default)
   everyapi use claude --transparent=false
   everyapi use codex --channel byteplus
-  everyapi use codex -- resume          (reattach the sole live project tmux, otherwise open the global picker)
+  everyapi use codex -- resume          (reattach the sole live project tmux, otherwise open the current-directory picker)
   everyapi use opencode --model gpt-5
 	 everyapi use continue --model gpt-5
 	 everyapi use kilo --model gpt-5
@@ -1956,7 +1956,7 @@ func toolInvocationNeedsEndpoint(args []string) bool {
 	}
 }
 
-// toolArgsForLaunch pins launch arguments whose tool defaults make the EveryAPI-managed experience misleading. Codex scopes its bare resume picker to the current working directory, which can report 0/0 even though the managed home contains resumable sessions, so make the bare picker global. Its profile is lifecycle-owned and Codex rejects duplicate --profile arguments, so remove caller overrides before prepending the generated profile. Qwen project settings override its QWEN_HOME settings, so force the OpenAI protocol at CLI precedence. Continue and Cline receive lifecycle config through managed paths, so remove caller-supplied overrides that would escape those isolated directories. Remove Qwen's caller-supplied auth type too: forwarding another protocol would either bypass the EveryAPI OPENAI_* overlay or make duplicate yargs values ambiguous.
+// toolArgsForLaunch pins launch arguments whose tool defaults make the EveryAPI-managed experience misleading. Codex's profile is lifecycle-owned and Codex rejects duplicate --profile arguments, so remove caller overrides before prepending the generated profile. All other Codex arguments, including the cwd-scoped bare resume picker, retain their native semantics. Qwen project settings override its QWEN_HOME settings, so force the OpenAI protocol at CLI precedence. Continue and Cline receive lifecycle config through managed paths, so remove caller-supplied overrides that would escape those isolated directories. Remove Qwen's caller-supplied auth type too: forwarding another protocol would either bypass the EveryAPI OPENAI_* overlay or make duplicate yargs values ambiguous.
 func toolArgsForLaunch(t *tools.Tool, args []string) []string {
 	if t.Name == "openhands" {
 		filtered := make([]string, 0, len(args)+1)
@@ -1990,9 +1990,6 @@ func toolArgsForLaunch(t *tools.Tool, args []string) []string {
 			default:
 				filtered = append(filtered, args[i])
 			}
-		}
-		if len(filtered) == 1 && filtered[0] == "resume" {
-			return []string{"resume", "--all"}
 		}
 		return filtered
 	}
