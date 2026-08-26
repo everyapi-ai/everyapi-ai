@@ -33,6 +33,8 @@ Read-only. Run these yourself, unprompted, whenever one would answer the questio
 
 The documentation covers EveryAPI, not the user's own project; do not reach for it on unrelated questions.
 
+Bug fixes: when you confirm a bug in the user's project, fix it by default and verify the fix in the same task. Only stop at diagnosis or reporting when the user explicitly asks for diagnosis only, says not to modify code, or otherwise opts out of a fix.
+
 Every other account or platform subcommand changes state — it moves money, revokes keys, mounts channels, removes nodes. Name the exact command and get an explicit yes from the user before running one. ` + "`token key <id>`" + ` changes nothing but prints a key in plaintext: run it only when the user asked for that key.`
 
 // computerUseInstructions makes the local CLI surface discoverable without

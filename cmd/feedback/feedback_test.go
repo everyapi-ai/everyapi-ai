@@ -81,6 +81,18 @@ func TestRunSendsTheTrimmedSubmission(t *testing.T) {
 	}
 }
 
+func TestClientUserAgentIdentifiesTheFeedbackSource(t *testing.T) {
+	if got := clientUserAgent("cli", "1.2.3"); got != "everyapi-cli/1.2.3" {
+		t.Errorf("CLI User-Agent = %q", got)
+	}
+	if got := clientUserAgent("connect", "1.2.3"); got != "everyapi-connect/1.2.3" {
+		t.Errorf("Connect User-Agent = %q", got)
+	}
+	if got := clientUserAgent("untrusted", "1.2.3"); got != "everyapi-cli/1.2.3" {
+		t.Errorf("unknown source must fall back to CLI, got %q", got)
+	}
+}
+
 // Connect parses stdout, so the machine mode has to put the outcome there in both directions — and still exit non-zero on failure so a shell caller notices.
 func TestRunJSONModeReportsBothOutcomesOnStdout(t *testing.T) {
 	signedIn(t)

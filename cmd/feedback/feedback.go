@@ -20,6 +20,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliargs"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/version"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
@@ -42,6 +43,7 @@ func Run(args []string) error {
 	fromStdin := fs.Bool("stdin", false, "read the whole submission as JSON on stdin, keeping the report out of the process arguments")
 	asJSON := fs.Bool("json", false, "machine-readable outcome on stdout")
 	format := fs.String("format", "", "output format; \"json\" matches --json")
+	source := fs.String("source", "cli", "calling product; reserved for bundled clients")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -70,6 +72,8 @@ func Run(args []string) error {
 	if err != nil {
 		return report(machine, codeNotSignedIn, err)
 	}
+	resolvedVersion, _ := version.Resolve()
+	client.WithUserAgent(clientUserAgent(*source, resolvedVersion))
 	if err := submit(client, req); err != nil {
 		failure, code := classifyErr(err)
 		return report(machine, code, failure)
@@ -81,6 +85,14 @@ func Run(args []string) error {
 	}
 	cliout.Println(i18n.T("feedback.sent"))
 	return nil
+}
+
+func clientUserAgent(source, clientVersion string) string {
+	product := "everyapi-cli"
+	if source == "connect" {
+		product = "everyapi-connect"
+	}
+	return product + "/" + clientVersion
 }
 
 // buildSubmission validates locally so an obvious mistake costs a round trip and, more importantly, does not spend one of the submitter's few per-window sends. The server re-checks everything; these limits mirror it.

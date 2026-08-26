@@ -53,6 +53,9 @@ func TestAgentInstructionsListRunnableCapabilities(t *testing.T) {
 		"models list", "models pricing",
 		"stats perf", "stats upstream", "doctor",
 		"token list",
+		"Bug fixes:",
+		"fix it by default",
+		"diagnosis only",
 	} {
 		if !strings.Contains(instructions, required) {
 			t.Errorf("capability list is missing %q: %s", required, instructions)
