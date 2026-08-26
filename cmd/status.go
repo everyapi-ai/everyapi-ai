@@ -111,7 +111,8 @@ func Status(args []string) error {
 	}
 	cliout.Printf("  %-10s %s\n", i18n.T("status.quota"), styledQuota(quotaUSD, usedUSD))
 	cliout.Printf("  %-10s %s\n", i18n.T("status.requests"), style.Bold(fmt.Sprintf("%d", self.RequestCount)))
-	cliout.Printf("  %-10s %s/wallet\n", i18n.T("status.topup"), api.WebOriginFromBase(creds.APIBase))
+	// The origin is derived from the stored api_base rather than from a response body, so it is a weaker source than the username and email above — but it is still text this command did not author being printed to a terminal, and it goes through the same sanitizer for the same reason.
+	cliout.Printf("  %-10s %s/wallet\n", i18n.T("status.topup"), cliout.Sanitize(api.WebOriginFromBase(creds.APIBase)))
 
 	printRelayHealth(ctx, creds)
 
@@ -138,7 +139,7 @@ func printRelayHealth(ctx context.Context, creds *config.Credentials) {
 		case api.IsUnauthorized(perr):
 			cliout.Printf("  relay:     %s — relay key invalid / expired / disabled / out of quota\n", style.Bold("UNAVAILABLE"))
 			cliout.Printf("             (account quota above is separate; top up %s/wallet or run 'everyapi auth login')\n",
-				api.WebOriginFromBase(creds.APIBase))
+				cliout.Sanitize(api.WebOriginFromBase(creds.APIBase)))
 		default:
 			// Non-401 probe failure (5xx, network). The key may be fine — we just couldn't get a verdict. Same shape as the lookup-failure branch.
 			cliout.Printf("  relay:     %s — probe failed (%v)\n", style.Bold("unknown"), perr)

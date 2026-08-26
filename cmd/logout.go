@@ -12,10 +12,13 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// toolCredentialHomes are the per-tool config dirs that `everyapi use` seeds with the resolved relay key (codex-home/auth.json holds it as OPENAI_API_KEY; hermes-home/config.yaml inlines it as api_key). They live next to credentials.json but config.Delete only removes the latter, so logout must scrub these too — otherwise a fully working, billable spend credential survives "logout" on disk.
+// toolCredentialHomes are the fixed per-tool config dirs that `everyapi use` seeds (hermes-home/config.yaml inlines the resolved relay key as api_key; codex-home/auth.json holds only transparentPlaceholderCredential, but the home is ours and goes with it). They live next to credentials.json but config.Delete only removes the latter, so logout must scrub these too — otherwise a fully working, billable spend credential survives "logout" on disk.
 //
-// These are the homes EveryAPI owns outright and can delete whole. A client whose credential lands in a file the vendor owns needs a surgical scrub instead; see vendorCredentialScrubs.
+// These are the homes EveryAPI owns outright and can delete whole. A client whose credential lands in a file the vendor owns needs a surgical scrub instead; see vendorCredentialScrubs. Launches that take the live-catalog path do not land here at all; see preparedSessionHomes.
 var toolCredentialHomes = []string{"codex-home", "hermes-home"}
+
+// preparedSessionHomes is the config-dir-relative root holding every process-scoped client home, mirroring the path tools.preparedHomeRoot resolves. It is where today's live-catalog launches actually land, and two adapters inline the relay key verbatim inside one (hermes writes it into config.yaml, cline into settings/providers.json), so logout clears the whole root rather than chasing individual adapters — that covers every prepared home the launcher can mint, present and future. Nothing reachable is lost: every launch mints a fresh home under this root and no launch ever reads an older one.
+const preparedSessionHomes = "sessions"
 
 // vendorCredentialScrubs remove the relay key from files that belong to the client rather than to EveryAPI, so the deletion has to be one entry rather than one directory. DeepSeek Harness is the only launch that persists the key this way — every other client either receives it in its process environment or references it by name.
 var vendorCredentialScrubs = []struct {
@@ -39,7 +42,7 @@ func Logout(args []string) error {
 		return err
 	}
 	defer unlock()
-	// Delete credentials.json (config.Delete treats a missing file as success) AND scrub the per-tool credential homes on EVERY logout. The scrub must run even when credentials.json is already gone: a prior partial logout (e.g. the Windows file-held-open warning path below), a crash, or a manual deletion can leave a live, billable relay key behind in codex-home/hermes-home. Gating the scrub on credentials.json still being present — as an early ErrNoCredentials return would — is exactly what lets that key outlive logout.
+	// Delete credentials.json (config.Delete treats a missing file as success) AND scrub the per-tool credential homes on EVERY logout. The scrub must run even when credentials.json is already gone: a prior partial logout (e.g. the Windows file-held-open warning path below), a crash, or a manual deletion can leave a live, billable relay key behind in hermes-home or under the prepared-session root. Gating the scrub on credentials.json still being present — as an early ErrNoCredentials return would — is exactly what lets that key outlive logout.
 	if err := config.Delete(); err != nil {
 		return err
 	}
@@ -59,6 +62,11 @@ func scrubToolCredentials() {
 		if err := os.RemoveAll(p); err != nil && !errors.Is(err, os.ErrNotExist) {
 			cliout.Printf(i18n.T("logout.cached_key_warn"), p, err)
 		}
+	}
+	// The process-scoped homes carry the key on the path launches actually take today, and the only other thing that removes them is the next `everyapi use`'s age-gated sweep — 7 days for a home with no readable owner, 30 days while its owner PID still looks alive. That is far too late for a credential logout has already given up the ability to revoke server-side, and it never runs at all if the user simply stops launching tools.
+	prepared := filepath.Join(cfgDir, preparedSessionHomes)
+	if err := os.RemoveAll(prepared); err != nil && !errors.Is(err, os.ErrNotExist) {
+		cliout.Printf(i18n.T("logout.cached_key_warn"), prepared, err)
 	}
 	for _, target := range vendorCredentialScrubs {
 		if err := target.scrub(); err != nil {

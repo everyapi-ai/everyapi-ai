@@ -576,3 +576,78 @@ func TestStatusMachineOmitsAvatarURLWhenUnset(t *testing.T) {
 		t.Fatalf("avatar_url present for an account without a picture: %v", got)
 	}
 }
+
+// The username and email printed at the top of `everyapi auth status` already go through cliout.Sanitize; the gateway origin printed two lines below them did not. It is a weaker source — it comes from the user's own credentials.json rather than from a response body — but `everyapi login --api-base` is a supported, first-class way for a self-hoster to put a third-party string there, and it reaches the terminal on the same screen through the same writer, so it gets the same sanitizer.
+//
+// The payload is a raw C1 CSI (U+009B) rather than an ESC-introduced sequence because net/url rejects ASCII control bytes outright: an api_base carrying \x1b could never survive a request, while U+009B rides through the path untouched and still drives a terminal.
+func TestStatusSanitizesGatewayOrigin(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/api/status"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"data":    map[string]any{"quota_per_unit": 100.0},
+			})
+		case strings.HasSuffix(r.URL.Path, "/api/user/self"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"data": map[string]any{
+					"id":            7,
+					"username":      "tony",
+					"quota":         10000,
+					"used_quota":    0,
+					"request_count": 7,
+				},
+			})
+		case strings.HasSuffix(r.URL.Path, "/v1/models"):
+			// 401 drives the one relay branch that reprints the origin, so both sites are covered by this test.
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": false, "message": "invalid key"})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": true})
+		}
+	}))
+	defer srv.Close()
+
+	hostileBase := srv.URL + "/\u009b2K"
+	if err := config.Save(&config.Credentials{
+		APIBase:               hostileBase,
+		AccessToken:           "tok",
+		UserID:                7,
+		Username:              "tony",
+		RelayKey:              "sk-everyapi-relay",
+		RelayKeySystemChecked: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	origLang := i18n.Language()
+	i18n.SetLanguage("en")
+	t.Cleanup(func() { i18n.SetLanguage(origLang) })
+
+	origOut := cliout.Out
+	var buf bytes.Buffer
+	cliout.Out = &buf
+	t.Cleanup(func() { cliout.Out = origOut })
+
+	styletest.WithColorProfile(t, termenv.TrueColor)
+	if err := Status(nil); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	out := buf.String()
+
+	if strings.Contains(out, "\u009b") {
+		t.Errorf("a C1 control from api_base reached the terminal:\n%q", out)
+	}
+	// Sanitizing must not mangle the origin otherwise — the URL is the thing the user is supposed to open.
+	want := srv.URL + "/2K/wallet"
+	if !strings.Contains(out, want) {
+		t.Errorf("status output missing sanitized topup origin %q:\n%q", want, out)
+	}
+	if !strings.Contains(out, "top up "+want) {
+		t.Errorf("relay-unauthorized hint missing sanitized topup origin %q:\n%q", want, out)
+	}
+}

@@ -58,8 +58,9 @@ func Topup(args []string) error {
 	cliout.Println("")
 	cliout.Println(i18n.T("topup.before_open"))
 	cliout.Println("")
-	cliout.Printf("  %-8s %s\n", i18n.T("topup.url_label"), jumpURL)
-	cliout.Printf("  %-8s %s\n", i18n.T("topup.phrase_label"), style.Bold(res.VerificationPhrase))
+	// Both of these are gateway-controlled — the phrase and session id come straight out of the jump-session response body, the origin out of the configured api_base — and this screen's entire job is display integrity, so an unescaped CSI here would rewrite the very URL line the user is told to check (and an OSC-52 payload would write their clipboard). Sanitize first, then apply the trusted bold: the reverse ordering is what cliout.Sanitize forbids, because style.Bold's own escapes would be stripped along with the attacker's.
+	cliout.Printf("  %-8s %s\n", i18n.T("topup.url_label"), cliout.Sanitize(jumpURL))
+	cliout.Printf("  %-8s %s\n", i18n.T("topup.phrase_label"), style.Bold(cliout.Sanitize(res.VerificationPhrase)))
 	if res.ExpiresIn > 0 {
 		cliout.Printf("  "+i18n.T("topup.expires_in")+"\n", res.ExpiresIn)
 	}
@@ -88,6 +89,7 @@ func Topup(args []string) error {
 		cliout.Println(i18n.T("topup.copy_url"))
 		return nil
 	}
+	// Deliberately the unsanitized jumpURL: the launcher is not a terminal sink, and cliprompt.IsBrowsableURL already refuses anything that is not a plain absolute http(s) URL. Handing it a sanitized copy would silently open a different address than the one the session belongs to.
 	if berr := cliprompt.OpenBrowser(jumpURL); berr == nil {
 		cliout.Println(i18n.T("topup.browser_opened"))
 	} else {
