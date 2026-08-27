@@ -573,12 +573,17 @@ func use(args []string, persistModelSelection bool) error {
 	if preparedCleanup != nil {
 		defer preparedCleanup()
 	}
-	// Clients whose only documented instruction surface is a user-owned file get a delimited block instead of a process-scoped copy; this is what takes it back out. Same defer discipline as the prepared home, so a normal exit, a tool that fails to start, and a child killed by a signal all converge on the file the user had before.
-	if blockCleanup := tools.TakeManagedBlockCleanup(extraEnv); blockCleanup != nil {
-		defer blockCleanup()
-	}
 	for k, v := range extraEnv {
 		env[k] = v
+	}
+	// Clients whose only documented instruction surface is a user-owned file get a delimited block instead of a process-scoped copy; this is what takes it back out, and it also strips the marker so the child is not handed EveryAPI's bookkeeping as an environment variable.
+	//
+	// It reads `env`, and only after the overlay above, because that is the one map guaranteed to carry the marker. A managed block is written by the tool's envFn (Goose is the only one today), so the marker arrives in the launch environment, not in Prepare's overlay — taking it from the overlay found nothing to clean on any path at all.
+	//
+	// The defer does not cover the normal exit: ExecWithOptions supervises the tool and then os.Exits with its status, which skips every deferred call in this function. So the un-patch also travels in the launch cleanup chain — the defer keeps the paths that return before the launch (a prepare failure, a cancelled prompt), the chain keeps the one that never returns, and removeManagedBlock is idempotent, so the two overlapping is fine.
+	blockCleanup := tools.TakeManagedBlockCleanup(env)
+	if blockCleanup != nil {
+		defer blockCleanup()
 	}
 
 	// Surface the resolved base URL so an aspiring debugger knows where the requests are heading. One line, just before we hand the terminal over to the tool. The hop addresses are an implementation detail of how this process reaches the gateway — ephemeral ports that differ every launch and mean nothing to someone who just wants to know where their requests are going. Printing them put that detail at the same weight as the destination and made a working launch read as a complicated one. They go to a log instead.
@@ -599,8 +604,13 @@ func use(args []string, persistModelSelection bool) error {
 	cliout.Printf(i18n.T("use.launching")+"\n", t.Name, gw)
 	// Discard any terminal control-sequence reply (e.g. the OSC 11 background-color report a huh picker triggered) still buffered on stdin, so it doesn't leak into the launched tool as phantom input.
 	cliprompt.DrainStdin()
+	// Taken last, so it records the file as it stands at the moment the tool takes over rather than as it stood before a prompt the user answered on the way here. Left nil for every other tool and for a Claude installation with no readable settings file, so a launch that has nothing else to clean up still reaches the plain Exec below.
+	var claudeModelRestore func()
+	if claudeModel := snapshotClaudeUserModel(claudeDir); claudeModel != nil {
+		claudeModelRestore = claudeModel.restore
+	}
 	if transparent {
-		cleanup := combineCleanups(transparentSession.stop, modelCatalogProxyStop, preparedCleanup)
+		cleanup := combineCleanups(transparentSession.stop, modelCatalogProxyStop, preparedCleanup, blockCleanup, claudeModelRestore)
 		return tools.ExecWithOptions(t, tools.ExecOptions{
 			Env:      env,
 			UnsetEnv: unsetEnv,
@@ -608,7 +618,7 @@ func use(args []string, persistModelSelection bool) error {
 			Cleanup:  cleanup,
 		})
 	}
-	if cleanup := combineCleanups(modelCatalogProxyStop, preparedCleanup); cleanup != nil {
+	if cleanup := combineCleanups(modelCatalogProxyStop, preparedCleanup, blockCleanup, claudeModelRestore); cleanup != nil {
 		return tools.ExecWithOptions(t, tools.ExecOptions{Env: env, Args: extraArgs, Cleanup: cleanup})
 	}
 	return tools.Exec(t, env, extraArgs)

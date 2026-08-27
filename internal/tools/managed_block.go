@@ -15,7 +15,7 @@ const (
 	managedBlockEnd   = "<!-- everyapi:end -->"
 )
 
-// managedBlockMarker carries the paths TakePreparedCleanup must un-patch, newline-separated, through the environment map the adapters return.
+// managedBlockMarker carries the paths TakeManagedBlockCleanup must un-patch, newline-separated, through the environment map the adapters return. It travels in the launch environment itself, so `use` takes it out of that map — after Prepare's overlay is merged in — rather than out of the overlay.
 const managedBlockMarker = "__EVERYAPI_MANAGED_BLOCKS"
 
 // writeManagedBlock inserts or replaces EveryAPI's block in path, preserving every other line and the file's existing permissions.
