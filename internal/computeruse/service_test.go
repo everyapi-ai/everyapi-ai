@@ -246,6 +246,126 @@ func TestResolveAppBlocksSensitiveBundleIDsCaseInsensitively(t *testing.T) {
 	}
 }
 
+func TestResolveAppBlocksBrowsers(t *testing.T) {
+	for _, testCase := range []struct{ name, bundleID string }{
+		{name: "Safari", bundleID: "com.apple.Safari"},
+		{name: "Safari Technology Preview", bundleID: "com.apple.SafariTechnologyPreview"},
+		// Chrome's beta and dev channels ship under the stable identifier; only canary takes a suffix. Firefox does the same — beta and ESR are both `org.mozilla.firefox`.
+		{name: "Google Chrome", bundleID: "com.google.Chrome"},
+		{name: "Google Chrome Canary", bundleID: "com.google.Chrome.canary"},
+		// Chrome installs a web app as a shim under its own identifier, which is a full browser engine pointed at one origin.
+		{name: "Gmail", bundleID: "com.google.Chrome.app.fmgjjmmmlfnkbppncabfkddbjimcfncm"},
+		{name: "Chromium", bundleID: "org.chromium.Chromium"},
+		{name: "Microsoft Edge", bundleID: "com.microsoft.edgemac"},
+		{name: "Microsoft Edge Beta", bundleID: "com.microsoft.edgemac.Beta"},
+		{name: "Firefox", bundleID: "org.mozilla.firefox"},
+		{name: "Firefox Developer Edition", bundleID: "org.mozilla.firefoxdeveloperedition"},
+		{name: "Firefox Nightly", bundleID: "org.mozilla.nightly"},
+		{name: "Brave Browser", bundleID: "com.brave.Browser"},
+		{name: "Brave Browser Nightly", bundleID: "com.brave.Browser.nightly"},
+		{name: "Brave Origin", bundleID: "com.brave.Browser.origin"},
+		{name: "Opera", bundleID: "com.operasoftware.Opera"},
+		{name: "Opera GX", bundleID: "com.operasoftware.OperaGX"},
+		{name: "Opera Air", bundleID: "com.operasoftware.OperaAir"},
+		{name: "Vivaldi", bundleID: "com.vivaldi.Vivaldi"},
+		{name: "Vivaldi Snapshot", bundleID: "com.vivaldi.Vivaldi.snapshot"},
+		{name: "Arc", bundleID: "company.thebrowser.Browser"},
+		{name: "Dia", bundleID: "company.thebrowser.dia"},
+		{name: "Zen", bundleID: "app.zen-browser.zen"},
+		// Some Firefox forks nest under `org.mozilla.com.` rather than taking the vendor's own name.
+		{name: "Zen (legacy identifier)", bundleID: "org.mozilla.com.zen.browser"},
+		{name: "Glide", bundleID: "org.mozilla.com.glide.browser"},
+		{name: "Thorium", bundleID: "org.chromium.Thorium"},
+		{name: "Mullvad Browser", bundleID: "net.mullvad.mullvadbrowser"},
+		{name: "LibreWolf", bundleID: "io.gitlab.librewolf-community.librewolf"},
+		{name: "Waterfox", bundleID: "net.waterfox.waterfox"},
+		{name: "Tor Browser", bundleID: "org.torproject.torbrowser"},
+		{name: "DuckDuckGo", bundleID: "com.duckduckgo.macos.browser"},
+		{name: "Orion", bundleID: "com.kagi.kagimacOS"},
+		{name: "Yandex", bundleID: "ru.yandex.desktop.yandex-browser"},
+		{name: "Whale", bundleID: "com.naver.Whale"},
+		{name: "QQBrowser", bundleID: "com.tencent.QQBrowser"},
+		{name: "Min", bundleID: "com.electron.min"},
+		{name: "Polypane", bundleID: "com.firstversionist.polypane"},
+		// The newest arrivals, and the reason this list needs revisiting.
+		{name: "Comet", bundleID: "ai.perplexity.comet"},
+		{name: "ChatGPT Atlas", bundleID: "com.openai.atlas"},
+	} {
+		t.Run(testCase.bundleID, func(t *testing.T) {
+			provider := fixtureProvider()
+			provider.apps = []App{{Name: testCase.name, BundleID: testCase.bundleID, PID: 91}}
+			service := NewService(provider, newMemoryStore(), time.Now)
+
+			// Both selector forms have to land on the same refusal: resolution falls back to matching the display name, and that path must not become a way around the bundle-ID table.
+			for _, selector := range []string{testCase.bundleID, testCase.name} {
+				_, err := service.ResolveApp(context.Background(), selector)
+				if ErrorCode(err) != CodeAppBlocked {
+					t.Fatalf("ResolveApp(%q) error = %v (%q), want %q", selector, err, ErrorCode(err), CodeAppBlocked)
+				}
+				if !strings.Contains(err.Error(), "web browsers are blocked") {
+					t.Fatalf("ResolveApp(%q) error %q does not explain the browser policy", selector, err)
+				}
+			}
+		})
+	}
+}
+
+func TestResolveAppAllowsNonBrowsersSharingAVendorNamespace(t *testing.T) {
+	// The browser prefixes sit next to unrelated products from the same vendors. Widening any of them to `org.mozilla.` or `com.microsoft.` would silently take these out too.
+	for _, testCase := range []struct{ name, bundleID string }{
+		{name: "Thunderbird", bundleID: "org.mozilla.thunderbird"},
+		{name: "Microsoft Word", bundleID: "com.microsoft.Word"},
+		{name: "Microsoft Teams", bundleID: "com.microsoft.teams2"},
+		{name: "Google Drive", bundleID: "com.google.GoogleDrive"},
+		{name: "Notes", bundleID: "com.apple.Notes"},
+		{name: "Opera Mail", bundleID: "com.operasoftware.OperaMail"},
+	} {
+		t.Run(testCase.bundleID, func(t *testing.T) {
+			provider := fixtureProvider()
+			provider.apps = []App{{Name: testCase.name, BundleID: testCase.bundleID, PID: 92}}
+			service := NewService(provider, newMemoryStore(), time.Now)
+
+			app, err := service.ResolveApp(context.Background(), testCase.bundleID)
+			if err != nil {
+				t.Fatalf("ResolveApp(%q): %v", testCase.bundleID, err)
+			}
+			if app.PID != 92 {
+				t.Fatalf("ResolveApp(%q) PID = %d, want 92", testCase.bundleID, app.PID)
+			}
+		})
+	}
+}
+
+func TestBlockedBundlePrefixesAreLowercase(t *testing.T) {
+	// blockedAppError lowercases the bundle ID before comparing, so an entry carrying an uppercase letter can never match anything.
+	for _, entry := range blockedBundlePrefixes {
+		if entry.prefix != strings.ToLower(entry.prefix) {
+			t.Fatalf("blocked prefix %q is not lowercase and can never match", entry.prefix)
+		}
+	}
+	for bundleID := range knownBlockedBundleIDs {
+		if bundleID != strings.ToLower(bundleID) {
+			t.Fatalf("blocked bundle ID %q is not lowercase and can never match", bundleID)
+		}
+	}
+	for bundleID := range knownBlockedBrowserBundleIDs {
+		if bundleID != strings.ToLower(bundleID) {
+			t.Fatalf("blocked browser bundle ID %q is not lowercase and can never match", bundleID)
+		}
+	}
+}
+
+func TestBlockedBrowsersAreNotAlreadyCoveredByAPrefix(t *testing.T) {
+	// The exact-match browser table exists only for identifiers the prefix table cannot reach. An entry that a prefix already covers is dead weight that reads like a live rule, and its presence hides the fact that the prefix is doing the work.
+	for bundleID := range knownBlockedBrowserBundleIDs {
+		for _, entry := range blockedBundlePrefixes {
+			if strings.HasPrefix(bundleID, entry.prefix) {
+				t.Fatalf("browser %q is already covered by prefix %q; drop the exact-match entry", bundleID, entry.prefix)
+			}
+		}
+	}
+}
+
 func TestGetAppStateCachesOnlyOpaqueElementIdentityAndRedactsSecrets(t *testing.T) {
 	provider := fixtureProvider()
 	secret := testStripeCredential()

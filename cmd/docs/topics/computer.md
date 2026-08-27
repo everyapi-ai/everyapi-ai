@@ -131,9 +131,11 @@ A successful GUI action stays successful when its best-effort state refresh fail
 
 ## What is blocked, and what that is worth
 
-A maintained list of known terminal apps, password managers, Keychain Access, Passwords, System Settings, and EveryAPI Connect is blocked as defense-in-depth friction.
+A maintained list of known web browsers, terminal apps, password managers, Keychain Access, Passwords, System Settings, and EveryAPI Connect is blocked as defense-in-depth friction.
 
-Bundle-ID blocking is not a comprehensive application classifier, and it should not be read as one. Unlisted apps, editors with integrated terminals, browsers, and renamed or newly released apps may expose equivalent capabilities. The explicit `--app` target, macOS TCC, and the caller's same-user authority remain the real trust boundary.
+Browsers are refused for observation as well as for action. An accessibility snapshot of a browser window returns page text from whatever authenticated session happens to be open, so reading one is not meaningfully safer than clicking in it. Release channels and browser-installed web apps are covered by prefix (`com.google.Chrome.canary`, `com.google.Chrome.app.<id>`, `com.microsoft.edgemac.Beta`), except where a vendor prefix would overreach — `com.operasoftware.Opera` also matches Opera Mail, so Opera is enumerated per channel instead. Channel naming is not consistent enough to enumerate: Chrome's beta and dev builds and Firefox's beta and ESR builds ship under their stable identifier, while canary and Developer Edition do not.
+
+Bundle-ID blocking is not a comprehensive application classifier, and it should not be read as one. Unlisted apps, editors with integrated terminals, embedded web views, and renamed or newly released browsers may expose equivalent capabilities. Run `everyapi computer list-apps --json` to read a real bundle identifier before adding one. The explicit `--app` target, macOS TCC, and the caller's same-user authority remain the real trust boundary.
 
 Observed text is stripped of terminal control sequences and scanned for credentials before output. Text you type or set is rejected when it matches the built-in secret detectors. Prefer `--text-stdin` and `--value-stdin` to keep ordinary text out of your shell history.
 
