@@ -41,7 +41,7 @@ ARGUMENTS
 	                       forge | llxprt | grok
 	                       qwen-code | kimi-code
 	                       hermes | librefang
-	                       open-webui | pi-web | deepseek-harness
+	                       open-webui | pi-web | pi-harness | deepseek-harness
                          Omit to open an interactive picker over installed tools.
 
 FLAGS
@@ -107,6 +107,7 @@ EXAMPLES
 	 everyapi use librefang               (native credential process)
 	 everyapi use open-webui               (start a configured local server)
 	 everyapi use pi-web                   (start Pi's browser UI on 127.0.0.1:30141)
+	 everyapi use pi-harness               (start the plugin-first Pi Harness web UI on 127.0.0.1:30142)
 `
 
 // Use is the buyer onboarding bridge: verify credentials, configure the tool's env vars to point at EveryAPI, exec into the tool.
@@ -404,17 +405,18 @@ func use(args []string, persistModelSelection bool) error {
 		if filtered := launchModelsForTool(t, relayCatalog, bootModel); len(filtered) > 0 {
 			catalogModels := filtered
 			var aliases map[string]string
+			var withheld []tools.Model
 			if t.ExecName == "claude" {
-				catalogModels, aliases = claudeCatalogModels(filtered)
+				catalogModels, aliases, withheld = claudeCatalogModels(filtered)
 			}
 			// The catalogue keeps its own log file whichever socket ends up hosting it: a user chasing a wrong /model picker looks for model-catalog.log, not for whichever hop happened to carry it.
 			var closeCatalogLog func()
 			catalogLog, closeCatalogLog = loopbackProxyLogger("model-catalog.log")
 			defer closeCatalogLog()
-			// Record what the catalogue will publish, here rather than at either host. The standalone proxy logs its own bind address, but when the sanitizer hosts the transform — which --sanitize and Claude recovery both make the default — nothing else writes to this file at all, so a user following the comment above found it empty precisely when the catalogue was active.
-			catalogLog.Printf("catalogue: %s publishing %d models, %d aliased",
-				t.ExecName, len(catalogModels), len(aliases))
-			catalogTransform = modelCatalogTransform(catalogModels, aliases, catalogLog)
+			// Record what the catalogue will publish, here rather than at either host. The standalone proxy logs its own bind address, but when the sanitizer hosts the transform — which --sanitize and Claude recovery both make the default — nothing else writes to this file at all, so a user following the comment above found it empty precisely when the catalogue was active. The withheld count is here too: a picker missing a model is exactly what sends someone to this file, and "0 models" with a non-zero withheld count is the difference between a broken filter and a catalogue that is entirely family rows.
+			catalogLog.Printf("catalogue: %s publishing %d models, %d aliased, %d withheld as family rows",
+				t.ExecName, len(catalogModels), len(aliases), len(withheld))
+			catalogTransform = modelCatalogTransform(catalogModels, withheld, aliases, catalogLog)
 		}
 	}
 
@@ -1654,7 +1656,7 @@ func launchModelsForTool(t *tools.Tool, catalog []api.RelayModel, preferred stri
 // Three tiers:
 //
 //  1. the model the user chose for this tool, so a remembered choice is what the client boots on;
-//  2. models the tool can name natively — for claude that means claude-*, the ids claudeCatalogModels leaves alone. Everything else reaches it as a synthetic claude-everyapi-<slug>-<hash> alias, which is a poor thing to default to and unreadable in its /model picker;
+//  2. models the tool can name natively — for claude that means claude-*, the ids claudeCatalogModels publishes under their own name rather than aliasing. Everything else reaches it as a synthetic claude-everyapi-<slug>-<hash> alias, which is a poor thing to default to and unreadable in its /model picker. A claude-* id that is its family's winner is ranked here but then withheld from the published catalogue entirely — it reaches the picker as the "Opus 5" family row instead, so ranking it native still puts the right thing at the front;
 //  3. alphabetical, so the rest stays deterministic.
 func sortLaunchModels(t *tools.Tool, models []tools.Model, preferred string) {
 	// Tools that boot on the catalogue's first entry and have a namespace of their own. grok has the same exposure as claude: it is served a filtered catalogue (toolNeedsFilteredCatalogProxy) and takes the head of it, so alphabetical order alone put an unrelated vendor's model in front of its own. codex is absent on purpose — its boot model comes from a pinned config.toml field rather than from position 0, and "native" has no clean prefix there (gpt-*, o*, codex-*).

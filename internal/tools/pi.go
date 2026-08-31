@@ -127,6 +127,10 @@ func piProviderNode(apiBase string, models []Model) map[string]any {
 // Nothing secret is written. The provider's apiKey is the fixed "$EVERYAPI_RELAY_KEY" reference, which resolves from the launched process's environment; a pi or Pi Web started outside EveryAPI simply reports the provider as unconfigured. That is also why logout has nothing to scrub here.
 func preparePiWebWithModels(apiBase, _ string, models []Model) (map[string]string, error) {
 	agentDir := piUserAgentDir()
+	return preparePiModelsInDir(apiBase, agentDir, models)
+}
+
+func preparePiModelsInDir(apiBase, agentDir string, models []Model) (map[string]string, error) {
 	if agentDir == "" {
 		return nil, fmt.Errorf("resolve Pi agent directory")
 	}
@@ -155,6 +159,48 @@ func preparePiWebWithModels(apiBase, _ string, models []Model) (map[string]strin
 		return nil, err
 	}
 	return map[string]string{}, nil
+}
+
+// preparePiHarnessWithModels keeps Pi Harness on the user's durable Pi agent directory while exposing the relay credential only to the launched process.
+func preparePiHarnessWithModels(apiBase, token string, models []Model) (map[string]string, error) {
+	agentDir := piHarnessAgentDir()
+	if agentDir == "" {
+		return nil, fmt.Errorf("resolve Pi agent directory")
+	}
+	env, err := preparePiModelsInDir(apiBase, agentDir, models)
+	if err != nil {
+		return nil, err
+	}
+	env["PI_AGENT_DIR"] = agentDir
+	selected := ""
+	for _, model := range models {
+		id := strings.TrimSpace(model.ID)
+		if id == "" {
+			continue
+		}
+		if selected == "" {
+			selected = id
+		}
+		if id == "deepseek-v4-flash" {
+			selected = id
+			break
+		}
+	}
+	if selected == "" {
+		return nil, fmt.Errorf("EveryAPI returned no usable Pi Harness models")
+	}
+	env["PI_HARNESS_PROVIDER"] = "everyapi"
+	env["PI_HARNESS_MODEL"] = selected
+	return env, nil
+}
+
+func piHarnessAgentDir() string {
+	if configured := strings.TrimSpace(os.Getenv("PI_AGENT_DIR")); configured != "" {
+		if absolute, err := filepath.Abs(configured); err == nil {
+			return absolute
+		}
+	}
+	return piUserAgentDir()
 }
 
 // loadPiModelsConfig reads the durable models.json as a generic object so unrelated providers, model overrides, and future keys survive the merge. A missing file starts empty; anything that is not a regular file or not a JSON object is an error rather than something to overwrite.

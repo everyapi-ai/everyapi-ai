@@ -179,7 +179,14 @@ func runPricing(args []string) error {
 		for _, g := range groups {
 			ratio, ok := p.GroupRatio[g]
 			id := cliout.Sanitize(g)
-			name := cliout.Sanitize(p.UsableGroup[g])
+			// A group whose name carries no text in this language and no English
+			// fallback would otherwise print an empty first column; the id is the
+			// one thing the caller can actually pass to --group. Sanitize BEFORE
+			// the fallback (same order as the owner column above): a name built
+			// only from escape sequences or control bytes passes the emptiness
+			// test and then sanitizes down to nothing, which is the blank column
+			// again. `id` is already sanitized.
+			name := fallback(cliout.Sanitize(p.UsableGroup[g].Resolve(i18n.Language())), id)
 			if !ok {
 				cliout.Printf("  %-24s  id=%-12s  (no explicit ratio)\n", name, id)
 				continue

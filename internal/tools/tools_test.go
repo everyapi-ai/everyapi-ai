@@ -17,7 +17,7 @@ import (
 // TestRegistry_HasExpectedTools pins the V1 supported set. New tools can be added freely; removing one should be a deliberate spec change that breaks this test.
 func TestRegistry_HasExpectedTools(t *testing.T) {
 	want := []string{
-		"claude", "codex", "opencode", "gemini", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "pi-web", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang", "open-webui", "deepseek-harness",
+		"claude", "codex", "opencode", "gemini", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "pi-web", "pi-harness", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang", "open-webui", "deepseek-harness",
 	}
 	got := Names()
 	if len(got) != len(want) {

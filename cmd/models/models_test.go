@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -136,6 +137,55 @@ func TestRunPricingShowsOnlySmartAutoForPromotionalOnlyAccount(t *testing.T) {
 	got := output.String()
 	if !strings.Contains(got, "smart-everyapi") || strings.Contains(got, "gpt-5.6-luna") || !strings.Contains(got, "id=auto") || strings.Contains(got, "id=default") || !strings.Contains(got, "promotional balance only") {
 		t.Fatalf("promotional-only pricing output =\n%s", got)
+	}
+}
+
+// TestRunPricingRendersLocalizedRouteGroupNames pins the shape /api/pricing
+// actually serves today. `usable_group` carries a {lang: text} object per route
+// group; decoding it into a plain string aborted the whole command with
+// "cannot unmarshal object into Go struct field Pricing.usable_group", so the
+// rate sheet was unreachable rather than merely unlocalized. The legacy bare
+// string stays covered by the fixtures in the tests around this one.
+func TestRunPricingRendersLocalizedRouteGroupNames(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	i18n.SetLanguage(i18n.LangZh)
+	t.Cleanup(func() { i18n.SetLanguage(i18n.LangEn) })
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/user/models":
+			_, _ = w.Write([]byte(`{"success":true,"data":[{"id":"deepseek-v4-flash","vendor":"DeepSeek"}]}`))
+		case "/api/pricing":
+			_, _ = w.Write([]byte(`{"data":[{"model_name":"deepseek-v4-flash","model_ratio":0.22}],"group_ratio":{"grp_dedicated":0.88,"grp_unnamed":0.5,"grp_escapes":0.7},"usable_group":{"grp_dedicated":{"en":"DeepSeek dedicated route","zh":"DeepSeek专线"},"grp_unnamed":{},"grp_escapes":{"zh":"\u001b[31m"}}}`))
+		default:
+			t.Fatalf("unexpected request path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	requireNoError(t, config.Save(&config.Credentials{APIBase: server.URL, AccessToken: "account-token", UserID: 7}))
+
+	originalOut := cliout.Out
+	var output bytes.Buffer
+	cliout.Out = &output
+	t.Cleanup(func() { cliout.Out = originalOut })
+
+	requireNoError(t, runPricing(nil))
+	got := output.String()
+	if !strings.Contains(got, "DeepSeek专线") {
+		t.Fatalf("localized route group name missing from pricing output =\n%s", got)
+	}
+	if !regexp.MustCompile(`grp_unnamed\s+id=grp_unnamed`).MatchString(got) {
+		t.Fatalf("a nameless route group must fall back to its id =\n%s", got)
+	}
+	// A name that is non-empty on the wire but sanitizes to nothing (an operator
+	// pasted an ANSI sequence) reaches the same blank column unless the fallback
+	// runs on the SANITIZED name rather than the raw one.
+	if !regexp.MustCompile(`grp_escapes\s+id=grp_escapes`).MatchString(got) {
+		t.Fatalf("a route group named only by escape sequences must fall back to its id =\n%s", got)
+	}
+	if strings.ContainsRune(got, 0x1b) {
+		t.Fatalf("escape sequences from the server must never reach the terminal =\n%q", got)
 	}
 }
 

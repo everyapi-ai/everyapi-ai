@@ -22,14 +22,16 @@ import (
 
 // modelCatalogTransform keeps dynamic client pickers honest. Requests other than model discovery pass through to next unchanged; /v1/models is answered from the protocol-filtered launch snapshot so media/embedding models cannot appear in a coding client's /model picker.
 //
+// detailOnly holds models this launch keeps out of the LIST but must still answer for by id — today that is claudeCatalogModels' withheld family defaults. The launch points Claude Code straight at those ids through ANTHROPIC_DEFAULT_<FAMILY>_MODEL and the --model argument, so serving GET /v1/models/<id> a 404 for exactly the id it was told to run on is a contradiction it has no way to resolve. Reachable by id, absent from the list, which is what withholding was meant to mean.
+//
 // It is a handler decorator rather than a proxy so that the SAME implementation can run on whichever socket the launch already has: hosted on the sanitizer's listener when one is running, or on its own (startModelCatalogProxy) when it is the only transform. Filtering a catalogue and rewriting a model id are content transforms, not transport, and giving each one its own loopback hop made the chain grow a port, a log file and a failure point per transform.
 //
 // Failures log to ~/.config/everyapi/model-catalog.log via the caller's logger. Like the connector and the sanitizer it MUST NOT log to stderr, which is shared with the launched tool's TUI — and without the file the user's only evidence is an opaque error with no way to tell which transform produced it.
-func modelCatalogTransform(models []tools.Model, aliases map[string]string, logger *log.Logger) func(http.Handler) http.Handler {
+func modelCatalogTransform(models, detailOnly []tools.Model, aliases map[string]string, logger *log.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodGet && (r.URL.Path == "/v1/models" || strings.HasPrefix(r.URL.Path, "/v1/models/")) {
-				serveLaunchModelCatalog(w, r, models)
+				serveLaunchModelCatalog(w, r, models, detailOnly)
 				return
 			}
 			if len(aliases) > 0 && strings.HasPrefix(r.URL.Path, "/v1/messages") {
@@ -96,14 +98,17 @@ func startModelCatalogProxy(upstreamBase string, transform func(http.Handler) ht
 	return "http://" + listener.Addr().String(), stop, nil
 }
 
-func serveLaunchModelCatalog(w http.ResponseWriter, r *http.Request, models []tools.Model) {
+func serveLaunchModelCatalog(w http.ResponseWriter, r *http.Request, models, detailOnly []tools.Model) {
 	w.Header().Set("Content-Type", "application/json")
 	id := strings.TrimPrefix(r.URL.Path, "/v1/models/")
 	if r.URL.Path != "/v1/models" {
-		for _, model := range models {
-			if model.ID == id {
-				_ = json.NewEncoder(w).Encode(modelCatalogEntry(model))
-				return
+		// The published list is searched first, so an id that appears in both answers with the entry the client actually discovered; detailOnly only adds ids the list deliberately omits.
+		for _, group := range [][]tools.Model{models, detailOnly} {
+			for _, model := range group {
+				if model.ID == id {
+					_ = json.NewEncoder(w).Encode(modelCatalogEntry(model))
+					return
+				}
 			}
 		}
 		http.NotFound(w, r)
@@ -133,10 +138,22 @@ func modelCatalogEntry(model tools.Model) map[string]any {
 	}
 }
 
-func claudeCatalogModels(models []tools.Model) ([]tools.Model, map[string]string) {
+// claudeCatalogModels turns a launch catalogue into the one Claude Code will discover: claude-* ids pass through under their own name, everything else is republished under a synthetic claude-everyapi-<slug>-<hash> alias so the client's own model-id validation accepts it, and the returned map lets the transform rewrite that alias back on the way out.
+//
+// The exception is the handful of ids that are already a family row. Those come back as the third return instead of being published — see ClaudeFamilyAliasedModelIDs for why listing them puts the same model in the picker twice. Dropping them from the list is safe because the family override reaches Claude Code through the environment, not through discovery, so the row survives; what disappears is only its duplicate. They stay answerable by id (modelCatalogTransform's detailOnly), because that override is what points the client at them.
+//
+// Input order is preserved among the published entries. That is not the same as preserving the head: a remembered model that happens to be its family's winner is withheld, so position 0 moves to the next published id. Claude Code boots on the --model argument managedBootModelArgs prepends rather than on the head of this list, so the shift changes which entry its /model picker opens on, not which model the session starts with.
+func claudeCatalogModels(models []tools.Model) ([]tools.Model, map[string]string, []tools.Model) {
+	familyAliased := tools.ClaudeFamilyAliasedModelIDs(models)
 	result := make([]tools.Model, 0, len(models))
 	aliases := make(map[string]string)
+	var withheld []tools.Model
 	for _, model := range models {
+		// Trimmed on lookup, because ClaudeFamilyAliasedModelIDs keys the set on parseClaudeModelID's trimmed id while cliout.Sanitize — which produced these ids — strips control characters without trimming spaces. Matching on the raw id would let " claude-opus-5" become the override AND stay published, which is the duplicate row this whole path exists to remove.
+		if familyAliased[strings.TrimSpace(model.ID)] {
+			withheld = append(withheld, model)
+			continue
+		}
 		if strings.HasPrefix(strings.ToLower(model.ID), "claude-") {
 			result = append(result, model)
 			continue
@@ -158,7 +175,7 @@ func claudeCatalogModels(models []tools.Model) ([]tools.Model, map[string]string
 		result = append(result, aliased)
 		aliases[alias] = model.ID
 	}
-	return result, aliases
+	return result, aliases, withheld
 }
 
 const maxAliasRewriteBody = 64 << 20

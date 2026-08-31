@@ -661,6 +661,20 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: ignoreBootModel(preparePiWebWithModels),
 	},
 
+	// Pi Harness is the plugin-first web host from the pi-harness repository. It reads the same durable Pi agent directory as Pi Web, while the installer exposes the built web entrypoint as a global executable.
+	"pi-harness": {
+		Name:                "pi-harness",
+		ExecName:            "pi-harness",
+		InstallHint:         "Install Pi Harness: https://github.com/pi-harness/pi-harness#run-the-web-console",
+		InstallCmd:          "npm install -g github:pi-harness/pi-harness#feat/cordis-pi-harness || npm install -g github:pi-harness/pi-harness#feat/cordis-pi-harness --registry=https://mirrors.cloud.tencent.com/npm/ || npm install -g github:pi-harness/pi-harness#feat/cordis-pi-harness --registry=https://registry.npmmirror.com",
+		RequiredEndpoint:    "openai",
+		AlternativeEndpoint: "openai-response",
+		envFn: func(_, token string) map[string]string {
+			return map[string]string{openClawCredentialEnv: token}
+		},
+		prepareCatalogFn: ignoreBootModel(preparePiHarnessWithModels),
+	},
+
 	// Vibe's VIBE_HOME is an official profile boundary. A generated TOML file registers EveryAPI as a generic OpenAI-compatible provider and references the process environment for its credential.
 	"vibe": {
 		Name:        "vibe",
@@ -903,6 +917,6 @@ func Lookup(name string) (*Tool, error) {
 func Names() []string {
 	// Deterministic order matters for both the error message and the picker UX. Hand-coded to match the ordering most likely to reflect user demand.
 	return []string{
-		"claude", "codex", "opencode", "gemini", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "pi-web", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang", "open-webui", "deepseek-harness",
+		"claude", "codex", "opencode", "gemini", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "pi-web", "pi-harness", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang", "open-webui", "deepseek-harness",
 	}
 }

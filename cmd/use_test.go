@@ -1611,7 +1611,7 @@ func TestSortSurvivesClaudeAliasing(t *testing.T) {
 	const chosen = "ark-doubao-seed"
 	sortLaunchModels(claude, models, chosen)
 
-	published, aliases := claudeCatalogModels(models)
+	published, aliases, _ := claudeCatalogModels(models)
 	if len(published) == 0 {
 		t.Fatal("no models published")
 	}
@@ -1910,7 +1910,7 @@ func TestManagedBootModelArgsClaude(t *testing.T) {
 
 	t.Run("passes the real upstream id, not the catalogue alias", func(t *testing.T) {
 		// claudeCatalogModels republishes non-claude ids under a synthetic alias; the alias is only resolvable while the catalogue transform is hosted, so the boot argument must stay the real id.
-		_, aliases := claudeCatalogModels([]tools.Model{{ID: "deepseek-v4-flash"}})
+		_, aliases, _ := claudeCatalogModels([]tools.Model{{ID: "deepseek-v4-flash"}})
 		got := managedBootModelArgs(claude, nil, "deepseek-v4-flash")
 		for _, arg := range got {
 			if _, isAlias := aliases[arg]; isAlias {

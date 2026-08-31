@@ -45,6 +45,23 @@ func claudeFamilyDefaultEnv(models []Model) map[string]string {
 	if len(models) == 0 {
 		return nil
 	}
+	chosen := claudeFamilyCandidates(models)
+	env := make(map[string]string, len(claudeFamilies)*2)
+	for family, spec := range claudeFamilies {
+		candidate, served := chosen[family]
+		if !served {
+			env[spec.modelEnv] = ""
+			env[spec.nameEnv] = ""
+			continue
+		}
+		env[spec.modelEnv] = candidate.id
+		env[spec.nameEnv] = claudeFamilyDisplayName(family, candidate.version)
+	}
+	return env
+}
+
+// claudeFamilyCandidates resolves the newest catalogue id for each family Claude Code exposes an override for. Families the catalogue does not serve are absent from the result rather than present with a zero value, so a caller can tell "no id won this family" from "this family is not tracked".
+func claudeFamilyCandidates(models []Model) map[string]claudeCandidate {
 	chosen := make(map[string]claudeCandidate, len(claudeFamilies))
 	for _, model := range models {
 		family, id, version, ok := parseClaudeModelID(model.ID)
@@ -59,18 +76,25 @@ func claudeFamilyDefaultEnv(models []Model) map[string]string {
 		}
 		chosen[family] = claudeCandidate{id: id, version: version}
 	}
-	env := make(map[string]string, len(claudeFamilies)*2)
-	for family, spec := range claudeFamilies {
-		candidate, served := chosen[family]
-		if !served {
-			env[spec.modelEnv] = ""
-			env[spec.nameEnv] = ""
-			continue
-		}
-		env[spec.modelEnv] = candidate.id
-		env[spec.nameEnv] = claudeFamilyDisplayName(family, candidate.version)
+	return chosen
+}
+
+// ClaudeFamilyAliasedModelIDs is the set of catalogue ids that claudeFamilyDefaultEnv has already turned into a Claude Code family row — the ids behind the picker's "Opus 5" / "Sonnet 5" / "Haiku 4.5" / "Fable 5" entries for this launch.
+//
+// It exists so the published catalogue can leave those ids out. Claude Code builds the picker from two independent sources: one row per family from the ANTHROPIC_DEFAULT_<FAMILY>_MODEL overrides, plus a row per entry discovered through GET /v1/models. It does not reconcile the two, so an id that is both the family default and a discovered entry is offered twice — once labelled "Opus 5", once as the raw id — and the two rows launch the identical model.
+//
+// Only the winning id per family is in the set. An older sibling the same catalogue still carries (claude-opus-4-5 next to claude-opus-5) never became a family row, so it has to stay discoverable or it would become unreachable from the picker entirely. Ids parseClaudeModelID rejects — suffixed variants, legacy claude-3-5-* shapes, marketplace listings that merely name themselves claude-* — are likewise absent, which is what keeps them published.
+func ClaudeFamilyAliasedModelIDs(models []Model) map[string]bool {
+	// Mirrors claudeFamilyDefaultEnv's own guard: with no catalogue there are no overrides, so nothing has been aliased and nothing should be withheld.
+	if len(models) == 0 {
+		return nil
 	}
-	return env
+	chosen := claudeFamilyCandidates(models)
+	aliased := make(map[string]bool, len(chosen))
+	for _, candidate := range chosen {
+		aliased[candidate.id] = true
+	}
+	return aliased
 }
 
 // claudeFamilyDisplayName builds the picker label out of the id itself — the capitalised family plus a dotted generation, so claude-haiku-4-5 reads as "Haiku 4.5". Deriving it means a model this code has never seen still gets a correct label. The release stamp is deliberately absent: claude-haiku-4-5-20251001 is still Haiku 4.5 to the reader, and spelling it "Haiku 4.5.20251001" names a build nobody chose by date. family is non-empty: only a key present in claudeFamilies reaches here.

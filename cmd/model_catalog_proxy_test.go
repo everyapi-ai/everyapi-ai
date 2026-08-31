@@ -18,11 +18,11 @@ import (
 )
 
 // startCatalogProxyForTest hosts the catalogue transform on its own listener — the shape a launch takes when no sanitizer is running. Callers must have set XDG_CONFIG_HOME already: the transform opens model-catalog.log, and without isolation it appends to the developer's real ~/.config/everyapi.
-func startCatalogProxyForTest(t *testing.T, upstream string, models []tools.Model, aliases map[string]string) string {
+func startCatalogProxyForTest(t *testing.T, upstream string, models, detailOnly []tools.Model, aliases map[string]string) string {
 	t.Helper()
 	logger, closeLog := loopbackProxyLogger("model-catalog.log")
 	t.Cleanup(closeLog)
-	proxyURL, stop, err := startModelCatalogProxy(upstream, modelCatalogTransform(models, aliases, logger), logger)
+	proxyURL, stop, err := startModelCatalogProxy(upstream, modelCatalogTransform(models, detailOnly, aliases, logger), logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func startCatalogProxyForTest(t *testing.T, upstream string, models []tools.Mode
 
 func TestModelCatalogProxyOnlyAdvertisesLaunchModels(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	proxyURL := startCatalogProxyForTest(t, "https://api.invalid", []tools.Model{{ID: "chat-ok"}}, nil)
+	proxyURL := startCatalogProxyForTest(t, "https://api.invalid", []tools.Model{{ID: "chat-ok"}}, nil, nil)
 	resp, err := http.Get(proxyURL + "/v1/models")
 	if err != nil {
 		t.Fatal(err)
@@ -60,7 +60,7 @@ func TestModelCatalogProxyOnlyAdvertisesLaunchModels(t *testing.T) {
 
 func TestClaudeCatalogAliasesNonClaudeModelsAndRewritesRequests(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	models, aliases := claudeCatalogModels([]tools.Model{{ID: "glm-4.7", OwnedBy: "zhipu"}})
+	models, aliases, _ := claudeCatalogModels([]tools.Model{{ID: "glm-4.7", OwnedBy: "zhipu"}})
 	if len(models) != 1 || models[0].ID == "glm-4.7" || models[0].DisplayName != "glm-4.7" {
 		t.Fatalf("Claude catalog models = %#v", models)
 	}
@@ -76,7 +76,7 @@ func TestClaudeCatalogAliasesNonClaudeModelsAndRewritesRequests(t *testing.T) {
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
 	defer upstream.Close()
-	proxyURL := startCatalogProxyForTest(t, upstream.URL, models, aliases)
+	proxyURL := startCatalogProxyForTest(t, upstream.URL, models, nil, aliases)
 	payload := []byte(`{"model":"` + alias + `","messages":[{"role":"user","content":"hi"}]}`)
 	resp, err := http.Post(proxyURL+"/v1/messages", "application/json", bytes.NewReader(payload))
 	if err != nil {
@@ -184,7 +184,7 @@ func TestModelCatalogProxyLogsUpstreamFailures(t *testing.T) {
 	// Not startCatalogProxyForTest: this test has to close the log itself, before reading the file back. Both are still registered for cleanup — closing early and releasing on abort are independent concerns, and the assertions below can fail (a port reused after dead.Close() answers with something other than a 502), which would otherwise strand the descriptor, the listener and the Serve goroutine for the rest of the run. Both closers are idempotent, so the explicit calls and the cleanup coexist.
 	logger, closeLog := loopbackProxyLogger("model-catalog.log")
 	t.Cleanup(closeLog)
-	proxyURL, stop, err := startModelCatalogProxy(deadURL, modelCatalogTransform([]tools.Model{{ID: "chat-ok"}}, nil, logger), logger)
+	proxyURL, stop, err := startModelCatalogProxy(deadURL, modelCatalogTransform([]tools.Model{{ID: "chat-ok"}}, nil, nil, logger), logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestModelCatalogProxyLogsUpstreamFailures(t *testing.T) {
 
 func TestTransparentClaudeCatalogAliasReachesGatewayAsRealModel(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	models, aliases := claudeCatalogModels([]tools.Model{{ID: "glm-4.7", OwnedBy: "zhipu"}})
+	models, aliases, _ := claudeCatalogModels([]tools.Model{{ID: "glm-4.7", OwnedBy: "zhipu"}})
 	alias := models[0].ID
 
 	var gatewayBody []byte
@@ -230,7 +230,7 @@ func TestTransparentClaudeCatalogAliasReachesGatewayAsRealModel(t *testing.T) {
 	}))
 	defer gateway.Close()
 
-	catalogProxy := startCatalogProxyForTest(t, gateway.URL, models, aliases)
+	catalogProxy := startCatalogProxyForTest(t, gateway.URL, models, nil, aliases)
 	connectorSession, err := startTransparentConnector(catalogProxy, gateway.URL, "relay-key")
 	if err != nil {
 		t.Fatal(err)
@@ -292,7 +292,7 @@ func TestModelCatalogTransformSkipsEncodedBodies(t *testing.T) {
 	next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		seen, _ = io.ReadAll(r.Body)
 	})
-	handler := modelCatalogTransform(nil, map[string]string{"claude-everyapi-glm": "glm-4.7"}, logger)(next)
+	handler := modelCatalogTransform(nil, nil, map[string]string{"claude-everyapi-glm": "glm-4.7"}, logger)(next)
 
 	const body = "\x1f\x8b\x08not-really-gzip-but-opaque-to-the-scanner"
 	req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(body))
@@ -309,5 +309,97 @@ func TestModelCatalogTransformSkipsEncodedBodies(t *testing.T) {
 	}
 	if !strings.Contains(string(written), "gzip-encoded") {
 		t.Fatalf("the skipped rewrite left no explanation for the upstream error it causes:\n%s", written)
+	}
+}
+
+// TestClaudeCatalogWithholdsFamilyDefaultIDs covers the picker duplicate: the id behind a Claude Code family row must not also be published through discovery, or the same model is offered twice — once labelled "Opus 5", once as the raw id.
+//
+// The other three cases in the table are the ones that make withholding safe rather than lossy. An older sibling never became a family row, an id parseClaudeModelID rejects cannot have become one, and a non-claude id is on the alias path entirely; all three stay reachable from the picker.
+func TestClaudeCatalogWithholdsFamilyDefaultIDs(t *testing.T) {
+	published, aliases, _ := claudeCatalogModels([]tools.Model{
+		{ID: "claude-opus-5"},
+		{ID: "claude-opus-4-5"},
+		{ID: "claude-sonnet-5"},
+		{ID: "claude-opus-5-thinking"},
+		{ID: "glm-4.7"},
+	})
+	ids := make(map[string]bool, len(published))
+	for _, model := range published {
+		ids[model.ID] = true
+	}
+	for _, withheld := range []string{"claude-opus-5", "claude-sonnet-5"} {
+		if ids[withheld] {
+			t.Errorf("%q is a family row already; publishing it too puts the model in the picker twice", withheld)
+		}
+	}
+	for _, kept := range []string{"claude-opus-4-5", "claude-opus-5-thinking"} {
+		if !ids[kept] {
+			t.Errorf("%q never became a family row, so withholding it makes the model unreachable from the picker", kept)
+		}
+	}
+	if len(aliases) != 1 {
+		t.Fatalf("only the non-claude id should be aliased, got %#v", aliases)
+	}
+	for alias, upstream := range aliases {
+		if upstream != "glm-4.7" || !ids[alias] {
+			t.Fatalf("alias %q -> %q is missing from the published catalogue", alias, upstream)
+		}
+	}
+}
+
+// TestClaudeCatalogWithholdingTracksTheCatalogue pins that the withheld set is derived per launch rather than from a hardcoded id list. A catalogue whose newest opus is 4-5 makes THAT the family row, so it is the id that must be withheld and claude-opus-4-1 that must survive — the reverse of the previous test.
+func TestClaudeCatalogWithholdingTracksTheCatalogue(t *testing.T) {
+	published, _, withheld := claudeCatalogModels([]tools.Model{{ID: "claude-opus-4-1"}, {ID: "claude-opus-4-5"}})
+	if len(published) != 1 || published[0].ID != "claude-opus-4-1" {
+		t.Fatalf("expected only the non-winning opus to stay published, got %#v", published)
+	}
+	if len(withheld) != 1 || withheld[0].ID != "claude-opus-4-5" {
+		t.Fatalf("the winning opus has to come back as withheld so it stays answerable by id, got %#v", withheld)
+	}
+}
+
+// TestClaudeCatalogWithholdingIsListOnly separates the two halves of "withheld". Leaving the family default out of GET /v1/models is the point — it is what stops the picker offering the model twice. Answering GET /v1/models/<that id> with a 404 is not, and would be self-contradictory: ANTHROPIC_DEFAULT_OPUS_MODEL and the --model argument both point Claude Code at exactly this id, so the launch would be telling it to run a model its own discovery endpoint denies exists.
+func TestClaudeCatalogWithholdingIsListOnly(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	published, aliases, withheld := claudeCatalogModels([]tools.Model{
+		{ID: "claude-opus-5", OwnedBy: "anthropic"},
+		{ID: "claude-opus-4-5", OwnedBy: "anthropic"},
+	})
+	proxyURL := startCatalogProxyForTest(t, "https://api.invalid", published, withheld, aliases)
+
+	list, err := http.Get(proxyURL + "/v1/models")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer list.Body.Close()
+	var body struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(list.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Data) != 1 || body.Data[0].ID != "claude-opus-4-5" {
+		t.Fatalf("the family default is still listed, so the picker shows it twice: %#v", body.Data)
+	}
+
+	detail, err := http.Get(proxyURL + "/v1/models/claude-opus-5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer detail.Body.Close()
+	if detail.StatusCode != http.StatusOK {
+		t.Fatalf("GET /v1/models/claude-opus-5 = %d, want 200: it is the id ANTHROPIC_DEFAULT_OPUS_MODEL points at", detail.StatusCode)
+	}
+	var entry struct {
+		ID      string `json:"id"`
+		OwnedBy string `json:"owned_by"`
+	}
+	if err := json.NewDecoder(detail.Body).Decode(&entry); err != nil {
+		t.Fatal(err)
+	}
+	if entry.ID != "claude-opus-5" || entry.OwnedBy != "anthropic" {
+		t.Fatalf("detail lookup returned %#v, want the withheld model's own entry", entry)
 	}
 }

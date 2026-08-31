@@ -240,3 +240,49 @@ func TestClaudeFamilyOverridesIgnoreBootModel(t *testing.T) {
 		t.Errorf("opus = %q, want claude-opus-5 even when booting on sonnet", withSonnetBoot["ANTHROPIC_DEFAULT_OPUS_MODEL"])
 	}
 }
+
+// TestClaudeFamilyAliasedModelIDsMatchesTheOverrides pins the invariant the catalogue withholding depends on: the withheld set is exactly the set of ids the ANTHROPIC_DEFAULT_<FAMILY>_MODEL overrides point at. If the two ever diverge, the picker either shows a duplicate again or loses a model outright, and both halves live in different packages where nothing else would catch it.
+func TestClaudeFamilyAliasedModelIDsMatchesTheOverrides(t *testing.T) {
+	models := []Model{
+		{ID: "claude-opus-5"},
+		{ID: "claude-opus-4-5"},
+		{ID: "claude-sonnet-5"},
+		{ID: "claude-haiku-4-5-20251001"},
+		{ID: "claude-3-5-sonnet"},
+		{ID: "glm-4.7"},
+	}
+	aliased := ClaudeFamilyAliasedModelIDs(models)
+	env := claudeFamilyDefaultEnv(models)
+	for family, spec := range claudeFamilies {
+		id := env[spec.modelEnv]
+		if id == "" {
+			continue
+		}
+		if !aliased[id] {
+			t.Errorf("%s resolves to %q but the catalogue would still publish it, duplicating the row", family, id)
+		}
+	}
+	if len(aliased) != len(nonEmptyFamilyModelIDs(env)) {
+		t.Fatalf("withheld set %#v does not match the family overrides %#v", aliased, env)
+	}
+	if aliased["claude-opus-4-5"] || aliased["claude-3-5-sonnet"] || aliased["glm-4.7"] {
+		t.Fatalf("only a winning family id may be withheld, got %#v", aliased)
+	}
+}
+
+// TestClaudeFamilyAliasedModelIDsEmptyCatalogue mirrors claudeFamilyDefaultEnv's own no-information guard: with no catalogue no override is set, so nothing has been aliased and nothing may be withheld.
+func TestClaudeFamilyAliasedModelIDsEmptyCatalogue(t *testing.T) {
+	if got := ClaudeFamilyAliasedModelIDs(nil); got != nil {
+		t.Fatalf("no catalogue must withhold nothing, got %#v", got)
+	}
+}
+
+func nonEmptyFamilyModelIDs(env map[string]string) []string {
+	ids := make([]string, 0, len(claudeFamilies))
+	for _, spec := range claudeFamilies {
+		if env[spec.modelEnv] != "" {
+			ids = append(ids, env[spec.modelEnv])
+		}
+	}
+	return ids
+}
