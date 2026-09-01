@@ -55,10 +55,16 @@ FLAGS
                          process-scoped config. claude is OFFERED it first in the
                          catalog it discovers; claude still makes the final
                          call, so a session that already has a model of its
-                         own may keep it. Third-party interactive launches without an explicit model show
-                         EveryAPI's picker; unavailable Claude models stay visible but disabled.
-                         A bare --model (no value) also reopens Claude Code's
-                         picker. grok receives the validated selection through its own
+                         own may keep it. claude, codex, opencode and grok remember
+                         the choice and reuse it without asking; only their first
+                         launch, or one whose remembered model this key can no
+                         longer route, opens EveryAPI's picker, where
+                         unavailable Claude models stay visible but disabled.
+                         Every other model-selected tool remembers nothing and
+                         opens its picker on each interactive launch.
+                         A bare --model (no value) reopens that picker on
+                         demand, along with the reasoning-level step.
+                         grok receives the validated selection through its own
                          CLI. Native antigravity/agy keeps Google's own catalog and
                          routing.
   --sanitize             Opt in to the local sanitizer proxy (masks detected secrets before they reach the gateway). Off by default — the mask/restore step corrupts coding-agent sessions; for non-agentic SDK traffic use the standalone 'everyapi proxy' instead.
@@ -392,7 +398,7 @@ func use(args []string, persistModelSelection bool) error {
 	extraArgs = managedBootModelArgs(t, extraArgs, bootModel, settings.ClaudeLongContextEnabled())
 
 	// Reasoning level, for the clients that have one. Runs after both model paths — the ModelEnv picker above and the managed picker just now — because the levels on offer depend on which model was chosen. Called unconditionally, including for a metadata-only invocation: the call also clears an inherited ReasoningLevelEnv, and skipping it here would let a nested launch forward the outer session's level.
-	if err := resolveReasoningLevel(t, settings, relayCatalog, launchedModelID(t, bootModel), interactive, toolInvocationNeedsEndpoint(extraArgs)); err != nil {
+	if err := resolveReasoningLevel(t, settings, relayCatalog, launchedModelID(t, bootModel), interactive, toolInvocationNeedsEndpoint(extraArgs), pickModel); err != nil {
 		return err
 	}
 
@@ -732,9 +738,11 @@ func managedBootPickerNeeded(t *tools.Tool, args []string) bool {
 
 // resolveRememberedModel returns the model this launch should boot on, and persists it when the user makes a choice.
 //
-// Precedence: an explicit --model wins, then a non-interactive launch reuses a remembered choice. Interactive third-party launches without an explicit model always show the managed picker so unavailable models remain visible rather than disappearing inside clients whose native model schema cannot represent disabled entries. Official Claude Code may reuse its remembered model because the restriction does not apply there. A bare --model forces that official picker to reopen too.
+// Precedence: an explicit --model wins, then a remembered choice is reused without prompting, and only a launch with nothing to reuse — or a bare --model asking to re-choose — opens the managed picker. That holds for every tool, official and third-party alike.
 //
-// Official Claude Code keeps its historical fail-soft behavior because its own catalogue remains authoritative. Third-party clients treat the picker as a launch policy boundary: cancellation, an all-disabled catalogue, or a stale explicit/remembered model stops the launch instead of falling through to a native default that may select Claude.
+// Third-party clients used to be forced through the picker on every interactive launch, on the reasoning that a client whose native model schema cannot represent a disabled entry would make unavailable models vanish rather than grey out. That is a discoverability argument, and it was being paid for once per launch forever. It also protected nothing at the point it fired: by the time control reaches the reuse check the remembered id has already survived both modelUnavailableForTool and the live `offered` membership test, so it is known-routable for this key and group. Discovering the greyed-out rows is what a bare --model is for.
+//
+// Official Claude Code keeps its historical fail-soft behavior because its own catalogue remains authoritative. Third-party clients still treat the picker as a launch policy boundary whenever it does open: cancellation, an all-disabled catalogue, or a stale explicit/remembered model stops the launch instead of falling through to a native default that may select Claude.
 func resolveRememberedModel(
 	t *tools.Tool,
 	settings *config.Settings,
@@ -788,7 +796,8 @@ func resolveRememberedModelWithPersistence(
 			remember("")
 		}
 	}
-	if remembered != "" && !pickModel && (!interactive || t.Name == "claude") {
+	// Whatever is left in remembered here is routable for this key and group, so reuse it silently. A bare --model is the one thing that reopens the picker on purpose.
+	if remembered != "" && !pickModel {
 		return remembered, nil
 	}
 	if !interactive {
@@ -871,7 +880,9 @@ func launchedModelID(t *tools.Tool, bootModel string) string {
 //
 // It exists because the level is exactly as unrememberable as the model, and for the same reason: Codex records its effort in the lifecycle-bound profile, and pi records its thinking level in the settings.json inside the process-scoped agent dir — both deleted on exit. So a level chosen inside the tool lasts one session, and the launcher is the only place that can hold one across launches.
 //
-// A tool/model pairing with no level control returns early and prompts for nothing. A non-interactive launch reuses the remembered level rather than blocking, and a remembered level the current model does not offer (a switch from gpt-5.6-sol's "ultra" to a model that stops at "xhigh") is dropped instead of forwarded — the tool would reject it, or worse, accept it and send it upstream.
+// A tool/model pairing with no level control returns early and prompts for nothing. A remembered level is reused without prompting — interactively too, not just in a script — and a remembered level the current model does not offer (a switch from gpt-5.6-sol's "ultra" to a model that stops at "xhigh") is dropped instead of forwarded, because the tool would reject it or, worse, accept it and send it upstream.
+//
+// reask is the bare --model that reopens the model picker. It reopens this one too: the level is chosen against a specific model's published steps, so the launch where the model is being reconsidered is exactly the launch where the level is worth reconsidering. There is no separate flag for it, because a level without a model to interpret it is not a thing anyone wants to pick.
 //
 // It clears ReasoningLevelEnv before deciding anything, because the variable reaches the launched tool's children: a nested `everyapi use codex` inside a pi session that chose "off" would otherwise inherit "off" and write it as codex's model_reasoning_effort, which is not a codex effort at all. Every path below either resolves a level for THIS launch or leaves the variable unset.
 func resolveReasoningLevel(
@@ -879,7 +890,7 @@ func resolveReasoningLevel(
 	settings *config.Settings,
 	catalog []api.RelayModel,
 	modelID string,
-	interactive, needsEndpoint bool,
+	interactive, needsEndpoint, reask bool,
 ) error {
 	if err := os.Unsetenv(tools.ReasoningLevelEnv); err != nil {
 		return err
@@ -913,6 +924,10 @@ func resolveReasoningLevel(
 		if remembered == "" {
 			return nil
 		}
+		return os.Setenv(tools.ReasoningLevelEnv, remembered)
+	}
+	// Interactive reuse. remembered is non-empty only if it is one of the levels this model publishes, so there is nothing left to confirm.
+	if remembered != "" && !reask {
 		return os.Setenv(tools.ReasoningLevelEnv, remembered)
 	}
 
@@ -1406,7 +1421,7 @@ func parseUseArgs(args []string) (toolName, group string, pickGroup, sanitize bo
 					continue
 				}
 			}
-			// Bare --model: open the picker. For a ModelEnv tool that is what omitting the flag already does, so this is redundant but harmless; for Claude Code it reopens the picker after a remembered choice; third-party interactive launches open it by default. An explicit --model= is still an error — an empty value is a typo, not a request to choose.
+			// Bare --model: re-choose. For a ModelEnv tool the model half is what omitting the flag already does; for the clients that remember a model (claude, codex, opencode, grok) it reopens the picker a remembered choice would otherwise skip. It is never purely redundant, because it also travels to resolveReasoningLevel as its reask: a remembered reasoning level is reused silently on every other launch, and this is the only way to reopen that step. An explicit --model= is still an error — an empty value is a typo, not a request to choose.
 			pickModel = true
 		case "group", "channel":
 			if groupFlagName != "" && groupFlagName != name {

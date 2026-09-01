@@ -31,11 +31,50 @@ func TestResolveReasoningLevelReusesTheRememberedLevelWhenNobodyCanBeAsked(t *te
 	t.Setenv(tools.ReasoningLevelEnv, "")
 	settings := &config.Settings{ToolReasoningLevels: map[string]string{"pi": "high"}}
 
-	if err := resolveReasoningLevel(piTool(t), settings, piReasoningCatalog, "gpt-5.6-terra", false, true); err != nil {
+	if err := resolveReasoningLevel(piTool(t), settings, piReasoningCatalog, "gpt-5.6-terra", false, true, false); err != nil {
 		t.Fatal(err)
 	}
 	if got := os.Getenv(tools.ReasoningLevelEnv); got != "high" {
 		t.Fatalf("%s = %q, want high", tools.ReasoningLevelEnv, got)
+	}
+}
+
+// The remembered level is reused on an interactive launch too, not only when there is nobody to ask. It used to reprompt on every single launch with the cursor parked on the answer already recorded, which made a saved level worth exactly one keystroke less than no saved level at all. Stdin is left as the test binary's own: a picker here would read EOF and return an error, so a passing run is itself the proof that nothing was asked.
+func TestResolveReasoningLevelReusesTheRememberedLevelInteractively(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(tools.ReasoningLevelEnv, "")
+	settings := &config.Settings{ToolReasoningLevels: map[string]string{"pi": "high"}}
+
+	if err := resolveReasoningLevel(piTool(t), settings, piReasoningCatalog, "gpt-5.6-terra", true, true, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := os.Getenv(tools.ReasoningLevelEnv); got != "high" {
+		t.Fatalf("%s = %q, want high reused without a prompt", tools.ReasoningLevelEnv, got)
+	}
+}
+
+// A bare --model reopens the model picker, and the level belongs to the model, so it reopens this step too. Cancelled here (stdin at EOF) it must surface the error rather than silently keep the old level — the user asked to re-choose.
+func TestResolveReasoningLevelReopensOnAReask(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(tools.ReasoningLevelEnv, "")
+	settings := &config.Settings{ToolReasoningLevels: map[string]string{"pi": "high"}}
+
+	originalStdin := os.Stdin
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdin = reader
+	t.Cleanup(func() {
+		os.Stdin = originalStdin
+		_ = reader.Close()
+	})
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := resolveReasoningLevel(piTool(t), settings, piReasoningCatalog, "gpt-5.6-terra", true, true, true); err == nil {
+		t.Fatal("a bare --model did not reopen the reasoning picker")
 	}
 }
 
@@ -45,7 +84,7 @@ func TestResolveReasoningLevelDropsALevelTheModelDoesNotOffer(t *testing.T) {
 	t.Setenv(tools.ReasoningLevelEnv, "")
 	settings := &config.Settings{ToolReasoningLevels: map[string]string{"pi": "ultra"}}
 
-	if err := resolveReasoningLevel(piTool(t), settings, piReasoningCatalog, "gpt-5.6-terra", false, true); err != nil {
+	if err := resolveReasoningLevel(piTool(t), settings, piReasoningCatalog, "gpt-5.6-terra", false, true, false); err != nil {
 		t.Fatal(err)
 	}
 	if got := os.Getenv(tools.ReasoningLevelEnv); got != "" {
@@ -62,7 +101,7 @@ func TestResolveReasoningLevelSkipsModelsWithoutVerifiedThinking(t *testing.T) {
 	t.Setenv(tools.ReasoningLevelEnv, "")
 	settings := &config.Settings{ToolReasoningLevels: map[string]string{"pi": "high"}}
 
-	if err := resolveReasoningLevel(piTool(t), settings, piReasoningCatalog, "mystery-model", true, true); err != nil {
+	if err := resolveReasoningLevel(piTool(t), settings, piReasoningCatalog, "mystery-model", true, true, false); err != nil {
 		t.Fatal(err)
 	}
 	if got := os.Getenv(tools.ReasoningLevelEnv); got != "" {
@@ -77,7 +116,7 @@ func TestResolveReasoningLevelSkipsAModelMissingFromTheCatalogue(t *testing.T) {
 
 	settings := &config.Settings{ToolReasoningLevels: map[string]string{"pi": "high"}}
 	for _, id := range []string{"", "not-in-the-catalogue"} {
-		if err := resolveReasoningLevel(piTool(t), settings, piReasoningCatalog, id, true, true); err != nil {
+		if err := resolveReasoningLevel(piTool(t), settings, piReasoningCatalog, id, true, true, false); err != nil {
 			t.Fatalf("model %q: %v", id, err)
 		}
 		if got := os.Getenv(tools.ReasoningLevelEnv); got != "" {
@@ -96,7 +135,7 @@ func TestResolveReasoningLevelIsANoOpForClientsWithoutALevelControl(t *testing.T
 		t.Fatal(err)
 	}
 	catalog := []api.RelayModel{{ID: "claude-opus-5", SupportedEndpointTypes: []string{"anthropic"}, SupportsThinking: true}}
-	if err := resolveReasoningLevel(claude, &config.Settings{}, catalog, "claude-opus-5", true, true); err != nil {
+	if err := resolveReasoningLevel(claude, &config.Settings{}, catalog, "claude-opus-5", true, true, false); err != nil {
 		t.Fatal(err)
 	}
 	if got := os.Getenv(tools.ReasoningLevelEnv); got != "" {
@@ -147,7 +186,7 @@ func TestResolveReasoningLevelClearsAnInheritedLevel(t *testing.T) {
 			if tc.tool.Name == "pi" {
 				models = piReasoningCatalog
 			}
-			if err := resolveReasoningLevel(tc.tool, &config.Settings{}, models, tc.modelID, true, tc.needsEndpoint); err != nil {
+			if err := resolveReasoningLevel(tc.tool, &config.Settings{}, models, tc.modelID, true, tc.needsEndpoint, false); err != nil {
 				t.Fatal(err)
 			}
 			if got, ok := os.LookupEnv(tools.ReasoningLevelEnv); ok {

@@ -100,9 +100,11 @@ At launch the CLI fetches the live catalog for the selected key and group, drops
 
 Tools with a model-environment contract — Gemini, Aider, Goose, Crush, Cline, OpenClaw, Continue, Kilo, Pi, Vibe, Copilot, Droid, OpenHands, Forge, LLxprt, Hermes, Qwen Code, Kimi Code — open EveryAPI's own picker; `--model <id>` skips it. A non-interactive run deterministically takes the first compatible model.
 
+Claude Code, Codex, OpenCode, and Grok are the four clients whose answer is remembered per tool in `settings.json` and reused on the next launch without asking again. They are only asked on the first launch, or when the remembered model stops being routable for the current key and group — a key that moved group, or a model the account lost. Pass a bare `--model` with no value to reopen the picker deliberately; that is also where the greyed-out unavailable entries are visible. The model-environment tools listed above remember nothing and open their picker on every interactive launch, so `--model <id>` remains the way to pin one for them.
+
 ## Reasoning level
 
-`everyapi use codex` and `everyapi use pi` ask which reasoning level to launch at, once, then reuse the answer.
+`everyapi use codex` and `everyapi use pi` ask which reasoning level to launch at, once, then reuse the answer. A bare `--model` reopens that step along with the model picker, since the levels on offer belong to the model.
 
 The two are gated differently because they know different things. Codex reads the levels its own bundled catalog publishes for that model and receives the choice as `model_reasoning_effort`; a model Codex has never heard of gets no step at all. Pi has no per-model table for a custom provider, so its step appears only where the gateway has verified the model takes an effort (`supports_thinking` on `/v1/models`), and it receives the choice as `defaultThinkingLevel`. A remembered level the current model does not offer is dropped rather than pinned.
 

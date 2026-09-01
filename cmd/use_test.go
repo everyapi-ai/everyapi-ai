@@ -322,8 +322,19 @@ func TestUseUsageDocumentsGrok(t *testing.T) {
 	if strings.Contains(useUsage, "pass model flags to it after --") {
 		t.Fatal("use help still tells Grok users to bypass EveryAPI's managed picker")
 	}
-	if !strings.Contains(useUsage, "Third-party interactive launches without an explicit model show") {
+	if !strings.Contains(useUsage, "unavailable Claude models stay") {
 		t.Fatal("use help does not explain the disabled-model picker")
+	}
+	// The reuse rule and its escape hatch are the two halves of one contract: without the second sentence the help reads as "you can never see the greyed-out rows again".
+	if !strings.Contains(useUsage, "claude, codex, opencode and grok remember") {
+		t.Fatal("use help does not say which clients reuse a remembered model without asking")
+	}
+	// Naming the four is what keeps the rule from reading as a promise the ModelEnv tools do not keep: they persist nothing, so their picker opens every interactive launch.
+	if !strings.Contains(useUsage, "Every other model-selected tool remembers nothing") {
+		t.Fatal("use help does not say the remaining model-selected tools remember nothing")
+	}
+	if !strings.Contains(useUsage, "A bare --model (no value) reopens that") {
+		t.Fatal("use help does not document how to reopen the picker on demand")
 	}
 }
 
@@ -1808,7 +1819,27 @@ func TestResolveRememberedModel(t *testing.T) {
 		}
 	})
 
-	t.Run("third-party remembered model still opens the disabled picker", func(t *testing.T) {
+	// The routable-remembered case is the common one — every launch after the first — and the picker used to fire on it anyway. Stdin is deliberately left as the test binary's own: a picker here would read EOF and fail the launch, so the assertion is that no prompt happened at all rather than that some scripted answer was accepted.
+	t.Run("third-party remembered model is reused without a picker", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		opencode := tools.Registry["opencode"]
+		s := &config.Settings{ToolModels: map[string]string{"opencode": "gpt-5.6-terra"}}
+		catalog := []api.RelayModel{
+			{ID: "claude-sonnet-5", SupportedEndpointTypes: []string{"openai"}},
+			{ID: "gpt-5.6-luna", SupportedEndpointTypes: []string{"openai-response"}},
+			{ID: "gpt-5.6-terra", SupportedEndpointTypes: []string{"openai-response"}},
+		}
+
+		got, err := resolveRememberedModel(opencode, s, catalog, "", false, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != "gpt-5.6-terra" {
+			t.Fatalf("selected model = %q, want the remembered model reused silently", got)
+		}
+	})
+
+	t.Run("a bare --model reopens the disabled picker for a third-party tool", func(t *testing.T) {
 		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 		opencode := tools.Registry["opencode"]
 		s := &config.Settings{ToolModels: map[string]string{"opencode": "gpt-5.6-terra"}}
@@ -1835,15 +1866,19 @@ func TestResolveRememberedModel(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		got, err := resolveRememberedModel(opencode, s, catalog, "", false, true)
+		got, err := resolveRememberedModel(opencode, s, catalog, "", true, true)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if got != "gpt-5.6-luna" {
 			t.Fatalf("selected model = %q, want the new picker choice", got)
 		}
+		if remembered := s.ToolModel("opencode"); remembered != "gpt-5.6-luna" {
+			t.Fatalf("re-picked model was not persisted: %q", remembered)
+		}
 	})
 
+	// The picker stays a launch policy boundary on the paths where it still opens: cancelling it must not fall through to a native default that may select Claude.
 	t.Run("third-party picker cancellation stops launch", func(t *testing.T) {
 		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 		opencode := tools.Registry["opencode"]
@@ -1867,8 +1902,8 @@ func TestResolveRememberedModel(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := resolveRememberedModel(opencode, s, catalog, "", false, true); err == nil {
-			t.Fatal("cancelled mandatory picker still allowed OpenCode to launch")
+		if _, err := resolveRememberedModel(opencode, s, catalog, "", true, true); err == nil {
+			t.Fatal("cancelled picker still allowed OpenCode to launch")
 		}
 	})
 
