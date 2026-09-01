@@ -9,8 +9,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestStripHTML(t *testing.T) {
@@ -95,6 +97,32 @@ func TestTerminalTextDropsPositionalTerminalName(t *testing.T) {
 	}
 	if got := terminalText([]string{"--terminal", "term-1", "hello", "world"}); got != "hello world" {
 		t.Fatalf("terminalText() with flag = %q, want %q", got, "hello world")
+	}
+}
+
+func TestTerminalWaitChecksImmediatelyAtZeroTimeout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("tmux terminal backend is unavailable on Windows")
+	}
+	binDir := t.TempDir()
+	tmuxPath := filepath.Join(binDir, "tmux")
+	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nif [ \"$1\" = \"has-session\" ]; then exit 1; fi\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	stateDir := t.TempDir()
+	t.Setenv("EVERYAPI_WORKSPACE_STATE_DIR", stateDir)
+	started := time.Now()
+	value, err := terminal([]string{"wait", "--terminal", "missing", "--timeout", "0"})
+	if err != nil {
+		t.Fatalf("terminal wait: %v", err)
+	}
+	result, ok := value.(map[string]any)
+	if !ok || result["exited"] != true || result["timedOut"] == true {
+		t.Fatalf("terminal wait result = %#v, want immediate exited=true", value)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("zero-timeout wait took %s", elapsed)
 	}
 }
 

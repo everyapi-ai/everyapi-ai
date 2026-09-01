@@ -672,9 +672,12 @@ func terminal(args []string) (any, error) {
 			return nil, timeoutErr
 		}
 		deadline := time.Now().Add(time.Duration(seconds) * time.Second)
-		for time.Now().Before(deadline) {
+		for {
 			if _, err := commandOutput(".", "tmux", "has-session", "-t", name); err != nil {
 				return map[string]any{"terminal": name, "exited": true}, nil
+			}
+			if !time.Now().Before(deadline) {
+				break
 			}
 			time.Sleep(200 * time.Millisecond)
 		}
