@@ -135,8 +135,8 @@ uninstall = "이 머신에서 everyapi 상태와 바이너리 제거"
 version = "빌드 버전 · update · uninstall"
 
 [artifacts]
-usage = "사용법: everyapi artifacts share [--json] <file.html> | everyapi artifacts list [--json] | everyapi artifacts update [--json] <url> <file.html> | everyapi artifacts delete [--json] <url>"
-unknown_sub = "알 수 없는 artifacts 하위 명령 %q (share, list, update, delete 사용)"
+usage = "사용법: everyapi artifacts share [--json] <file.html> | everyapi artifacts list [--json] | everyapi artifacts update [--json] <file.html> | everyapi artifacts delete [--json] <id-or-url> | everyapi artifacts unshare [--json] <file.html>"
+unknown_sub = "알 수 없는 artifacts 하위 명령 %q (share, list, update, delete, unshare 사용)"
 html_required = "artifact 는 .html 또는 .htm 파일이어야 합니다"
 regular_required = "artifact 는 일반 파일이어야 합니다"
 too_large = "artifact 크기는 %d 바이트이며 최대 허용 크기는 %d 바이트입니다"

@@ -72,16 +72,28 @@ type artifactListResult struct {
 }
 
 func Run(args []string) error {
-	if len(args) == 0 || (len(args) == 1 && isHelp(args[0])) {
+	if len(args) == 0 || hasHelpArg(args) {
 		cliout.Println(i18n.T("artifacts.usage"))
 		return nil
 	}
-	if args[0] != "share" && args[0] != "update" && args[0] != "delete" && args[0] != "list" {
+	if args[0] != "share" && args[0] != "update" && args[0] != "delete" && args[0] != "list" && args[0] != "unshare" {
 		return fmt.Errorf(i18n.T("artifacts.unknown_sub"), args[0])
 	}
 	operands, asJSON := artifactOperands(args[1:])
+	if args[0] == "update" && len(operands) == 1 {
+		// The file-only form resolves the URL saved by share. The legacy
+		// URL-plus-file form remains accepted for backwards compatibility.
+		if url, loadErr := artifactForFile(operands[0]); loadErr == nil && url != "" {
+			operands = append([]string{url}, operands...)
+		}
+	}
+	if args[0] == "unshare" && len(operands) == 1 {
+		if url, loadErr := artifactForFile(operands[0]); loadErr == nil && url != "" {
+			operands = append([]string{url}, operands...)
+		}
+	}
 	expected := 1
-	if args[0] == "update" {
+	if args[0] == "update" || args[0] == "unshare" {
 		expected = 2
 	} else if args[0] == "list" {
 		expected = 0
@@ -95,33 +107,62 @@ func Run(args []string) error {
 	}
 	ctx, stop := cliout.SignalCtx()
 	defer stop()
+	baseURL := serviceBaseURL
+	if value := artifactFlagValue(args[1:], "api-url"); value != "" {
+		baseURL = strings.TrimRight(value, "/")
+	}
 	switch args[0] {
 	case "share":
-		result, err := publish(ctx, httpClient, serviceBaseURL, creds, operands[0])
+		result, err := publish(ctx, httpClient, baseURL, creds, operands[0])
 		if err != nil {
 			return err
 		}
+		_ = rememberArtifactFile(operands[0], result.URL)
 		return printPublishResult(result, asJSON)
 	case "update":
-		result, err := updateArtifact(ctx, httpClient, serviceBaseURL, creds, operands[0], operands[1])
+		result, err := updateArtifact(ctx, httpClient, baseURL, creds, operands[0], operands[1])
 		if err != nil {
 			return err
 		}
 		return printPublishResult(result, asJSON)
 	case "delete":
-		result, err := deleteArtifact(ctx, httpClient, serviceBaseURL, creds, operands[0])
+		artifactURL := operands[0]
+		if !strings.Contains(artifactURL, "://") {
+			artifactURL = "https://artifacts.everyapi.ai/" + strings.TrimPrefix(artifactURL, "/")
+		}
+		result, err := deleteArtifact(ctx, httpClient, baseURL, creds, artifactURL)
 		if err != nil {
 			return err
 		}
 		return printDeleteResult(result, asJSON)
+	case "unshare":
+		artifactURL := operands[0]
+		if !strings.Contains(artifactURL, "://") {
+			artifactURL = "https://artifacts.everyapi.ai/" + strings.TrimPrefix(artifactURL, "/")
+		}
+		result, err := deleteArtifact(ctx, httpClient, baseURL, creds, artifactURL)
+		if err != nil {
+			return err
+		}
+		_ = forgetArtifactFile(operands[len(operands)-1])
+		return printDeleteResult(result, asJSON)
 	case "list":
-		result, err := listArtifacts(ctx, httpClient, serviceBaseURL, creds)
+		result, err := listArtifacts(ctx, httpClient, baseURL, creds)
 		if err != nil {
 			return err
 		}
 		return printListResult(result, asJSON)
 	}
 	return errors.New(i18n.T("artifacts.usage"))
+}
+
+func hasHelpArg(args []string) bool {
+	for _, arg := range args {
+		if isHelp(arg) {
+			return true
+		}
+	}
+	return false
 }
 
 func isHelp(arg string) bool {
@@ -131,14 +172,118 @@ func isHelp(arg string) bool {
 func artifactOperands(args []string) ([]string, bool) {
 	operands := make([]string, 0, len(args))
 	asJSON := false
+	skipNext := false
 	for _, arg := range args {
+		if skipNext {
+			skipNext = false
+			continue
+		}
 		if arg == "--json" {
 			asJSON = true
+			continue
+		}
+		if arg == "--api-url" || arg == "--cursor" {
+			skipNext = true
+			continue
+		}
+		if strings.HasPrefix(arg, "--api-url=") || strings.HasPrefix(arg, "--cursor=") {
 			continue
 		}
 		operands = append(operands, arg)
 	}
 	return operands, asJSON
+}
+
+func artifactFlagValue(args []string, name string) string {
+	prefix := "--" + name + "="
+	for i, arg := range args {
+		if strings.HasPrefix(arg, prefix) {
+			return strings.TrimPrefix(arg, prefix)
+		}
+		if arg == "--"+name && i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
+func artifactMapPath() (string, error) {
+	dir := os.Getenv("EVERYAPI_WORKSPACE_STATE_DIR")
+	if dir == "" {
+		var err error
+		dir, err = os.UserConfigDir()
+		if err != nil {
+			return "", err
+		}
+		dir = filepath.Join(dir, "everyapi")
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "artifacts.json"), nil
+}
+
+func artifactForFile(file string) (string, error) {
+	path, err := artifactMapPath()
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	var items map[string]string
+	if err := json.Unmarshal(data, &items); err != nil {
+		return "", err
+	}
+	abs, _ := filepath.Abs(file)
+	return items[abs], nil
+}
+
+func rememberArtifactFile(file, artifactURL string) error {
+	path, err := artifactMapPath()
+	if err != nil {
+		return err
+	}
+	items := map[string]string{}
+	if data, readErr := os.ReadFile(path); readErr == nil {
+		_ = json.Unmarshal(data, &items)
+	}
+	abs, _ := filepath.Abs(file)
+	items[abs] = artifactURL
+	data, err := json.MarshalIndent(items, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o600)
+}
+
+func forgetArtifactFile(file string) error {
+	path, err := artifactMapPath()
+	if err != nil {
+		return err
+	}
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var items map[string]string
+	if json.Unmarshal(data, &items) != nil {
+		return nil
+	}
+	abs, _ := filepath.Abs(file)
+	delete(items, abs)
+	newData, err := json.MarshalIndent(items, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(newData, '\n'), 0o600)
 }
 
 func publish(ctx context.Context, client *http.Client, baseURL string, creds *config.Credentials, filePath string) (publishResult, error) {

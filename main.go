@@ -41,6 +41,7 @@ import (
 	usagecmd "github.com/everyapi-ai/everyapi-ai/v3/cmd/usage"
 	usercmd "github.com/everyapi-ai/everyapi-ai/v3/cmd/user"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/wallet"
+	workspacecmd "github.com/everyapi-ai/everyapi-ai/v3/cmd/workspace"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
@@ -84,6 +85,9 @@ type command struct {
 	requireLogin bool
 	// hideLoggedIn is the inverse — hides the row once credentials exist. Currently unused: it gated the old top-level `login` row, but login moved under `auth` (whose subs aren't individually gated). Kept as a reusable gate for a future logged-out-only top-level command.
 	hideLoggedIn bool
+	// cliOnly keeps machine-facing command families out of the interactive TUI.
+	// They still appear in `everyapi help` and dispatch normally when typed.
+	cliOnly bool
 	// subs is the subcommand menu rendered when this command is picked from the launcher (or invoked bare on a TTY without arguments). Each entry's args slice is passed verbatim to run, so a row {args: []string{"marketplace", "on"}} dispatches the same way `everyapi admin marketplace on` would. Only includes subcommands that are useful without further flags — flag-required actions (seller add-key, edge register --name N) stay command-line-only. Empty/nil means "no sub-menu — pick runs the command bare".
 	subs []subcommand
 	// headerFn, when set, prints a status header above the sub-picker each time the menu renders — for "stateful service" commands where the current state IS the thing you came to see (mcp: which clients are registered; proxy: is the sanitizer running). The `status` action then lives in this header instead of as a menu row, so the picker only lists the things you can DO. Reuses the command's own status printer, so it stays in sync.
@@ -179,6 +183,8 @@ func accountRun(args []string) error {
 		return nil
 	}
 	switch args[0] {
+	case "add", "list":
+		return workspacecmd.Command("account")(args)
 	case "user":
 		return usercmd.Run(args[1:])
 	case "subscription":
@@ -353,7 +359,118 @@ var commands = []command{
 	// admin has no static subs: bare `everyapi admin` on a TTY launches admin's own two-level operator console (area → action → inline arg prompts) inside the admin package, since the keyed actions need values a flat picker row can't carry. selfMenu earns it the usage <sub> tag; dispatchInteractive sees hasPicker()==false and calls admin.Run (not runSubPicker), which handles the TTY/non-TTY split.
 	{name: "admin", desc: "Operator commands", adminOnly: true, requireLogin: true, selfMenu: true, run: admin.Run},
 	{name: "proxy", desc: "Local sanitizer proxy (privacy filter for SDK requests)", run: proxy.Run, headerFn: proxyHeader, subsFn: proxyMenuSubs},
-	{name: "computer", desc: "Read and control macOS apps through accessibility", run: computer.Run},
+	{name: "computer", desc: "Read and control macOS apps through accessibility", cliOnly: true, run: computer.Run},
+	// Local workspace automation is intentionally CLI-only. These handlers
+	// execute repository, terminal, and filesystem operations in this process;
+	// they never open an interactive launcher or delegate to another binary.
+	{name: "open", desc: "Open the local automation endpoint", cliOnly: true, run: workspacecmd.Command("open")},
+	{name: "serve", desc: "Serve the current project locally", cliOnly: true, run: workspacecmd.Command("serve")},
+	{name: "claude-teams", desc: "Start a local agent command with team settings", cliOnly: true, run: workspacecmd.Command("claude-teams")},
+	{name: "status", desc: "Show local workspace readiness", cliOnly: true, run: workspacecmd.Command("status")},
+	{name: "host", desc: "Show this machine's execution details", cliOnly: true, run: workspacecmd.Command("host")},
+	{name: "repo", desc: "Inspect the current Git repository", cliOnly: true, run: workspacecmd.Command("repo"), subs: []subcommand{
+		{name: "list", desc: "List the current repository", args: []string{"list"}},
+		{name: "show", desc: "Show repository details", args: []string{"show"}},
+		{name: "add", desc: "Register a repository", args: []string{"add"}},
+		{name: "set-base-ref", desc: "Set the default base ref", args: []string{"set-base-ref"}},
+		{name: "search-refs", desc: "Search branches and tags", args: []string{"search-refs"}},
+	}},
+	{name: "worktree", desc: "Create and manage local Git worktrees", cliOnly: true, run: workspacecmd.Command("worktree"), subs: []subcommand{
+		{name: "list", desc: "List Git worktrees", args: []string{"list"}},
+		{name: "current", desc: "Show the worktree for this directory", args: []string{"current"}},
+		{name: "show", desc: "Show one worktree", args: []string{"show"}},
+		{name: "create", desc: "Create an isolated worktree", args: []string{"create"}},
+		{name: "set", desc: "Set worktree metadata", args: []string{"set"}},
+		{name: "rm", desc: "Remove a worktree", args: []string{"rm"}},
+		{name: "ps", desc: "Show compact worktree status", args: []string{"ps"}},
+	}},
+	{name: "terminal", desc: "Manage local tmux terminals", cliOnly: true, run: workspacecmd.Command("terminal"), subs: []subcommand{
+		{name: "list", desc: "List live terminals", args: []string{"list"}},
+		{name: "show", desc: "Show terminal metadata", args: []string{"show"}},
+		{name: "read", desc: "Read terminal output", args: []string{"read"}},
+		{name: "send", desc: "Send input to a terminal", args: []string{"send"}},
+		{name: "wait", desc: "Wait for terminal exit", args: []string{"wait"}},
+		{name: "stop", desc: "Stop a terminal", args: []string{"stop"}},
+		{name: "create", desc: "Create a terminal", args: []string{"create"}},
+		{name: "rename", desc: "Rename a terminal", args: []string{"rename"}},
+		{name: "split", desc: "Split a terminal pane", args: []string{"split"}},
+		{name: "switch", desc: "Switch a terminal tab", args: []string{"switch"}},
+		{name: "focus", desc: "Focus a terminal tab", args: []string{"focus"}},
+		{name: "close", desc: "Close a terminal", args: []string{"close"}},
+	}},
+	{name: "snapshot", desc: "Read the last locally fetched web page", cliOnly: true, run: workspacecmd.Command("snapshot")},
+	{name: "goto", desc: "Fetch a web page into local state", cliOnly: true, run: workspacecmd.Command("goto")},
+	{name: "find", desc: "Find text in the fetched page", cliOnly: true, run: workspacecmd.Command("find")},
+	{name: "get", desc: "Read fetched page state", cliOnly: true, run: workspacecmd.Command("get")},
+	{name: "screenshot", desc: "Render the fetched page to an SVG image", cliOnly: true, run: workspacecmd.Command("screenshot")},
+	{name: "click", desc: "Activate a link or page element in local state", cliOnly: true, run: workspacecmd.Command("click")},
+	{name: "fill", desc: "Set a page field in local state", cliOnly: true, run: workspacecmd.Command("fill")},
+	{name: "type", desc: "Append text to a page field in local state", cliOnly: true, run: workspacecmd.Command("type")},
+	{name: "select", desc: "Set a page option in local state", cliOnly: true, run: workspacecmd.Command("select")},
+	{name: "scroll", desc: "Update the fetched page scroll position", cliOnly: true, run: workspacecmd.Command("scroll")},
+	{name: "back", desc: "Navigate local page history back", cliOnly: true, run: workspacecmd.Command("back")},
+	{name: "reload", desc: "Fetch the current page again", cliOnly: true, run: workspacecmd.Command("reload")},
+	{name: "eval", desc: "Evaluate a supported page expression", cliOnly: true, run: workspacecmd.Command("eval")},
+	{name: "wait", desc: "Wait for text in the fetched page", cliOnly: true, run: workspacecmd.Command("wait")},
+	{name: "check", desc: "Check a page control in local state", cliOnly: true, run: workspacecmd.Command("check")},
+	{name: "uncheck", desc: "Uncheck a page control in local state", cliOnly: true, run: workspacecmd.Command("uncheck")},
+	{name: "focus", desc: "Focus a page element in local state", cliOnly: true, run: workspacecmd.Command("focus")},
+	{name: "clear", desc: "Clear a page field in local state", cliOnly: true, run: workspacecmd.Command("clear")},
+	{name: "select-all", desc: "Select all fetched page text", cliOnly: true, run: workspacecmd.Command("select-all")},
+	{name: "keypress", desc: "Record a page keypress in local state", cliOnly: true, run: workspacecmd.Command("keypress")},
+	{name: "pdf", desc: "Render the fetched page to a PDF", cliOnly: true, run: workspacecmd.Command("pdf")},
+	{name: "full-screenshot", desc: "Render the complete fetched page to SVG", cliOnly: true, run: workspacecmd.Command("full-screenshot")},
+	{name: "hover", desc: "Record a page hover in local state", cliOnly: true, run: workspacecmd.Command("hover")},
+	{name: "drag", desc: "Record a page drag in local state", cliOnly: true, run: workspacecmd.Command("drag")},
+	{name: "upload", desc: "Attach a local file to a page field", cliOnly: true, run: workspacecmd.Command("upload")},
+	{name: "tab", desc: "Manage local browser tabs", cliOnly: true, run: workspacecmd.Command("tab"), subs: []subcommand{
+		{name: "list", desc: "List browser tabs", args: []string{"list"}},
+		{name: "show", desc: "Show the current tab", args: []string{"show"}},
+		{name: "current", desc: "Show the active tab", args: []string{"current"}},
+		{name: "create", desc: "Create a browser tab", args: []string{"create"}},
+		{name: "switch", desc: "Switch browser tabs", args: []string{"switch"}},
+		{name: "close", desc: "Close a browser tab", args: []string{"close"}},
+		{name: "profile", desc: "Manage tab profiles", args: []string{"profile"}},
+	}},
+	{name: "cookie", desc: "Read and write local page cookies", cliOnly: true, run: workspacecmd.Command("cookie")},
+	{name: "storage", desc: "Read and write local page storage", cliOnly: true, run: workspacecmd.Command("storage")},
+	{name: "console", desc: "Read local page console entries", cliOnly: true, run: workspacecmd.Command("console")},
+	{name: "network", desc: "Read local page request entries", cliOnly: true, run: workspacecmd.Command("network")},
+	{name: "clipboard", desc: "Read and write the local page clipboard", cliOnly: true, run: workspacecmd.Command("clipboard")},
+	{name: "dialog", desc: "Record local page dialog actions", cliOnly: true, run: workspacecmd.Command("dialog")},
+	{name: "download", desc: "Inspect local page downloads", cliOnly: true, run: workspacecmd.Command("download")},
+	{name: "highlight", desc: "Record a highlighted page element", cliOnly: true, run: workspacecmd.Command("highlight")},
+	{name: "capture", desc: "Toggle local page traffic capture", cliOnly: true, run: workspacecmd.Command("capture")},
+	{name: "viewport", desc: "Set the local page viewport", cliOnly: true, run: workspacecmd.Command("viewport")},
+	{name: "geolocation", desc: "Set the local page geolocation", cliOnly: true, run: workspacecmd.Command("geolocation")},
+	{name: "intercept", desc: "Manage local page request patterns", cliOnly: true, run: workspacecmd.Command("intercept")},
+	{name: "mouse", desc: "Record a local page mouse event", cliOnly: true, run: workspacecmd.Command("mouse")},
+	{name: "inserttext", desc: "Insert text into local page state", cliOnly: true, run: workspacecmd.Command("inserttext")},
+	{name: "is", desc: "Inspect local page element state", cliOnly: true, run: workspacecmd.Command("is")},
+	{name: "scrollintoview", desc: "Record a local page scroll target", cliOnly: true, run: workspacecmd.Command("scrollintoview")},
+	{name: "dblclick", desc: "Activate a page element twice in local state", cliOnly: true, run: workspacecmd.Command("dblclick")},
+	{name: "forward", desc: "Navigate local page history forward", cliOnly: true, run: workspacecmd.Command("forward")},
+	{name: "set", desc: "Set local page options", cliOnly: true, run: workspacecmd.Command("set")},
+	{name: "exec", desc: "Execute a browser command through local state", cliOnly: true, run: workspacecmd.Command("exec")},
+	{name: "diagnostics", desc: "Collect local process diagnostics", cliOnly: true, run: workspacecmd.Command("diagnostics"), subs: []subcommand{{name: "memory", desc: "Show process memory snapshot", args: []string{"memory"}}}},
+	{name: "agent-context", desc: "Print the native command schema", cliOnly: true, run: workspacecmd.Command("agent-context")},
+	{name: "agent", desc: "Run a local agent lifecycle command", cliOnly: true, run: workspacecmd.Command("agent")},
+	{name: "skills", desc: "List and inspect local skills", cliOnly: true, run: workspacecmd.Command("skills"), subs: []subcommand{
+		{name: "list", desc: "List discovered skills", args: []string{"list"}},
+		{name: "get", desc: "Print a skill guide", args: []string{"get"}},
+		{name: "installed", desc: "List installed skills", args: []string{"installed"}},
+		{name: "share", desc: "Create a local skill share record", args: []string{"share"}},
+		{name: "install", desc: "Install a skill locally", args: []string{"install"}},
+		{name: "update", desc: "Update an installed skill", args: []string{"update"}},
+	}},
+	{name: "orchestration", desc: "Coordinate local runs and messages", cliOnly: true, run: workspacecmd.Command("orchestration"), subs: []subcommand{{name: "run-create", desc: "Create a local run", args: []string{"run-create"}}, {name: "run-use", desc: "Bind the current terminal to a run", args: []string{"run-use"}}, {name: "run-current", desc: "Show the current run", args: []string{"run-current"}}, {name: "run-list", desc: "List local runs", args: []string{"run-list"}}, {name: "run-show", desc: "Show one run", args: []string{"run-show"}}, {name: "send", desc: "Send a local message", args: []string{"send"}}, {name: "check", desc: "Read new messages", args: []string{"check"}}, {name: "ask", desc: "Ask a blocking question", args: []string{"ask"}}, {name: "reply", desc: "Reply to a question", args: []string{"reply"}}, {name: "inbox", desc: "Show the local inbox", args: []string{"inbox"}}, {name: "task-create", desc: "Create a task", args: []string{"task-create"}}, {name: "task-list", desc: "List tasks", args: []string{"task-list"}}, {name: "task-update", desc: "Update a task", args: []string{"task-update"}}, {name: "dispatch", desc: "Dispatch a task", args: []string{"dispatch"}}, {name: "dispatch-show", desc: "Show a dispatch", args: []string{"dispatch-show"}}, {name: "worker-start", desc: "Start a worker record", args: []string{"worker-start"}}, {name: "worker-show", desc: "Show a worker", args: []string{"worker-show"}}, {name: "worker-read", desc: "Read worker output", args: []string{"worker-read"}}, {name: "worker-stop", desc: "Stop a worker", args: []string{"worker-stop"}}, {name: "worker-abandon", desc: "Abandon a worker", args: []string{"worker-abandon"}}, {name: "worker-release", desc: "Release a worker", args: []string{"worker-release"}}, {name: "worker-retain", desc: "Retain a worker", args: []string{"worker-retain"}}, {name: "worker-list", desc: "List workers", args: []string{"worker-list"}}, {name: "coordinator-start", desc: "Start the coordinator", args: []string{"coordinator-start"}}, {name: "coordinator-stop", desc: "Stop the coordinator", args: []string{"coordinator-stop"}}, {name: "gate-create", desc: "Create a decision gate", args: []string{"gate-create"}}, {name: "gate-resolve", desc: "Resolve a decision gate", args: []string{"gate-resolve"}}, {name: "gate-list", desc: "List decision gates", args: []string{"gate-list"}}, {name: "reset", desc: "Reset local orchestration state", args: []string{"reset"}}}},
+	{name: "automations", desc: "Inspect local automation records", cliOnly: true, run: workspacecmd.Command("automations"), subs: []subcommand{{name: "list", desc: "List automations", args: []string{"list"}}, {name: "show", desc: "Show an automation", args: []string{"show"}}, {name: "create", desc: "Create an automation", args: []string{"create"}}, {name: "edit", desc: "Edit an automation", args: []string{"edit"}}, {name: "remove", desc: "Remove an automation", args: []string{"remove"}}, {name: "run", desc: "Record an automation run", args: []string{"run"}}, {name: "runs", desc: "List automation runs", args: []string{"runs"}}}},
+	{name: "environment", desc: "Show local execution environments", cliOnly: true, run: workspacecmd.Command("environment"), subs: []subcommand{{name: "add", desc: "Add a saved environment", args: []string{"add"}}, {name: "list", desc: "List local environments", args: []string{"list"}}, {name: "show", desc: "Show the local environment", args: []string{"show"}}, {name: "rm", desc: "Remove a saved environment", args: []string{"rm"}}}},
+	{name: "project", desc: "Inspect the current project setup", cliOnly: true, run: workspacecmd.Command("project"), subs: []subcommand{{name: "list", desc: "List the current project", args: []string{"list"}}, {name: "setups", desc: "List project setups", args: []string{"setups"}}, {name: "setup-existing-folder", desc: "Import an existing folder", args: []string{"setup-existing-folder"}}, {name: "setup-clone", desc: "Clone a repository setup", args: []string{"setup-clone"}}, {name: "setup-create", desc: "Create setup metadata", args: []string{"setup-create"}}, {name: "setup-update", desc: "Update setup metadata", args: []string{"setup-update"}}, {name: "setup-delete", desc: "Delete setup metadata", args: []string{"setup-delete"}}}},
+	{name: "file", desc: "Open and inspect local files", cliOnly: true, run: workspacecmd.Command("file"), subs: []subcommand{{name: "open", desc: "Open a file", args: []string{"open"}}, {name: "diff", desc: "Show a file diff", args: []string{"diff"}}, {name: "open-changed", desc: "List changed files", args: []string{"open-changed"}}}},
+	{name: "linear", desc: "Use a configured issue-tracking cache", cliOnly: true, run: workspacecmd.Command("linear"), subs: []subcommand{{name: "issue", desc: "Show an issue", args: []string{"issue"}}, {name: "search", desc: "Search issues", args: []string{"search"}}, {name: "list", desc: "List issues", args: []string{"list"}}}},
+	{name: "vm", desc: "Inspect local runtime recipe information", cliOnly: true, run: workspacecmd.Command("vm"), subs: []subcommand{{name: "recipe doctor", desc: "Check a runtime recipe", args: []string{"recipe", "doctor", "cloud-sandbox"}}}},
+	{name: "emulator", desc: "Control a mobile emulator when installed", cliOnly: true, run: workspacecmd.Command("emulator"), subs: []subcommand{{name: "list", desc: "List emulators", args: []string{"list"}}, {name: "attach", desc: "Attach to an emulator", args: []string{"attach"}}, {name: "tap", desc: "Tap normalized coordinates", args: []string{"tap"}}, {name: "type", desc: "Type into the emulator", args: []string{"type"}}, {name: "gesture", desc: "Send a touch gesture", args: []string{"gesture"}}, {name: "button", desc: "Press a hardware button", args: []string{"button"}}, {name: "rotate", desc: "Rotate the emulator", args: []string{"rotate"}}, {name: "exec", desc: "Run an emulator command", args: []string{"exec"}}, {name: "kill", desc: "Stop the emulator", args: []string{"kill"}}}},
 	{name: "mcp", desc: "MCP server for AI CLIs (Claude Code / Codex / Gemini)", run: runMCP, headerFn: mcpHeader, subs: mcpSubs},
 	{name: "doctor", desc: "Self-check (creds, gateway, sanitizer, tools)", run: doctor.Run},
 	// No subs: the topic list IS this command's menu, and docs.Run renders it itself on a TTY (a four-row list/search/open sub-picker would bury the content the user came for). Not requireLogin — the handbook is embedded in the binary and answers before there is an account.
@@ -554,6 +671,9 @@ func launcherRows(loggedIn, isAdmin bool) ([]command, []string) {
 		if c.hideLoggedIn && loggedIn {
 			continue
 		}
+		if c.cliOnly {
+			continue
+		}
 		if len(c.name) > maxName {
 			maxName = len(c.name)
 		}
@@ -589,6 +709,22 @@ var commandGroup = map[string]string{
 	"seller": "marketplace", "edge": "marketplace",
 	// Tools & settings
 	"mcp": "tools", "proxy": "tools", "computer": "tools",
+	// Workspace automation commands are intentionally CLI-only: they are
+	// script surfaces, not entries in the interactive launcher.
+	"open": "tools", "serve": "tools", "claude-teams": "tools", "status": "tools", "host": "tools",
+	"repo": "tools", "worktree": "tools", "terminal": "tools",
+	"snapshot": "tools", "screenshot": "tools", "goto": "tools", "click": "tools", "fill": "tools",
+	"type": "tools", "select": "tools", "scroll": "tools", "back": "tools", "reload": "tools", "eval": "tools", "wait": "tools",
+	"check": "tools", "uncheck": "tools", "focus": "tools", "clear": "tools", "select-all": "tools", "keypress": "tools",
+	"pdf": "tools", "full-screenshot": "tools", "hover": "tools", "drag": "tools", "upload": "tools",
+	"tab": "tools", "exec": "tools",
+	"find": "tools", "get": "tools", "cookie": "tools", "storage": "tools", "console": "tools", "network": "tools",
+	"clipboard": "tools", "dialog": "tools", "download": "tools", "highlight": "tools", "capture": "tools", "viewport": "tools",
+	"geolocation": "tools", "intercept": "tools", "mouse": "tools", "inserttext": "tools", "is": "tools", "scrollintoview": "tools",
+	"dblclick": "tools", "forward": "tools", "set": "tools", "agent": "tools",
+	"skills": "tools", "orchestration": "tools", "automations": "tools", "environment": "tools",
+	"project": "tools", "file": "tools", "linear": "tools", "vm": "tools", "emulator": "tools",
+	"diagnostics": "tools", "agent-context": "tools",
 	"doctor": "tools", "events": "tools", "settings": "tools", "artifacts": "tools",
 	// docs sits with the tools: it is a reference surface, not an account or money action, and it is the one row that works with no credentials at all.
 	"docs": "tools",
@@ -746,7 +882,7 @@ func sessionRejected(creds *config.Credentials) bool {
 // Non-TTY callers (CI / piped) skip the picker — they get the command's original "no subcommand specified" usage text exactly the way it printed before any of this picker code existed.
 func dispatchInteractive(c command, args []string) error {
 	// Only runSubPicker-driven commands (subs/subsFn) are intercepted here; a selfMenu command (admin) falls through to c.run, which renders its own console. hasPicker — not hasSubmenu — gates this.
-	if len(args) > 0 || !c.hasPicker() || !cliprompt.IsInteractive() {
+	if c.cliOnly || len(args) > 0 || !c.hasPicker() || !cliprompt.IsInteractive() {
 		return c.run(args)
 	}
 	return runSubPicker(c)

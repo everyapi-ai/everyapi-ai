@@ -140,8 +140,8 @@ uninstall = "Supprimer l'état everyapi et le binaire de cette machine"
 version = "Version · update · uninstall"
 
 [artifacts]
-usage = "utilisation : everyapi artifacts share [--json] <file.html> | everyapi artifacts list [--json] | everyapi artifacts update [--json] <url> <file.html> | everyapi artifacts delete [--json] <url>"
-unknown_sub = "sous-commande artifacts inconnue %q (essayez : share, list, update, delete)"
+usage = "utilisation : everyapi artifacts share [--json] <file.html> | everyapi artifacts list [--json] | everyapi artifacts update [--json] <file.html> | everyapi artifacts delete [--json] <id-or-url> | everyapi artifacts unshare [--json] <file.html>"
+unknown_sub = "sous-commande artifacts inconnue %q (essayez : share, list, update, delete, unshare)"
 html_required = "l’artifact doit être un fichier .html ou .htm"
 regular_required = "l’artifact doit être un fichier standard"
 too_large = "l’artifact fait %d octets ; le maximum est de %d octets"

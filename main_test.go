@@ -73,6 +73,31 @@ func TestPrivateDesktopCommandRegistryIncludesBenchmarkUploadWithoutPublicFallba
 	}
 }
 
+func TestNativeWorkspaceCommandRegistryIsCompleteAndCLIOnly(t *testing.T) {
+	expected := []string{
+		"computer", "open", "serve", "claude-teams", "status", "host", "repo", "worktree", "terminal", "snapshot", "goto", "find", "get", "screenshot", "click", "fill", "type", "select", "scroll", "back", "reload", "eval", "wait", "check", "uncheck", "focus", "clear", "select-all", "keypress", "pdf", "full-screenshot", "hover", "drag", "upload", "tab", "cookie", "storage", "console", "network", "clipboard", "dialog", "download", "highlight", "capture", "viewport", "geolocation", "intercept", "mouse", "inserttext", "is", "scrollintoview", "dblclick", "forward", "set", "exec", "diagnostics", "agent-context", "agent", "skills", "orchestration", "automations", "environment", "project", "file", "linear", "vm", "emulator",
+	}
+	seen := map[string]int{}
+	for _, command := range commands {
+		seen[command.name]++
+	}
+	for _, name := range expected {
+		command, ok := lookup(name)
+		if !ok {
+			t.Fatalf("native command %q is not registered", name)
+		}
+		if !command.cliOnly {
+			t.Errorf("native command %q is exposed to the interactive launcher", name)
+		}
+		if command.run == nil {
+			t.Errorf("native command %q has no handler", name)
+		}
+		if seen[name] != 1 {
+			t.Errorf("native command %q appears %d times in the registry", name, seen[name])
+		}
+	}
+}
+
 // withStdin swaps os.Stdin for a pipe preloaded with input for the duration of the test. The sub-picker's non-TTY path reads os.Stdin via fmt.Scanln, so this drives runSubPicker without a real terminal.
 func withStdin(t *testing.T, input string) {
 	t.Helper()
@@ -399,6 +424,24 @@ func TestEveryCommandGrouped(t *testing.T) {
 	for name := range commandGroup {
 		if !exists[name] {
 			t.Errorf("commandGroup has entry for %q which isn't a registered command", name)
+		}
+	}
+}
+
+func TestWorkspaceCommandsStayOutOfInteractiveLauncher(t *testing.T) {
+	visible, _ := launcherRows(true, true)
+	for _, c := range visible {
+		if c.cliOnly {
+			t.Fatalf("CLI-only command %q leaked into launcher rows", c.name)
+		}
+	}
+	for _, name := range []string{"status", "repo", "worktree", "terminal", "skills", "orchestration", "automations"} {
+		c, ok := lookup(name)
+		if !ok {
+			t.Fatalf("missing workspace command %q", name)
+		}
+		if !c.cliOnly {
+			t.Errorf("command %q is not marked CLI-only", name)
 		}
 	}
 }

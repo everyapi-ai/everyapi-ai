@@ -33,6 +33,81 @@ admin      Operator console — visible to admin accounts only
 version    Build version, update, uninstall
 ```
 
+EveryAPI includes native workspace automation commands as CLI-only subcommands. They do not add rows to the interactive launcher. Repository, worktree, terminal, file, skills, diagnostics, and fetched-page state are handled locally in this process; no second executable is required.
+
+Useful entry points include:
+
+```text
+everyapi status --json
+everyapi repo list --json
+everyapi worktree list --json
+everyapi terminal read --screen --json
+everyapi snapshot --json
+everyapi screenshot --json
+everyapi goto --url https://example.com --json
+everyapi click --element @e1 --json
+everyapi fill --element @e1 --value text --json
+everyapi skills list --json
+everyapi orchestration inbox --json
+everyapi automations list --json
+everyapi environment list --json
+everyapi project list --json
+everyapi file diff --json
+everyapi linear search "bug" --json
+everyapi vm recipe doctor cloud-sandbox --json
+everyapi emulator list --json
+everyapi open --json
+everyapi serve --json
+everyapi claude-teams --help
+everyapi host list --json
+everyapi type --help
+everyapi select --help
+everyapi scroll --help
+everyapi back --json
+everyapi reload --json
+everyapi eval --help
+everyapi wait --help
+everyapi check --help
+everyapi uncheck --help
+everyapi focus --help
+everyapi clear --help
+everyapi select-all --help
+everyapi keypress --help
+everyapi pdf --help
+everyapi full-screenshot --help
+everyapi hover --help
+everyapi drag --help
+everyapi upload --help
+everyapi tab list --json
+everyapi exec --help
+everyapi cookie get --json
+everyapi storage local get --json
+everyapi console --json
+everyapi network --json
+everyapi find --help
+everyapi clipboard read --json
+everyapi dialog accept --json
+everyapi download --json
+everyapi highlight --help
+everyapi capture start --json
+everyapi viewport --help
+everyapi geolocation --help
+everyapi intercept list --json
+everyapi mouse move --help
+everyapi inserttext --help
+everyapi is --help
+everyapi get --help
+everyapi scrollintoview --help
+everyapi dblclick --help
+everyapi forward --json
+everyapi set device --help
+everyapi agent-context --json
+everyapi agent --help
+everyapi diagnostics memory --json
+```
+
+Page commands use a local, persisted page model: `goto` fetches and stores HTML, navigation and form actions update that model, and `screenshot`/`pdf` render it without a desktop UI. Mobile commands use `xcrun simctl` or `adb` when either bridge is installed and fall back to a persisted local device registry.
+
 ## Signing in
 
 ```

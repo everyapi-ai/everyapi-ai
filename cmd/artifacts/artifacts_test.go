@@ -18,6 +18,18 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
+func TestRunAcceptsHelpInAnyArgumentPosition(t *testing.T) {
+	for _, args := range [][]string{
+		{"--help", "--json"},
+		{"help", "--json"},
+		{"list", "--help", "--json"},
+	} {
+		if err := Run(args); err != nil {
+			t.Errorf("Run(%v) returned error: %v", args, err)
+		}
+	}
+}
+
 func TestPublishUploadsHTMLWithTheCurrentSession(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	projectDir := filepath.Join(t.TempDir(), "everyapi-project")

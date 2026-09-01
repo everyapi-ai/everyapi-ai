@@ -59,7 +59,7 @@ Same flow as the shell script — resolves the latest tag, downloads `everyapi_w
 
 ## Commands
 
-Running `everyapi` with no arguments on a TTY opens an interactive launcher over this same set; `everyapi help` prints it as text.
+Running `everyapi` with no arguments on a TTY opens the interactive launcher for user-facing commands; machine-facing workspace controls remain CLI-only. `everyapi help` prints the complete command set as text.
 
 | Command | Purpose |
 |---|---|
@@ -80,6 +80,9 @@ Running `everyapi` with no arguments on a TTY opens an interactive launcher over
 | `everyapi feedback` | Send a bug report or feature request to the team |
 | `everyapi proxy <sub>` | Local sanitizer proxy (`start` / `stop` / `status` / `configure`) |
 | `everyapi computer <sub>` | Read and control local macOS app windows through Accessibility |
+| `everyapi repo/worktree/terminal …` | Native repository, worktree, and terminal controls (CLI-only) |
+| `everyapi skills/orchestration/automations …` | Native skills and agent coordination controls (CLI-only) |
+| `everyapi snapshot/goto/click/fill …` | Local web-page inspection and automation controls (CLI-only) |
 | `everyapi mcp` | Run as an MCP server (stdin/stdout JSON-RPC) |
 | `everyapi doctor` | Self-check: credentials, gateway, sanitizer, installed tools |
 | `everyapi docs <topic>` | The platform handbook, embedded in the binary (`list` / `<topic>` / `search` / `open`) |

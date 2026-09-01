@@ -125,8 +125,8 @@ uninstall = "從此機器移除 everyapi 狀態和二進位"
 version = "版本 · 升級 · 解除安裝"
 
 [artifacts]
-usage = "用法：everyapi artifacts share [--json] <file.html> | everyapi artifacts list [--json] | everyapi artifacts update [--json] <url> <file.html> | everyapi artifacts delete [--json] <url>"
-unknown_sub = "未知的 artifacts 子命令 %q（可用：share、list、update、delete）"
+usage = "用法：everyapi artifacts share [--json] <file.html> | everyapi artifacts list [--json] | everyapi artifacts update [--json] <file.html> | everyapi artifacts delete [--json] <id-or-url> | everyapi artifacts unshare [--json] <file.html>"
+unknown_sub = "未知的 artifacts 子命令 %q（可用：share、list、update、delete、unshare）"
 html_required = "artifact 必須是 .html 或 .htm 檔案"
 regular_required = "artifact 必須是一般檔案"
 too_large = "artifact 大小為 %d 位元組；最大允許 %d 位元組"

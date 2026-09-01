@@ -139,8 +139,8 @@ uninstall = "everyapi state and binary entfernen"
 version = "Version · update · uninstall"
 
 [artifacts]
-usage = "Verwendung: everyapi artifacts share [--json] <file.html> | everyapi artifacts list [--json] | everyapi artifacts update [--json] <url> <file.html> | everyapi artifacts delete [--json] <url>"
-unknown_sub = "unbekannter artifacts-Unterbefehl %q (versuche: share, list, update, delete)"
+usage = "Verwendung: everyapi artifacts share [--json] <file.html> | everyapi artifacts list [--json] | everyapi artifacts update [--json] <file.html> | everyapi artifacts delete [--json] <id-or-url> | everyapi artifacts unshare [--json] <file.html>"
+unknown_sub = "unbekannter artifacts-Unterbefehl %q (versuche: share, list, update, delete, unshare)"
 html_required = "das Artefakt muss eine .html- oder .htm-Datei sein"
 regular_required = "das Artefakt muss eine reguläre Datei sein"
 too_large = "das Artefakt ist %d Byte groß; maximal sind %d Byte erlaubt"
