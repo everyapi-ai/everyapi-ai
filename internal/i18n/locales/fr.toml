@@ -295,6 +295,7 @@ terminal_mode_native = "terminal natif"
 terminal_mode_tmux = "session tmux"
 codex_bypass_label = "Contourner la confiance des hooks Codex"
 dangerous_mode_label = "Mode dangereux"
+claude_long_context_label = "Contexte Claude 1M (Opus)"
 bool_on = "activé"
 bool_off = "désactivé"
 usage = '''
@@ -310,6 +311,7 @@ UTILISATION
 CLÉS
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
   terminal_mode                            native | tmux
+  claude_long_context                      true | false  (Opus 1M context, default on)
 
 Le fichier de paramètres est un JSON simple au chemin que
 'everyapi settings list' affiche. L'édition manuelle est OK ; le CLI

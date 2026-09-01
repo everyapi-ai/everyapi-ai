@@ -389,7 +389,7 @@ func use(args []string, persistModelSelection bool) error {
 			return err
 		}
 	}
-	extraArgs = managedBootModelArgs(t, extraArgs, bootModel)
+	extraArgs = managedBootModelArgs(t, extraArgs, bootModel, settings.ClaudeLongContextEnabled())
 
 	// Reasoning level, for the clients that have one. Runs after both model paths — the ModelEnv picker above and the managed picker just now — because the levels on offer depend on which model was chosen. Called unconditionally, including for a metadata-only invocation: the call also clears an inherited ReasoningLevelEnv, and skipping it here would let a nested launch forward the outer session's level.
 	if err := resolveReasoningLevel(t, settings, relayCatalog, launchedModelID(t, bootModel), interactive, toolInvocationNeedsEndpoint(extraArgs)); err != nil {
@@ -841,7 +841,7 @@ func pickManagedModelForTool(t *tools.Tool, catalog []api.RelayModel, preferred 
 // Claude Code is here because serving it a filtered catalogue does not, on its own, steer the model it boots on. It starts on its own built-in default and consults GET /v1/models for its /model picker, so sorting the selection to position 0 only changes what that picker shows. On an account whose relay key cannot route Claude Code's built-in default the very first request 403s with "该令牌无权访问模型 claude-opus-5" / "this token has no access to model …", which Claude Code surfaces as "Please run /login" — an instruction that cannot fix a model-permission error. Passing the selection through --model makes the remembered choice authoritative on that first request instead of a suggestion the client is free to ignore.
 //
 // The real upstream id is passed, not the synthetic claude-everyapi-* alias the catalogue publishes for non-claude ids: the alias only has meaning while the catalogue transform is hosted, and the gateway resolves the real id either way (rewriteModelAlias forwards ids it does not recognise untouched). A launch that ends up without the transform therefore still boots on the right model.
-func managedBootModelArgs(t *tools.Tool, args []string, bootModel string) []string {
+func managedBootModelArgs(t *tools.Tool, args []string, bootModel string, claudeLongContext bool) []string {
 	if t == nil || bootModel == "" {
 		return args
 	}
@@ -851,6 +851,10 @@ func managedBootModelArgs(t *tools.Tool, args []string, bootModel string) []stri
 	// Metadata-only invocations take no model and must not grow one, and a caller-supplied --model stays authoritative rather than being duplicated. Grok gets both for free — managedBootPickerNeeded gates it on toolInvocationNeedsEndpoint and its raw model flags are rejected earlier — but Claude's picker is unconditional, so the guard has to live here.
 	if t.Name == "claude" && (!toolInvocationNeedsEndpoint(args) || containsFlag(args, "--model")) {
 		return args
+	}
+	if t.Name == "claude" && claudeLongContext {
+		// Claude Code selects Anthropic's 1M-context beta from the model string it boots on, so the id that travels here decides the session's context window. Passing the plain id pins an Opus launch to 200K — see tools.ClaudeBootModelWithContextMarker for why Opus and only Opus is marked, and why the marker cannot reach the gateway as a routing id. Off is a real choice, not a fallback: the beta is account-gated upstream, and a key whose channel lacks it rejects every request rather than running short.
+		bootModel = tools.ClaudeBootModelWithContextMarker(bootModel)
 	}
 	return append([]string{"--model", bootModel}, args...)
 }

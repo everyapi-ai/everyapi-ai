@@ -296,6 +296,7 @@ terminal_mode_native = "terminal nativo"
 terminal_mode_tmux = "sesión tmux"
 codex_bypass_label = "Omitir la confianza de hooks de Codex"
 dangerous_mode_label = "Modo peligroso"
+claude_long_context_label = "Contexto Claude 1M (Opus)"
 bool_on = "activado"
 bool_off = "desactivado"
 usage = '''
@@ -311,6 +312,7 @@ USO
 CLAVES
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
   terminal_mode                            native | tmux
+  claude_long_context                      true | false  (Opus 1M context, default on)
 
 El archivo de configuración es un JSON plano en la ruta que muestra
 'everyapi settings list'. Editar a mano está bien; el CLI vuelve a

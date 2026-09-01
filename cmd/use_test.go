@@ -1887,11 +1887,11 @@ func TestResolveRememberedModel(t *testing.T) {
 
 func TestManagedBootModelArgs(t *testing.T) {
 	grok := tools.Registry["grok"]
-	if got, want := managedBootModelArgs(grok, []string{"chat"}, "gpt-5.6-terra"), []string{"--model", "gpt-5.6-terra", "chat"}; !reflect.DeepEqual(got, want) {
+	if got, want := managedBootModelArgs(grok, []string{"chat"}, "gpt-5.6-terra", true), []string{"--model", "gpt-5.6-terra", "chat"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("managedBootModelArgs(grok) = %v, want %v", got, want)
 	}
 	opencode := tools.Registry["opencode"]
-	if got, want := managedBootModelArgs(opencode, []string{"run"}, "gpt-5.6-terra"), []string{"run"}; !reflect.DeepEqual(got, want) {
+	if got, want := managedBootModelArgs(opencode, []string{"run"}, "gpt-5.6-terra", true), []string{"run"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("managedBootModelArgs(opencode) = %v, want %v", got, want)
 	}
 }
@@ -1901,17 +1901,43 @@ func TestManagedBootModelArgsClaude(t *testing.T) {
 	claude := tools.Registry["claude"]
 
 	t.Run("pins the remembered model", func(t *testing.T) {
-		got := managedBootModelArgs(claude, nil, "deepseek-v4-flash")
+		got := managedBootModelArgs(claude, nil, "deepseek-v4-flash", true)
 		want := []string{"--model", "deepseek-v4-flash"}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("managedBootModelArgs(claude) = %v, want %v", got, want)
 		}
 	})
 
+	t.Run("marks an Opus boot model for 1M context", func(t *testing.T) {
+		// The context window a launch runs at is decided here: Claude Code reads the 1M beta off the model string it boots on, so an unmarked Opus id pins the session to 200K. Non-Opus families must stay unmarked — their upstreams hard-reject the flag.
+		for boot, want := range map[string]string{
+			"claude-opus-5":     "claude-opus-5[1m]",
+			"claude-opus-4-8":   "claude-opus-4-8[1m]",
+			"claude-sonnet-5":   "claude-sonnet-5",
+			"claude-haiku-4-5":  "claude-haiku-4-5",
+			"deepseek-v4-flash": "deepseek-v4-flash",
+		} {
+			got := managedBootModelArgs(claude, nil, boot, true)
+			if !reflect.DeepEqual(got, []string{"--model", want}) {
+				t.Errorf("managedBootModelArgs(claude, %q) = %v, want [--model %s]", boot, got, want)
+			}
+		}
+	})
+
+	t.Run("claude_long_context=false leaves every boot model unmarked", func(t *testing.T) {
+		// The escape hatch has to reach the argv, because that is the only place the marker is applied. A relay key whose Anthropic channel is not enabled for the beta rejects every request in the session, so "off" must produce exactly the pre-change argument.
+		for _, boot := range []string{"claude-opus-5", "claude-opus-4-8", "claude-sonnet-5", "deepseek-v4-flash"} {
+			got := managedBootModelArgs(claude, nil, boot, false)
+			if !reflect.DeepEqual(got, []string{"--model", boot}) {
+				t.Errorf("managedBootModelArgs(claude, %q, longContext=false) = %v, want [--model %s]", boot, got, boot)
+			}
+		}
+	})
+
 	t.Run("passes the real upstream id, not the catalogue alias", func(t *testing.T) {
 		// claudeCatalogModels republishes non-claude ids under a synthetic alias; the alias is only resolvable while the catalogue transform is hosted, so the boot argument must stay the real id.
 		_, aliases, _ := claudeCatalogModels([]tools.Model{{ID: "deepseek-v4-flash"}})
-		got := managedBootModelArgs(claude, nil, "deepseek-v4-flash")
+		got := managedBootModelArgs(claude, nil, "deepseek-v4-flash", true)
 		for _, arg := range got {
 			if _, isAlias := aliases[arg]; isAlias {
 				t.Fatalf("boot args %v carry a synthetic alias; want the real upstream id", got)
@@ -1924,7 +1950,7 @@ func TestManagedBootModelArgsClaude(t *testing.T) {
 			{"--model", "claude-haiku-4-5"},
 			{"--model=claude-haiku-4-5"},
 		} {
-			got := managedBootModelArgs(claude, args, "deepseek-v4-flash")
+			got := managedBootModelArgs(claude, args, "deepseek-v4-flash", true)
 			if !reflect.DeepEqual(got, args) {
 				t.Fatalf("managedBootModelArgs(claude, %v) = %v, want it unchanged", args, got)
 			}
@@ -1933,7 +1959,7 @@ func TestManagedBootModelArgsClaude(t *testing.T) {
 
 	t.Run("leaves metadata-only invocations alone", func(t *testing.T) {
 		for _, args := range [][]string{{"--help"}, {"-h"}, {"help"}, {"--version"}, {"-v"}, {"version"}} {
-			got := managedBootModelArgs(claude, args, "deepseek-v4-flash")
+			got := managedBootModelArgs(claude, args, "deepseek-v4-flash", true)
 			if !reflect.DeepEqual(got, args) {
 				t.Fatalf("managedBootModelArgs(claude, %v) = %v, want it unchanged", args, got)
 			}
@@ -1941,7 +1967,7 @@ func TestManagedBootModelArgsClaude(t *testing.T) {
 	})
 
 	t.Run("no selection means no argument", func(t *testing.T) {
-		if got := managedBootModelArgs(claude, []string{"chat"}, ""); !reflect.DeepEqual(got, []string{"chat"}) {
+		if got := managedBootModelArgs(claude, []string{"chat"}, "", true); !reflect.DeepEqual(got, []string{"chat"}) {
 			t.Fatalf("managedBootModelArgs(claude) with no boot model = %v, want unchanged", got)
 		}
 	})

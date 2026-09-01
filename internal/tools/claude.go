@@ -60,6 +60,35 @@ func claudeFamilyDefaultEnv(models []Model) map[string]string {
 	return env
 }
 
+// claudeContextMarker1M is the marker Claude Code reads to select Anthropic's 1M-context beta. It is the client's own notation, not a routable model id: the client validates a model by stripping this suffix, then strips it again before the id goes on the wire, and the only thing the marker leaves behind is `anthropic-beta: context-1m-2025-08-07` on the request. The gateway re-appends it to the model name it records (relay/channel/claude's preserveClaudeCodeContextModel) so a resumed transcript keeps its prompt cache. Nothing downstream ever has to route an id carrying it.
+const claudeContextMarker1M = "[1m]"
+
+// ClaudeBootModelWithContextMarker returns the id Claude Code should boot on for a catalogue id, marking the Opus family for 1M context.
+//
+// Without the marker an EveryAPI launch is strictly worse than a bare `claude`: the boot model reaches the client through --model as a plain id, so the client never asks for the beta and the session runs at 200K where the same model under a bare `claude` would not. The user's only way back was to reopen /model inside the session and pick Claude Code's own "Opus (1M context)" row, a session-scoped choice that claude_user_settings.go then correctly reverts on exit.
+//
+// Opus and nothing else. sonnet and haiku are rejected outright by Anthropic for this flag, so marking them would break a launch rather than widen it; claudeBetaTierFlags in backend/internal/relay/channel/claude/cli_envelope.go draws the same tier line for the envelope it synthesises. There is deliberately no generation floor: the repository has no per-generation long-context table to read one out of, and inventing a cutoff here would be a guess that silently ages.
+//
+// The caller decides WHETHER to mark at all — see config.Settings.ClaudeLongContextEnabled. The beta is account-gated upstream and the gateway forwards the client's anthropic-beta header verbatim, so on a relay key whose Anthropic channel lacks long context every request in the session is rejected rather than merely running short. This function only answers "which id would carry it".
+//
+// An id that already carries the marker is returned unchanged, so this stays safe to apply to a value that has been through it before.
+func ClaudeBootModelWithContextMarker(id string) string {
+	if id == "" || strings.HasSuffix(id, claudeContextMarker1M) {
+		return id
+	}
+	family, catalogueID, _, ok := parseClaudeModelID(id)
+	if !ok || family != "opus" {
+		return id
+	}
+	// The parsed (trimmed) id, not the raw argument: cliout.Sanitize strips control bytes from a catalogue id without trimming spaces — the shape claudeCatalogModels already trims on lookup — and appending the marker to " claude-opus-5 " would hand Claude Code "claude-opus-5 [1m]", whose `\[1m\]$` strip leaves a spaced id the gateway cannot route.
+	return catalogueID + claudeContextMarker1M
+}
+
+// ClaudeCatalogueID reverses ClaudeBootModelWithContextMarker back to the catalogue id it was applied to. The published catalogue never carries the marker, so anything keyed on a catalogue id — ClaudeFamilyAliasedModelIDs' withheld set and the launch catalogue's by-id lookup above all — must compare against this rather than against the boot model.
+func ClaudeCatalogueID(bootModel string) string {
+	return strings.TrimSuffix(bootModel, claudeContextMarker1M)
+}
+
 // claudeFamilyCandidates resolves the newest catalogue id for each family Claude Code exposes an override for. Families the catalogue does not serve are absent from the result rather than present with a zero value, so a caller can tell "no id won this family" from "this family is not tracked".
 func claudeFamilyCandidates(models []Model) map[string]claudeCandidate {
 	chosen := make(map[string]claudeCandidate, len(claudeFamilies))

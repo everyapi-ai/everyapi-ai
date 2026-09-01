@@ -290,6 +290,7 @@ terminal_mode_native = "ネイティブターミナル"
 terminal_mode_tmux = "tmux セッション"
 codex_bypass_label = "Codex フック信頼のスキップ"
 dangerous_mode_label = "危険モード"
+claude_long_context_label = "Claude 1M コンテキスト (Opus)"
 bool_on = "オン"
 bool_off = "オフ"
 usage = '''
@@ -305,6 +306,7 @@ everyapi settings — CLI 設定の表示 / 変更
 キー
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
   terminal_mode                            native | tmux
+  claude_long_context                      true | false  (Opus 1M context, default on)
 
 設定ファイルは 'everyapi settings list' が表示するパスのプレーン JSON
 です。手動編集も可能で、CLI は次回起動時に読み直します。

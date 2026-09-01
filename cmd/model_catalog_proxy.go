@@ -100,7 +100,8 @@ func startModelCatalogProxy(upstreamBase string, transform func(http.Handler) ht
 
 func serveLaunchModelCatalog(w http.ResponseWriter, r *http.Request, models, detailOnly []tools.Model) {
 	w.Header().Set("Content-Type", "application/json")
-	id := strings.TrimPrefix(r.URL.Path, "/v1/models/")
+	// Matched through Claude Code's 1M context marker, because the id the launch tells the client to boot on carries it (ClaudeBootModelWithContextMarker, on both --model and ANTHROPIC_DEFAULT_OPUS_MODEL) while the catalogue only ever holds the id it was applied to. Without this, the withheld family default 404s on exactly the id the launch pointed the client at — the contradiction detailOnly exists to prevent. No real model id ends in the marker, so stripping it can never shadow a published entry.
+	id := tools.ClaudeCatalogueID(strings.TrimPrefix(r.URL.Path, "/v1/models/"))
 	if r.URL.Path != "/v1/models" {
 		// The published list is searched first, so an id that appears in both answers with the entry the client actually discovered; detailOnly only adds ids the list deliberately omits.
 		for _, group := range [][]tools.Model{models, detailOnly} {

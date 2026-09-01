@@ -402,4 +402,24 @@ func TestClaudeCatalogWithholdingIsListOnly(t *testing.T) {
 	if entry.ID != "claude-opus-5" || entry.OwnedBy != "anthropic" {
 		t.Fatalf("detail lookup returned %#v, want the withheld model's own entry", entry)
 	}
+
+	// The id the launch actually hands Claude Code for opus carries the 1M context marker, on both --model and ANTHROPIC_DEFAULT_OPUS_MODEL. The catalogue only ever holds the id the marker was applied to, so a lookup on the marked id has to resolve to the same entry — otherwise the 404 this test exists to prevent comes back for precisely the string the client was told to run on.
+	marked, err := http.Get(proxyURL + "/v1/models/" + url.PathEscape(tools.ClaudeBootModelWithContextMarker("claude-opus-5")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer marked.Body.Close()
+	if marked.StatusCode != http.StatusOK {
+		t.Fatalf("GET /v1/models/claude-opus-5[1m] = %d, want 200: it is the id --model and ANTHROPIC_DEFAULT_OPUS_MODEL both name", marked.StatusCode)
+	}
+	entry = struct {
+		ID      string `json:"id"`
+		OwnedBy string `json:"owned_by"`
+	}{}
+	if err := json.NewDecoder(marked.Body).Decode(&entry); err != nil {
+		t.Fatal(err)
+	}
+	if entry.ID != "claude-opus-5" {
+		t.Fatalf("marked detail lookup returned %#v, want the catalogue id the marker was applied to", entry)
+	}
 }

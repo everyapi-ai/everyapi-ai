@@ -286,3 +286,41 @@ func nonEmptyFamilyModelIDs(env map[string]string) []string {
 	}
 	return ids
 }
+
+// The marker is what makes an EveryAPI launch match a bare `claude` on context: Claude Code selects Anthropic's context-1m-2025-08-07 beta purely from the model string it boots on, so an unmarked Opus id runs the session at 200K.
+func TestClaudeBootModelWithContextMarkerMarksOpusOnly(t *testing.T) {
+	for _, testCase := range []struct {
+		id   string
+		want string
+	}{
+		{"claude-opus-5", "claude-opus-5[1m]"},
+		{"claude-opus-4-8", "claude-opus-4-8[1m]"},
+		{"claude-opus-4-20250514", "claude-opus-4-20250514[1m]"},
+		// Anthropic rejects the flag outright for these, so marking them would break a launch rather than widen it.
+		{"claude-sonnet-5", "claude-sonnet-5"},
+		{"claude-haiku-4-5", "claude-haiku-4-5"},
+		{"claude-fable-5", "claude-fable-5"},
+		// Not a parseable family id, so nothing is known about its context surface.
+		{"claude-opus-4-7-thinking", "claude-opus-4-7-thinking"},
+		{"claude-3-5-sonnet", "claude-3-5-sonnet"},
+		{"glm-4.7", "glm-4.7"},
+		{"", ""},
+		// Idempotent, so a value that has already been through this stays routable.
+		{"claude-opus-5[1m]", "claude-opus-5[1m]"},
+		// cliout.Sanitize strips control bytes without trimming spaces. Appending to the raw argument would yield "  claude-opus-5  [1m]", whose marker strip leaves a spaced id the gateway cannot route.
+		{"  claude-opus-5  ", "claude-opus-5[1m]"},
+	} {
+		if got := ClaudeBootModelWithContextMarker(testCase.id); got != testCase.want {
+			t.Errorf("ClaudeBootModelWithContextMarker(%q) = %q, want %q", testCase.id, got, testCase.want)
+		}
+	}
+}
+
+// The marker is Claude Code's own notation and never a routable id, so every catalogue-keyed lookup has to be able to get back to the id the catalogue published.
+func TestClaudeCatalogueIDReversesTheMarker(t *testing.T) {
+	for _, id := range []string{"claude-opus-5", "claude-sonnet-5", "glm-4.7", ""} {
+		if got := ClaudeCatalogueID(ClaudeBootModelWithContextMarker(id)); got != id {
+			t.Errorf("ClaudeCatalogueID(marker(%q)) = %q, want %q", id, got, id)
+		}
+	}
+}

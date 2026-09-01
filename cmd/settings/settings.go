@@ -67,6 +67,7 @@ func runList(args []string) error {
 	cliout.Printf("  %s: %s\n", i18n.T("settings.terminal_mode_label"), labelTerminalMode(s.TerminalMode))
 	cliout.Printf("  %s: %s\n", i18n.T("settings.codex_bypass_label"), displayOptionalBool(s.CodexHookTrustBypass))
 	cliout.Printf("  %s: %s\n", i18n.T("settings.dangerous_mode_label"), displayOptionalBool(s.DangerousMode))
+	cliout.Printf("  %s: %s\n", i18n.T("settings.claude_long_context_label"), displayOptionalBool(s.ClaudeLongContext))
 	path, _ := config.SettingsPath()
 	if path != "" {
 		cliout.Printf("\n%s %s\n", i18n.T("settings.file_at"), path)
@@ -170,6 +171,7 @@ func settingRows() []settingRow {
 		{"terminal_mode", i18n.T("settings.terminal_mode_label"), func(s *config.Settings) string { return labelTerminalMode(s.TerminalMode) }, editTerminalMode},
 		{"codex_hook_trust_bypass", i18n.T("settings.codex_bypass_label"), func(s *config.Settings) string { return displayOptionalBool(s.CodexHookTrustBypass) }, editCodexHookTrustBypass},
 		{"dangerous_mode", i18n.T("settings.dangerous_mode_label"), func(s *config.Settings) string { return displayOptionalBool(s.DangerousMode) }, editDangerousMode},
+		{"claude_long_context", i18n.T("settings.claude_long_context_label"), func(s *config.Settings) string { return displayOptionalBool(s.ClaudeLongContext) }, editClaudeLongContext},
 		{"", i18n.T("settings.default_key_label"), func(*config.Settings) string { return labelDefaultRelayKey() }, editDefaultRelayKey},
 	}
 }
@@ -299,6 +301,11 @@ func editDangerousMode(s *config.Settings) error {
 	return editOptionalBool(s, i18n.T("settings.dangerous_mode_label"), s.DangerousMode, func(v *bool) { s.DangerousMode = v })
 }
 
+// Unset reads as on here rather than as a question to ask later — an Opus launch matching what the same model does under a bare `claude` is the useful default, and the editor still offers unset so the file stays clean for a user who never changes it.
+func editClaudeLongContext(s *config.Settings) error {
+	return editOptionalBool(s, i18n.T("settings.claude_long_context_label"), s.ClaudeLongContext, func(v *bool) { s.ClaudeLongContext = v })
+}
+
 // editOptionalBool keeps the third state. These preferences distinguish "not set" (ask on first interactive use) from an explicit false, so the editor has to offer unset as a choice rather than collapsing it into off.
 func editOptionalBool(s *config.Settings, label string, current *bool, apply func(*bool)) error {
 	opts := []string{i18n.T("settings.bool_on"), i18n.T("settings.bool_off"), i18n.T("settings.unset")}
@@ -367,6 +374,8 @@ func readKey(s *config.Settings, key string) (string, bool) {
 		return labelOptionalBool(s.CodexHookTrustBypass), true
 	case "dangerous_mode":
 		return labelOptionalBool(s.DangerousMode), true
+	case "claude_long_context":
+		return labelOptionalBool(s.ClaudeLongContext), true
 	}
 	return "", false
 }
@@ -411,15 +420,18 @@ func writeKey(s *config.Settings, key, value string) error {
 		}
 		s.TerminalMode = v
 		return nil
-	case "codex_hook_trust_bypass", "dangerous_mode":
+	case "codex_hook_trust_bypass", "dangerous_mode", "claude_long_context":
 		v, err := strconv.ParseBool(strings.TrimSpace(value))
 		if err != nil {
 			return fmt.Errorf("%s must be true or false", key)
 		}
-		if key == "codex_hook_trust_bypass" {
+		switch key {
+		case "codex_hook_trust_bypass":
 			s.CodexHookTrustBypass = &v
-		} else {
+		case "dangerous_mode":
 			s.DangerousMode = &v
+		default:
+			s.ClaudeLongContext = &v
 		}
 		return nil
 	}

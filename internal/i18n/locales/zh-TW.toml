@@ -280,6 +280,7 @@ terminal_mode_native = "原生終端"
 terminal_mode_tmux = "tmux 工作階段"
 codex_bypass_label = "Codex hook 信任略過"
 dangerous_mode_label = "危險模式"
+claude_long_context_label = "Claude 1M 上下文（Opus）"
 bool_on = "開"
 bool_off = "關"
 usage = '''
@@ -295,6 +296,7 @@ everyapi settings — 查看 / 修改 CLI 偏好
 KEY
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
   terminal_mode                            native | tmux
+  claude_long_context                      true | false  (Opus 1M context, default on)
 
 設定檔是 'everyapi settings list' 印出的路徑上的純 JSON。可手動編輯；
 CLI 下次啟動時會重新讀取。

@@ -156,7 +156,7 @@ func TestTerminalModeWriteReadRoundTrip(t *testing.T) {
 
 func TestSafetyPreferencesWriteReadRoundTrip(t *testing.T) {
 	s := &config.Settings{}
-	for _, key := range []string{"codex_hook_trust_bypass", "dangerous_mode"} {
+	for _, key := range []string{"codex_hook_trust_bypass", "dangerous_mode", "claude_long_context"} {
 		if got, ok := readKey(s, key); !ok || got != "unset" {
 			t.Fatalf("readKey(%s) unset = %q,%v; want unset,true", key, got, ok)
 		}
@@ -180,7 +180,7 @@ func TestSafetyPreferencesWriteReadRoundTrip(t *testing.T) {
 
 // The editor is the only surface most people ever see, and it used to ask two hard-coded questions — so gateway_region, codex_hook_trust_bypass and dangerous_mode existed in the file, in `settings set`, and in `settings list`, but were invisible and unreachable there. Tie the two together: every key writeKey accepts has to have a row.
 func TestSettingRowsCoverEverySettingsKey(t *testing.T) {
-	keys := []string{"language", "menu_layout", "gateway_region", "terminal_mode", "codex_hook_trust_bypass", "dangerous_mode"}
+	keys := []string{"language", "menu_layout", "gateway_region", "terminal_mode", "codex_hook_trust_bypass", "dangerous_mode", "claude_long_context"}
 	rows := settingRows()
 	rowKeys := make(map[string]bool, len(rows))
 	for _, row := range rows {
@@ -272,8 +272,8 @@ func TestEditorMenuRendersEveryRow(t *testing.T) {
 		lines = append(lines, line)
 	}
 	lines = append(lines, i18n.T("settings.done"))
-	if len(lines) != 8 {
-		t.Fatalf("menu has %d lines, want 7 settings plus Done", len(lines))
+	if len(lines) != 9 {
+		t.Fatalf("menu has %d lines, want 8 settings plus Done", len(lines))
 	}
 	// The value column has to show what is in effect, not the raw field: an unset tri-state reads "unset", not "false".
 	if got := lines[2]; got != "Gateway region: cn" {
@@ -288,7 +288,10 @@ func TestEditorMenuRendersEveryRow(t *testing.T) {
 	if got := lines[5]; got != "Dangerous mode: on" {
 		t.Errorf("set tri-state rendered as %q", got)
 	}
-	if got := lines[6]; got != "Default API key: not set" {
+	if got := lines[6]; got != "Claude 1M context (Opus): unset" {
+		t.Errorf("claude long context rendered as %q", got)
+	}
+	if got := lines[7]; got != "Default API key: not set" {
 		t.Errorf("relay key row rendered as %q", got)
 	}
 	t.Log("interactive editor:\n  " + strings.Join(lines, "\n  "))
