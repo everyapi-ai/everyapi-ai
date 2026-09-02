@@ -37,6 +37,8 @@ EveryAPI includes native workspace automation commands as CLI-only subcommands. 
 
 When a signed-in EveryAPI desktop host is running, `everyapi automations` uses its authenticated loopback control runtime, so list/create/edit/pause/run operations and run history are the same scheduler state the desktop UI sees. Pass `--control-state PATH` to select an explicit desktop state file. If no runtime exists, the command preserves the standalone local-record behavior for compatibility; setting `EVERYAPI_WORKSPACE_STATE_DIR` explicitly selects that standalone store.
 
+`everyapi vm` reads repository-owned `environmentRecipes` from `everyapi.yaml`. `vm recipe doctor` is non-destructive by default; pass `--provision` only when you want it to execute create and then the configured cleanup. `vm runtime create`, `suspend`, `resume`, and `cleanup` own the lifecycle state used by desktop clients, while `cleanup-info` prints a manual recovery payload and command.
+
 Useful entry points include:
 
 ```text
@@ -56,7 +58,11 @@ everyapi environment list --json
 everyapi project list --json
 everyapi file diff --json
 everyapi linear search "bug" --json
+everyapi vm recipe list --repo-path . --json
 everyapi vm recipe doctor cloud-sandbox --json
+everyapi vm runtime list --json
+everyapi vm runtime create cloud-sandbox --repo-path . --json
+everyapi vm runtime cleanup RUNTIME_ID --json
 everyapi emulator list --json
 everyapi open --json
 everyapi serve --json

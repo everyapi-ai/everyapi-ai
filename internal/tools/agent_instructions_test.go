@@ -39,7 +39,8 @@ func TestAgentInstructionsDescribeTheViewerConstraints(t *testing.T) {
 		"data:",
 		"no same-origin storage",
 		"background-color",
-		"fetch the returned URL back",
+		"the document itself is served from that frame's iframe source",
+		"confirm it carries the content you wrote",
 	} {
 		if !strings.Contains(instructions, required) {
 			t.Errorf("agent instructions missing %q: %s", required, instructions)

@@ -15,7 +15,9 @@ One file, up to 5 MiB, `.html` or `.htm`. There is no second request for assets 
 
 ## How a report is served
 
-The share URL renders an EveryAPI frame — title, expiry, abuse link — around your document, and your document is served from a **separate origin** inside a sandboxed iframe. That separation is the security model: your report cannot read the page hosting it, cannot reach your session, and cannot navigate the browser away from EveryAPI.
+The share URL renders an EveryAPI frame — title, expiry, **Open document**, abuse link — around your document, and your document is served from a **separate origin** inside a sandboxed iframe. That separation is the security model: your report cannot read the page hosting it, cannot reach your session, and cannot navigate the browser away from EveryAPI.
+
+**Open document** in that frame is the report on its own, at its own address, for printing, saving, or reading on a narrow screen. It is the same isolated origin under the same policy — nothing is unlocked by opening it directly.
 
 The same separation is why the viewer is strict about what a report may do.
 
@@ -46,4 +48,13 @@ In-page anchors (`href="#section"`) keep working as anchors. Write real links; y
 
 ## Verify before you share the URL
 
-Publishing succeeds long before anyone finds out whether the report reads correctly. Open the URL — or fetch it back — once, and look, before passing the link on.
+Publishing succeeds long before anyone finds out whether the report reads correctly, so look at the result once before passing the link on.
+
+Note what you are looking at. The share URL returns the **frame**, not the report: fetching it and finding your own title proves only that the artifact exists. The document lives at the frame's iframe source, which is what **Open document** points at.
+
+```
+url=$(everyapi artifacts share report.html --json | jq -r .url)
+curl -s "$url" | grep -o 'iframe .*src="[^"]*"'
+```
+
+In a browser, just open `$url` and read it. Check it in a dark colour scheme too if your report styles anything itself.

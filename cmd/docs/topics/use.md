@@ -163,6 +163,8 @@ Two clients receive nothing: GitHub Copilot CLI and OpenHands, whose documented 
 
 Claude Code, Codex, OpenCode, and Kilo launches receive a process-scoped delivery standard through their documented instruction surfaces: after finishing a task, publish a sanitized self-contained HTML report through `everyapi artifacts share` and return the artifact URL. The launcher exports its own path as `EVERYAPI_CLI_PATH`, so the child uses the same authenticated installation even when `everyapi` is not on `PATH`. A publish failure never replaces the normal text result or invents a link, and no project-owned instruction file is ever edited.
 
+The standard also carries the viewer's constraints, because a report that reaches for an external stylesheet or a `fetch` is refused silently rather than loudly: see the `artifacts` topic.
+
 ## Examples
 
 ```

@@ -199,7 +199,7 @@ var nativeUsages = map[string]string{
 	"project":         "Usage: everyapi project <list|setups|setup-existing-folder|setup-clone|setup-create|setup-update|setup-delete> [flags]",
 	"file":            "Usage: everyapi file <open|diff|open-changed> [path] [flags]",
 	"linear":          "Usage: everyapi linear <issue|search|list> [flags]",
-	"vm":              "Usage: everyapi vm <recipe|list> [name] [flags]",
+	"vm":              "Usage: everyapi vm <recipe list|recipe doctor|runtime list|runtime show|runtime create|runtime suspend|runtime resume|runtime cleanup|runtime cleanup-info|runtime forget> [flags]",
 	"emulator":        "Usage: everyapi emulator <list|attach|tap|type|gesture|button|rotate|exec|kill> [flags]",
 }
 
@@ -1801,8 +1801,10 @@ func schemaPositionalArgs(command string) []string {
 		return []string{"path"}
 	case "skills get":
 		return []string{"topic"}
-	case "vm recipe doctor":
+	case "vm recipe doctor", "vm runtime create":
 		return []string{"recipe-id"}
+	case "vm runtime show", "vm runtime suspend", "vm runtime resume", "vm runtime cleanup", "vm runtime cleanup-info", "vm runtime forget":
+		return []string{"id"}
 	}
 	if strings.HasPrefix(command, "linear ") {
 		if strings.Contains(command, "search") {
@@ -1929,8 +1931,19 @@ func schemaFlags(command string) []string {
 		case "repo show":
 			add("repo")
 		}
-	case command == "vm recipe doctor":
-		add("recipe-id", "repo-path", "provision", "connect", "page")
+	case strings.HasPrefix(command, "vm "):
+		switch command {
+		case "vm recipe list":
+			add("repo-path")
+		case "vm recipe doctor":
+			add("recipe-id", "repo-path", "provision", "connect")
+		case "vm runtime create":
+			add("recipe-id", "repo-path", "instance-id", "project-id", "workspace-id", "workspace-name", "repo-url", "branch")
+		case "vm runtime show", "vm runtime suspend", "vm runtime resume", "vm runtime cleanup", "vm runtime cleanup-info":
+			add("id")
+		case "vm runtime forget":
+			add("id", "force")
+		}
 	case strings.HasPrefix(command, "computer "):
 		add(schemaComputerFlags(command)...)
 	case strings.HasPrefix(command, "linear "):
@@ -2301,7 +2314,7 @@ var nativeSubcommands = map[string][]string{
 	"skills":        {"installed", "share", "list", "get", "install", "update"},
 	"host":          {"list"},
 	"environment":   {"add", "list", "show", "rm"},
-	"vm":            {"recipe doctor"},
+	"vm":            {"recipe list", "recipe doctor", "runtime list", "runtime show", "runtime create", "runtime suspend", "runtime resume", "runtime cleanup", "runtime cleanup-info", "runtime forget"},
 	"automations":   {"list", "show", "create", "edit", "remove", "run", "runs"},
 	"project":       {"list", "setups", "setup-existing-folder", "setup-clone", "setup-create", "setup-update", "setup-delete"},
 	"repo":          {"list", "add", "show", "set-base-ref", "search-refs"},
@@ -3078,65 +3091,7 @@ func filterProjectSetups(items []map[string]any, selector string) []map[string]a
 	return filtered
 }
 
-func vm(args []string) (any, error) {
-	recipes := []map[string]any{
-		{"id": "cloud-sandbox", "name": "cloud-sandbox", "runtime": runtime.GOOS, "available": false, "local": true},
-	}
-	base := map[string]any{"runtime": runtime.GOOS, "arch": runtime.GOARCH, "recipes": recipes}
-	if len(args) == 0 || args[0] == "list" || args[0] == "recipes" {
-		return base, nil
-	}
-	if args[0] != "recipe" {
-		return nil, fmt.Errorf("unknown vm subcommand %q", args[0])
-	}
-	parts := positional(args[1:])
-	if len(parts) > 0 && parts[0] == "doctor" {
-		result := map[string]any{"operation": "doctor", "runtime": runtime.GOOS, "arch": runtime.GOARCH, "recipes": recipes}
-		recipeID := flagValue(args[1:], "recipe-id", "")
-		if recipeID == "" && len(parts) > 1 {
-			recipeID = parts[1]
-		}
-		if repoPath := flagValue(args[1:], "repo-path", ""); repoPath != "" {
-			result["repoPath"] = repoPath
-		}
-		if hasFlag(args[1:], "--provision") {
-			result["provision"] = true
-		}
-		if hasFlag(args[1:], "--connect") {
-			result["connect"] = true
-		}
-		if recipeID != "" {
-			for _, recipe := range recipes {
-				if recipe["id"] == recipeID || recipe["name"] == recipeID {
-					result["recipe"] = recipe
-					return result, nil
-				}
-			}
-			return nil, fmt.Errorf("vm recipe %q not found", parts[1])
-		}
-		return result, nil
-	}
-	if len(parts) == 0 {
-		return recipes, nil
-	}
-	operation, recipeName := "inspect", parts[0]
-	if len(parts) > 1 {
-		operation, recipeName = parts[0], parts[1]
-	}
-	for _, recipe := range recipes {
-		if recipe["id"] == recipeName || recipe["name"] == recipeName {
-			result := map[string]any{}
-			for key, value := range recipe {
-				result[key] = value
-			}
-			result["operation"] = operation
-			result["runtime"] = runtime.GOOS
-			result["arch"] = runtime.GOARCH
-			return result, nil
-		}
-	}
-	return nil, fmt.Errorf("vm recipe %q not found", recipeName)
-}
+func vm(args []string) (any, error) { return vmCommand(args) }
 
 func emulator(args []string) (any, error) {
 	if len(args) == 0 || isHelp(args[0]) {
