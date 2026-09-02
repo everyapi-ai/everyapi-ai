@@ -31,6 +31,7 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/models"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/notify"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/perf"
+	pluginscmd "github.com/everyapi-ai/everyapi-ai/v3/cmd/plugins"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/proxy"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/report"
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/seller"
@@ -463,6 +464,11 @@ var commands = []command{
 		{name: "install", desc: "Install a skill locally", args: []string{"install"}},
 		{name: "update", desc: "Update an installed skill", args: []string{"update"}},
 	}},
+	{name: "plugins", desc: "Discover and manage Codex plugins and marketplaces", cliOnly: true, run: pluginscmd.Run, subs: []subcommand{
+		{name: "catalog", desc: "List installed and available plugins with marketplace metadata", args: []string{"catalog"}},
+		{name: "list", desc: "List installed plugins", args: []string{"list"}},
+		{name: "marketplace list", desc: "List configured plugin marketplaces", args: []string{"marketplace", "list"}},
+	}},
 	{name: "orchestration", desc: "Coordinate local runs and messages", cliOnly: true, run: workspacecmd.Command("orchestration"), subs: []subcommand{{name: "run-create", desc: "Create a local run", args: []string{"run-create"}}, {name: "run-use", desc: "Bind the current terminal to a run", args: []string{"run-use"}}, {name: "run-current", desc: "Show the current run", args: []string{"run-current"}}, {name: "run-list", desc: "List local runs", args: []string{"run-list"}}, {name: "run-show", desc: "Show one run", args: []string{"run-show"}}, {name: "send", desc: "Send a local message", args: []string{"send"}}, {name: "check", desc: "Read new messages", args: []string{"check"}}, {name: "ask", desc: "Ask a blocking question", args: []string{"ask"}}, {name: "reply", desc: "Reply to a question", args: []string{"reply"}}, {name: "inbox", desc: "Show the local inbox", args: []string{"inbox"}}, {name: "task-create", desc: "Create a task", args: []string{"task-create"}}, {name: "task-list", desc: "List tasks", args: []string{"task-list"}}, {name: "task-update", desc: "Update a task", args: []string{"task-update"}}, {name: "dispatch", desc: "Dispatch a task", args: []string{"dispatch"}}, {name: "dispatch-show", desc: "Show a dispatch", args: []string{"dispatch-show"}}, {name: "worker-start", desc: "Start a worker record", args: []string{"worker-start"}}, {name: "worker-show", desc: "Show a worker", args: []string{"worker-show"}}, {name: "worker-read", desc: "Read worker output", args: []string{"worker-read"}}, {name: "worker-stop", desc: "Stop a worker", args: []string{"worker-stop"}}, {name: "worker-abandon", desc: "Abandon a worker", args: []string{"worker-abandon"}}, {name: "worker-release", desc: "Release a worker", args: []string{"worker-release"}}, {name: "worker-retain", desc: "Retain a worker", args: []string{"worker-retain"}}, {name: "worker-list", desc: "List workers", args: []string{"worker-list"}}, {name: "coordinator-start", desc: "Start the coordinator", args: []string{"coordinator-start"}}, {name: "coordinator-stop", desc: "Stop the coordinator", args: []string{"coordinator-stop"}}, {name: "gate-create", desc: "Create a decision gate", args: []string{"gate-create"}}, {name: "gate-resolve", desc: "Resolve a decision gate", args: []string{"gate-resolve"}}, {name: "gate-list", desc: "List decision gates", args: []string{"gate-list"}}, {name: "reset", desc: "Reset local orchestration state", args: []string{"reset"}}}},
 	{name: "automations", desc: "Inspect local automation records", cliOnly: true, run: workspacecmd.Command("automations"), subs: []subcommand{{name: "list", desc: "List automations", args: []string{"list"}}, {name: "show", desc: "Show an automation", args: []string{"show"}}, {name: "create", desc: "Create an automation", args: []string{"create"}}, {name: "edit", desc: "Edit an automation", args: []string{"edit"}}, {name: "remove", desc: "Remove an automation", args: []string{"remove"}}, {name: "run", desc: "Record an automation run", args: []string{"run"}}, {name: "runs", desc: "List automation runs", args: []string{"runs"}}}},
 	{name: "environment", desc: "Show local execution environments", cliOnly: true, run: workspacecmd.Command("environment"), subs: []subcommand{{name: "add", desc: "Add a saved environment", args: []string{"add"}}, {name: "list", desc: "List local environments", args: []string{"list"}}, {name: "show", desc: "Show the local environment", args: []string{"show"}}, {name: "rm", desc: "Remove a saved environment", args: []string{"rm"}}}},
@@ -734,7 +740,7 @@ var commandGroup = map[string]string{
 	"clipboard": "tools", "dialog": "tools", "download": "tools", "highlight": "tools", "capture": "tools", "viewport": "tools",
 	"geolocation": "tools", "intercept": "tools", "mouse": "tools", "inserttext": "tools", "is": "tools", "scrollintoview": "tools",
 	"dblclick": "tools", "forward": "tools", "set": "tools", "agent": "tools",
-	"skills": "tools", "orchestration": "tools", "automations": "tools", "environment": "tools",
+	"skills": "tools", "plugins": "tools", "orchestration": "tools", "automations": "tools", "environment": "tools",
 	"project": "tools", "file": "tools", "linear": "tools", "vm": "tools", "emulator": "tools",
 	"diagnostics": "tools", "agent-context": "tools",
 	"doctor": "tools", "events": "tools", "settings": "tools", "artifacts": "tools",

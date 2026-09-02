@@ -26,6 +26,7 @@ var topicOrder = []string{
 	"use",
 	"billing",
 	"mcp",
+	"plugins",
 	"proxy",
 	"computer",
 	"artifacts",
