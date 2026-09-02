@@ -56,6 +56,22 @@ func TestSafeRepoPathCannotEscapeRoot(t *testing.T) {
 	}
 }
 
+func TestSafeRepoPathCannotEscapeThroughSymlink(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	link := filepath.Join(root, "linked")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := safeRepoPath(root, filepath.Join("linked", "secret.txt"))
+	if filepath.Base(got) != "secret.txt" || !isWithin(filepath.Dir(got), canonicalPath(root)) {
+		t.Fatalf("safeRepoPath escaped through symlink: got %s, root %s, outside %s", got, root, outside)
+	}
+}
+
 func TestIndexValueAcceptsZero(t *testing.T) {
 	if got := indexValue([]string{"--index", "0"}, "index", -1); got != 0 {
 		t.Fatalf("indexValue() = %d, want 0", got)

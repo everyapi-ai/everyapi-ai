@@ -5261,8 +5261,18 @@ func safeRepoPath(root, value string) string {
 		value = filepath.Join(root, value)
 	}
 	abs, _ := filepath.Abs(value)
+	root = canonicalPath(root)
 	if !isWithin(abs, root) && !samePath(abs, root) {
 		return filepath.Join(root, filepath.Base(value))
+	}
+	// Lexical containment is insufficient when a repository contains a
+	// symlink to a path outside the repository. Resolve existing paths before
+	// handing them to an editor so `file open` cannot escape the repo through a
+	// symlink.
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		if !isWithin(resolved, root) && !samePath(resolved, root) {
+			return filepath.Join(root, filepath.Base(value))
+		}
 	}
 	return abs
 }
