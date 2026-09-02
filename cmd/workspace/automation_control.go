@@ -556,7 +556,26 @@ func automationsThroughControl(args []string, path string) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return callAutomationControl(path, map[string]any{"type": "schedule_run_now", "schedule_id": fmt.Sprint(current["id"])})
+		value, err := callAutomationControl(path, map[string]any{"type": "schedule_run_now", "schedule_id": fmt.Sprint(current["id"])})
+		if err != nil {
+			return nil, err
+		}
+		result, ok := value.(map[string]any)
+		if !ok {
+			return nil, errors.New("desktop automation service returned an invalid run result")
+		}
+		accepted, _ := result["accepted"].(bool)
+		duplicate, _ := result["duplicate"].(bool)
+		skipped, _ := result["skipped"].(bool)
+		outcome, _ := result["outcome"].(string)
+		if outcome == "" && accepted {
+			outcome = "accepted"
+		}
+		result["accepted"] = accepted
+		result["duplicate"] = duplicate
+		result["skipped"] = skipped
+		result["outcome"] = outcome
+		return result, nil
 	default:
 		return nil, fmt.Errorf("unknown automations subcommand %q", subcommand)
 	}

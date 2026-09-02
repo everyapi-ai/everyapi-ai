@@ -2602,7 +2602,7 @@ func orchestration(args []string) (any, error) {
 
 func automations(args []string) (any, error) {
 	if len(args) == 0 || isHelp(args[0]) {
-		return map[string]any{"commands": []string{"list", "show", "create", "edit", "remove", "run", "runs"}}, nil
+		return map[string]any{"commands": []string{"snapshot", "list", "show", "create", "edit", "remove", "run", "runs"}}, nil
 	}
 	controlState, useControl, err := automationControlStatePath(args)
 	if err != nil {

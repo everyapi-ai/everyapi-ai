@@ -159,6 +159,39 @@ func TestAutomationSnapshotSchemaOnlyExposesControlState(t *testing.T) {
 	}
 }
 
+func TestAutomationsRunReturnsACompleteStableContract(t *testing.T) {
+	statePath, commands := startAutomationControlFixture(t, []any{map[string]any{"id": "job-1"}})
+
+	value, err := automations([]string{"run", "job-1", "--control-state", statePath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("automations run = %#v", value)
+	}
+	if result["accepted"] != true || result["duplicate"] != false || result["skipped"] != false || result["outcome"] != "accepted" {
+		t.Fatalf("automations run contract = %#v", result)
+	}
+	if command := nextAutomationControlCommand(t, commands); command["type"] != "schedule_list" {
+		t.Fatalf("list command = %#v", command)
+	}
+	if command := nextAutomationControlCommand(t, commands); command["type"] != "schedule_run_now" || command["schedule_id"] != "job-1" {
+		t.Fatalf("run command = %#v", command)
+	}
+}
+
+func TestAutomationsHelpIncludesSnapshot(t *testing.T) {
+	value, err := automations([]string{"--help"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commands := value.(map[string]any)["commands"].([]string)
+	if !containsString(commands, "snapshot") {
+		t.Fatalf("automations help commands = %#v", commands)
+	}
+}
+
 func TestAutomationsDiscoverDefaultDesktopControlState(t *testing.T) {
 	statePath, commands := startAutomationControlFixture(t, []any{map[string]any{"id": "job-1"}})
 	state, err := os.ReadFile(statePath)
