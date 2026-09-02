@@ -58,6 +58,54 @@ func TestLogoutScrubsCredentialsPersistedInsideClientHomes(t *testing.T) {
 	}
 }
 
+// Codex's persistent home is session state, not a credential cache. The real
+// EveryAPI key is process-scoped and auth.json contains only a placeholder, so
+// deleting this directory during logout corrupts already-running Codex sessions.
+func TestLogoutPreservesCodexThreadState(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+
+	configDir := filepath.Join(home, ".config", "everyapi")
+	credentials := filepath.Join(configDir, "credentials.json")
+	codexHome := filepath.Join(configDir, "codex-home")
+	state := filepath.Join(codexHome, "state_5.sqlite")
+	rollout := filepath.Join(codexHome, "sessions", "2026", "09", "rollout.jsonl")
+	for path, body := range map[string]string{
+		credentials: `{"access_token":"remove-me"}`,
+		state:       "durable sqlite state",
+		rollout:     "durable transcript",
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := Logout(nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(credentials); !os.IsNotExist(err) {
+		t.Fatalf("logout kept primary credentials (stat err: %v)", err)
+	}
+	for path, want := range map[string]string{
+		state:   "durable sqlite state",
+		rollout: "durable transcript",
+	} {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("logout removed Codex state at %s: %v", path, err)
+		}
+		if string(body) != want {
+			t.Fatalf("Codex state at %s = %q, want %q", path, body, want)
+		}
+	}
+}
+
 // The fixed per-tool homes are no longer where a launch puts the key: `everyapi use` takes the live-catalog path, which mints a process-scoped home under the prepared-session root instead, and two adapters inline the relay key verbatim in there. Nothing else reclaims those homes on a logout — the only other sweep is age-gated behind the NEXT launch — so if logout misses the root a working, billable credential simply stays on disk.
 //
 // This drives the real hermes preparer rather than hand-seeding a path, so the sessions root is derived from what the launcher actually produced: move the root and this test fails instead of quietly asserting that logout scrubbed a directory nobody writes to.

@@ -12,10 +12,12 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// toolCredentialHomes are the fixed per-tool config dirs that `everyapi use` seeds (hermes-home/config.yaml inlines the resolved relay key as api_key; codex-home/auth.json holds only transparentPlaceholderCredential, but the home is ours and goes with it). They live next to credentials.json but config.Delete only removes the latter, so logout must scrub these too — otherwise a fully working, billable spend credential survives "logout" on disk.
+// toolCredentialHomes are the fixed per-tool config dirs that `everyapi use` seeds with a billable relay key. They live next to credentials.json but config.Delete only removes the latter, so logout must scrub these too — otherwise a fully working credential survives "logout" on disk.
 //
 // These are the homes EveryAPI owns outright and can delete whole. A client whose credential lands in a file the vendor owns needs a surgical scrub instead; see vendorCredentialScrubs. Launches that take the live-catalog path do not land here at all; see preparedSessionHomes.
-var toolCredentialHomes = []string{"codex-home", "hermes-home"}
+//
+// codex-home is deliberately absent. It contains Codex's durable rollouts and SQLite thread state, while its auth.json stores only transparentPlaceholderCredential; the real relay key is process-scoped. Deleting that home during logout leaves already-running Codex processes attached to a recreated, unmigrated database and causes repeated `no such table: threads` transcript failures.
+var toolCredentialHomes = []string{"hermes-home"}
 
 // preparedSessionHomes is the config-dir-relative root holding every process-scoped client home, mirroring the path tools.preparedHomeRoot resolves. It is where today's live-catalog launches actually land, and two adapters inline the relay key verbatim inside one (hermes writes it into config.yaml, cline into settings/providers.json), so logout clears the whole root rather than chasing individual adapters — that covers every prepared home the launcher can mint, present and future. Nothing reachable is lost: every launch mints a fresh home under this root and no launch ever reads an older one.
 const preparedSessionHomes = "sessions"
