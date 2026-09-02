@@ -146,6 +146,10 @@ regular_required = "das Artefakt muss eine reguläre Datei sein"
 too_large = "das Artefakt ist %d Byte groß; maximal sind %d Byte erlaubt"
 official_only = "das gehostete Teilen von Artefakten erfordert eine Anmeldung über api.everyapi.ai oder api-cn.everyapi.ai"
 deleted = "%s gelöscht"
+lint_intro = "Warnung: %s verwendet Funktionen, die der Artifact-Viewer blockiert:"
+lint_external = "  - externe Ressource %s — der Viewer erlaubt nur Inline-CSS und -JS sowie data:-URIs für Bilder und Schriften"
+lint_blocked_api = "  - %s in einem Skript — der Viewer setzt connect-src 'none' und der Frame hat keinen Same-Origin-Speicher"
+lint_hint = "  wird trotzdem veröffentlicht; 'everyapi docs artifacts' zeigt alle Einschränkungen des Viewers"
 
 [launcher.subs.auth]
 login = "Dieses Gerät bei EveryAPI authentifizieren"
@@ -449,7 +453,7 @@ per_model = "Nutzung pro Modell (%d Modell(e)):"
 [models]
 no_models = "Aus deiner Gruppe sind keine Modelle routbar. Bitte einen Admin, eines zu aktivieren."
 count = "%d Modell(e) verfügbar:"
-promotional_only = "Dieses Konto hat nur Aktionsguthaben. Bis bezahltes Guthaben hinzugefügt wird, zeigt die CLI nur smart-everyapi in der Gruppe %s. Setze das Modell auf smart-everyapi, um HTTP 403 zu vermeiden; ein direkt angegebenes Modell ohne Aktionsberechtigung gibt HTTP 403 zurück. Anfragen verwenden OpenAI Chat Completions; Smart Routing wählt aus aktionsfähigen Modellen und unterliegt Limits pro Anfrage, gemeinsamem Tageslimit und Parallelitätslimits."
+promotional_only = "Dieses Konto hat nur Aktionsguthaben. Bis bezahltes Guthaben hinzugefügt wird, zeigt die CLI smart-everyapi und aktionsberechtigte dedizierte Modelle in der Gruppe %s. Setze das Modell auf smart-everyapi für automatisches Routing oder wähle ein als aktionsberechtigt markiertes Modell; ein direkt angegebenes Modell ohne Aktionsberechtigung gibt HTTP 403 zurück. Anfragen verwenden OpenAI Chat Completions; Smart Routing wählt aus aktionsfähigen Modellen und unterliegt Limits pro Anfrage, gemeinsamem Tageslimit und Parallelitätslimits."
 no_pricing = "Keine passenden Preiszeilen."
 no_groups = "Für dein Konto sind keine Routing-Gruppen verfügbar."
 usage = '''
@@ -1357,8 +1361,8 @@ choice_skip = "Diese Version überspringen"
 
 [use]
 no_selectable_models = "Für %s sind mit diesem Relay-Schlüssel/dieser Gruppe keine auswählbaren Modelle verfügbar."
-promotional_only = "Dieses Konto hat nur Aktionsguthaben. Bis bezahltes Guthaben hinzugefügt wird, stellt die CLI nur smart-everyapi in der Gruppe %s bereit. Setze das Modell auf smart-everyapi, um HTTP 403 zu vermeiden; ein direkt angegebenes Modell ohne Aktionsberechtigung gibt HTTP 403 zurück. Anfragen verwenden OpenAI Chat Completions; Smart Routing wählt aus aktionsfähigen Modellen und unterliegt Limits pro Anfrage, gemeinsamem Tageslimit und Parallelitätslimits."
-promotional_only_group = "Dieses Konto hat nur Aktionsguthaben. Verwende die Gruppe %s und setze das Modell auf smart-everyapi, um HTTP 403 zu vermeiden. Ein direkt angegebenes Modell ohne Aktionsberechtigung gibt HTTP 403 zurück. Füge bezahltes Guthaben hinzu, bevor du eine andere Gruppe auswählst."
+promotional_only = "Dieses Konto hat nur Aktionsguthaben. Bis bezahltes Guthaben hinzugefügt wird, stellt die CLI smart-everyapi und aktionsberechtigte dedizierte Modelle in der Gruppe %s bereit. Setze das Modell auf smart-everyapi für automatisches Routing oder wähle ein als aktionsberechtigt markiertes Modell; ein direkt angegebenes Modell ohne Aktionsberechtigung gibt HTTP 403 zurück. Anfragen verwenden OpenAI Chat Completions; Smart Routing wählt aus aktionsfähigen Modellen und unterliegt Limits pro Anfrage, gemeinsamem Tageslimit und Parallelitätslimits."
+promotional_only_group = "Dieses Konto hat nur Aktionsguthaben. Verwende die Gruppe %s und wähle smart-everyapi oder ein aktionsberechtigtes dediziertes Modell, um HTTP 403 zu vermeiden. Ein direkt angegebenes anderes Modell gibt HTTP 403 zurück. Füge bezahltes Guthaben hinzu, bevor du eine andere Gruppe auswählst."
 sanitize_bad_value = "--sanitize=%q ist kein gültiger true/false-Wert — verwende --sanitize oder --sanitize=false"
 tool_picker = "Tool auswählen:"
 group_picker = "Routing-Gruppe auswählen:"
@@ -1694,3 +1698,4 @@ search_count = "%d Treffer"
 search_more = "… und %d weitere Zeile(n)"
 search_hint = "Ein Thema vollständig lesen mit 'everyapi docs <topic>'."
 opening = "Öffne %s"
+

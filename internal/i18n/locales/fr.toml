@@ -147,6 +147,10 @@ regular_required = "l’artifact doit être un fichier standard"
 too_large = "l’artifact fait %d octets ; le maximum est de %d octets"
 official_only = "le partage d’artifacts hébergés nécessite un compte connecté via api.everyapi.ai ou api-cn.everyapi.ai"
 deleted = "%s supprimé"
+lint_intro = "avertissement : %s utilise des fonctionnalités que la visionneuse d’artifacts bloque :"
+lint_external = "  - ressource externe %s — la visionneuse n’autorise que le CSS et le JS en ligne, et les URI data: pour les images et les polices"
+lint_blocked_api = "  - %s dans un script — la visionneuse impose connect-src 'none' et le cadre n’a pas de stockage de même origine"
+lint_hint = "  publication tout de même ; exécutez 'everyapi docs artifacts' pour toutes les contraintes de la visionneuse"
 
 [launcher.subs.auth]
 login = "Authentifier cet appareil auprès d'EveryAPI"
@@ -450,7 +454,7 @@ per_model = "Utilisation par modèle (%d modèle(s)) :"
 [models]
 no_models = "Aucun modèle routable depuis votre groupe. Demandez à un admin d'en activer un."
 count = "%d modèle(s) accessibles :"
-promotional_only = "Ce compte dispose uniquement d’un solde promotionnel. Tant qu’aucun solde payé n’est ajouté, la CLI affiche seulement smart-everyapi dans le groupe %s. Définissez le modèle sur smart-everyapi pour éviter HTTP 403 ; indiquer directement un modèle non éligible aux promotions renvoie HTTP 403. Les requêtes utilisent OpenAI Chat Completions ; le routage intelligent choisit parmi les modèles éligibles aux promotions, avec des limites par requête, quotidiennes partagées et de concurrence."
+promotional_only = "Ce compte dispose uniquement d’un solde promotionnel. Tant qu’aucun solde payé n’est ajouté, la CLI affiche smart-everyapi et les modèles dédiés éligibles aux promotions dans le groupe %s. Définissez le modèle sur smart-everyapi pour le routage automatique ou choisissez un modèle marqué comme éligible ; indiquer directement un modèle non éligible aux promotions renvoie HTTP 403. Les requêtes utilisent OpenAI Chat Completions ; le routage intelligent choisit parmi les modèles éligibles aux promotions, avec des limites par requête, quotidiennes partagées et de concurrence."
 no_pricing = "Aucune ligne de tarif ne correspond."
 no_groups = "Aucun groupe de routage disponible pour votre compte."
 usage = '''
@@ -1362,8 +1366,8 @@ choice_skip = "Ignorer cette version"
 
 [use]
 no_selectable_models = "Aucun modèle sélectionnable n’est disponible pour %s avec cette clé/ce groupe de relais."
-promotional_only = "Ce compte dispose uniquement d’un solde promotionnel. Tant qu’aucun solde payé n’est ajouté, la CLI expose seulement smart-everyapi dans le groupe %s. Définissez le modèle sur smart-everyapi pour éviter HTTP 403 ; indiquer directement un modèle non éligible aux promotions renvoie HTTP 403. Les requêtes utilisent OpenAI Chat Completions ; le routage intelligent choisit parmi les modèles éligibles aux promotions, avec des limites par requête, quotidiennes partagées et de concurrence."
-promotional_only_group = "Ce compte dispose uniquement d’un solde promotionnel. Utilisez le groupe %s et définissez le modèle sur smart-everyapi pour éviter HTTP 403. Indiquer directement un modèle non éligible aux promotions renvoie HTTP 403. Ajoutez un solde payé avant de sélectionner un autre groupe."
+promotional_only = "Ce compte dispose uniquement d’un solde promotionnel. Tant qu’aucun solde payé n’est ajouté, la CLI expose smart-everyapi et les modèles dédiés éligibles aux promotions dans le groupe %s. Définissez le modèle sur smart-everyapi pour le routage automatique ou choisissez un modèle marqué comme éligible ; indiquer directement un modèle non éligible aux promotions renvoie HTTP 403. Les requêtes utilisent OpenAI Chat Completions ; le routage intelligent choisit parmi les modèles éligibles aux promotions, avec des limites par requête, quotidiennes partagées et de concurrence."
+promotional_only_group = "Ce compte dispose uniquement d’un solde promotionnel. Utilisez le groupe %s et choisissez smart-everyapi ou un modèle dédié éligible aux promotions pour éviter HTTP 403. Indiquer directement tout autre modèle renvoie HTTP 403. Ajoutez un solde payé avant de sélectionner un autre groupe."
 sanitize_bad_value = "--sanitize=%q n'est pas une valeur true/false valide — utilisez --sanitize ou --sanitize=false"
 tool_picker = "Choisissez un outil :"
 group_picker = "Choisissez un groupe de routage :"
@@ -1699,3 +1703,4 @@ search_count = "%d correspondance(s)"
 search_more = "… et %d ligne(s) de plus"
 search_hint = "Lisez un sujet en entier avec 'everyapi docs <topic>'."
 opening = "Ouverture de %s"
+

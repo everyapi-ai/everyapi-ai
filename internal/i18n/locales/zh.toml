@@ -132,6 +132,10 @@ regular_required = "artifact 必须是普通文件"
 too_large = "artifact 大小为 %d 字节；最大允许 %d 字节"
 official_only = "托管 artifact 分享仅支持通过 api.everyapi.ai 或 api-cn.everyapi.ai 登录的账户"
 deleted = "已删除 %s"
+lint_intro = "警告：%s 使用了 artifact 查看器会拦截的特性："
+lint_external = "  - 外部资源 %s —— 查看器只允许内联 CSS 和 JS，图片与字体需用 data: URI"
+lint_blocked_api = "  - 脚本中的 %s —— 查看器设置了 connect-src 'none'，且 iframe 没有同源存储"
+lint_hint = "  仍将发布；运行 'everyapi docs artifacts' 查看查看器的完整约束"
 
 [launcher.subs.auth]
 login = "登录此设备到 EveryAPI"
@@ -434,7 +438,7 @@ per_model = "按模型用量（共 %d 个模型）："
 [models]
 no_models = "你的分组无可路由模型。请联系管理员启用。"
 count = "可用 %d 个模型："
-promotional_only = "该账户当前仅有赠送额度。充值付费余额前，CLI 只显示 %s 分组中的 smart-everyapi。为避免 HTTP 403，请将模型指定为 smart-everyapi；直接指定不在赠送额度白名单中的模型会返回 HTTP 403。请求使用 OpenAI Chat Completions，由智能路由从赠送额度可用模型中选择，并受单次额度、共享每日额度与并发限制。"
+promotional_only = "该账户当前仅有赠送额度。充值付费余额前，CLI 会显示 %s 分组中的 smart-everyapi 和赠送可用的专线模型。可将模型指定为 smart-everyapi 使用自动路由，也可以选择标有赠送可用的模型；直接指定不在赠送额度白名单中的模型会返回 HTTP 403。请求使用 OpenAI Chat Completions，由智能路由从赠送额度可用模型中选择，并受单次额度、共享每日额度与并发限制。"
 no_pricing = "无匹配的定价记录。"
 no_groups = "你的账户无可用路由分组。"
 usage = '''
@@ -1324,8 +1328,8 @@ choice_skip = "跳过此版本"
 
 [use]
 no_selectable_models = "此 relay key/group 没有可供 %s 选择的模型。"
-promotional_only = "该账户当前仅有赠送额度。充值付费余额前，CLI 只开放 %s 分组中的 smart-everyapi。为避免 HTTP 403，请将模型指定为 smart-everyapi；直接指定不在赠送额度白名单中的模型会返回 HTTP 403。请求使用 OpenAI Chat Completions，由智能路由从赠送额度可用模型中选择，并受单次额度、共享每日额度与并发限制。"
-promotional_only_group = "该账户当前仅有赠送额度。为避免 HTTP 403，请使用 %s 分组并将模型指定为 smart-everyapi；直接指定不在赠送额度白名单中的模型会返回 HTTP 403。充值付费余额后才能选择其他分组。"
+promotional_only = "该账户当前仅有赠送额度。充值付费余额前，CLI 会开放 %s 分组中的 smart-everyapi 和赠送可用的专线模型。可将模型指定为 smart-everyapi 使用自动路由，也可以选择标有赠送可用的模型；直接指定不在赠送额度白名单中的模型会返回 HTTP 403。请求使用 OpenAI Chat Completions，由智能路由从赠送额度可用模型中选择，并受单次额度、共享每日额度与并发限制。"
+promotional_only_group = "该账户当前仅有赠送额度。为避免 HTTP 403，请使用 %s 分组并选择 smart-everyapi 或赠送可用的专线模型；直接指定其他模型会返回 HTTP 403。充值付费余额后才能选择其他分组。"
 sanitize_bad_value = "--sanitize=%q 不是有效的 true/false 值 — 使用 --sanitize 或 --sanitize=false"
 tool_picker = "选一个工具："
 group_picker = "选一个路由分组："
@@ -1661,3 +1665,4 @@ search_count = "%d 处匹配"
 search_more = "… 另有 %d 行"
 search_hint = "用 'everyapi docs <topic>' 阅读完整主题。"
 opening = "正在打开 %s"
+

@@ -148,6 +148,10 @@ regular_required = "el artifact debe ser un archivo normal"
 too_large = "el artifact tiene %d bytes; el máximo es %d bytes"
 official_only = "el uso compartido de artifacts alojados requiere una cuenta iniciada mediante api.everyapi.ai o api-cn.everyapi.ai"
 deleted = "%s eliminado"
+lint_intro = "advertencia: %s usa funciones que el visor de artifacts bloquea:"
+lint_external = "  - recurso externo %s — el visor solo permite CSS y JS en línea, y URI data: para imágenes y fuentes"
+lint_blocked_api = "  - %s en un script — el visor establece connect-src 'none' y el marco no tiene almacenamiento del mismo origen"
+lint_hint = "  se publicará igualmente; ejecuta 'everyapi docs artifacts' para ver todas las restricciones del visor"
 
 [launcher.subs.auth]
 login = "Autenticar este dispositivo con EveryAPI"
@@ -451,7 +455,7 @@ per_model = "Uso por modelo (%d modelo(s)):"
 [models]
 no_models = "Ningún modelo enrutable desde tu grupo. Pide a un admin que habilite uno."
 count = "%d modelo(s) accesibles:"
-promotional_only = "Esta cuenta solo tiene saldo promocional. Hasta que añadas saldo de pago, la CLI muestra únicamente smart-everyapi en el grupo %s. Establece el modelo en smart-everyapi para evitar HTTP 403; especificar directamente un modelo no apto para promociones devuelve HTTP 403. Las solicitudes usan OpenAI Chat Completions; el enrutamiento inteligente selecciona modelos aptos para promociones y aplica límites por solicitud, diarios compartidos y de concurrencia."
+promotional_only = "Esta cuenta solo tiene saldo promocional. Hasta que añadas saldo de pago, la CLI muestra smart-everyapi y modelos dedicados aptos para promociones en el grupo %s. Establece smart-everyapi para el enrutamiento automático o elige un modelo marcado como apto; especificar directamente un modelo no apto para promociones devuelve HTTP 403. Las solicitudes usan OpenAI Chat Completions; el enrutamiento inteligente selecciona modelos aptos para promociones y aplica límites por solicitud, diarios compartidos y de concurrencia."
 no_pricing = "No hay filas de tarifas que coincidan."
 no_groups = "No hay grupos de enrutado disponibles para tu cuenta."
 usage = '''
@@ -1359,8 +1363,8 @@ choice_skip = "Omitir esta versión"
 
 [use]
 no_selectable_models = "No hay modelos seleccionables para %s con esta clave/grupo de relay."
-promotional_only = "Esta cuenta solo tiene saldo promocional. Hasta que añadas saldo de pago, la CLI ofrece únicamente smart-everyapi en el grupo %s. Establece el modelo en smart-everyapi para evitar HTTP 403; especificar directamente un modelo no apto para promociones devuelve HTTP 403. Las solicitudes usan OpenAI Chat Completions; el enrutamiento inteligente selecciona modelos aptos para promociones y aplica límites por solicitud, diarios compartidos y de concurrencia."
-promotional_only_group = "Esta cuenta solo tiene saldo promocional. Usa el grupo %s y establece el modelo en smart-everyapi para evitar HTTP 403. Especificar directamente un modelo no apto para promociones devuelve HTTP 403. Añade saldo de pago antes de seleccionar otro grupo."
+promotional_only = "Esta cuenta solo tiene saldo promocional. Hasta que añadas saldo de pago, la CLI ofrece smart-everyapi y modelos dedicados aptos para promociones en el grupo %s. Establece smart-everyapi para el enrutamiento automático o elige un modelo marcado como apto; especificar directamente un modelo no apto para promociones devuelve HTTP 403. Las solicitudes usan OpenAI Chat Completions; el enrutamiento inteligente selecciona modelos aptos para promociones y aplica límites por solicitud, diarios compartidos y de concurrencia."
+promotional_only_group = "Esta cuenta solo tiene saldo promocional. Usa el grupo %s y elige smart-everyapi o un modelo dedicado apto para promociones para evitar HTTP 403. Especificar directamente cualquier otro modelo devuelve HTTP 403. Añade saldo de pago antes de seleccionar otro grupo."
 sanitize_bad_value = "--sanitize=%q no es un valor true/false válido — usa --sanitize o --sanitize=false"
 tool_picker = "Elige una herramienta:"
 group_picker = "Elige un grupo de enrutado:"
@@ -1696,3 +1700,4 @@ search_count = "%d coincidencia(s)"
 search_more = "… y %d línea(s) más"
 search_hint = "Lee un tema completo con 'everyapi docs <topic>'."
 opening = "Abriendo %s"
+

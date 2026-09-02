@@ -76,13 +76,6 @@ func runList(args []string) error {
 	}
 	ms := directory.Models
 	if directory.PromotionalOnly {
-		filtered := ms[:0]
-		for _, model := range ms {
-			if model.ID == "smart-everyapi" {
-				filtered = append(filtered, model)
-			}
-		}
-		ms = filtered
 		cliout.Printf(i18n.T("models.promotional_only")+"\n", cliout.Sanitize(requiredPromotionalGroup(directory.RequiredGroup)))
 	}
 	if len(ms) == 0 {
@@ -124,9 +117,13 @@ func runPricing(args []string) error {
 	}
 	rows := p.Rows
 	if directory.PromotionalOnly {
+		allowedModels := make(map[string]struct{}, len(directory.Models))
+		for _, model := range directory.Models {
+			allowedModels[model.ID] = struct{}{}
+		}
 		filtered := rows[:0]
 		for _, row := range rows {
-			if row.ModelName == "smart-everyapi" {
+			if _, allowed := allowedModels[row.ModelName]; allowed {
 				filtered = append(filtered, row)
 			}
 		}

@@ -28,6 +28,7 @@ var topicOrder = []string{
 	"mcp",
 	"proxy",
 	"computer",
+	"artifacts",
 	"desktop",
 	"dashboard",
 	"seller",

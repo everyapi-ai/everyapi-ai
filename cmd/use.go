@@ -2216,13 +2216,10 @@ func promotionalRelayCatalog(directory *api.RelayModelDirectory) []api.RelayMode
 		}
 		return directory.Models
 	}
-	filtered := make([]api.RelayModel, 0, 1)
-	for _, model := range directory.Models {
-		if model.ID == "smart-everyapi" {
-			filtered = append(filtered, model)
-		}
-	}
-	return filtered
+	// The gateway already filters this catalogue to platform routes that the
+	// promotional policy allows. Keep every returned model so dedicated routes
+	// remain selectable alongside the smart alias.
+	return directory.Models
 }
 
 func requiredPromotionalRouteGroup(group string) string {

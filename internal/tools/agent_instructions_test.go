@@ -26,6 +26,27 @@ func TestAgentInstructionsAlwaysCarryArtifactDeliveryStandard(t *testing.T) {
 	}
 }
 
+// TestAgentInstructionsDescribeTheViewerConstraints covers the failures an agent cannot discover on its own: the viewer refuses external assets, network access and storage SILENTLY, so a report that uses them publishes cleanly and is simply broken for its reader. The verification step is here for the same reason — a real URL to an unopened report passed every check the standard used to make.
+func TestAgentInstructionsDescribeTheViewerConstraints(t *testing.T) {
+	t.Setenv("TMUX", "")
+	t.Setenv(TerminalModeEnvironment, "native")
+
+	instructions := AgentInstructions()
+	for _, required := range []string{
+		"sandboxed iframe",
+		"fails silently",
+		"inline every asset",
+		"data:",
+		"no same-origin storage",
+		"background-color",
+		"fetch the returned URL back",
+	} {
+		if !strings.Contains(instructions, required) {
+			t.Errorf("agent instructions missing %q: %s", required, instructions)
+		}
+	}
+}
+
 func TestAgentInstructionsAppendVerifiedTmuxContext(t *testing.T) {
 	t.Setenv("TMUX", "/tmp/tmux-501/default,1,0")
 	t.Setenv(TerminalModeEnvironment, "tmux")

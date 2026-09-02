@@ -133,6 +133,10 @@ regular_required = "artifact must be a regular file"
 too_large = "artifact is %d bytes; maximum is %d bytes"
 official_only = "hosted artifact sharing requires an account signed in through api.everyapi.ai or api-cn.everyapi.ai"
 deleted = "deleted %s"
+lint_intro = "warning: %s uses features the artifact viewer blocks:"
+lint_external = "  - external resource %s — the viewer allows inline CSS and JS only, and data: URIs for images and fonts"
+lint_blocked_api = "  - %s in a script — the viewer sets connect-src 'none' and the frame has no same-origin storage"
+lint_hint = "  publishing anyway; run 'everyapi docs artifacts' for the viewer's full constraints"
 
 [launcher.subs.auth]
 login = "Authenticate this **device** with EveryAPI"
@@ -435,7 +439,7 @@ per_model = "Per-model usage (%d model(s)):"
 [models]
 no_models = "No models routable from your group. Ask an admin to enable one."
 count = "%d model(s) accessible:"
-promotional_only = "This account has promotional balance only. Until you add paid balance, the CLI shows only smart-everyapi in the %s group. Set model to smart-everyapi to avoid HTTP 403; directly specifying a model that is not promotion-eligible returns HTTP 403. Requests use OpenAI Chat Completions; smart routing selects from promotion-eligible models, subject to per-request, shared daily, and concurrency limits."
+promotional_only = "This account has promotional balance only. Until you add paid balance, the CLI shows smart-everyapi and promotion-eligible dedicated models in the %s group. Set model to smart-everyapi for automatic routing, or choose a model marked promotion-eligible; directly specifying a model that is not promotion-eligible returns HTTP 403. Requests use OpenAI Chat Completions; smart routing selects from promotion-eligible models, subject to per-request, shared daily, and concurrency limits."
 no_pricing = "No pricing rows match."
 no_groups = "No routing groups available to your account."
 usage = '''
@@ -1339,8 +1343,8 @@ choice_skip = "Skip this version"
 
 [use]
 no_selectable_models = "No selectable models are available to %s with this relay key/group."
-promotional_only = "This account has promotional balance only. Until you add paid balance, the CLI exposes only smart-everyapi in the %s group. Set model to smart-everyapi to avoid HTTP 403; directly specifying a model that is not promotion-eligible returns HTTP 403. Requests use OpenAI Chat Completions; smart routing selects from promotion-eligible models, subject to per-request, shared daily, and concurrency limits."
-promotional_only_group = "This account has promotional balance only. Use the %s group and set model to smart-everyapi to avoid HTTP 403. Directly specifying a model that is not promotion-eligible returns HTTP 403. Add paid balance before selecting another group."
+promotional_only = "This account has promotional balance only. Until you add paid balance, the CLI exposes smart-everyapi and promotion-eligible dedicated models in the %s group. Set model to smart-everyapi for automatic routing, or choose a model marked promotion-eligible; directly specifying a model that is not promotion-eligible returns HTTP 403. Requests use OpenAI Chat Completions; smart routing selects from promotion-eligible models, subject to per-request, shared daily, and concurrency limits."
+promotional_only_group = "This account has promotional balance only. Use the %s group and choose smart-everyapi or a promotion-eligible dedicated model to avoid HTTP 403. Directly specifying any other model returns HTTP 403. Add paid balance before selecting another group."
 sanitize_bad_value = "--sanitize=%q is not a valid true/false value — use --sanitize or --sanitize=false"
 tool_picker = "Pick a tool:"
 group_picker = "Pick a routing group:"
@@ -1676,3 +1680,4 @@ search_count = "%d match(es)"
 search_more = "… and %d more line(s)"
 search_hint = "Read a topic in full with 'everyapi docs <topic>'."
 opening = "Opening %s"
+

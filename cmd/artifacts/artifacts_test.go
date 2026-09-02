@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -564,4 +565,141 @@ func captureArtifactOutput(t *testing.T) *bytes.Buffer {
 	cliout.Out = out
 	t.Cleanup(func() { cliout.Out = previous })
 	return out
+}
+
+func TestScanArtifactForViewerLimitsFlagsOnlyWhatTheViewerBlocks(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		content string
+		want    []string
+	}{
+		{
+			name:    "external stylesheet",
+			content: `<link rel="stylesheet" href="https://cdn.example.com/a.css">`,
+			want:    []string{"artifacts.lint_external"},
+		},
+		{
+			name:    "protocol relative script",
+			content: `<script src="//cdn.example.com/chart.js"></script>`,
+			want:    []string{"artifacts.lint_external"},
+		},
+		{
+			name:    "webfont in css",
+			content: `<style>@font-face{src:url(https://fonts.example.com/a.woff2)}</style>`,
+			want:    []string{"artifacts.lint_external"},
+		},
+		{
+			name:    "network call in a script",
+			content: `<script>fetch("/api").then(r => r.json())</script>`,
+			want:    []string{"artifacts.lint_blocked_api"},
+		},
+		{
+			name:    "storage in a script",
+			content: `<script>localStorage.setItem("k", "v")</script>`,
+			want:    []string{"artifacts.lint_blocked_api"},
+		},
+		{
+			// The whole reason the API scan is scoped to <script> bodies: a report ABOUT web code names these constantly, and a warning there is pure noise.
+			name:    "prose that merely names the blocked APIs",
+			content: `<p>The viewer sets connect-src 'none', so fetch( and localStorage are unavailable.</p>`,
+			want:    nil,
+		},
+		{
+			name:    "inline assets and an ordinary link",
+			content: `<style>body{color:#111}</style><img src="data:image/png;base64,AA=="><a href="https://github.com/">PR</a>`,
+			want:    nil,
+		},
+		{
+			name:    "both classes at once",
+			content: `<img src="https://example.com/a.png"><script>new WebSocket("wss://example.com")</script>`,
+			want:    []string{"artifacts.lint_external", "artifacts.lint_blocked_api"},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			warnings := scanArtifactForViewerLimits(testCase.content)
+			var got []string
+			for _, warning := range warnings {
+				got = append(got, warning.key)
+			}
+			if strings.Join(got, ",") != strings.Join(testCase.want, ",") {
+				t.Errorf("keys = %v, want %v", got, testCase.want)
+			}
+		})
+	}
+}
+
+func TestPublishWarnsOnStderrAndStillUploadsTheWholeFile(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	const html = `<!doctype html><head><link rel="stylesheet" href="https://cdn.example.com/a.css"></head><body><script>fetch("/x")</script></body>`
+	var received string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := new(bytes.Buffer)
+		if _, err := body.ReadFrom(r.Body); err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		received = body.String()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"url":"https://artifacts.everyapi.ai/TK4tBA9HQErZ","expires_at":"2026-09-18T12:00:00Z"}`))
+	}))
+	defer server.Close()
+
+	path := filepath.Join(t.TempDir(), "report.html")
+	if err := os.WriteFile(path, []byte(html), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var warnings bytes.Buffer
+	previousWarnOut := warnOut
+	warnOut = &warnings
+	t.Cleanup(func() { warnOut = previousWarnOut })
+	var out bytes.Buffer
+	previousOut := cliout.Out
+	cliout.Out = &out
+	t.Cleanup(func() { cliout.Out = previousOut })
+
+	if _, err := publish(context.Background(), server.Client(), server.URL, &config.Credentials{APIBase: config.DefaultAPIBase, AccessToken: "access-token", UserID: 42}, path); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	// The lint reads the same descriptor the request body streams from, so a missing rewind would truncate the upload.
+	if received != html {
+		t.Errorf("uploaded body = %q, want the whole file", received)
+	}
+	if out.Len() != 0 {
+		t.Errorf("stdout = %q, want nothing (the --json contract)", out.String())
+	}
+	for _, want := range []string{"report.html", "cdn.example.com", "fetch("} {
+		if !strings.Contains(warnings.String(), want) {
+			t.Errorf("stderr = %q, want it to mention %q", warnings.String(), want)
+		}
+	}
+}
+
+func TestPublishStaysSilentForAConformingArtifact(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := io.Copy(io.Discard, r.Body); err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"url":"https://artifacts.everyapi.ai/TK4tBA9HQErZ","expires_at":"2026-09-18T12:00:00Z"}`))
+	}))
+	defer server.Close()
+
+	path := filepath.Join(t.TempDir(), "clean.html")
+	if err := os.WriteFile(path, []byte(`<!doctype html><head><style>body{background-color:#fff;color:#111}</style></head><body><p>Done</p></body>`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var warnings bytes.Buffer
+	previousWarnOut := warnOut
+	warnOut = &warnings
+	t.Cleanup(func() { warnOut = previousWarnOut })
+
+	if _, err := publish(context.Background(), server.Client(), server.URL, &config.Credentials{APIBase: config.DefaultAPIBase, AccessToken: "access-token", UserID: 42}, path); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	if warnings.Len() != 0 {
+		t.Errorf("stderr = %q, want nothing", warnings.String())
+	}
 }

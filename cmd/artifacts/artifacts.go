@@ -350,6 +350,11 @@ func uploadArtifact(ctx context.Context, client *http.Client, creds *config.Cred
 	if openedInfo.Size() > maxArtifactBytes {
 		return publishResult{}, fmt.Errorf(i18n.T("artifacts.too_large"), openedInfo.Size(), maxArtifactBytes)
 	}
+	warnings, err := artifactViewerWarnings(file, openedInfo.Size())
+	if err != nil {
+		return publishResult{}, err
+	}
+	printArtifactWarnings(filepath.Base(filePath), warnings)
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, file)
 	if err != nil {
 		return publishResult{}, fmt.Errorf("create artifact request: %w", err)
@@ -386,6 +391,81 @@ func uploadArtifact(ctx context.Context, client *http.Client, creds *config.Cred
 		return publishResult{}, err
 	}
 	return result, nil
+}
+
+// warnOut is where publish-time advisories go. Stderr, not cliout.Out: `artifacts share --json` is parsed by the agents that publish most reports, and a warning on stdout would corrupt that contract.
+var warnOut io.Writer = os.Stderr
+
+// The artifact viewer serves reports from an isolated origin under `default-src 'none'` — inline CSS and JS only, `data:`/`blob:` images and fonts, `connect-src 'none'`, and a sandbox with no same-origin privilege. An author gets no feedback about any of that: a blocked stylesheet or a failed fetch degrades silently, and the report simply looks wrong to whoever opens it.
+//
+// So these two classes are reported at the only moment the author is still present. They are the ones the service genuinely cannot repair on the reader's behalf, unlike the colour scheme and link target, which the worker rewrites. Detection is deliberately coarse and never blocks the publish: a false positive costs a line on stderr, while refusing to upload would cost the report.
+//
+// The JS check reads only <script> bodies. Scanning the whole document would flag any report that merely DISCUSSES fetch() or localStorage in its prose — and reports about web code do that constantly.
+var (
+	artifactScriptBlock       = regexp.MustCompile(`(?is)<script\b[^>]*>(.*?)</script\s*>`)
+	artifactExternalResources = []*regexp.Regexp{
+		regexp.MustCompile(`(?is)<(?:script|img|iframe|source|video|audio|embed|object|track)\b[^>]*?\s(?:src|data)\s*=\s*["']?\s*(?:https?:)?//[^\s"'>]+`),
+		regexp.MustCompile(`(?is)<link\b[^>]*?\shref\s*=\s*["']?\s*(?:https?:)?//[^\s"'>]+`),
+		regexp.MustCompile(`(?i)url\(\s*["']?\s*(?:https?:)?//[^)"'\s]+`),
+	}
+	artifactBlockedAPIs = regexp.MustCompile(`(?i)\b(?:fetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|indexedDB|navigator\s*\.\s*sendBeacon|new\s+EventSource|new\s+WebSocket)`)
+)
+
+type artifactWarning struct {
+	key    string
+	sample string
+}
+
+// artifactViewerWarnings inspects the very bytes that are about to be uploaded, then rewinds. Re-reading the path instead would open a second window for the swap that the caller's SameFile check just closed. A read failure yields no warnings — advisory output must not fail a publish — but a failed rewind is fatal, because the request body would otherwise be silently short.
+func artifactViewerWarnings(file *os.File, size int64) ([]artifactWarning, error) {
+	content := make([]byte, size)
+	_, readErr := io.ReadFull(file, content)
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("rewind artifact: %w", err)
+	}
+	if readErr != nil {
+		return nil, nil
+	}
+	return scanArtifactForViewerLimits(string(content)), nil
+}
+
+func scanArtifactForViewerLimits(content string) []artifactWarning {
+	var warnings []artifactWarning
+	for _, pattern := range artifactExternalResources {
+		if match := pattern.FindString(content); match != "" {
+			warnings = append(warnings, artifactWarning{key: "artifacts.lint_external", sample: match})
+			break
+		}
+	}
+	for _, script := range artifactScriptBlock.FindAllStringSubmatch(content, -1) {
+		if match := artifactBlockedAPIs.FindString(script[1]); match != "" {
+			warnings = append(warnings, artifactWarning{key: "artifacts.lint_blocked_api", sample: match})
+			break
+		}
+	}
+	return warnings
+}
+
+func printArtifactWarnings(filename string, warnings []artifactWarning) {
+	if len(warnings) == 0 {
+		return
+	}
+	fmt.Fprintf(warnOut, i18n.T("artifacts.lint_intro")+"\n", cliout.Sanitize(filename))
+	for _, warning := range warnings {
+		fmt.Fprintf(warnOut, i18n.T(warning.key)+"\n", cliout.Sanitize(truncateArtifactSample(warning.sample)))
+	}
+	fmt.Fprintln(warnOut, i18n.T("artifacts.lint_hint"))
+}
+
+// Truncation counts runes, not bytes: a sample is arbitrary document content and cutting mid-sequence would print a replacement character.
+func truncateArtifactSample(sample string) string {
+	const limit = 80
+	sample = strings.Join(strings.Fields(sample), " ")
+	runes := []rune(sample)
+	if len(runes) <= limit {
+		return sample
+	}
+	return string(runes[:limit]) + "…"
 }
 
 func currentArtifactProject(ctx context.Context) string {

@@ -25,7 +25,7 @@ func TestRunWithNoArgsDoesNotPanic(t *testing.T) {
 	}
 }
 
-func TestRunListShowsOnlySmartForPromotionalOnlyAccount(t *testing.T) {
+func TestRunListShowsPromotionalDedicatedModels(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	i18n.SetLanguage(i18n.LangEn)
 	t.Cleanup(func() { i18n.SetLanguage(i18n.LangEn) })
@@ -47,7 +47,7 @@ func TestRunListShowsOnlySmartForPromotionalOnlyAccount(t *testing.T) {
 
 	requireNoError(t, runList(nil))
 	got := output.String()
-	if !strings.Contains(got, "smart-everyapi") || strings.Contains(got, "gpt-5.6-luna") || !strings.Contains(got, "promotional balance only") || !strings.Contains(got, "auto") {
+	if !strings.Contains(got, "smart-everyapi") || !strings.Contains(got, "gpt-5.6-luna") || !strings.Contains(got, "promotional balance only") || !strings.Contains(got, "auto") {
 		t.Fatalf("promotional-only model output =\n%s", got)
 	}
 	if !strings.Contains(got, "OpenAI Chat Completions") || !strings.Contains(got, "concurrency limits") || strings.Contains(got, "without tools") {
@@ -109,7 +109,7 @@ func TestRunGroupsShowsOnlyRequiredGroupForPromotionalOnlyAccount(t *testing.T) 
 	}
 }
 
-func TestRunPricingShowsOnlySmartAutoForPromotionalOnlyAccount(t *testing.T) {
+func TestRunPricingShowsPromotionalDedicatedModelsInAutoGroup(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	i18n.SetLanguage(i18n.LangEn)
 	t.Cleanup(func() { i18n.SetLanguage(i18n.LangEn) })
@@ -118,9 +118,9 @@ func TestRunPricingShowsOnlySmartAutoForPromotionalOnlyAccount(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/user/models":
-			_, _ = w.Write([]byte(`{"success":true,"promotional_only":true,"required_group":"auto","data":[{"id":"smart-everyapi","vendor":"EveryAPI"}]}`))
+			_, _ = w.Write([]byte(`{"success":true,"promotional_only":true,"required_group":"auto","data":[{"id":"smart-everyapi","vendor":"EveryAPI"},{"id":"gpt-5.6-luna","vendor":"OpenAI"}]}`))
 		case "/api/pricing":
-			_, _ = w.Write([]byte(`{"data":[{"model_name":"smart-everyapi","model_ratio":1},{"model_name":"gpt-5.6-luna","model_ratio":2}],"group_ratio":{"auto":1,"default":1},"usable_group":{"auto":"Automatic","default":"Standard"}}`))
+			_, _ = w.Write([]byte(`{"data":[{"model_name":"smart-everyapi","model_ratio":1},{"model_name":"gpt-5.6-luna","model_ratio":2},{"model_name":"other-model","model_ratio":3}],"group_ratio":{"auto":1,"default":1},"usable_group":{"auto":"Automatic","default":"Standard"}}`))
 		default:
 			t.Fatalf("unexpected request path %q", r.URL.Path)
 		}
@@ -135,7 +135,7 @@ func TestRunPricingShowsOnlySmartAutoForPromotionalOnlyAccount(t *testing.T) {
 
 	requireNoError(t, runPricing(nil))
 	got := output.String()
-	if !strings.Contains(got, "smart-everyapi") || strings.Contains(got, "gpt-5.6-luna") || !strings.Contains(got, "id=auto") || strings.Contains(got, "id=default") || !strings.Contains(got, "promotional balance only") {
+	if !strings.Contains(got, "smart-everyapi") || !strings.Contains(got, "gpt-5.6-luna") || strings.Contains(got, "other-model") || !strings.Contains(got, "id=auto") || strings.Contains(got, "id=default") || !strings.Contains(got, "promotional balance only") {
 		t.Fatalf("promotional-only pricing output =\n%s", got)
 	}
 }
@@ -230,7 +230,7 @@ func TestOAuthRelayOnlyCommandsUseRelayPromotionalMetadata(t *testing.T) {
 
 			requireNoError(t, command.run())
 			got := output.String()
-			if !strings.Contains(got, "promotional balance only") || !strings.Contains(got, "smart-everyapi") && command.name != "groups" || strings.Contains(got, "gpt-5.6-luna") || strings.Contains(got, "id=default") {
+			if !strings.Contains(got, "promotional balance only") || !strings.Contains(got, "smart-everyapi") && command.name != "groups" || command.name == "list" && !strings.Contains(got, "gpt-5.6-luna") || strings.Contains(got, "id=default") {
 				t.Fatalf("OAuth relay-only %s output =\n%s", command.name, got)
 			}
 		})

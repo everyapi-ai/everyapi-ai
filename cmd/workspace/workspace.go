@@ -2090,16 +2090,17 @@ func schemaEmulatorFlags(command string) []string {
 }
 
 func schemaAutomationFlags(command string) []string {
+	control := []string{"control-state"}
 	if command == "automations list" {
-		return nil
+		return control
 	}
 	if command == "automations show" || command == "automations remove" || command == "automations run" {
-		return []string{"id"}
+		return append([]string{"id"}, control...)
 	}
 	if command == "automations runs" {
-		return []string{"id"}
+		return append([]string{"id"}, control...)
 	}
-	flags := []string{"name", "prompt", "provider", "precheck", "precheck-timeout", "repo", "workspace", "project", "host", "project-host-setup", "source-context", "workspace-mode", "base-branch", "trigger", "schedule", "time", "day", "timezone", "enabled", "disabled", "missed-run-grace-minutes", "reuse-session", "fresh-session"}
+	flags := []string{"name", "clear-name", "prompt", "provider", "session", "precheck", "precheck-timeout", "precheck-approved", "precheck-approval", "repo", "workspace", "project", "host", "project-host-setup", "source-context", "workspace-mode", "base-branch", "trigger", "schedule", "every-seconds", "time", "day", "timezone", "enabled", "disabled", "missed-run-policy", "missed-run-grace-minutes", "reuse-session", "fresh-session", "control-state"}
 	if command == "automations edit" {
 		flags = append([]string{"id"}, flags...)
 	}
@@ -2589,6 +2590,13 @@ func orchestration(args []string) (any, error) {
 func automations(args []string) (any, error) {
 	if len(args) == 0 || isHelp(args[0]) {
 		return map[string]any{"commands": []string{"list", "show", "create", "edit", "remove", "run", "runs"}}, nil
+	}
+	controlState, useControl, err := automationControlStatePath(args)
+	if err != nil {
+		return nil, err
+	}
+	if useControl {
+		return automationsThroughControl(args, controlState)
 	}
 	store, err := loadState("automations.json")
 	if err != nil {

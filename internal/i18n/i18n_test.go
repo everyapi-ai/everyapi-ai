@@ -221,11 +221,11 @@ func TestPromotionalOnlyMessagesRequireSmartAndWarn403(t *testing.T) {
 		}
 	}
 	for _, key := range keys {
-		if message := locales[LangEn][key]; !strings.Contains(message, "not promotion-eligible") || strings.Contains(message, "any other model") {
-			t.Errorf("en/%s must limit HTTP 403 to models outside the promotional policy: %q", key, message)
+		if message := locales[LangEn][key]; !strings.Contains(message, "promotion-eligible") {
+			t.Errorf("en/%s must identify promotion-eligible models: %q", key, message)
 		}
-		if message := locales[LangZh][key]; !strings.Contains(message, "不在赠送额度白名单") {
-			t.Errorf("zh/%s must limit HTTP 403 to models outside the promotional allowlist: %q", key, message)
+		if message := locales[LangZh][key]; !strings.Contains(message, "赠送可用") {
+			t.Errorf("zh/%s must identify models usable with promotional balance: %q", key, message)
 		}
 	}
 }
