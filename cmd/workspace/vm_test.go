@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestVMRecipeListAndDoctorReadEveryAPIYAML(t *testing.T) {
@@ -186,6 +187,79 @@ func TestVMRuntimeCleanupFailureRemainsRetryable(t *testing.T) {
 	}
 }
 
+func TestVMRuntimeCancelStopsActiveCleanup(t *testing.T) {
+	repo := vmTestRepo(t)
+	stateDir := t.TempDir()
+	t.Setenv("EVERYAPI_WORKSPACE_STATE_DIR", stateDir)
+	createRunner := &fakeVMRecipeRunner{results: []vmProcessResult{{Stdout: validVMRecipeResult("/workspace/project", "token")}}}
+	if _, err := vmRuntimeCreate(context.Background(), []string{"cloud-sandbox", "--repo-path", repo, "--instance-id", "vm-cancel"}, createRunner); err != nil {
+		t.Fatal(err)
+	}
+
+	type actionResult struct {
+		record vmRuntimeRecord
+		err    error
+	}
+	runner := &blockingVMRecipeRunner{started: make(chan struct{})}
+	done := make(chan actionResult, 1)
+	go func() {
+		record, err := vmRuntimeAction(context.Background(), vmActionCleanup, []string{"vm-cancel"}, runner)
+		done <- actionResult{record: record, err: err}
+	}()
+	select {
+	case <-runner.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cleanup did not start")
+	}
+	if _, err := vmRuntimeAction(context.Background(), vmActionCleanup, []string{"vm-cancel"}, &fakeVMRecipeRunner{}); err == nil || !strings.Contains(err.Error(), "already has an active cleanup operation") {
+		t.Fatalf("concurrent cleanup error = %v", err)
+	}
+
+	value, err := vmRuntimeCommand([]string{"cancel", "vm-cancel"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancelResult := value.(vmRuntimeCancelResult)
+	if cancelResult.RuntimeID != "vm-cancel" || cancelResult.Action != string(vmActionCleanup) || !cancelResult.CancellationRequested {
+		t.Fatalf("cancel result = %#v", cancelResult)
+	}
+
+	select {
+	case result := <-done:
+		if result.err == nil || !strings.Contains(result.err.Error(), "cleanup cancelled by request") {
+			t.Fatalf("cleanup result = %#v, err = %v", result.record, result.err)
+		}
+		if result.record.Status != vmRuntimeCleanupFailed || result.record.CleanupStatus != vmCleanupFailed || result.record.ActiveOperation != nil {
+			t.Fatalf("cancelled runtime = %#v", result.record)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("cleanup was not cancelled")
+	}
+
+	store, err := loadVMRuntimeStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(store.Runtimes) != 1 || store.Runtimes[0].ActiveOperation != nil || !strings.Contains(store.Runtimes[0].LastError, "cancelled by request") {
+		t.Fatalf("runtime store = %#v", store)
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, ".vm-cancel-"+cancelResult.OperationID)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("cancellation marker remains: %v", err)
+	}
+}
+
+func TestVMRuntimeCancelRejectsIdleRuntime(t *testing.T) {
+	repo := vmTestRepo(t)
+	t.Setenv("EVERYAPI_WORKSPACE_STATE_DIR", t.TempDir())
+	runner := &fakeVMRecipeRunner{results: []vmProcessResult{{Stdout: validVMRecipeResult("/workspace/project", "token")}}}
+	if _, err := vmRuntimeCreate(context.Background(), []string{"cloud-sandbox", "--repo-path", repo, "--instance-id", "vm-idle"}, runner); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := vmRuntimeCommand([]string{"cancel", "vm-idle"}); err == nil || !strings.Contains(err.Error(), "no active operation") {
+		t.Fatalf("cancel idle runtime error = %v", err)
+	}
+}
+
 func TestVMShellRunnerExecutesLifecycleContract(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell fixture uses POSIX scripts")
@@ -269,6 +343,7 @@ func TestVMAgentContextExposesFullLifecycle(t *testing.T) {
 		"vm runtime suspend":      false,
 		"vm runtime resume":       false,
 		"vm runtime cleanup":      false,
+		"vm runtime cancel":       false,
 		"vm runtime cleanup-info": false,
 		"vm runtime forget":       false,
 	}
@@ -288,6 +363,16 @@ func TestVMAgentContextExposesFullLifecycle(t *testing.T) {
 type fakeVMRecipeRunner struct {
 	results []vmProcessResult
 	calls   []vmRunRequest
+}
+
+type blockingVMRecipeRunner struct {
+	started chan struct{}
+}
+
+func (r *blockingVMRecipeRunner) Run(ctx context.Context, _ vmRunRequest) vmProcessResult {
+	close(r.started)
+	<-ctx.Done()
+	return vmProcessResult{ExitCode: -1, Err: context.Cause(ctx)}
 }
 
 func (f *fakeVMRecipeRunner) Run(_ context.Context, request vmRunRequest) vmProcessResult {

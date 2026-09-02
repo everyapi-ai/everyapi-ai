@@ -478,6 +478,7 @@ var commands = []command{
 		{name: "runtime suspend", desc: "Suspend a VM runtime", args: []string{"runtime", "suspend"}},
 		{name: "runtime resume", desc: "Resume a VM runtime", args: []string{"runtime", "resume"}},
 		{name: "runtime cleanup", desc: "Destroy a VM runtime", args: []string{"runtime", "cleanup"}},
+		{name: "runtime cancel", desc: "Request cancellation of an active VM operation", args: []string{"runtime", "cancel"}},
 		{name: "runtime cleanup-info", desc: "Print manual cleanup payload and command", args: []string{"runtime", "cleanup-info"}},
 		{name: "runtime forget", desc: "Remove a cleaned VM runtime record", args: []string{"runtime", "forget"}},
 	}},

@@ -199,7 +199,7 @@ var nativeUsages = map[string]string{
 	"project":         "Usage: everyapi project <list|setups|setup-existing-folder|setup-clone|setup-create|setup-update|setup-delete> [flags]",
 	"file":            "Usage: everyapi file <open|diff|open-changed> [path] [flags]",
 	"linear":          "Usage: everyapi linear <issue|search|list> [flags]",
-	"vm":              "Usage: everyapi vm <recipe list|recipe doctor|runtime list|runtime show|runtime create|runtime suspend|runtime resume|runtime cleanup|runtime cleanup-info|runtime forget> [flags]",
+	"vm":              "Usage: everyapi vm <recipe list|recipe doctor|runtime list|runtime show|runtime create|runtime suspend|runtime resume|runtime cleanup|runtime cancel|runtime cleanup-info|runtime forget> [flags]",
 	"emulator":        "Usage: everyapi emulator <list|attach|tap|type|gesture|button|rotate|exec|kill> [flags]",
 }
 
@@ -1803,7 +1803,7 @@ func schemaPositionalArgs(command string) []string {
 		return []string{"topic"}
 	case "vm recipe doctor", "vm runtime create":
 		return []string{"recipe-id"}
-	case "vm runtime show", "vm runtime suspend", "vm runtime resume", "vm runtime cleanup", "vm runtime cleanup-info", "vm runtime forget":
+	case "vm runtime show", "vm runtime suspend", "vm runtime resume", "vm runtime cleanup", "vm runtime cancel", "vm runtime cleanup-info", "vm runtime forget":
 		return []string{"id"}
 	}
 	if strings.HasPrefix(command, "linear ") {
@@ -1939,7 +1939,7 @@ func schemaFlags(command string) []string {
 			add("recipe-id", "repo-path", "provision", "connect")
 		case "vm runtime create":
 			add("recipe-id", "repo-path", "instance-id", "project-id", "workspace-id", "workspace-name", "repo-url", "branch")
-		case "vm runtime show", "vm runtime suspend", "vm runtime resume", "vm runtime cleanup", "vm runtime cleanup-info":
+		case "vm runtime show", "vm runtime suspend", "vm runtime resume", "vm runtime cleanup", "vm runtime cancel", "vm runtime cleanup-info":
 			add("id")
 		case "vm runtime forget":
 			add("id", "force")
@@ -2314,7 +2314,7 @@ var nativeSubcommands = map[string][]string{
 	"skills":        {"installed", "share", "list", "get", "install", "update"},
 	"host":          {"list"},
 	"environment":   {"add", "list", "show", "rm"},
-	"vm":            {"recipe list", "recipe doctor", "runtime list", "runtime show", "runtime create", "runtime suspend", "runtime resume", "runtime cleanup", "runtime cleanup-info", "runtime forget"},
+	"vm":            {"recipe list", "recipe doctor", "runtime list", "runtime show", "runtime create", "runtime suspend", "runtime resume", "runtime cleanup", "runtime cancel", "runtime cleanup-info", "runtime forget"},
 	"automations":   {"list", "show", "create", "edit", "remove", "run", "runs"},
 	"project":       {"list", "setups", "setup-existing-folder", "setup-clone", "setup-create", "setup-update", "setup-delete"},
 	"repo":          {"list", "add", "show", "set-base-ref", "search-refs"},

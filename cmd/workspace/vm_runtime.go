@@ -15,7 +15,13 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 )
+
+const vmCancelPollInterval = 50 * time.Millisecond
+
+var errVMRuntimeCancellationRequested = errors.New("VM runtime cancellation requested")
 
 type vmRuntimeStatus string
 
@@ -42,22 +48,29 @@ const (
 )
 
 type vmRuntimeRecord struct {
-	ID                   string          `json:"id"`
-	RecipeID             string          `json:"recipeId"`
-	Recipe               vmRecipe        `json:"recipe"`
-	RepoPath             string          `json:"repoPath"`
-	ProjectID            string          `json:"projectId,omitempty"`
-	WorkspaceID          string          `json:"workspaceId,omitempty"`
-	WorkspaceName        string          `json:"workspaceName,omitempty"`
-	RepoURL              string          `json:"repoUrl,omitempty"`
-	Branch               string          `json:"branch,omitempty"`
-	Status               vmRuntimeStatus `json:"status"`
-	CleanupStatus        vmCleanupStatus `json:"cleanupStatus"`
-	CleanupLastAttemptAt int64           `json:"cleanupLastAttemptAt,omitempty"`
-	LastError            string          `json:"lastError,omitempty"`
-	CreatedAt            int64           `json:"createdAt"`
-	UpdatedAt            int64           `json:"updatedAt"`
-	RecipeResult         json.RawMessage `json:"recipeResult,omitempty"`
+	ID                   string              `json:"id"`
+	RecipeID             string              `json:"recipeId"`
+	Recipe               vmRecipe            `json:"recipe"`
+	RepoPath             string              `json:"repoPath"`
+	ProjectID            string              `json:"projectId,omitempty"`
+	WorkspaceID          string              `json:"workspaceId,omitempty"`
+	WorkspaceName        string              `json:"workspaceName,omitempty"`
+	RepoURL              string              `json:"repoUrl,omitempty"`
+	Branch               string              `json:"branch,omitempty"`
+	Status               vmRuntimeStatus     `json:"status"`
+	CleanupStatus        vmCleanupStatus     `json:"cleanupStatus"`
+	CleanupLastAttemptAt int64               `json:"cleanupLastAttemptAt,omitempty"`
+	LastError            string              `json:"lastError,omitempty"`
+	CreatedAt            int64               `json:"createdAt"`
+	UpdatedAt            int64               `json:"updatedAt"`
+	RecipeResult         json.RawMessage     `json:"recipeResult,omitempty"`
+	ActiveOperation      *vmRuntimeOperation `json:"activeOperation,omitempty"`
+}
+
+type vmRuntimeOperation struct {
+	ID        string `json:"id"`
+	Action    string `json:"action"`
+	StartedAt int64  `json:"startedAt"`
 }
 
 type vmRuntimeStore struct {
@@ -78,6 +91,13 @@ type vmCleanupInfo struct {
 	Command   string          `json:"command,omitempty"`
 	Payload   json.RawMessage `json:"payload"`
 	Disabled  bool            `json:"disabled"`
+}
+
+type vmRuntimeCancelResult struct {
+	RuntimeID             string `json:"runtimeId"`
+	OperationID           string `json:"operationId"`
+	Action                string `json:"action"`
+	CancellationRequested bool   `json:"cancellationRequested"`
 }
 
 func vmRuntimeCommand(args []string) (any, error) {
@@ -119,6 +139,29 @@ func vmRuntimeCommand(args []string) (any, error) {
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer cancel()
 		return vmRuntimeAction(ctx, vmActionCleanup, args[1:], shellVMRecipeRunner{})
+	case "cancel":
+		id, err := vmRuntimeID(args[1:])
+		if err != nil {
+			return nil, err
+		}
+		store, err := loadVMRuntimeStore()
+		if err != nil {
+			return nil, err
+		}
+		_, record, err := findVMRuntime(store, id)
+		if err != nil {
+			return nil, err
+		}
+		if record.ActiveOperation == nil {
+			return nil, fmt.Errorf("VM runtime %q has no active operation to cancel", id)
+		}
+		if err := requestVMRuntimeCancellation(*record.ActiveOperation); err != nil {
+			return nil, err
+		}
+		return vmRuntimeCancelResult{
+			RuntimeID: id, OperationID: record.ActiveOperation.ID,
+			Action: record.ActiveOperation.Action, CancellationRequested: true,
+		}, nil
 	case "cleanup-info":
 		id, err := vmRuntimeID(args[1:])
 		if err != nil {
@@ -202,11 +245,19 @@ func vmRuntimeCreate(ctx context.Context, args []string, runner vmRecipeRunner) 
 		return vmRuntimeRecord{}, fmt.Errorf("VM runtime %q already exists", instanceID)
 	}
 	now := vmNowMillis()
+	operation, err := newVMRuntimeOperation("create")
+	if err != nil {
+		return vmRuntimeRecord{}, err
+	}
+	if err := prepareVMRuntimeCancellation(operation); err != nil {
+		return vmRuntimeRecord{}, err
+	}
 	record := vmRuntimeRecord{
 		ID: instanceID, RecipeID: recipe.ID, Recipe: recipe, RepoPath: repoPath,
 		ProjectID: flagValue(args, "project-id", ""), WorkspaceID: flagValue(args, "workspace-id", ""), WorkspaceName: flagValue(args, "workspace-name", ""),
 		RepoURL: flagValue(args, "repo-url", ""), Branch: flagValue(args, "branch", ""),
 		Status: vmRuntimeProvisioning, CleanupStatus: vmCleanupNotStarted, CreatedAt: now, UpdatedAt: now,
+		ActiveOperation: &operation,
 	}
 	if recipe.DestroyDisabled {
 		record.CleanupStatus = vmCleanupDisabled
@@ -216,10 +267,25 @@ func vmRuntimeCreate(ctx context.Context, args []string, runner vmRecipeRunner) 
 		return vmRuntimeRecord{}, err
 	}
 	runContext := vmContextFromRecord(record)
-	result := runner.Run(ctx, vmRunRequest{Command: recipe.Create, RepoPath: repoPath, Mode: vmModeCreate, Context: runContext, ResultSchemaVersion: vmRecipeResultSchemaVersion(recipe)})
+	runCtx, finishCancellation, err := watchVMRuntimeCancellation(ctx, operation)
+	if err != nil {
+		record.ActiveOperation = nil
+		record.Status = vmRuntimeFailed
+		record.LastError = err.Error()
+		record.UpdatedAt = vmNowMillis()
+		persistErr := updateVMRuntimeRecord(record)
+		return record, errors.Join(err, persistErr)
+	}
+	result := runner.Run(runCtx, vmRunRequest{Command: recipe.Create, RepoPath: repoPath, Mode: vmModeCreate, Context: runContext, ResultSchemaVersion: vmRecipeResultSchemaVersion(recipe)})
+	cancellationRequested := finishCancellation()
+	record.ActiveOperation = nil
 	if result.Err != nil || result.ExitCode != 0 {
 		record.Status = vmRuntimeFailed
-		record.LastError = vmProcessFailure("provision", result)
+		if cancellationRequested {
+			record.LastError = "provision cancelled by request"
+		} else {
+			record.LastError = vmProcessFailure("provision", result)
+		}
 		record.UpdatedAt = vmNowMillis()
 		persistErr := updateVMRuntimeRecord(record)
 		return record, errors.Join(errors.New(record.LastError), persistErr)
@@ -254,6 +320,9 @@ func vmRuntimeAction(ctx context.Context, action vmLifecycleAction, args []strin
 	if err != nil {
 		return vmRuntimeRecord{}, err
 	}
+	if record.ActiveOperation != nil {
+		return record, fmt.Errorf("runtime %q already has an active %s operation", id, record.ActiveOperation.Action)
+	}
 	mode := vmModeSuspend
 	command := record.Recipe.Suspend
 	switch action {
@@ -283,28 +352,45 @@ func vmRuntimeAction(ctx context.Context, action vmLifecycleAction, args []strin
 			return record, updateVMRuntimeRecord(record)
 		}
 		mode, command = vmModeDestroy, record.Recipe.Destroy
-		record.Status = vmRuntimeCleanupPending
-		record.CleanupStatus = vmCleanupRunning
-		record.CleanupLastAttemptAt = vmNowMillis()
-		record.UpdatedAt = record.CleanupLastAttemptAt
-		if err := updateVMRuntimeRecord(record); err != nil {
-			return record, err
-		}
 	default:
 		return record, fmt.Errorf("unknown VM runtime action %q", action)
 	}
-	result := runVMRecipeLifecycle(ctx, runner, record.Recipe, record.RepoPath, vmContextFromRecord(record), mode, record.RecipeResult)
+	operation, err := newVMRuntimeOperation(string(action))
+	if err != nil {
+		return record, err
+	}
+	if err := prepareVMRuntimeCancellation(operation); err != nil {
+		return record, err
+	}
+	record.ActiveOperation = &operation
+	if action == vmActionCleanup {
+		record.Status = vmRuntimeCleanupPending
+		record.CleanupStatus = vmCleanupRunning
+		record.CleanupLastAttemptAt = operation.StartedAt
+	}
+	record.UpdatedAt = operation.StartedAt
+	if err := updateVMRuntimeRecord(record); err != nil {
+		return record, err
+	}
+	runCtx, finishCancellation, err := watchVMRuntimeCancellation(ctx, operation)
+	if err != nil {
+		record.ActiveOperation = nil
+		record.LastError = err.Error()
+		markVMRuntimeActionFailed(&record, action)
+		record.UpdatedAt = vmNowMillis()
+		persistErr := updateVMRuntimeRecord(record)
+		return record, errors.Join(err, persistErr)
+	}
+	result := runVMRecipeLifecycle(runCtx, runner, record.Recipe, record.RepoPath, vmContextFromRecord(record), mode, record.RecipeResult)
+	cancellationRequested := finishCancellation()
+	record.ActiveOperation = nil
 	if result.Err != nil || result.ExitCode != 0 {
-		record.LastError = vmProcessFailure(string(action), result)
-		switch action {
-		case vmActionSuspend:
-			record.Status = vmRuntimeSuspendFailed
-		case vmActionResume:
-			record.Status = vmRuntimeResumeFailed
-		case vmActionCleanup:
-			record.Status = vmRuntimeCleanupFailed
-			record.CleanupStatus = vmCleanupFailed
+		if cancellationRequested {
+			record.LastError = fmt.Sprintf("%s cancelled by request", action)
+		} else {
+			record.LastError = vmProcessFailure(string(action), result)
 		}
+		markVMRuntimeActionFailed(&record, action)
 		record.UpdatedAt = vmNowMillis()
 		persistErr := updateVMRuntimeRecord(record)
 		return record, errors.Join(errors.New(record.LastError), persistErr)
@@ -335,6 +421,107 @@ func vmRuntimeAction(ctx context.Context, action vmLifecycleAction, args []strin
 		return record, err
 	}
 	return record, nil
+}
+
+func markVMRuntimeActionFailed(record *vmRuntimeRecord, action vmLifecycleAction) {
+	switch action {
+	case vmActionSuspend:
+		record.Status = vmRuntimeSuspendFailed
+	case vmActionResume:
+		record.Status = vmRuntimeResumeFailed
+	case vmActionCleanup:
+		record.Status = vmRuntimeCleanupFailed
+		record.CleanupStatus = vmCleanupFailed
+	}
+}
+
+func newVMRuntimeOperation(action string) (vmRuntimeOperation, error) {
+	value := make([]byte, 12)
+	if _, err := rand.Read(value); err != nil {
+		return vmRuntimeOperation{}, err
+	}
+	return vmRuntimeOperation{ID: "vmop-" + hex.EncodeToString(value), Action: action, StartedAt: vmNowMillis()}, nil
+}
+
+func vmCancellationPath(operation vmRuntimeOperation) (string, error) {
+	if !vmRecipeIDPattern.MatchString(operation.ID) {
+		return "", errors.New("invalid VM runtime operation id")
+	}
+	return statePath(".vm-cancel-" + operation.ID)
+}
+
+func requestVMRuntimeCancellation(operation vmRuntimeOperation) error {
+	path, err := vmCancellationPath(operation)
+	if err != nil {
+		return err
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if errors.Is(err, os.ErrExist) {
+		info, statErr := os.Lstat(path)
+		if statErr != nil {
+			return statErr
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return errors.New("VM runtime cancellation request must be a regular non-symbolic-link file")
+		}
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return file.Close()
+}
+
+func prepareVMRuntimeCancellation(operation vmRuntimeOperation) error {
+	path, err := vmCancellationPath(operation)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func watchVMRuntimeCancellation(parent context.Context, operation vmRuntimeOperation) (context.Context, func() bool, error) {
+	path, err := vmCancellationPath(operation)
+	if err != nil {
+		return nil, nil, err
+	}
+	ctx, cancel := context.WithCancelCause(parent)
+	done := make(chan struct{})
+	var wait sync.WaitGroup
+	wait.Add(1)
+	go func() {
+		defer wait.Done()
+		ticker := time.NewTicker(vmCancelPollInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if _, err := os.Lstat(path); err == nil {
+					cancel(errVMRuntimeCancellationRequested)
+					return
+				} else if !errors.Is(err, os.ErrNotExist) {
+					cancel(fmt.Errorf("inspect VM runtime cancellation request: %w", err))
+					return
+				}
+			}
+		}
+	}()
+	finish := func() bool {
+		requested := errors.Is(context.Cause(ctx), errVMRuntimeCancellationRequested)
+		close(done)
+		cancel(context.Canceled)
+		wait.Wait()
+		_ = os.Remove(path)
+		return requested
+	}
+	return ctx, finish, nil
 }
 
 func runVMRecipeLifecycle(ctx context.Context, runner vmRecipeRunner, recipe vmRecipe, repoPath string, runContext vmRunContext, mode vmMode, result json.RawMessage) vmProcessResult {
@@ -598,6 +785,16 @@ func validateVMRuntimeRecord(record vmRuntimeRecord) error {
 	}
 	if record.CreatedAt <= 0 || record.UpdatedAt <= 0 {
 		return errors.New("createdAt and updatedAt must be positive")
+	}
+	if record.ActiveOperation != nil {
+		operation := record.ActiveOperation
+		if !vmRecipeIDPattern.MatchString(operation.ID) || operation.StartedAt <= 0 {
+			return errors.New("invalid active VM runtime operation")
+		}
+		validActions := map[string]bool{"create": true, string(vmActionSuspend): true, string(vmActionResume): true, string(vmActionCleanup): true}
+		if !validActions[operation.Action] {
+			return fmt.Errorf("unsupported active VM runtime action %q", operation.Action)
+		}
 	}
 	if len(record.RecipeResult) > 0 {
 		if _, err := parseVMRecipeResult(record.RecipeResult, record.Recipe.CheckoutMode); err != nil {
