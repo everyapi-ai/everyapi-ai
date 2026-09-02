@@ -30,6 +30,16 @@ func TestRunAcceptsHelpInAnyArgumentPosition(t *testing.T) {
 	}
 }
 
+func TestArtifactOperandsAcceptIDFlagWithoutTreatingItsValueAsAPath(t *testing.T) {
+	operands, asJSON := artifactOperands([]string{"--id", "ABC123", "--json"})
+	if len(operands) != 0 || !asJSON {
+		t.Fatalf("artifactOperands() = %#v, %v", operands, asJSON)
+	}
+	if got := artifactFlagValue([]string{"--id=ABC123"}, "id"); got != "ABC123" {
+		t.Fatalf("artifactFlagValue() = %q", got)
+	}
+}
+
 func TestPublishUploadsHTMLWithTheCurrentSession(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	projectDir := filepath.Join(t.TempDir(), "everyapi-project")

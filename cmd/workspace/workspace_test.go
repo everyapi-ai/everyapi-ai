@@ -210,6 +210,91 @@ func TestHelpWordDoesNotConsumeFlagValues(t *testing.T) {
 	}
 }
 
+func TestAgentContextMatchesReferenceShape(t *testing.T) {
+	value, err := agentContext(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, ok := value.(map[string]any)
+	if !ok || data["schemaVersion"] != 1 || data["commandCount"] != 232 {
+		t.Fatalf("agent context = %#v", value)
+	}
+	commands, ok := data["commands"].([]map[string]any)
+	if !ok || len(commands) != 232 {
+		t.Fatalf("commands = %T/%d", data["commands"], len(commands))
+	}
+	for _, command := range commands {
+		if command["command"] == "worktree create" {
+			flags := command["flags"].([]string)
+			if !containsString(flags, "parent-worktree") || !containsString(flags, "no-parent") {
+				t.Fatalf("worktree create flags = %#v", flags)
+			}
+			return
+		}
+	}
+	t.Fatal("worktree create missing from schema")
+}
+
+func TestAutomationAndOrchestrationReferenceFlagsPersist(t *testing.T) {
+	stateDir := t.TempDir()
+	t.Setenv("EVERYAPI_WORKSPACE_STATE_DIR", stateDir)
+	automation, err := automations([]string{"create", "--name", "Nightly", "--prompt", "echo hi", "--provider", "codex", "--timezone", "UTC", "--disabled", "--fresh-session"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	automationItem := automation.(map[string]any)
+	if automationItem["prompt"] != "echo hi" || automationItem["command"] != "echo hi" || automationItem["enabled"] != false || automationItem["freshSession"] != true {
+		t.Fatalf("automation = %#v", automationItem)
+	}
+	run, err := orchestration([]string{"run-create", "--objective", "ship", "--from", "cli"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runID := run.(map[string]any)["id"].(string)
+	message, err := orchestration([]string{"send", "--body", "done", "--to", "worker-1", "--subject", "status"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	messageItem := message.(map[string]any)
+	if messageItem["body"] != "done" || messageItem["to"] != "worker-1" || messageItem["subject"] != "status" || messageItem["run"] != runID {
+		t.Fatalf("message = %#v", messageItem)
+	}
+}
+
+func TestBrowserAuxAndEmulatorAliases(t *testing.T) {
+	stateDir := t.TempDir()
+	t.Setenv("EVERYAPI_WORKSPACE_STATE_DIR", stateDir)
+	if _, err := browserAux([]string{"media", "--color-scheme", "dark", "--reduced-motion", "reduce"}, "set"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := browserAux([]string{"set", "--name", "sid", "--value", "abc", "--domain", "example.test", "--secure"}, "cookie"); err != nil {
+		t.Fatal(err)
+	}
+	cookie, err := browserAux([]string{"get", "--url", "https://example.test"}, "cookie")
+	if err != nil || cookie.(map[string]any)["cookies"].(map[string]string)["sid"] != "abc" {
+		t.Fatalf("cookie = %#v, %v", cookie, err)
+	}
+	if _, err := emulator([]string{"attach", "--device", "sim-1", "--focus"}); err != nil {
+		t.Fatal(err)
+	}
+	action, err := emulator([]string{"tap", "--emulator", "sim-1", "--x", "0.25", "--y", "0.75"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action.(map[string]any)["action"].(map[string]any)["x"] != 0.25 {
+		t.Fatalf("tap action = %#v", action)
+	}
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
 func TestRenderArtifacts(t *testing.T) {
 	state := browserState{URL: "https://example.test", Text: "Hello (world)"}
 	pdfPath := filepath.Join(t.TempDir(), "page.pdf")

@@ -31,7 +31,7 @@ func assertClaudeEnv(t *testing.T, got, want map[string]string) {
 
 // The catalogue EveryAPI actually serves today. Without these overrides Claude Code's gateway tier resolves opus to claude-opus-4-7 and sonnet to claude-sonnet-4-6, neither of which is routable here.
 func TestClaudeFamilyDefaultEnvPinsEveryFamilyInTheCatalogue(t *testing.T) {
-	got := claudeFamilyDefaultEnv(modelsFromIDs("claude-fable-5", "claude-haiku-4-5", "claude-opus-5", "claude-sonnet-5"))
+	got := claudeFamilyDefaultEnv(modelsFromIDs("claude-fable-5", "claude-fable-5-1", "claude-haiku-4-5", "claude-opus-5", "claude-sonnet-5"))
 	want := map[string]string{
 		"ANTHROPIC_DEFAULT_OPUS_MODEL":        "claude-opus-5",
 		"ANTHROPIC_DEFAULT_OPUS_MODEL_NAME":   "Opus 5",
@@ -39,8 +39,8 @@ func TestClaudeFamilyDefaultEnvPinsEveryFamilyInTheCatalogue(t *testing.T) {
 		"ANTHROPIC_DEFAULT_SONNET_MODEL_NAME": "Sonnet 5",
 		"ANTHROPIC_DEFAULT_HAIKU_MODEL":       "claude-haiku-4-5",
 		"ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME":  "Haiku 4.5",
-		"ANTHROPIC_DEFAULT_FABLE_MODEL":       "claude-fable-5",
-		"ANTHROPIC_DEFAULT_FABLE_MODEL_NAME":  "Fable 5",
+		"ANTHROPIC_DEFAULT_FABLE_MODEL":       "claude-fable-5-1",
+		"ANTHROPIC_DEFAULT_FABLE_MODEL_NAME":  "Fable 5.1",
 	}
 	assertClaudeEnv(t, got, want)
 }

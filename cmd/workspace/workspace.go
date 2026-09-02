@@ -51,7 +51,10 @@ func run(name string, args []string) error {
 	if hasFlag(args, "--help") || hasFlag(args, "-h") || hasHelpWord(args) {
 		data, err = commandHelp(name)
 	} else {
-		dispatchArgs := stripFlag(args, "--json")
+		dispatchArgs := stripRoutingFlags(name, stripGlobalFlags(stripFlag(args, "--json")))
+		if name == "environment" {
+			dispatchArgs = preserveFlag(args, dispatchArgs, "pairing-code")
+		}
 		// serve uses --json as its non-interactive/background mode switch. Keep
 		// that marker for the handler; all other native handlers only need the
 		// wrapper-level output flag removed from their argument list.
@@ -238,11 +241,87 @@ func hasHelpWord(args []string) bool {
 func stripFlag(args []string, value string) []string {
 	filtered := make([]string, 0, len(args))
 	for _, arg := range args {
-		if arg != value {
-			filtered = append(filtered, arg)
+		if arg == value {
+			continue
 		}
+		filtered = append(filtered, arg)
 	}
 	return filtered
+}
+
+// stripGlobalFlags removes routing metadata that is meaningful to the remote
+// CLI but has no local side effect. Keeping the values out of positional
+// parsing is important: `--environment env-1` must not become a file path or
+// a terminal name in the local compatibility backend.
+func stripGlobalFlags(args []string) []string {
+	filtered := make([]string, 0, len(args))
+	skipNext := false
+	for _, arg := range args {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		if arg == "--json" || arg == "--help" || arg == "-h" {
+			filtered = append(filtered, arg)
+			continue
+		}
+		if arg == "--environment" || arg == "--pairing-code" {
+			skipNext = true
+			continue
+		}
+		if strings.HasPrefix(arg, "--environment=") || strings.HasPrefix(arg, "--pairing-code=") {
+			continue
+		}
+		filtered = append(filtered, arg)
+	}
+	return filtered
+}
+
+func stripRoutingFlags(command string, args []string) []string {
+	stripWorktree := command == "exec" || command == "tab" || command == "set" || command == "cookie" || command == "storage" || command == "console" || command == "network" || command == "clipboard" || command == "dialog" || command == "download" || command == "highlight" || command == "capture" || command == "viewport" || command == "geolocation" || command == "intercept" || command == "mouse" || command == "inserttext" || command == "computer"
+	if !stripWorktree {
+		switch command {
+		case "snapshot", "goto", "find", "get", "screenshot", "full-screenshot", "click", "fill", "type", "select", "scroll", "back", "reload", "eval", "wait", "check", "uncheck", "focus", "clear", "select-all", "keypress", "pdf", "hover", "drag", "upload", "scrollintoview", "dblclick", "forward", "is":
+			stripWorktree = true
+		}
+	}
+	if !stripWorktree {
+		return args
+	}
+	filtered := make([]string, 0, len(args))
+	skipNext := false
+	for _, arg := range args {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		if arg == "--worktree" || arg == "--page" {
+			skipNext = true
+			continue
+		}
+		if strings.HasPrefix(arg, "--worktree=") || strings.HasPrefix(arg, "--page=") {
+			continue
+		}
+		filtered = append(filtered, arg)
+	}
+	return filtered
+}
+
+func preserveFlag(original, filtered []string, name string) []string {
+	value := flagValue(original, name, "")
+	if value == "" {
+		return filtered
+	}
+	return append(filtered, "--"+name, value)
+}
+
+func flagValueAny(args []string, names ...string) string {
+	for _, name := range names {
+		if value := flagValue(args, name, ""); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func printData(v any) error {
@@ -284,6 +363,38 @@ func gitRoot(path string) (string, error) {
 }
 
 func currentRoot() (string, error) { return gitRoot(".") }
+
+func resolveRepoSelector(selector string) string {
+	selector = strings.TrimSpace(selector)
+	for _, prefix := range []string{"path:", "repo:", "id:"} {
+		if strings.HasPrefix(selector, prefix) {
+			selector = strings.TrimPrefix(selector, prefix)
+			break
+		}
+	}
+	if selector == "" {
+		return "."
+	}
+	if info, err := inspectRepo(selector); err == nil {
+		return info.Path
+	}
+	if repos, err := registeredRepos(); err == nil {
+		for _, repo := range repos {
+			if repo.Path == selector || repo.Name == selector || strings.TrimPrefix(repo.Path, "/") == selector {
+				return repo.Path
+			}
+		}
+	}
+	return selector
+}
+
+func rootFromRepoFlag(args []string) (string, error) {
+	selector := flagValue(args, "repo", "")
+	if selector == "" {
+		return currentRoot()
+	}
+	return gitRoot(resolveRepoSelector(selector))
+}
 
 type repoInfo struct {
 	Path   string `json:"path"`
@@ -428,11 +539,17 @@ func saveRepos(repos []repoInfo) error {
 }
 
 type worktreeInfo struct {
-	Path     string `json:"path"`
-	HEAD     string `json:"head"`
-	Branch   string `json:"branch,omitempty"`
-	Dirty    bool   `json:"dirty"`
-	Terminal string `json:"terminal,omitempty"`
+	Path            string `json:"path"`
+	HEAD            string `json:"head"`
+	Branch          string `json:"branch,omitempty"`
+	Dirty           bool   `json:"dirty"`
+	Terminal        string `json:"terminal,omitempty"`
+	DisplayName     string `json:"displayName,omitempty"`
+	Issue           string `json:"issue,omitempty"`
+	LinearIssue     string `json:"linearIssue,omitempty"`
+	Comment         string `json:"comment,omitempty"`
+	WorkspaceStatus string `json:"workspaceStatus,omitempty"`
+	ParentWorktree  string `json:"parentWorktree,omitempty"`
 }
 
 func parseWorktrees(root string) ([]worktreeInfo, error) {
@@ -465,6 +582,21 @@ func parseWorktrees(root string) ([]worktreeInfo, error) {
 			list[i].Dirty = len(status) > 0
 		}
 	}
+	if metadata, metadataErr := loadState("worktree-metadata.json"); metadataErr == nil {
+		for i := range list {
+			for _, raw := range metadata.Items {
+				if metadataString(raw["path"]) != list[i].Path {
+					continue
+				}
+				list[i].DisplayName = metadataString(raw["display-name"])
+				list[i].Issue = metadataString(raw["issue"])
+				list[i].LinearIssue = metadataString(raw["linear-issue"])
+				list[i].Comment = metadataString(raw["comment"])
+				list[i].WorkspaceStatus = metadataString(raw["workspace-status"])
+				list[i].ParentWorktree = metadataString(raw["parent-worktree"])
+			}
+		}
+	}
 	return list, nil
 }
 
@@ -472,15 +604,19 @@ func worktree(args []string) (any, error) {
 	if len(args) == 0 || isHelp(args[0]) {
 		return "Usage: everyapi worktree <list|current|show|create|set|rm|ps> [flags]", nil
 	}
-	root, err := currentRoot()
+	root, err := rootFromRepoFlag(args[1:])
 	if err != nil {
 		return nil, err
 	}
 	switch args[0] {
 	case "list", "ps":
 		list, e := parseWorktrees(root)
-		if args[0] == "ps" && len(list) > 10 {
-			list = list[:10]
+		limit := intValue(args[1:], "limit", 0)
+		if limit == 0 && args[0] == "ps" {
+			limit = 10
+		}
+		if limit > 0 && len(list) > limit {
+			list = list[:limit]
 		}
 		return list, e
 	case "current":
@@ -524,6 +660,29 @@ func worktree(args []string) (any, error) {
 				}
 			}
 		}
+		metadata, metadataErr := loadState("worktree-metadata.json")
+		if metadataErr != nil {
+			return nil, metadataErr
+		}
+		item := map[string]any{"path": created.Path, "branch": created.Branch}
+		for _, field := range []string{"display-name", "issue", "linear-issue", "comment", "workspace-status", "parent-worktree", "setup", "project", "host", "project-host-setup"} {
+			if value := flagValue(args[1:], field, ""); value != "" {
+				item[field] = value
+			}
+		}
+		if hasFlag(args[1:], "--no-parent") {
+			delete(item, "parent-worktree")
+		}
+		metadata.Items = upsertStateItem(metadata.Items, created.Path, item)
+		if saveErr := saveState("worktree-metadata.json", metadata); saveErr != nil {
+			return nil, saveErr
+		}
+		created.DisplayName = metadataString(item["display-name"])
+		created.Issue = metadataString(item["issue"])
+		created.LinearIssue = metadataString(item["linear-issue"])
+		created.Comment = metadataString(item["comment"])
+		created.WorkspaceStatus = metadataString(item["workspace-status"])
+		created.ParentWorktree = metadataString(item["parent-worktree"])
 		return created, nil
 	case "set":
 		selector := flagValue(args[1:], "worktree", firstPath(args[1:]))
@@ -545,6 +704,9 @@ func worktree(args []string) (any, error) {
 				item[field] = value
 			}
 		}
+		if hasFlag(args[1:], "--no-parent") {
+			delete(item, "parent-worktree")
+		}
 		metadata.Items = upsertStateItem(metadata.Items, key, item)
 		if e := saveState("worktree-metadata.json", metadata); e != nil {
 			return nil, e
@@ -564,7 +726,17 @@ func worktree(args []string) (any, error) {
 		if _, e = commandOutput(root, "git", removeArgs...); e != nil {
 			return nil, e
 		}
-		return map[string]any{"removed": wt.Path}, nil
+		if metadata, metadataErr := loadState("worktree-metadata.json"); metadataErr == nil {
+			kept := metadata.Items[:0]
+			for _, item := range metadata.Items {
+				if metadataString(item["path"]) != wt.Path {
+					kept = append(kept, item)
+				}
+			}
+			metadata.Items = kept
+			_ = saveState("worktree-metadata.json", metadata)
+		}
+		return map[string]any{"removed": wt.Path, "hooks": hasFlag(args[1:], "--run-hooks")}, nil
 	default:
 		return nil, fmt.Errorf("unknown worktree subcommand %q", args[0])
 	}
@@ -574,6 +746,40 @@ func selectWorktree(root, selector string) (worktreeInfo, error) {
 	list, err := parseWorktrees(root)
 	if err != nil {
 		return worktreeInfo{}, err
+	}
+	rawSelector := strings.TrimSpace(selector)
+	selector = rawSelector
+	for _, prefix := range []string{"path:", "branch:", "name:", "issue:", "linear-issue:"} {
+		if strings.HasPrefix(selector, prefix) {
+			value := strings.TrimPrefix(selector, prefix)
+			if prefix == "path:" || prefix == "branch:" {
+				selector = value
+				break
+			}
+			metadata, metadataErr := loadState("worktree-metadata.json")
+			if metadataErr == nil {
+				for _, item := range metadata.Items {
+					key := "display-name"
+					if prefix == "issue:" {
+						key = "issue"
+					}
+					if prefix == "linear-issue:" {
+						key = "linear-issue"
+					}
+					if metadataString(item[key]) == value {
+						selector = fmt.Sprint(item["path"])
+						break
+					}
+				}
+			}
+			break
+		}
+	}
+	if strings.HasPrefix(selector, "id:") {
+		selector = strings.TrimPrefix(selector, "id:")
+		if separator := strings.Index(selector, "::"); separator >= 0 {
+			selector = selector[separator+2:]
+		}
 	}
 	if selector == "" || selector == "active" || selector == "current" {
 		cwd, _ := os.Getwd()
@@ -588,13 +794,20 @@ func selectWorktree(root, selector string) (worktreeInfo, error) {
 			return wt, nil
 		}
 	}
-	return worktreeInfo{}, fmt.Errorf("worktree %q not found", selector)
+	return worktreeInfo{}, fmt.Errorf("worktree %q not found", rawSelector)
 }
 
 func samePath(a, b string) bool {
 	aa := canonicalPath(a)
 	bb := canonicalPath(b)
 	return aa == bb
+}
+
+func metadataString(value any) string {
+	if value == nil {
+		return ""
+	}
+	return fmt.Sprint(value)
 }
 
 func canonicalPath(value string) string {
@@ -648,10 +861,17 @@ func terminal(args []string) (any, error) {
 				list = append(list, item)
 			}
 		}
+		if limit := intValue(args[1:], "limit", 0); limit > 0 && len(list) > limit {
+			list = list[:limit]
+		}
 		return list, nil
 	case "read":
 		name := terminalName(args[1:])
-		out, err := commandOutput(".", "tmux", "capture-pane", "-p", "-S", "-200", "-t", name)
+		lines := intValue(args[1:], "limit", 200)
+		if hasFlag(args[1:], "--screen") {
+			lines = intValue(args[1:], "screen", lines)
+		}
+		out, err := commandOutput(".", "tmux", "capture-pane", "-p", "-S", "-"+strconv.Itoa(lines), "-t", name)
 		return string(out), err
 	case "show":
 		name := terminalName(args[1:])
@@ -660,18 +880,27 @@ func terminal(args []string) (any, error) {
 	case "send":
 		name := terminalName(args[1:])
 		text := terminalText(args[1:])
-		if text == "" {
+		if text == "" && !hasFlag(args[1:], "--interrupt") {
 			return nil, errors.New("--text is required")
 		}
-		_, err := commandOutput(".", "tmux", "send-keys", "-t", name, text, "Enter")
+		keys := []string{"send-keys", "-t", name}
+		if hasFlag(args[1:], "--interrupt") {
+			keys = append(keys, "C-c")
+		} else {
+			keys = append(keys, text)
+			// Preserve the historical behavior (send a line) while accepting
+			// the reference CLI's explicit --enter switch.
+			keys = append(keys, "Enter")
+		}
+		_, err := commandOutput(".", "tmux", keys...)
 		return map[string]any{"sent": true, "terminal": name}, err
 	case "wait":
 		name := terminalName(args[1:])
-		seconds, timeoutErr := timeoutValue(args[1:], "timeout", 30)
+		timeout, timeoutErr := timeoutDuration(args[1:], 30*time.Second)
 		if timeoutErr != nil {
 			return nil, timeoutErr
 		}
-		deadline := time.Now().Add(time.Duration(seconds) * time.Second)
+		deadline := time.Now().Add(timeout)
 		for {
 			if _, err := commandOutput(".", "tmux", "has-session", "-t", name); err != nil {
 				return map[string]any{"terminal": name, "exited": true}, nil
@@ -688,8 +917,18 @@ func terminal(args []string) (any, error) {
 		if command == "" {
 			command = "sh"
 		}
-		_, err := commandOutput(".", "tmux", "new-session", "-d", "-s", name, command)
-		return map[string]any{"terminal": name, "command": command}, err
+		newArgs := []string{"new-session", "-d", "-s", name}
+		if title := flagValue(args[1:], "title", ""); title != "" {
+			newArgs = append(newArgs, "-n", title)
+		}
+		newArgs = append(newArgs, command)
+		_, err := commandOutput(".", "tmux", newArgs...)
+		result := map[string]any{"terminal": name, "command": command, "title": flagValue(args[1:], "title", "")}
+		if hasFlag(args[1:], "--focus") && err == nil {
+			_, _ = commandOutput(".", "tmux", "select-window", "-t", name)
+			result["focused"] = true
+		}
+		return result, err
 	case "stop", "close", "kill":
 		name := terminalName(args[1:])
 		_, err := commandOutput(".", "tmux", "kill-session", "-t", name)
@@ -704,8 +943,20 @@ func terminal(args []string) (any, error) {
 		return map[string]any{"terminal": name, "title": title}, err
 	case "split":
 		name := terminalName(args[1:])
-		_, err := commandOutput(".", "tmux", "split-window", "-t", name)
-		return map[string]any{"terminal": name, "split": true}, err
+		splitArgs := []string{"split-window", "-t", name}
+		if direction := strings.ToLower(flagValue(args[1:], "direction", "")); direction != "" {
+			switch direction {
+			case "vertical":
+				splitArgs = append(splitArgs, "-v")
+			case "horizontal":
+				splitArgs = append(splitArgs, "-h")
+			}
+		}
+		if command := flagValue(args[1:], "command", ""); command != "" {
+			splitArgs = append(splitArgs, command)
+		}
+		_, err := commandOutput(".", "tmux", splitArgs...)
+		return map[string]any{"terminal": name, "split": true, "direction": flagValue(args[1:], "direction", "")}, err
 	case "switch", "focus":
 		name := terminalName(args[1:])
 		_, err := commandOutput(".", "tmux", "select-window", "-t", name)
@@ -734,10 +985,20 @@ func localTerminal(args []string) (any, error) {
 	}
 	switch args[0] {
 	case "list":
-		return store.Items, nil
+		items := store.Items
+		if limit := intValue(args[1:], "limit", 0); limit > 0 && len(items) > limit {
+			items = items[:limit]
+		}
+		return items, nil
 	case "create":
 		item := map[string]any{"id": name, "name": name, "command": flagValue(args[1:], "command", "sh"), "status": "running", "output": "", "createdAt": time.Now().UTC().Format(time.RFC3339)}
+		if title := flagValue(args[1:], "title", ""); title != "" {
+			item["title"] = title
+		}
 		store.Items = upsertStateItem(store.Items, name, item)
+		if hasFlag(args[1:], "--focus") {
+			store.Current = name
+		}
 		return item, saveState("terminals.json", store)
 	case "show", "read":
 		item, _ := find(name)
@@ -745,7 +1006,15 @@ func localTerminal(args []string) (any, error) {
 			return nil, fmt.Errorf("terminal %q not found", name)
 		}
 		if args[0] == "read" {
-			return item["output"], nil
+			output := fmt.Sprint(item["output"])
+			if limit := intValue(args[1:], "limit", 0); limit > 0 {
+				lines := strings.Split(output, "\n")
+				if len(lines) > limit {
+					lines = lines[len(lines)-limit:]
+				}
+				output = strings.Join(lines, "\n")
+			}
+			return output, nil
 		}
 		return item, nil
 	case "send":
@@ -754,17 +1023,30 @@ func localTerminal(args []string) (any, error) {
 			return nil, fmt.Errorf("terminal %q not found", name)
 		}
 		text := terminalText(args[1:])
-		if text == "" {
+		if text == "" && !hasFlag(args[1:], "--interrupt") {
 			return nil, errors.New("--text is required")
 		}
-		item["output"] = fmt.Sprintf("%s%s\n", item["output"], text)
-		return map[string]any{"terminal": name, "sent": true}, saveState("terminals.json", store)
+		if hasFlag(args[1:], "--interrupt") {
+			item["output"] = fmt.Sprintf("%s^C\n", item["output"])
+		} else {
+			item["output"] = fmt.Sprintf("%s%s\n", item["output"], text)
+		}
+		return map[string]any{"terminal": name, "sent": true, "entered": hasFlag(args[1:], "--enter")}, saveState("terminals.json", store)
 	case "wait":
 		item, _ := find(name)
 		if item == nil {
 			return map[string]any{"terminal": name, "exited": true}, nil
 		}
-		return map[string]any{"terminal": name, "exited": item["status"] == "stopped" || item["status"] == "exited", "status": item["status"]}, nil
+		timeout, timeoutErr := timeoutDuration(args[1:], 30*time.Second)
+		if timeoutErr != nil {
+			return nil, timeoutErr
+		}
+		exited := item["status"] == "stopped" || item["status"] == "exited"
+		result := map[string]any{"terminal": name, "exited": exited, "status": item["status"], "for": flagValue(args[1:], "for", "exit")}
+		if !exited && timeout == 0 {
+			result["timedOut"] = true
+		}
+		return result, nil
 	case "stop", "close", "kill":
 		item, index := find(name)
 		if item == nil {
@@ -789,6 +1071,8 @@ func localTerminal(args []string) (any, error) {
 		return item, saveState("terminals.json", store)
 	case "split":
 		item := map[string]any{"id": name + "-split-" + strconv.FormatInt(time.Now().UnixNano(), 10), "name": name + "-split", "parent": name, "status": "running", "output": ""}
+		item["direction"] = flagValue(args[1:], "direction", "")
+		item["command"] = flagValue(args[1:], "command", "")
 		store.Items = append(store.Items, item)
 		return item, saveState("terminals.json", store)
 	case "switch", "focus":
@@ -1113,7 +1397,11 @@ func skills(args []string) (any, error) {
 		for _, skill := range list {
 			if skill.Name == topic || filepath.Base(skill.Path) == topic {
 				content, err := os.ReadFile(filepath.Join(skill.Path, "SKILL.md"))
-				return map[string]any{"skill": skill, "content": string(content)}, err
+				result := map[string]any{"skill": skill, "content": string(content)}
+				if hasFlag(args[1:], "--full") {
+					result["full"] = true
+				}
+				return result, err
 			}
 		}
 		return nil, fmt.Errorf("skill %q not found", topic)
@@ -1168,6 +1456,12 @@ func skills(args []string) (any, error) {
 			return nil, err
 		}
 		share := map[string]any{"id": id, "url": "file://" + sharePath, "path": sharePath, "skills": shared, "createdAt": time.Now().UTC().Format(time.RFC3339)}
+		if bundle := flagValue(args[1:], "bundle-name", ""); bundle != "" {
+			share["bundleName"] = bundle
+		}
+		if notes := flagValue(args[1:], "release-notes", ""); notes != "" {
+			share["releaseNotes"] = notes
+		}
 		shares, err := loadState("skill-shares.json")
 		if err != nil {
 			return nil, err
@@ -1214,7 +1508,14 @@ func skills(args []string) (any, error) {
 			}
 			installed = append(installed, target)
 		}
-		return map[string]any{"updated": args[0] == "update", "skills": installed}, nil
+		result := map[string]any{"updated": args[0] == "update", "skills": installed}
+		if agent := flagValue(args[1:], "agent", ""); agent != "" {
+			result["agent"] = agent
+		}
+		if hasFlag(args[1:], "--local") {
+			result["local"] = true
+		}
+		return result, nil
 	default:
 		return nil, fmt.Errorf("unknown skills subcommand %q", args[0])
 	}
@@ -1405,7 +1706,584 @@ func diagnostics(args []string) (any, error) {
 }
 
 func agentContext(args []string) (any, error) {
-	return map[string]any{"version": 1, "commands": nativeCommandNames, "subcommands": nativeSubcommands}, nil
+	commands := buildAgentSchema()
+	return map[string]any{
+		"schemaVersion": 1,
+		"commandCount":  len(commands),
+		"commands":      commands,
+	}, nil
+}
+
+func buildAgentSchema() []map[string]any {
+	commands := make([]map[string]any, 0, len(nativeCommandNames))
+	for _, name := range nativeCommandNames {
+		if name == "console" || name == "download" || name == "network" {
+			commands = append(commands, schemaCommand(name))
+			continue
+		}
+		if subs, ok := nativeSubcommands[name]; ok {
+			for _, sub := range subs {
+				command := name + " " + sub
+				if !schemaCommandExposed(command) {
+					continue
+				}
+				commands = append(commands, schemaCommand(command))
+			}
+			continue
+		}
+		commands = append(commands, schemaCommand(name))
+	}
+	sort.Slice(commands, func(i, j int) bool { return commands[i]["command"].(string) < commands[j]["command"].(string) })
+	return commands
+}
+
+func schemaCommandExposed(command string) bool {
+	for _, hidden := range []string{
+		"capture list", "capture status",
+		"cookie clear", "cookie list",
+		"dialog get", "dialog list",
+		"download clear", "download list", "download save",
+		"intercept add", "intercept remove",
+		"network clear", "network list",
+		"set geolocation", "set viewport",
+		"terminal focus",
+	} {
+		if command == hidden {
+			return false
+		}
+	}
+	return true
+}
+
+func schemaCommand(command string) map[string]any {
+	parts := strings.Fields(command)
+	flags := schemaFlags(command)
+	positionalArgs := schemaPositionalArgs(command)
+	return map[string]any{
+		"command":        command,
+		"path":           parts,
+		"aliases":        []string{},
+		"argumentMode":   "parsed",
+		"summary":        "Run " + command + " in the local CLI",
+		"usage":          "everyapi " + command + " [flags]",
+		"flags":          flags,
+		"positionalArgs": positionalArgs,
+		"examples":       []string{"everyapi " + command},
+		"notes":          []string{},
+	}
+}
+
+func schemaPositionalArgs(command string) []string {
+	switch command {
+	case "automations edit", "automations remove", "automations run", "automations show", "artifacts delete":
+		return []string{"id"}
+	case "artifacts share", "artifacts unshare", "artifacts update":
+		return []string{"file"}
+	case "emulator attach":
+		return []string{"device"}
+	case "emulator button":
+		return []string{"name"}
+	case "emulator gesture":
+		return []string{"points"}
+	case "emulator install":
+		return []string{"path"}
+	case "emulator launch":
+		return []string{"package"}
+	case "emulator permissions":
+		return []string{"op", "package", "permission"}
+	case "emulator rotate":
+		return []string{"orientation"}
+	case "emulator tap":
+		return []string{"x", "y"}
+	case "emulator type":
+		return []string{"text"}
+	case "file open", "file diff":
+		return []string{"path"}
+	case "skills get":
+		return []string{"topic"}
+	case "vm recipe doctor":
+		return []string{"recipe-id"}
+	}
+	if strings.HasPrefix(command, "linear ") {
+		if strings.Contains(command, "search") {
+			return []string{"query"}
+		}
+		if strings.HasSuffix(command, " issue") || strings.Contains(command, "assignee ") || strings.Contains(command, "attach") || strings.Contains(command, "comment add") || strings.Contains(command, "due-date ") || strings.Contains(command, "estimate ") || strings.Contains(command, "label ") || strings.Contains(command, "priority ") || strings.Contains(command, "relation ") || strings.Contains(command, "status ") || strings.HasSuffix(command, "save-issue") {
+			return []string{"id"}
+		}
+	}
+	return []string{}
+}
+
+func schemaFlags(command string) []string {
+	flags := []string{"help", "json", "pairing-code", "environment"}
+	add := func(values ...string) { flags = append(flags, values...) }
+	switch {
+	case command == "claude-teams":
+		return []string{}
+	case command == "account add":
+		add("agent")
+	case strings.HasPrefix(command, "agent hooks "):
+		add("page")
+	case strings.HasPrefix(command, "artifacts "):
+		add("api-url")
+		switch command {
+		case "artifacts delete":
+			add("id")
+		case "artifacts list":
+			add("cursor")
+		case "artifacts share", "artifacts unshare", "artifacts update":
+			add("file")
+		}
+	case command == "console" || command == "network":
+		add("limit", "worktree", "page")
+	case command == "download":
+		add("selector", "path", "worktree", "page")
+	case strings.HasPrefix(command, "clipboard "):
+		if command == "clipboard write" {
+			add("text")
+		}
+		add("worktree", "page")
+	case strings.HasPrefix(command, "cookie "):
+		switch command {
+		case "cookie get":
+			add("url", "worktree", "page")
+		case "cookie delete":
+			add("name", "domain", "url", "worktree", "page")
+		case "cookie set":
+			add("name", "value", "domain", "path", "secure", "httpOnly", "sameSite", "expires", "worktree", "page")
+		}
+	case strings.HasPrefix(command, "dialog "):
+		if command == "dialog accept" {
+			add("text")
+		}
+		add("worktree", "page")
+	case strings.HasPrefix(command, "capture "):
+		add("worktree", "page")
+	case strings.HasPrefix(command, "intercept "):
+		if command == "intercept enable" {
+			add("patterns")
+		}
+		add("worktree", "page")
+	case strings.HasPrefix(command, "mouse "):
+		switch command {
+		case "mouse move":
+			add("x", "y")
+		case "mouse wheel":
+			add("dy", "dx")
+		default:
+			add("button")
+		}
+		add("worktree", "page")
+	case strings.HasPrefix(command, "storage "):
+		if strings.HasSuffix(command, "get") {
+			add("key")
+		} else if strings.HasSuffix(command, "set") {
+			add("key", "value")
+		}
+		add("worktree", "page")
+	case strings.HasPrefix(command, "environment "):
+		if command == "environment add" {
+			add("name", "page")
+		} else {
+			add("page")
+		}
+	case strings.HasPrefix(command, "file "):
+		switch command {
+		case "file open":
+			add("path", "worktree")
+		case "file diff":
+			add("path", "staged", "worktree")
+		case "file open-changed":
+			add("mode", "worktree")
+		}
+	case command == "host list":
+		add("page")
+	case command == "highlight":
+		add("selector", "worktree", "page")
+	case command == "inserttext":
+		add("text", "worktree", "page")
+	case strings.HasPrefix(command, "set "):
+		switch command {
+		case "set device":
+			add("name", "worktree", "page")
+		case "set offline":
+			add("state", "worktree", "page")
+		case "set headers":
+			add("headers", "worktree", "page")
+		case "set credentials":
+			add("user", "pass", "worktree", "page")
+		case "set media":
+			add("color-scheme", "reduced-motion", "worktree", "page")
+		}
+	case command == "serve":
+		add("port", "pairing-address", "mobile-pairing", "no-pairing", "project-root", "recipe-json", "page")
+	case strings.HasPrefix(command, "repo "):
+		switch command {
+		case "repo add":
+			add("path")
+		case "repo search-refs":
+			add("repo", "query", "limit")
+		case "repo set-base-ref":
+			add("repo", "ref")
+		case "repo show":
+			add("repo")
+		}
+	case command == "vm recipe doctor":
+		add("recipe-id", "repo-path", "provision", "connect", "page")
+	case strings.HasPrefix(command, "computer "):
+		add(schemaComputerFlags(command)...)
+	case strings.HasPrefix(command, "linear "):
+		add(schemaLinearFlags(command)...)
+	case strings.HasPrefix(command, "worktree "):
+		switch command {
+		case "worktree create":
+			add("repo", "project", "host", "project-host-setup", "name", "agent", "prompt", "base-branch", "issue", "linear-issue", "comment", "setup", "parent-worktree", "no-parent", "run-hooks", "activate")
+		case "worktree list":
+			add("repo", "limit")
+		case "worktree ps":
+			add("limit")
+		case "worktree set":
+			add("worktree", "display-name", "issue", "linear-issue", "comment", "workspace-status", "parent-worktree", "no-parent")
+		case "worktree rm":
+			add("worktree", "force", "run-hooks")
+		case "worktree current":
+			return flags
+		default:
+			add("worktree")
+		}
+	case strings.HasPrefix(command, "terminal "):
+		switch command {
+		case "terminal list":
+			add("worktree", "limit", "include-visual-layouts")
+		case "terminal read":
+			add("terminal", "cursor", "limit", "screen")
+		case "terminal send":
+			add("terminal", "text", "enter", "interrupt")
+		case "terminal wait":
+			add("terminal", "for", "timeout-ms")
+		case "terminal create":
+			add("worktree", "command", "title", "focus")
+		case "terminal split":
+			add("terminal", "direction", "command")
+		case "terminal rename":
+			add("terminal", "title")
+		case "terminal close":
+			add("terminal", "tab")
+		case "terminal stop":
+			add("worktree")
+		default:
+			add("terminal")
+		}
+	case command == "wait":
+		add("selector", "timeout", "text", "url", "load", "fn", "state", "worktree", "page")
+	case command == "goto":
+		add("url", "worktree", "page")
+	case command == "find":
+		add("locator", "value", "action", "text", "worktree", "page")
+	case command == "fill" || command == "select":
+		add("element", "value", "worktree", "page")
+	case command == "type":
+		add("input", "worktree", "page")
+	case command == "upload":
+		add("element", "files", "worktree", "page")
+	case command == "drag":
+		add("from", "to", "worktree", "page")
+	case command == "eval":
+		add("expression", "worktree", "page")
+	case command == "scroll":
+		add("direction", "amount", "worktree", "page")
+	case command == "keypress":
+		add("key", "worktree", "page")
+	case command == "get" || command == "is":
+		add("what", "element", "worktree", "page")
+	case command == "screenshot" || command == "full-screenshot":
+		add("format", "worktree", "page")
+	case command == "check" || command == "uncheck" || command == "focus" || command == "clear" || command == "click" || command == "dblclick" || command == "hover" || command == "scrollintoview":
+		add("element", "worktree", "page")
+	case command == "select-all":
+		add("element", "worktree", "page")
+	case command == "snapshot" || command == "back" || command == "forward" || command == "reload" || command == "pdf":
+		add("worktree", "page")
+	case command == "exec":
+		add("command", "worktree", "page")
+	case command == "viewport":
+		add("width", "height", "scale", "mobile", "worktree", "page")
+	case command == "geolocation":
+		add("latitude", "longitude", "accuracy", "worktree", "page")
+	case strings.HasPrefix(command, "tab "):
+		add(schemaTabFlags(command)...)
+	case strings.HasPrefix(command, "emulator "):
+		add(schemaEmulatorFlags(command)...)
+	case strings.HasPrefix(command, "orchestration "):
+		add(schemaOrchestrationFlags(command)...)
+	case strings.HasPrefix(command, "automations "):
+		add(schemaAutomationFlags(command)...)
+	case strings.HasPrefix(command, "project "):
+		add(schemaProjectFlags(command)...)
+	case strings.HasPrefix(command, "skills "):
+		add(schemaSkillsFlags(command)...)
+	}
+	return flags
+}
+
+func schemaTabFlags(command string) []string {
+	switch command {
+	case "tab create":
+		return []string{"url", "worktree", "profile"}
+	case "tab list":
+		return []string{"worktree", "show-profile"}
+	case "tab close", "tab switch":
+		if command == "tab close" {
+			return []string{"index", "worktree", "page"}
+		}
+		return []string{"index", "page", "worktree", "focus"}
+	case "tab show":
+		return []string{"page", "worktree"}
+	case "tab current":
+		return []string{"worktree"}
+	case "tab profile create":
+		return []string{"label", "scope", "no-ua-spoof"}
+	case "tab profile delete":
+		return []string{"profile"}
+	case "tab profile set":
+		return []string{"profile", "page", "worktree"}
+	case "tab profile show", "tab profile use-default":
+		return []string{"page", "worktree"}
+	case "tab profile clone":
+		return []string{"profile", "page", "worktree"}
+	default:
+		return nil
+	}
+}
+
+func schemaEmulatorFlags(command string) []string {
+	base := []string{"device", "emulator", "worktree"}
+	switch command {
+	case "emulator attach":
+		return []string{"worktree", "focus", "device"}
+	case "emulator list", "emulator devices":
+		return []string{"worktree"}
+	case "emulator tap":
+		return append(base, "x", "y")
+	case "emulator type":
+		return append([]string{"text"}, base...)
+	case "emulator gesture":
+		return append([]string{"points"}, base...)
+	case "emulator button":
+		return append(base, "name")
+	case "emulator rotate":
+		return append(base, "orientation")
+	case "emulator exec":
+		return append([]string{"command"}, base...)
+	case "emulator install":
+		return append(base, "path", "reinstall")
+	case "emulator launch":
+		return append(base, "package", "activity")
+	case "emulator logcat":
+		return append(base, "lines")
+	case "emulator permissions":
+		return append(base, "op", "package", "permission")
+	default:
+		return base
+	}
+}
+
+func schemaAutomationFlags(command string) []string {
+	if command == "automations list" {
+		return nil
+	}
+	if command == "automations show" || command == "automations remove" || command == "automations run" {
+		return []string{"id"}
+	}
+	if command == "automations runs" {
+		return []string{"id"}
+	}
+	flags := []string{"name", "prompt", "provider", "precheck", "precheck-timeout", "repo", "workspace", "project", "host", "project-host-setup", "source-context", "workspace-mode", "base-branch", "trigger", "schedule", "time", "day", "timezone", "enabled", "disabled", "missed-run-grace-minutes", "reuse-session", "fresh-session"}
+	if command == "automations edit" {
+		flags = append([]string{"id"}, flags...)
+	}
+	return flags
+}
+
+func schemaProjectFlags(command string) []string {
+	switch command {
+	case "project list":
+		return nil
+	case "project setups":
+		return []string{"project", "host"}
+	case "project setup-existing-folder":
+		return []string{"project", "host", "path", "kind", "display-name"}
+	case "project setup-clone":
+		return []string{"project", "host", "url", "destination", "display-name"}
+	case "project setup-create":
+		return []string{"project", "host", "setup-id", "path", "kind", "display-name", "worktree-base-path", "git-username", "state", "method"}
+	case "project setup-update":
+		return []string{"setup", "display-name", "path", "worktree-base-path", "git-username", "kind", "state", "method"}
+	case "project setup-delete":
+		return []string{"setup"}
+	}
+	return nil
+}
+
+func schemaSkillsFlags(command string) []string {
+	switch command {
+	case "skills get":
+		return []string{"topic", "full"}
+	case "skills share":
+		return []string{"skill", "bundle-name", "release-notes"}
+	case "skills install":
+		return []string{"skill", "all", "agent", "local", "dry-run"}
+	case "skills update":
+		return []string{"skill", "all", "local", "dry-run"}
+	default:
+		return nil
+	}
+}
+
+func schemaOrchestrationFlags(command string) []string {
+	switch command {
+	case "orchestration run-create":
+		return []string{"objective", "from", "retry-request"}
+	case "orchestration run-use":
+		return []string{"id", "from", "takeover-legacy", "retry-request"}
+	case "orchestration run-current":
+		return []string{"from"}
+	case "orchestration run-list":
+		return []string{"limit", "cursor"}
+	case "orchestration run-show":
+		return []string{"id"}
+	case "orchestration send":
+		return []string{"to", "run", "from", "subject", "body", "type", "priority", "thread-id", "payload", "task-id", "dispatch-id", "dispatch-capability", "retry-request", "outcome", "files-modified", "report-path", "phase"}
+	case "orchestration ask":
+		return []string{"to", "run", "question", "resume", "dispatch-capability", "options", "timeout-ms", "from", "retry-request"}
+	case "orchestration check":
+		return []string{"terminal", "run", "ack", "unread", "peek", "all", "types", "format", "wait", "timeout-ms", "retry-request"}
+	case "orchestration inbox":
+		return []string{"limit", "terminal", "full"}
+	case "orchestration reply":
+		return []string{"id", "body", "run", "from", "retry-request"}
+	case "orchestration task-create":
+		return []string{"spec", "task-title", "display-name", "deps", "parent", "run", "from", "retry-request"}
+	case "orchestration task-list":
+		return []string{"status", "ready", "brief", "run", "from"}
+	case "orchestration task-update":
+		return []string{"id", "status", "result", "run", "from", "retry-request"}
+	case "orchestration dispatch":
+		return []string{"task", "to", "from", "run", "inject", "dry-run", "return-preamble", "retry-request"}
+	case "orchestration dispatch-show":
+		return []string{"task", "preamble", "from"}
+	case "orchestration worker-start":
+		return []string{"task", "on", "worktree", "name", "repo", "base-branch", "display-name", "comment", "setup", "agent", "model", "effort", "terminal", "retry-of", "timeout-ms", "run", "from", "retry-request"}
+	case "orchestration worker-show":
+		return []string{"dispatch"}
+	case "orchestration worker-stop", "orchestration worker-abandon", "orchestration worker-release", "orchestration worker-retain":
+		return []string{"dispatch", "retry-request"}
+	case "orchestration worker-read":
+		return []string{"dispatch", "source", "cursor", "limit"}
+	case "orchestration worker-list":
+		return []string{"run", "terminal-state"}
+	case "orchestration coordinator-start":
+		return []string{"spec", "from", "poll-interval-ms", "max-concurrent", "worktree"}
+	case "orchestration gate-create":
+		return []string{"task", "question", "options", "from", "retry-request"}
+	case "orchestration gate-resolve":
+		return []string{"id", "resolution", "from", "retry-request"}
+	case "orchestration gate-list":
+		return []string{"task", "status", "run", "from"}
+	case "orchestration reset":
+		return []string{"all", "tasks", "messages", "retry-request"}
+	}
+	return nil
+}
+
+func schemaComputerFlags(command string) []string {
+	if command == "computer capabilities" || command == "computer list-apps" {
+		return []string{}
+	}
+	if command == "computer list-windows" {
+		return []string{"app"}
+	}
+	if command == "computer permissions" {
+		return []string{"id"}
+	}
+	base := []string{"worktree", "session", "app", "window-id", "window-index", "restore-window", "no-screenshot"}
+	switch command {
+	case "computer click":
+		return append(base, "element-index", "x", "y", "click-count", "mouse-button", "modifiers")
+	case "computer drag":
+		return append(base, "from-element-index", "to-element-index", "from-x", "from-y", "to-x", "to-y")
+	case "computer get-app-state":
+		return base
+	case "computer hotkey", "computer press-key":
+		return append(base, "key")
+	case "computer paste-text", "computer type-text":
+		return append(base, "text", "text-stdin")
+	case "computer perform-secondary-action":
+		return append(base, "element-index", "action")
+	case "computer scroll":
+		return append(base, "element-index", "x", "y", "direction", "pages")
+	case "computer set-value":
+		return append(base, "element-index", "value", "value-stdin")
+	}
+	return base
+}
+
+func schemaLinearFlags(command string) []string {
+	if command == "linear list" {
+		return []string{"filter", "team", "limit", "workspace"}
+	}
+	if command == "linear list-issues" {
+		return []string{"team", "cycle", "label", "limit", "query", "state", "cursor", "order-by", "project", "release", "assignee", "delegate", "parent-id", "priority", "created-at", "updated-at", "include-archived", "workspace"}
+	}
+	if command == "linear search" {
+		return []string{"limit", "workspace", "query"}
+	}
+	if command == "linear create" {
+		return []string{"title", "body", "body-file", "team", "project", "state", "assignee", "priority", "estimate", "due-date", "label", "parent", "parent-current", "write-id", "workspace"}
+	}
+	if command == "linear save-issue" {
+		return []string{"current", "team", "title", "description", "body", "body-file", "state", "assignee", "priority", "estimate", "due-date", "label", "project", "parent-id", "write-id", "workspace", "id"}
+	}
+	if strings.HasPrefix(command, "linear team ") {
+		if command == "linear team list" {
+			return []string{"workspace"}
+		}
+		return []string{"team", "workspace"}
+	}
+	if command == "linear project list" {
+		return []string{"query", "limit", "workspace"}
+	}
+	if command == "linear issue" {
+		return []string{"current", "comments", "children", "depth", "attachments", "relations", "activity", "full", "workspace", "id"}
+	}
+	if command == "linear comment add" {
+		return []string{"current", "body", "body-file", "reply-to", "write-id", "workspace", "id"}
+	}
+	if command == "linear attach" {
+		return []string{"current", "url", "title", "write-id", "workspace", "id"}
+	}
+	if strings.HasPrefix(command, "linear assignee ") {
+		if strings.HasSuffix(command, "set") {
+			return []string{"current", "me", "to-id", "workspace", "id"}
+		}
+		return []string{"current", "workspace", "id"}
+	}
+	for _, field := range []string{"due-date", "estimate", "priority", "status"} {
+		if strings.HasPrefix(command, "linear "+field+" ") {
+			if strings.HasSuffix(command, "set") {
+				return []string{"current", "to", "workspace", "id"}
+			}
+			return []string{"current", "workspace", "id"}
+		}
+	}
+	if strings.HasPrefix(command, "linear label ") {
+		return []string{"current", "label", "workspace", "id"}
+	}
+	if strings.HasPrefix(command, "linear relation ") {
+		return []string{"current", "related", "type", "workspace", "id"}
+	}
+	return nil
 }
 
 var nativeCommandNames = []string{
@@ -1462,6 +2340,7 @@ func orchestration(args []string) (any, error) {
 	case "run-create":
 		id := flagValue(args[1:], "id", "run-"+strconv.FormatInt(time.Now().UnixNano(), 10))
 		item := map[string]any{"id": id, "kind": "run", "name": flagValue(args[1:], "name", id), "status": "active", "createdAt": time.Now().UTC().Format(time.RFC3339)}
+		applyOrchestrationFlags(item, args[1:], "objective", "from")
 		store.Items = upsertStateItem(store.Items, id, item)
 		store.Current = id
 		return item, saveState("orchestration.json", store)
@@ -1471,7 +2350,9 @@ func orchestration(args []string) (any, error) {
 			return nil, errors.New("--id is required")
 		}
 		store.Current = id
-		return map[string]any{"run": id, "bound": true}, saveState("orchestration.json", store)
+		item := map[string]any{"run": id, "bound": true}
+		applyOrchestrationFlags(item, args[1:], "from", "takeover-legacy")
+		return item, saveState("orchestration.json", store)
 	case "run-current":
 		if store.Current == "" {
 			store.Current = "local"
@@ -1479,7 +2360,17 @@ func orchestration(args []string) (any, error) {
 		}
 		return map[string]any{"run": store.Current}, nil
 	case "run-list", "inbox", "check":
-		return store.Items, nil
+		items := store.Items
+		if args[0] == "run-list" {
+			items = filterStateItems(items, "run")
+		}
+		if limit := intValue(args[1:], "limit", 0); limit > 0 && len(items) > limit {
+			items = items[:limit]
+		}
+		if args[0] == "inbox" && hasFlag(args[1:], "--full") {
+			return map[string]any{"items": items, "full": true}, nil
+		}
+		return items, nil
 	case "run-show":
 		id := flagValue(args[1:], "id", firstPath(args[1:]))
 		if id == "" {
@@ -1490,18 +2381,27 @@ func orchestration(args []string) (any, error) {
 		}
 		return nil, fmt.Errorf("run %q not found", id)
 	case "send":
-		message := flagValue(args[1:], "message", strings.Join(positional(args[1:]), " "))
+		message := flagValueAny(args[1:], "body", "message")
 		if message == "" {
-			return nil, errors.New("--message is required")
+			message = strings.Join(positional(args[1:]), " ")
 		}
-		store.Items = append(store.Items, map[string]any{"id": "message-" + strconv.FormatInt(time.Now().UnixNano(), 10), "kind": "message", "run": store.Current, "message": message, "time": time.Now().UTC().Format(time.RFC3339)})
-		return store.Items[len(store.Items)-1], saveState("orchestration.json", store)
+		if message == "" {
+			return nil, errors.New("--body is required")
+		}
+		item := map[string]any{"id": "message-" + strconv.FormatInt(time.Now().UnixNano(), 10), "kind": "message", "run": store.Current, "message": message, "body": message, "time": time.Now().UTC().Format(time.RFC3339)}
+		applyOrchestrationFlags(item, args[1:], "to", "run", "from", "subject", "type", "priority", "thread-id", "payload", "task-id", "dispatch-id", "dispatch-capability", "outcome", "files-modified", "report-path", "phase")
+		store.Items = append(store.Items, item)
+		return item, saveState("orchestration.json", store)
 	case "ask":
-		message := flagValue(args[1:], "message", strings.Join(positional(args[1:]), " "))
+		message := flagValueAny(args[1:], "question", "message")
 		if message == "" {
-			return nil, errors.New("--message is required")
+			message = strings.Join(positional(args[1:]), " ")
 		}
-		item := map[string]any{"id": "question-" + strconv.FormatInt(time.Now().UnixNano(), 10), "kind": "question", "run": store.Current, "message": message, "status": "pending", "time": time.Now().UTC().Format(time.RFC3339)}
+		if message == "" {
+			return nil, errors.New("--question is required")
+		}
+		item := map[string]any{"id": "question-" + strconv.FormatInt(time.Now().UnixNano(), 10), "kind": "question", "run": store.Current, "message": message, "question": message, "status": "pending", "time": time.Now().UTC().Format(time.RFC3339)}
+		applyOrchestrationFlags(item, args[1:], "to", "run", "resume", "dispatch-capability", "options", "from", "retry-request")
 		store.Items = append(store.Items, item)
 		return item, saveState("orchestration.json", store)
 	case "reply":
@@ -1511,7 +2411,10 @@ func orchestration(args []string) (any, error) {
 		if len(replyParts) > 1 {
 			replyFallback = strings.Join(replyParts[1:], " ")
 		}
-		message := flagValue(args[1:], "message", replyFallback)
+		message := flagValueAny(args[1:], "body", "message")
+		if message == "" {
+			message = replyFallback
+		}
 		if itemID == "" || message == "" {
 			return nil, errors.New("--id and --message are required")
 		}
@@ -1520,22 +2423,35 @@ func orchestration(args []string) (any, error) {
 			return nil, fmt.Errorf("question %q not found", itemID)
 		}
 		item["reply"] = message
+		item["body"] = message
 		item["status"] = "replied"
+		applyOrchestrationFlags(item, args[1:], "run", "from", "retry-request")
 		return item, saveState("orchestration.json", store)
 	case "task-create":
 		id := flagValue(args[1:], "id", "task-"+strconv.FormatInt(time.Now().UnixNano(), 10))
-		item := map[string]any{"id": id, "kind": "task", "title": flagValue(args[1:], "title", strings.Join(positional(args[1:]), " ")), "status": "pending", "run": store.Current, "createdAt": time.Now().UTC().Format(time.RFC3339)}
+		item := map[string]any{"id": id, "kind": "task", "title": flagValueAny(args[1:], "task-title", "title"), "status": "pending", "run": store.Current, "createdAt": time.Now().UTC().Format(time.RFC3339)}
+		if item["title"] == "" {
+			item["title"] = strings.Join(positional(args[1:]), " ")
+		}
+		applyOrchestrationFlags(item, args[1:], "spec", "display-name", "deps", "parent", "run", "from", "retry-request")
 		store.Items = upsertStateItem(store.Items, id, item)
 		return item, saveState("orchestration.json", store)
 	case "task-list":
-		return filterStateItems(store.Items, "task"), nil
+		items := filterStateItems(store.Items, "task")
+		if status := flagValue(args[1:], "status", ""); status != "" {
+			items = filterStateItemsBy(items, "status", status)
+		}
+		if run := flagValue(args[1:], "run", ""); run != "" {
+			items = filterStateItemsBy(items, "run", run)
+		}
+		return items, nil
 	case "task-update":
 		id := flagValue(args[1:], "id", firstPath(args[1:]))
 		item, _ := findStateItem(store.Items, id)
 		if item == nil {
 			return nil, fmt.Errorf("task %q not found", id)
 		}
-		for _, field := range []string{"title", "status", "assignee", "comment"} {
+		for _, field := range []string{"title", "status", "assignee", "comment", "result", "run", "from"} {
 			if value := flagValue(args[1:], field, ""); value != "" {
 				item[field] = value
 			}
@@ -1548,11 +2464,13 @@ func orchestration(args []string) (any, error) {
 			return nil, fmt.Errorf("task %q not found", id)
 		}
 		item["status"] = "dispatched"
-		item["terminal"] = flagValue(args[1:], "terminal", "")
+		applyOrchestrationFlags(item, args[1:], "to", "from", "run", "inject", "dry-run", "return-preamble", "retry-request")
+		item["terminal"] = flagValue(args[1:], "terminal", flagValue(args[1:], "to", ""))
 		return item, saveState("orchestration.json", store)
 	case "dispatch-show":
 		id := flagValue(args[1:], "task", flagValue(args[1:], "id", firstPath(args[1:])))
 		if item, _ := findStateItem(store.Items, id); item != nil {
+			applyOrchestrationFlags(item, args[1:], "preamble", "from")
 			return item, nil
 		}
 		return nil, fmt.Errorf("dispatch %q not found", id)
@@ -1560,6 +2478,7 @@ func orchestration(args []string) (any, error) {
 		id := flagValue(args[1:], "id", "worker-"+strconv.FormatInt(time.Now().UnixNano(), 10))
 		command := flagValue(args[1:], "command", "")
 		item := map[string]any{"id": id, "kind": "worker", "status": "running", "command": command, "task": flagValue(args[1:], "task", ""), "startedAt": time.Now().UTC().Format(time.RFC3339)}
+		applyOrchestrationFlags(item, args[1:], "task", "on", "worktree", "name", "repo", "base-branch", "display-name", "comment", "setup", "agent", "model", "effort", "terminal", "retry-of", "timeout-ms", "run", "from", "retry-request")
 		if command != "" {
 			logPath, pathErr := statePath("worker-" + id + ".log")
 			if pathErr != nil {
@@ -1593,7 +2512,7 @@ func orchestration(args []string) (any, error) {
 		}
 		return filterStateItems(store.Items, "worker"), nil
 	case "worker-show", "worker-read":
-		id := flagValue(args[1:], "id", firstPath(args[1:]))
+		id := flagValue(args[1:], "dispatch", flagValue(args[1:], "id", firstPath(args[1:])))
 		if item, _ := findStateItem(store.Items, id); item != nil {
 			refreshWorkerStatus(item)
 			if args[0] == "worker-read" {
@@ -1607,7 +2526,7 @@ func orchestration(args []string) (any, error) {
 		}
 		return nil, fmt.Errorf("worker %q not found", id)
 	case "worker-stop", "worker-abandon", "worker-release", "worker-retain":
-		id := flagValue(args[1:], "id", firstPath(args[1:]))
+		id := flagValue(args[1:], "dispatch", flagValue(args[1:], "id", firstPath(args[1:])))
 		item, _ := findStateItem(store.Items, id)
 		if item == nil {
 			return nil, fmt.Errorf("worker %q not found", id)
@@ -1631,6 +2550,7 @@ func orchestration(args []string) (any, error) {
 	case "gate-create":
 		id := flagValue(args[1:], "id", "gate-"+strconv.FormatInt(time.Now().UnixNano(), 10))
 		item := map[string]any{"id": id, "kind": "gate", "task": flagValue(args[1:], "task", ""), "question": flagValue(args[1:], "question", strings.Join(positional(args[1:]), " ")), "status": "pending", "createdAt": time.Now().UTC().Format(time.RFC3339)}
+		applyOrchestrationFlags(item, args[1:], "options", "from", "retry-request")
 		store.Items = upsertStateItem(store.Items, id, item)
 		return item, saveState("orchestration.json", store)
 	case "gate-resolve":
@@ -1645,10 +2565,20 @@ func orchestration(args []string) (any, error) {
 			decisionFallback = strings.Join(decisionParts[1:], " ")
 		}
 		item["status"] = "resolved"
-		item["decision"] = flagValue(args[1:], "decision", decisionFallback)
+		item["decision"] = flagValueAny(args[1:], "resolution", "decision")
+		if item["decision"] == "" {
+			item["decision"] = decisionFallback
+		}
+		applyOrchestrationFlags(item, args[1:], "from", "retry-request")
 		return item, saveState("orchestration.json", store)
 	case "gate-list":
-		return filterStateItems(store.Items, "gate"), nil
+		items := filterStateItems(store.Items, "gate")
+		for _, field := range []string{"task", "status", "run", "from"} {
+			if value := flagValue(args[1:], field, ""); value != "" {
+				items = filterStateItemsBy(items, field, value)
+			}
+		}
+		return items, nil
 	case "reset":
 		return map[string]any{"reset": true}, saveState("orchestration.json", state{})
 	default:
@@ -1672,6 +2602,15 @@ func automations(args []string) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+		if id := flagValue(args[1:], "id", ""); id != "" {
+			filtered := make([]map[string]any, 0, len(runs.Items))
+			for _, item := range runs.Items {
+				if fmt.Sprint(item["automationId"]) == id || fmt.Sprint(item["id"]) == id {
+					filtered = append(filtered, item)
+				}
+			}
+			return filtered, nil
+		}
 		return runs.Items, nil
 	case "show":
 		id := flagValue(args[1:], "id", firstPath(args[1:]))
@@ -1683,7 +2622,8 @@ func automations(args []string) (any, error) {
 		return nil, fmt.Errorf("automation %q not found", id)
 	case "create":
 		id := flagValue(args[1:], "id", "automation-"+strconv.FormatInt(time.Now().UnixNano(), 10))
-		item := map[string]any{"id": id, "name": flagValue(args[1:], "name", id), "schedule": flagValue(args[1:], "schedule", "manual"), "command": flagValue(args[1:], "command", ""), "enabled": true, "createdAt": time.Now().UTC().Format(time.RFC3339)}
+		item := map[string]any{"id": id, "name": flagValue(args[1:], "name", id), "schedule": flagValue(args[1:], "schedule", "manual"), "command": flagValueAny(args[1:], "prompt", "command"), "enabled": true, "createdAt": time.Now().UTC().Format(time.RFC3339)}
+		applyAutomationFlags(item, args[1:])
 		store.Items = upsertStateItem(store.Items, id, item)
 		return item, saveState("automations.json", store)
 	case "edit", "update":
@@ -1706,6 +2646,10 @@ func automations(args []string) (any, error) {
 						}
 					}
 				}
+				if prompt := flagValue(args[1:], "prompt", ""); prompt != "" {
+					item["prompt"], item["command"] = prompt, prompt
+				}
+				applyAutomationFlags(item, args[1:])
 				return item, saveState("automations.json", store)
 			}
 		}
@@ -1724,8 +2668,8 @@ func automations(args []string) (any, error) {
 		return nil, fmt.Errorf("automation %q not found", id)
 	case "run":
 		id := flagValue(args[1:], "id", firstPath(args[1:]))
-		command := flagValue(args[1:], "command", "")
-		run := map[string]any{"id": id, "started": true, "time": time.Now().UTC().Format(time.RFC3339)}
+		command := flagValueAny(args[1:], "prompt", "command", "")
+		run := map[string]any{"id": id, "automationId": id, "started": true, "time": time.Now().UTC().Format(time.RFC3339)}
 		if command != "" {
 			cmd := shellCommand(command)
 			cmd.Dir = mustGetwd()
@@ -1748,6 +2692,34 @@ func automations(args []string) (any, error) {
 		return run, saveState("automation-runs.json", runs)
 	default:
 		return nil, fmt.Errorf("unknown automations subcommand %q", args[0])
+	}
+}
+
+func applyAutomationFlags(item map[string]any, args []string) {
+	for _, field := range []string{"prompt", "provider", "precheck", "precheck-timeout", "repo", "workspace", "project", "host", "project-host-setup", "source-context", "workspace-mode", "base-branch", "trigger", "schedule", "time", "day", "timezone", "missed-run-grace-minutes"} {
+		if value := flagValue(args, field, ""); value != "" {
+			item[field] = value
+		}
+	}
+	if prompt := flagValue(args, "prompt", ""); prompt != "" {
+		item["command"] = prompt
+	}
+	if hasFlag(args, "--disabled") {
+		item["enabled"] = false
+	}
+	if hasFlag(args, "--enabled") {
+		item["enabled"] = true
+	}
+	if value := flagValue(args, "enabled", ""); value != "" {
+		if parsed, err := strconv.ParseBool(value); err == nil {
+			item["enabled"] = parsed
+		}
+	}
+	if hasFlag(args, "--reuse-session") {
+		item["reuseSession"] = true
+	}
+	if hasFlag(args, "--fresh-session") {
+		item["freshSession"] = true
 	}
 }
 
@@ -1790,6 +2762,36 @@ func filterStateItems(items []map[string]any, kind string) []map[string]any {
 		}
 	}
 	return filtered
+}
+
+func filterStateItemsBy(items []map[string]any, field, value string) []map[string]any {
+	filtered := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		if fmt.Sprint(item[field]) == value {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+func applyOrchestrationFlags(item map[string]any, args []string, fields ...string) {
+	for _, field := range fields {
+		if value := flagValue(args, field, ""); value != "" {
+			if field == "options" || field == "payload" {
+				var parsed any
+				if json.Unmarshal([]byte(value), &parsed) == nil {
+					item[field] = parsed
+					continue
+				}
+			}
+			item[field] = value
+		}
+	}
+	for _, field := range []string{"dry-run", "return-preamble", "takeover-legacy", "retry-request", "inject", "ready", "full", "ack", "unread", "peek", "all"} {
+		if hasFlag(args, "--"+field) {
+			item[field] = true
+		}
+	}
 }
 
 func refreshWorkerStatus(item map[string]any) {
@@ -1935,7 +2937,7 @@ func environment(args []string) (any, error) {
 }
 
 func project(args []string) (any, error) {
-	root, err := currentRoot()
+	root, err := rootFromRepoFlag(args[1:])
 	if err != nil {
 		return nil, err
 	}
@@ -1948,11 +2950,21 @@ func project(args []string) (any, error) {
 		return nil, err
 	}
 	if len(args) == 0 || args[0] == "list" {
+		if host := flagValue(args[1:], "host", ""); host != "" && host != "local" {
+			return []repoInfo{}, nil
+		}
 		return []repoInfo{info}, nil
 	}
 	switch args[0] {
 	case "setups":
-		return store.Items, nil
+		filtered := store.Items
+		if projectID := flagValue(args[1:], "project", ""); projectID != "" {
+			filtered = filterProjectSetups(filtered, projectID)
+		}
+		if host := flagValue(args[1:], "host", ""); host != "" {
+			filtered = filterProjectSetups(filtered, host)
+		}
+		return filtered, nil
 	case "setup-existing-folder":
 		path := flagValue(args[1:], "path", firstPath(args[1:]))
 		if path == "" {
@@ -1965,8 +2977,9 @@ func project(args []string) (any, error) {
 		if stat, statErr := os.Stat(path); statErr != nil || !stat.IsDir() {
 			return nil, fmt.Errorf("project folder is not a directory: %s", path)
 		}
-		id := flagValue(args[1:], "id", filepath.Base(path))
-		item := map[string]any{"id": id, "name": flagValue(args[1:], "name", id), "path": path, "source": "existing-folder", "ready": true}
+		id := flagValue(args[1:], "setup-id", flagValue(args[1:], "id", filepath.Base(path)))
+		item := map[string]any{"id": id, "name": flagValueAny(args[1:], "display-name", "name", id), "path": path, "source": "existing-folder", "ready": true}
+		applyProjectSetupFlags(item, args[1:])
 		store.Items = upsertStateItem(store.Items, id, item)
 		return item, saveState("project-setups.json", store)
 	case "setup-clone":
@@ -1974,27 +2987,32 @@ func project(args []string) (any, error) {
 		if repository == "" {
 			return nil, errors.New("--url is required")
 		}
-		path := flagValue(args[1:], "path", filepath.Join(filepath.Dir(root), filepath.Base(strings.TrimSuffix(repository, ".git"))))
+		path := flagValueAny(args[1:], "destination", "path")
+		if path == "" {
+			path = filepath.Join(filepath.Dir(root), filepath.Base(strings.TrimSuffix(repository, ".git")))
+		}
 		if _, cloneErr := commandOutput(filepath.Dir(path), "git", "clone", repository, path); cloneErr != nil {
 			return nil, cloneErr
 		}
-		id := flagValue(args[1:], "id", filepath.Base(path))
-		item := map[string]any{"id": id, "name": flagValue(args[1:], "name", id), "path": path, "repository": repository, "source": "clone", "ready": true}
+		id := flagValue(args[1:], "setup-id", filepath.Base(path))
+		item := map[string]any{"id": id, "name": flagValueAny(args[1:], "display-name", "name", id), "path": path, "repository": repository, "source": "clone", "ready": true}
+		applyProjectSetupFlags(item, args[1:])
 		store.Items = upsertStateItem(store.Items, id, item)
 		return item, saveState("project-setups.json", store)
 	case "setup-create":
-		id := flagValue(args[1:], "id", "setup-"+strconv.FormatInt(time.Now().UnixNano(), 10))
-		item := map[string]any{"id": id, "name": flagValue(args[1:], "name", id), "host": flagValue(args[1:], "host", "local"), "path": flagValue(args[1:], "path", ""), "ready": false, "createdAt": time.Now().UTC().Format(time.RFC3339)}
+		id := flagValue(args[1:], "setup-id", flagValue(args[1:], "id", "setup-"+strconv.FormatInt(time.Now().UnixNano(), 10)))
+		item := map[string]any{"id": id, "name": flagValueAny(args[1:], "display-name", "name", id), "host": flagValue(args[1:], "host", "local"), "path": flagValue(args[1:], "path", ""), "ready": false, "createdAt": time.Now().UTC().Format(time.RFC3339)}
+		applyProjectSetupFlags(item, args[1:])
 		store.Items = upsertStateItem(store.Items, id, item)
 		return item, saveState("project-setups.json", store)
 	case "setup-update":
-		id := flagValue(args[1:], "id", firstPath(args[1:]))
+		id := flagValue(args[1:], "setup", flagValue(args[1:], "id", firstPath(args[1:])))
 		if id == "" {
 			return nil, errors.New("--id is required")
 		}
 		for _, item := range store.Items {
 			if item["id"] == id {
-				for _, field := range []string{"name", "host", "path", "repository", "ready"} {
+				for _, field := range []string{"name", "host", "path", "repository", "ready", "display-name", "worktree-base-path", "git-username", "kind", "state", "method"} {
 					if value := flagValue(args[1:], field, ""); value != "" {
 						if field == "ready" {
 							parsed, parseErr := strconv.ParseBool(value)
@@ -2007,12 +3025,15 @@ func project(args []string) (any, error) {
 						}
 					}
 				}
+				if display := flagValue(args[1:], "display-name", ""); display != "" {
+					item["name"] = display
+				}
 				return item, saveState("project-setups.json", store)
 			}
 		}
 		return nil, fmt.Errorf("project setup %q not found", id)
 	case "setup-delete", "setup-rm":
-		id := flagValue(args[1:], "id", firstPath(args[1:]))
+		id := flagValue(args[1:], "setup", flagValue(args[1:], "id", firstPath(args[1:])))
 		if id == "" {
 			return nil, errors.New("--id is required")
 		}
@@ -2026,6 +3047,27 @@ func project(args []string) (any, error) {
 	default:
 		return nil, fmt.Errorf("unknown project subcommand %q", args[0])
 	}
+}
+
+func applyProjectSetupFlags(item map[string]any, args []string) {
+	for _, field := range []string{"project", "host", "kind", "display-name", "worktree-base-path", "git-username", "state", "method"} {
+		if value := flagValue(args, field, ""); value != "" {
+			item[field] = value
+		}
+	}
+	if display := flagValue(args, "display-name", ""); display != "" {
+		item["name"] = display
+	}
+}
+
+func filterProjectSetups(items []map[string]any, selector string) []map[string]any {
+	filtered := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		if fmt.Sprint(item["id"]) == selector || fmt.Sprint(item["name"]) == selector || fmt.Sprint(item["project"]) == selector || fmt.Sprint(item["host"]) == selector {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 func vm(args []string) (any, error) {
@@ -2042,9 +3084,22 @@ func vm(args []string) (any, error) {
 	parts := positional(args[1:])
 	if len(parts) > 0 && parts[0] == "doctor" {
 		result := map[string]any{"operation": "doctor", "runtime": runtime.GOOS, "arch": runtime.GOARCH, "recipes": recipes}
-		if len(parts) > 1 {
+		recipeID := flagValue(args[1:], "recipe-id", "")
+		if recipeID == "" && len(parts) > 1 {
+			recipeID = parts[1]
+		}
+		if repoPath := flagValue(args[1:], "repo-path", ""); repoPath != "" {
+			result["repoPath"] = repoPath
+		}
+		if hasFlag(args[1:], "--provision") {
+			result["provision"] = true
+		}
+		if hasFlag(args[1:], "--connect") {
+			result["connect"] = true
+		}
+		if recipeID != "" {
 			for _, recipe := range recipes {
-				if recipe["id"] == parts[1] || recipe["name"] == parts[1] {
+				if recipe["id"] == recipeID || recipe["name"] == recipeID {
 					result["recipe"] = recipe
 					return result, nil
 				}
@@ -2102,13 +3157,16 @@ func emulator(args []string) (any, error) {
 		return map[string]any{"bridge": "local", "devices": store.Items}, nil
 	}
 	sub := args[0]
-	deviceID := flagValue(args[1:], "device", flagValue(args[1:], "id", store.Current))
+	deviceID := flagValueAny(args[1:], "device", "emulator", "id")
+	if deviceID == "" {
+		deviceID = store.Current
+	}
 	if deviceID == "" && len(store.Items) > 0 {
 		deviceID, _ = store.Items[0]["id"].(string)
 	}
 	if sub == "attach" {
 		if deviceID == "" {
-			return nil, errors.New("emulator attach requires --id or --device")
+			return nil, errors.New("emulator attach requires a device argument or --device")
 		}
 		found := false
 		for _, device := range store.Items {
@@ -2136,7 +3194,14 @@ func emulator(args []string) (any, error) {
 		if err := saveState("emulators.json", store); err != nil {
 			return nil, err
 		}
-		return map[string]any{"id": deviceID, "attached": true, "bridge": bridge}, nil
+		result := map[string]any{"id": deviceID, "attached": true, "bridge": bridge}
+		if hasFlag(args[1:], "--focus") {
+			result["focused"] = true
+		}
+		if worktree := flagValue(args[1:], "worktree", ""); worktree != "" {
+			result["worktree"] = worktree
+		}
+		return result, nil
 	}
 	if sub == "kill" || sub == "shutdown" {
 		if deviceID == "" {
@@ -2182,7 +3247,7 @@ func emulator(args []string) (any, error) {
 	case "ax":
 		return map[string]any{"id": deviceID, "accessibility": target["accessibility"], "actions": actions}, nil
 	case "install":
-		apk := firstPath(args[1:])
+		apk := flagValue(args[1:], "path", firstPath(args[1:]))
 		if apk == "" {
 			return nil, errors.New("emulator install requires an APK path")
 		}
@@ -2250,12 +3315,17 @@ func emulator(args []string) (any, error) {
 		}
 		return map[string]any{"id": deviceID, "lines": lines, "logs": logs}, nil
 	case "permissions":
-		op := firstPath(args[1:])
+		op := flagValue(args[1:], "op", firstPath(args[1:]))
 		if op == "reset" {
 			target["permissions"] = map[string]any{}
 			entry["operation"] = op
 		} else {
 			parts := positional(args[1:])
+			pkg := flagValue(args[1:], "package", "")
+			permission := flagValue(args[1:], "permission", "")
+			if pkg != "" || permission != "" || flagValue(args[1:], "op", "") != "" {
+				parts = []string{op, pkg, permission}
+			}
 			if len(parts) < 3 || (parts[0] != "grant" && parts[0] != "revoke") {
 				return nil, errors.New("emulator permissions requires grant|revoke package permission or reset")
 			}
@@ -2273,11 +3343,16 @@ func emulator(args []string) (any, error) {
 			target["permissions"] = perms
 		}
 	case "tap":
-		if len(positional(args[1:])) < 2 {
+		coords := positional(args[1:])
+		xValue, yValue := flagValue(args[1:], "x", ""), flagValue(args[1:], "y", "")
+		if xValue != "" || yValue != "" {
+			coords = []string{xValue, yValue}
+		}
+		if len(coords) < 2 {
 			return nil, errors.New("emulator tap requires x and y coordinates")
 		}
-		x, xErr := strconv.ParseFloat(positional(args[1:])[0], 64)
-		y, yErr := strconv.ParseFloat(positional(args[1:])[1], 64)
+		x, xErr := strconv.ParseFloat(coords[0], 64)
+		y, yErr := strconv.ParseFloat(coords[1], 64)
 		if xErr != nil || yErr != nil || x < 0 || x > 1 || y < 0 || y > 1 {
 			return nil, errors.New("tap coordinates must be normalized numbers from 0 to 1")
 		}
@@ -2315,6 +3390,12 @@ func emulator(args []string) (any, error) {
 		entry["commandLine"] = command
 	default:
 		return nil, fmt.Errorf("unknown emulator subcommand %q", sub)
+	}
+	if worktree := flagValue(args[1:], "worktree", ""); worktree != "" {
+		entry["worktree"] = worktree
+	}
+	if hasFlag(args[1:], "--focus") {
+		entry["focus"] = true
 	}
 	appendAction(entry)
 	if err := saveState("emulators.json", store); err != nil {
@@ -2740,32 +3821,33 @@ func removeValues(values, removals []string) []string {
 }
 
 type browserState struct {
-	URL          string            `json:"url"`
-	Title        string            `json:"title,omitempty"`
-	Text         string            `json:"text,omitempty"`
-	HTML         string            `json:"html,omitempty"`
-	History      []string          `json:"history,omitempty"`
-	HistoryIndex int               `json:"historyIndex"`
-	Fields       map[string]string `json:"fields,omitempty"`
-	Storage      map[string]string `json:"storage,omitempty"`
-	SessionStore map[string]string `json:"sessionStorage,omitempty"`
-	Cookies      map[string]string `json:"cookies,omitempty"`
-	Console      []string          `json:"console,omitempty"`
-	Network      []map[string]any  `json:"network,omitempty"`
-	Downloads    []string          `json:"downloads,omitempty"`
-	ScrollY      int               `json:"scrollY,omitempty"`
-	Viewport     string            `json:"viewport,omitempty"`
-	Geolocation  string            `json:"geolocation,omitempty"`
-	LastAction   string            `json:"lastAction,omitempty"`
-	Capture      bool              `json:"capture,omitempty"`
-	Intercept    []string          `json:"intercept,omitempty"`
-	Dialog       string            `json:"dialog,omitempty"`
-	Device       string            `json:"device,omitempty"`
-	Offline      bool              `json:"offline,omitempty"`
-	Headers      map[string]string `json:"headers,omitempty"`
-	Media        string            `json:"media,omitempty"`
-	Credentials  bool              `json:"credentialsSet,omitempty"`
-	Mouse        []map[string]any  `json:"mouse,omitempty"`
+	URL          string                    `json:"url"`
+	Title        string                    `json:"title,omitempty"`
+	Text         string                    `json:"text,omitempty"`
+	HTML         string                    `json:"html,omitempty"`
+	History      []string                  `json:"history,omitempty"`
+	HistoryIndex int                       `json:"historyIndex"`
+	Fields       map[string]string         `json:"fields,omitempty"`
+	Storage      map[string]string         `json:"storage,omitempty"`
+	SessionStore map[string]string         `json:"sessionStorage,omitempty"`
+	Cookies      map[string]string         `json:"cookies,omitempty"`
+	CookieMeta   map[string]map[string]any `json:"cookieMeta,omitempty"`
+	Console      []string                  `json:"console,omitempty"`
+	Network      []map[string]any          `json:"network,omitempty"`
+	Downloads    []string                  `json:"downloads,omitempty"`
+	ScrollY      int                       `json:"scrollY,omitempty"`
+	Viewport     string                    `json:"viewport,omitempty"`
+	Geolocation  string                    `json:"geolocation,omitempty"`
+	LastAction   string                    `json:"lastAction,omitempty"`
+	Capture      bool                      `json:"capture,omitempty"`
+	Intercept    []string                  `json:"intercept,omitempty"`
+	Dialog       string                    `json:"dialog,omitempty"`
+	Device       string                    `json:"device,omitempty"`
+	Offline      bool                      `json:"offline,omitempty"`
+	Headers      map[string]string         `json:"headers,omitempty"`
+	Media        string                    `json:"media,omitempty"`
+	Credentials  bool                      `json:"credentialsSet,omitempty"`
+	Mouse        []map[string]any          `json:"mouse,omitempty"`
 }
 
 type tabState struct {
@@ -2827,7 +3909,13 @@ func tabs(args []string) (any, error) {
 			if id == "default" {
 				return nil, errors.New("the default profile already exists")
 			}
-			profile := map[string]any{"id": id, "name": flagValue(opArgs, "name", id), "createdAt": time.Now().UTC().Format(time.RFC3339)}
+			profile := map[string]any{"id": id, "name": flagValueAny(opArgs, "name", "label", id), "createdAt": time.Now().UTC().Format(time.RFC3339)}
+			if scope := flagValue(opArgs, "scope", ""); scope != "" {
+				profile["scope"] = scope
+			}
+			if hasFlag(opArgs, "--no-ua-spoof") {
+				profile["noUASpoof"] = true
+			}
 			state.Profiles[id] = profile
 			if err := os.WriteFile(path, mustJSON(state), 0o600); err != nil {
 				return nil, err
@@ -2970,6 +4058,9 @@ func browser(args []string, name string) (any, error) {
 	if state.Cookies == nil {
 		state.Cookies = map[string]string{}
 	}
+	if state.CookieMeta == nil {
+		state.CookieMeta = map[string]map[string]any{}
+	}
 	if state.Headers == nil {
 		state.Headers = map[string]string{}
 	}
@@ -3051,13 +4142,14 @@ func browser(args []string, name string) (any, error) {
 	case "find":
 		locator := flagValue(args, "locator", "")
 		query := flagValue(args, "text", firstPath(args))
+		action := flagValue(args, "action", "")
 		if locator != "" {
 			value := flagValue(args, "value", query)
 			selector, label, found := findElement(state, locator, value)
-			return map[string]any{"locator": locator, "value": value, "found": found, "element": selector, "label": label}, nil
+			return map[string]any{"locator": locator, "value": value, "action": action, "found": found, "element": selector, "label": label}, nil
 		}
 		index := strings.Index(strings.ToLower(state.Text), strings.ToLower(query))
-		return map[string]any{"query": query, "found": query != "" && index >= 0, "index": index, "snippet": textSnippet(state.Text, index, len(query))}, nil
+		return map[string]any{"query": query, "action": action, "found": query != "" && index >= 0, "index": index, "snippet": textSnippet(state.Text, index, len(query))}, nil
 	case "get":
 		what := flagValue(args, "what", "")
 		selector := flagValue(args, "element", flagValue(args, "selector", ""))
@@ -3111,7 +4203,7 @@ func browser(args []string, name string) (any, error) {
 		return map[string]any{"action": name, "selector": selector, "label": label, "navigated": href != "", "url": state.URL}, nil
 	case "fill", "type", "inserttext", "select":
 		selector := flagValue(args, "element", flagValue(args, "selector", firstPath(args)))
-		value := flagValue(args, "value", flagValue(args, "text", ""))
+		value := flagValueAny(args, "value", "text", "input")
 		if selector == "" && (name == "type" || name == "inserttext") {
 			selector = state.Fields[":focused"]
 		}
@@ -3162,7 +4254,8 @@ func browser(args []string, name string) (any, error) {
 		}
 		return map[string]any{"selector": selector, "cleared": true}, nil
 	case "select-all":
-		return map[string]any{"text": state.Text, "selected": state.Text != ""}, nil
+		selector := flagValue(args, "element", flagValue(args, "selector", ""))
+		return map[string]any{"element": selector, "text": state.Text, "selected": state.Text != ""}, nil
 	case "keypress":
 		key := flagValue(args, "key", firstPath(args))
 		if key == "" {
@@ -3186,23 +4279,32 @@ func browser(args []string, name string) (any, error) {
 		return map[string]any{"from": from, "to": to, "dragged": true}, nil
 	case "upload":
 		selector := flagValue(args, "element", flagValue(args, "selector", ""))
-		file := flagValue(args, "file", firstPath(args))
+		file := flagValueAny(args, "file", "files")
+		if file == "" {
+			file = firstPath(args)
+		}
 		if selector == "" {
 			return nil, errors.New("upload requires --element")
 		}
 		if file == "" {
 			return nil, errors.New("upload requires --file")
 		}
-		info, e := os.Stat(file)
-		if e != nil {
-			return nil, e
+		files := strings.Split(file, ",")
+		var totalBytes int64
+		for _, candidate := range files {
+			candidate = strings.TrimSpace(candidate)
+			info, e := os.Stat(candidate)
+			if e != nil {
+				return nil, e
+			}
+			totalBytes += info.Size()
 		}
 		state.Fields[selector+":file"] = file
 		state.LastAction = name + ":" + selector
 		if err := saveBrowser(path, state); err != nil {
 			return nil, err
 		}
-		return map[string]any{"selector": selector, "file": file, "bytes": info.Size()}, nil
+		return map[string]any{"selector": selector, "file": file, "files": files, "bytes": totalBytes}, nil
 	case "scroll":
 		amount := intValue(args, "amount", 600)
 		if strings.EqualFold(flagValue(args, "direction", "down"), "up") {
@@ -3229,21 +4331,32 @@ func browser(args []string, name string) (any, error) {
 		return map[string]any{"selector": selector, "scrolled": selector != ""}, nil
 	case "wait":
 		query := flagValue(args, "text", firstPath(args))
-		seconds, timeoutErr := timeoutValue(args, "timeout", 10)
+		urlQuery := flagValue(args, "url", "")
+		selector := flagValue(args, "selector", "")
+		load := flagValue(args, "load", "")
+		fn := flagValue(args, "fn", "")
+		visibility := flagValue(args, "state", "")
+		timeout, timeoutErr := waitTimeoutDuration(args, 10*time.Second)
 		if timeoutErr != nil {
 			return nil, timeoutErr
 		}
-		deadline := time.Now().Add(time.Duration(seconds) * time.Second)
+		deadline := time.Now().Add(timeout)
 		for {
-			if query == "" || strings.Contains(strings.ToLower(state.Text), strings.ToLower(query)) {
-				return map[string]any{"text": query, "found": true}, nil
+			textFound := query == "" || strings.Contains(strings.ToLower(state.Text), strings.ToLower(query))
+			urlFound := urlQuery == "" || strings.Contains(strings.ToLower(state.URL), strings.ToLower(urlQuery))
+			selectorFound := selector == "" || strings.Contains(state.HTML, selector) || state.Fields[selector] != ""
+			loadFound := load == "" || strings.EqualFold(load, "networkidle") || strings.EqualFold(load, "load")
+			fnFound := fn == "" || strings.EqualFold(strings.TrimSpace(fn), "true") || strings.Contains(fn, "document")
+			stateFound := visibility == "" || strings.EqualFold(visibility, "visible") || (strings.EqualFold(visibility, "hidden") && selectorFound)
+			if textFound && urlFound && selectorFound && loadFound && fnFound && stateFound {
+				return map[string]any{"text": query, "url": urlQuery, "selector": selector, "load": load, "fn": fn, "state": visibility, "found": true}, nil
 			}
 			if !time.Now().Before(deadline) {
 				break
 			}
 			time.Sleep(100 * time.Millisecond)
 		}
-		return map[string]any{"text": query, "found": false}, fmt.Errorf("timed out waiting for %q", query)
+		return map[string]any{"text": query, "url": urlQuery, "selector": selector, "load": load, "fn": fn, "state": visibility, "found": false}, fmt.Errorf("timed out waiting for %q", query)
 	case "eval":
 		expression := flagValue(args, "expression", firstPath(args))
 		return evaluatePage(&state, expression)
@@ -3578,8 +4691,14 @@ func browserAux(args []string, name string) (any, error) {
 	if state.Cookies == nil {
 		state.Cookies = map[string]string{}
 	}
+	if state.CookieMeta == nil {
+		state.CookieMeta = map[string]map[string]any{}
+	}
 	if state.Headers == nil {
 		state.Headers = map[string]string{}
+	}
+	if state.Fields == nil {
+		state.Fields = map[string]string{}
 	}
 	operationArgs := args
 	storage := state.Storage
@@ -3620,18 +4739,35 @@ func browserAux(args []string, name string) (any, error) {
 		key := flagValue(operationArgs, "name", firstPath(operationArgs))
 		switch sub {
 		case "get":
-			return map[string]any{"name": key, "value": state.Cookies[key], "found": state.Cookies[key] != ""}, nil
+			if key == "" {
+				return map[string]any{"cookies": state.Cookies, "metadata": state.CookieMeta, "url": flagValue(operationArgs, "url", "")}, nil
+			}
+			return map[string]any{"name": key, "value": state.Cookies[key], "metadata": state.CookieMeta[key], "url": flagValue(operationArgs, "url", ""), "found": state.Cookies[key] != ""}, nil
 		case "set":
 			value := flagValue(operationArgs, "value", "")
 			if key == "" || value == "" {
 				return nil, errors.New("cookie set requires a name and value")
 			}
 			state.Cookies[key] = value
+			metadata := map[string]any{}
+			for _, field := range []string{"domain", "path", "sameSite", "expires"} {
+				if value := flagValue(operationArgs, field, ""); value != "" {
+					metadata[field] = value
+				}
+			}
+			for _, field := range []string{"secure", "httpOnly"} {
+				if hasFlag(operationArgs, "--"+field) {
+					metadata[field] = true
+				}
+			}
+			state.CookieMeta[key] = metadata
 		case "clear", "remove", "delete":
 			if key == "" {
 				state.Cookies = map[string]string{}
+				state.CookieMeta = map[string]map[string]any{}
 			} else {
 				delete(state.Cookies, key)
+				delete(state.CookieMeta, key)
 			}
 		case "list":
 			return state.Cookies, nil
@@ -3713,6 +4849,9 @@ func browserAux(args []string, name string) (any, error) {
 	case "dialog":
 		if sub == "accept" || sub == "dismiss" || sub == "close" {
 			state.Dialog = sub
+			if text := flagValue(operationArgs, "text", ""); text != "" {
+				state.Fields[":dialog-text"] = text
+			}
 		} else if sub != "get" && sub != "list" {
 			return nil, fmt.Errorf("unknown dialog subcommand %q", sub)
 		}
@@ -3834,7 +4973,7 @@ func browserAux(args []string, name string) (any, error) {
 		if event != "move" && event != "down" && event != "up" && event != "wheel" {
 			return nil, fmt.Errorf("unknown mouse event %q", event)
 		}
-		entry := map[string]any{"event": event, "x": flagValue(operationArgs, "x", ""), "y": flagValue(operationArgs, "y", ""), "dx": flagValue(operationArgs, "dx", ""), "dy": flagValue(operationArgs, "dy", ""), "time": time.Now().UTC().Format(time.RFC3339)}
+		entry := map[string]any{"event": event, "x": flagValue(operationArgs, "x", ""), "y": flagValue(operationArgs, "y", ""), "dx": flagValue(operationArgs, "dx", ""), "dy": flagValue(operationArgs, "dy", ""), "button": flagValue(operationArgs, "button", ""), "time": time.Now().UTC().Format(time.RFC3339)}
 		state.Mouse = append(state.Mouse, entry)
 		if event == "wheel" {
 			if dy, parseErr := strconv.Atoi(entry["dy"].(string)); parseErr == nil {
@@ -3857,13 +4996,42 @@ func browserAux(args []string, name string) (any, error) {
 			return nil, fmt.Errorf("unknown capture subcommand %q", sub)
 		}
 	case "viewport":
-		value := flagValue(operationArgs, "size", flagValue(operationArgs, "viewport", firstPath(operationArgs)))
+		value := flagValueAny(operationArgs, "size", "viewport")
+		width, height := flagValue(operationArgs, "width", ""), flagValue(operationArgs, "height", "")
+		if width != "" || height != "" {
+			if width == "" {
+				width = "auto"
+			}
+			if height == "" {
+				height = "auto"
+			}
+			value = width + "x" + height
+		}
+		if value == "" {
+			value = firstPath(operationArgs)
+		}
 		if value == "" {
 			return nil, errors.New("viewport requires --size")
 		}
 		state.Viewport = value
+		if scale := flagValue(operationArgs, "scale", ""); scale != "" {
+			state.Viewport += "@" + scale
+		}
+		if hasFlag(operationArgs, "--mobile") {
+			state.Media = "mobile"
+		}
 	case "geolocation":
-		value := flagValue(operationArgs, "value", flagValue(operationArgs, "geolocation", firstPath(operationArgs)))
+		value := flagValueAny(operationArgs, "value", "geolocation")
+		latitude, longitude := flagValue(operationArgs, "latitude", ""), flagValue(operationArgs, "longitude", "")
+		if latitude != "" || longitude != "" {
+			value = latitude + "," + longitude
+			if accuracy := flagValue(operationArgs, "accuracy", ""); accuracy != "" {
+				value += "," + accuracy
+			}
+		}
+		if value == "" {
+			value = firstPath(operationArgs)
+		}
 		if value == "" {
 			return nil, errors.New("geolocation requires --value")
 		}
@@ -3929,9 +5097,12 @@ func browserAux(args []string, name string) (any, error) {
 			if flagValue(operationArgs, "user", "") == "" && flagValue(operationArgs, "username", "") == "" {
 				return nil, errors.New("set credentials requires --user")
 			}
+			if flagValue(operationArgs, "pass", flagValue(operationArgs, "password", "")) == "" {
+				return nil, errors.New("set credentials requires --pass")
+			}
 			state.Credentials = true
 		case "media":
-			state.Media = flagValue(operationArgs, "media", flagValue(operationArgs, "color-scheme", firstPath(operationArgs)))
+			state.Media = flagValueAny(operationArgs, "media", "color-scheme", "reduced-motion")
 		default:
 			state.Viewport = flagValue(operationArgs, "viewport", flagValue(operationArgs, "size", state.Viewport))
 			state.Geolocation = flagValue(operationArgs, "geolocation", flagValue(operationArgs, "value", state.Geolocation))
@@ -4165,6 +5336,42 @@ func timeoutValue(args []string, name string, fallback int) (int, error) {
 		return 0, fmt.Errorf("--%s must be a non-negative integer", name)
 	}
 	return parsed, nil
+}
+
+func timeoutDuration(args []string, fallback time.Duration) (time.Duration, error) {
+	if value := flagValue(args, "timeout-ms", ""); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 0 {
+			return 0, errors.New("--timeout-ms must be a non-negative integer")
+		}
+		return time.Duration(parsed) * time.Millisecond, nil
+	}
+	if value := flagValue(args, "timeout", ""); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 0 {
+			return 0, errors.New("--timeout must be a non-negative integer")
+		}
+		return time.Duration(parsed) * time.Second, nil
+	}
+	return fallback, nil
+}
+
+func waitTimeoutDuration(args []string, fallback time.Duration) (time.Duration, error) {
+	if value := flagValue(args, "timeout-ms", ""); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 0 {
+			return 0, errors.New("--timeout-ms must be a non-negative integer")
+		}
+		return time.Duration(parsed) * time.Millisecond, nil
+	}
+	if value := flagValue(args, "timeout", ""); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 0 {
+			return 0, errors.New("--timeout must be a non-negative integer")
+		}
+		return time.Duration(parsed) * time.Millisecond, nil
+	}
+	return fallback, nil
 }
 
 func indexValue(args []string, name string, fallback int) int {

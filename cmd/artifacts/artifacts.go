@@ -80,6 +80,11 @@ func Run(args []string) error {
 		return fmt.Errorf(i18n.T("artifacts.unknown_sub"), args[0])
 	}
 	operands, asJSON := artifactOperands(args[1:])
+	if args[0] == "delete" && len(operands) == 0 {
+		if id := artifactFlagValue(args[1:], "id"); id != "" {
+			operands = []string{id}
+		}
+	}
 	if args[0] == "update" && len(operands) == 1 {
 		// The file-only form resolves the URL saved by share. The legacy
 		// URL-plus-file form remains accepted for backwards compatibility.
@@ -186,7 +191,14 @@ func artifactOperands(args []string) ([]string, bool) {
 			skipNext = true
 			continue
 		}
+		if arg == "--id" {
+			skipNext = true
+			continue
+		}
 		if strings.HasPrefix(arg, "--api-url=") || strings.HasPrefix(arg, "--cursor=") {
+			continue
+		}
+		if strings.HasPrefix(arg, "--id=") {
 			continue
 		}
 		operands = append(operands, arg)
