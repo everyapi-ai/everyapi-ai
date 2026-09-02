@@ -194,7 +194,7 @@ var nativeUsages = map[string]string{
 	"agent":           "Usage: everyapi agent <list|status|start|run|create|stop|kill|close> [flags]",
 	"skills":          "Usage: everyapi skills <installed|share|list|get|install|update> [flags]",
 	"orchestration":   "Usage: everyapi orchestration <run-create|run-use|run-current|run-list|run-show|send|check|ask|reply|inbox|task-create|task-list|task-update|dispatch|dispatch-show|worker-start|worker-show|worker-read|worker-stop|worker-abandon|worker-release|worker-retain|worker-list|coordinator-start|coordinator-stop|gate-create|gate-resolve|gate-list|reset> [flags]",
-	"automations":     "Usage: everyapi automations <list|show|create|edit|remove|run|runs> [flags]",
+	"automations":     "Usage: everyapi automations <snapshot|list|show|create|edit|remove|run|runs> [flags]",
 	"environment":     "Usage: everyapi environment <add|list|show|rm> [flags]",
 	"project":         "Usage: everyapi project <list|setups|setup-existing-folder|setup-clone|setup-create|setup-update|setup-delete> [flags]",
 	"file":            "Usage: everyapi file <open|diff|open-changed> [path] [flags]",
@@ -2104,7 +2104,7 @@ func schemaEmulatorFlags(command string) []string {
 
 func schemaAutomationFlags(command string) []string {
 	control := []string{"control-state"}
-	if command == "automations list" {
+	if command == "automations list" || command == "automations snapshot" {
 		return control
 	}
 	if command == "automations show" || command == "automations remove" || command == "automations run" {
@@ -2315,7 +2315,7 @@ var nativeSubcommands = map[string][]string{
 	"host":          {"list"},
 	"environment":   {"add", "list", "show", "rm"},
 	"vm":            {"recipe list", "recipe doctor", "runtime list", "runtime show", "runtime create", "runtime suspend", "runtime resume", "runtime cleanup", "runtime cancel", "runtime cleanup-info", "runtime forget"},
-	"automations":   {"list", "show", "create", "edit", "remove", "run", "runs"},
+	"automations":   {"snapshot", "list", "show", "create", "edit", "remove", "run", "runs"},
 	"project":       {"list", "setups", "setup-existing-folder", "setup-clone", "setup-create", "setup-update", "setup-delete"},
 	"repo":          {"list", "add", "show", "set-base-ref", "search-refs"},
 	"worktree":      {"list", "show", "current", "create", "set", "rm", "ps"},

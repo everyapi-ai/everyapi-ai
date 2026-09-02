@@ -232,11 +232,11 @@ func TestAgentContextMatchesReferenceShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	data, ok := value.(map[string]any)
-	if !ok || data["schemaVersion"] != 1 || data["commandCount"] != 242 {
+	if !ok || data["schemaVersion"] != 1 || data["commandCount"] != 243 {
 		t.Fatalf("agent context = %#v", value)
 	}
 	commands, ok := data["commands"].([]map[string]any)
-	if !ok || len(commands) != 242 {
+	if !ok || len(commands) != 243 {
 		t.Fatalf("commands = %T/%d", data["commands"], len(commands))
 	}
 	for _, command := range commands {

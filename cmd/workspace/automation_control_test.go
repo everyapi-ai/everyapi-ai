@@ -126,6 +126,39 @@ func TestAutomationsListUsesRunningDesktopScheduler(t *testing.T) {
 	}
 }
 
+func TestAutomationsSnapshotReturnsTheCompleteDesktopProjection(t *testing.T) {
+	statePath, commands := startAutomationControlFixture(t, []any{map[string]any{
+		"id": "job-1", "name": "Repository health", "session": "session-1", "text": "review changes",
+	}})
+
+	value, err := automations([]string{"snapshot", "--control-state", statePath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("automations snapshot = %#v", value)
+	}
+	if schedules := snapshot["schedules"].([]any); len(schedules) != 1 || schedules[0].(map[string]any)["id"] != "job-1" {
+		t.Fatalf("snapshot schedules = %#v", snapshot["schedules"])
+	}
+	for _, field := range []string{"runs", "templates"} {
+		if _, ok := snapshot[field].([]any); !ok {
+			t.Fatalf("snapshot %s = %#v", field, snapshot[field])
+		}
+	}
+	if command := nextAutomationControlCommand(t, commands); command["type"] != "schedule_list" {
+		t.Fatalf("control command = %#v", command)
+	}
+}
+
+func TestAutomationSnapshotSchemaOnlyExposesControlState(t *testing.T) {
+	flags := schemaAutomationFlags("automations snapshot")
+	if len(flags) != 1 || flags[0] != "control-state" {
+		t.Fatalf("automations snapshot flags = %#v", flags)
+	}
+}
+
 func TestAutomationsDiscoverDefaultDesktopControlState(t *testing.T) {
 	statePath, commands := startAutomationControlFixture(t, []any{map[string]any{"id": "job-1"}})
 	state, err := os.ReadFile(statePath)

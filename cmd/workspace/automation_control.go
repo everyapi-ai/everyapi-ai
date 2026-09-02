@@ -463,7 +463,7 @@ func automationControlScheduleResult(value any) (map[string]any, error) {
 
 func automationsThroughControl(args []string, path string) (any, error) {
 	if len(args) == 0 || isHelp(args[0]) {
-		return map[string]any{"commands": []string{"list", "show", "create", "edit", "remove", "run", "runs"}, "backend": "desktop-control"}, nil
+		return map[string]any{"commands": []string{"snapshot", "list", "show", "create", "edit", "remove", "run", "runs"}, "backend": "desktop-control"}, nil
 	}
 	subcommand := args[0]
 	data, err := automationControlList(path)
@@ -472,6 +472,8 @@ func automationsThroughControl(args []string, path string) (any, error) {
 	}
 	schedules := automationControlItems(data, "schedules")
 	switch subcommand {
+	case "snapshot":
+		return data, nil
 	case "list":
 		return schedules, nil
 	case "runs":
