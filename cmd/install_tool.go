@@ -10,16 +10,21 @@ import (
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/tools"
 )
 
-// InstallTool is the desktop-only half of the install/launch split. The tool name resolves through the compile-time registry, and RunInstall executes only that entry's fixed InstallCmd. It never calls Use or starts the installed client.
+// InstallTool is the desktop-only half of the install/launch split. The tool name resolves through the compile-time registry, and RunInstall executes only that entry's fixed InstallCmd. The optional --force flag lets Connect reuse the same allowlisted installer for an update when the executable already exists. It never calls Use or starts the installed client.
 func InstallTool(args []string) error {
-	if len(args) != 1 {
-		return errors.New("desktop-install-tool requires exactly one tool")
+	force := len(args) == 2 && args[1] == "--force"
+	if len(args) != 1 && !force {
+		return errors.New("desktop-install-tool requires one tool and optional --force")
 	}
 	tool, err := tools.Lookup(args[0])
 	if err != nil {
 		return err
 	}
-	if tools.IsInstalled(tool) {
+	// The desktop updater must operate on Claude's native installation instead of whichever older shim appears first in the GUI process's PATH.
+	if force && tool.ExecName == "claude" {
+		return runClaudeDesktopUpdate()
+	}
+	if tools.IsInstalled(tool) && !force {
 		cliout.Printf(i18n.T("use.installed")+"\n", tool.Name)
 		return nil
 	}

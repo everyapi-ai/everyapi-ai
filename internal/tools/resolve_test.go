@@ -268,6 +268,33 @@ func TestResolveExec_ExtraBinDirs(t *testing.T) {
 	}
 }
 
+func TestResolveInstallerOwnedExecPrefersNativeBinary(t *testing.T) {
+	home := t.TempDir()
+	nativeBin := filepath.Join(home, ".local", "bin")
+	pathBin := t.TempDir()
+	if err := os.MkdirAll(nativeBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const exe = "everyapi-fake-native-preferred-zzz"
+	writeFakeExec(t, nativeBin, exe)
+	writeFakeExec(t, pathBin, exe)
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", pathBin)
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", home)
+	}
+
+	got, err := ResolveInstallerOwnedExec(&Tool{
+		Name:         "native-preferred",
+		ExecName:     exe,
+		ExtraBinDirs: []string{".local/bin"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResolvesInto(t, got, nativeBin)
+}
+
 func TestResolveExec_WindowsLocalAppDataBinDirs(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows installer output")

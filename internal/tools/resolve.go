@@ -23,6 +23,19 @@ func ResolveExec(t *Tool) (string, error) {
 	return path, err
 }
 
+// ResolveInstallerOwnedExec prefers the native installer's fixed directory, while ordinary launches continue to honor an explicitly selected PATH shim.
+func ResolveInstallerOwnedExec(t *Tool) (string, error) {
+	if t == nil {
+		return "", os.ErrNotExist
+	}
+	for _, dir := range extraBinDirs(t) {
+		if path, ok := findExecutable(dir, t.ExecName); ok {
+			return path, nil
+		}
+	}
+	return ResolveExec(t)
+}
+
 // LookupExecName resolves a bare executable name for launching, the way Exec launches tools: exec.LookPath first, then the ExtraBinDirs of the registry entry running that binary (if any), then the npm global bin dirs (env-derived, then `npm prefix -g`). The env return is ready for exec.Cmd.Env, with the resolved dir appended to the child's PATH so a co-located node/npm resolves — nil means "inherit unchanged" (the $PATH fast path). ok=false when nothing resolves; callers should keep the bare name so exec.Command's own not-found error still surfaces.
 //
 // The argument is an executable name, not a registry key: callers pass the binary they intend to run. This matters for entries whose names differ from their executable, such as Antigravity (`antigravity` -> `agy`).

@@ -51,6 +51,7 @@ var (
 	claudeUpdatePromptFn      = promptClaudeUpdate
 	runClaudeUpdateFn         = runClaudeUpdate
 	claudeUpdateCommandFn     = runClaudeUpdateCommand
+	claudeDesktopUpdateFn     = runClaudeDesktopUpdateCommand
 	claudeMirrorUpdateFn      = runClaudeMirrorUpdate
 	claudeUpdateErrorFn       = reportClaudeUpdateError
 )
@@ -112,7 +113,15 @@ func promptClaudeUpdate(current, latest string) (bool, error) {
 }
 
 func runClaudeUpdate() error {
-	officialErr := claudeUpdateCommandFn()
+	return runClaudeUpdateWith(claudeUpdateCommandFn)
+}
+
+func runClaudeDesktopUpdate() error {
+	return runClaudeUpdateWith(claudeDesktopUpdateFn)
+}
+
+func runClaudeUpdateWith(updateCommand func() error) error {
+	officialErr := updateCommand()
 	if officialErr == nil {
 		return nil
 	}
@@ -126,9 +135,25 @@ func runClaudeUpdate() error {
 }
 
 func runClaudeUpdateCommand() error {
+	return executeClaudeUpdate("claude")
+}
+
+func runClaudeDesktopUpdateCommand() error {
+	tool, err := tools.Lookup("claude")
+	if err != nil {
+		return err
+	}
+	path, err := tools.ResolveInstallerOwnedExec(tool)
+	if err != nil {
+		return err
+	}
+	return executeClaudeUpdate(path)
+}
+
+func executeClaudeUpdate(path string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	c := exec.CommandContext(ctx, "claude", "update")
+	c := exec.CommandContext(ctx, path, "update")
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
