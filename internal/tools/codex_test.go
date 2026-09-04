@@ -172,7 +172,7 @@ func TestPrepareCodexAddsArtifactStandardAndOnlyCurrentTmuxContext(t *testing.T)
 	}
 }
 
-func TestPrepareCodexTransparentUsesBuiltInOpenAIProviderAndPlaceholder(t *testing.T) {
+func TestPrepareCodexTransparentUsesOfficialHTTPProviderAndPlaceholder(t *testing.T) {
 	_, codexHome := codexTestHome(t)
 	tool, _ := Lookup("codex")
 
@@ -199,10 +199,21 @@ func TestPrepareCodexTransparentUsesBuiltInOpenAIProviderAndPlaceholder(t *testi
 		t.Fatal(err)
 	}
 	configText := string(configBody)
-	if !strings.Contains(configText, `model_provider = "openai"`) {
-		t.Errorf("config.toml does not select built-in OpenAI provider:\n%s", configText)
+	for _, required := range []string{
+		`model_provider = "everyapi_openai"`,
+		`[model_providers.everyapi_openai]`,
+		`base_url = "https://api.openai.com/v1"`,
+		`env_key = "OPENAI_API_KEY"`,
+		`wire_api = "responses"`,
+		`requires_openai_auth = false`,
+		`supports_websockets = false`,
+		`supports_standalone_web_search = true`,
+	} {
+		if !strings.Contains(configText, required) {
+			t.Errorf("transparent config.toml missing %q:\n%s", required, configText)
+		}
 	}
-	for _, forbidden := range []string{"api.everyapi", "model_providers.everyapi", "openai_base_url"} {
+	for _, forbidden := range []string{"api.everyapi", "openai_base_url"} {
 		if strings.Contains(configText, forbidden) {
 			t.Errorf("config.toml contains transparent-mode forbidden value %q:\n%s", forbidden, configText)
 		}
@@ -229,7 +240,7 @@ func TestPrepareCodexTransparentPreservesUserModelDefaults(t *testing.T) {
 	}
 	config := string(configBody)
 	for _, want := range []string{
-		`model_provider = "openai"`,
+		`model_provider = "everyapi_openai"`,
 		`model = "gpt-5.6-terra"`,
 		`model_reasoning_effort = "high"`,
 	} {

@@ -19,4 +19,7 @@ func TestInjectedCodexProviderEnablesStandaloneWebSearch(t *testing.T) {
 	if !strings.Contains(string(body), "supports_standalone_web_search = true") {
 		t.Fatalf("generated provider does not enable standalone web search:\n%s", body)
 	}
+	if !strings.Contains(string(body), "supports_websockets = false") {
+		t.Fatalf("generated provider does not pin HTTP Responses transport:\n%s", body)
+	}
 }
