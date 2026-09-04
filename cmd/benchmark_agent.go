@@ -110,7 +110,8 @@ func BenchmarkCatalog(args []string) error {
 	if err != nil {
 		return err
 	}
-	key, err := api.ResolveRelayKey(context.Background(), creds, "")
+	// Resolve through the locked wrapper, never api.ResolveRelayKey directly: resolution can rotate an OAuth2 relay key and rewrite credentials.json, and Connect spawns this sidecar alongside `auth credential`, which holds the cross-process credential lock while it refreshes. Loading before that lock and refreshing outside it would replay an already-rotated refresh token, and the gateway's reuse detector revokes the whole refresh family plus its paired relay keys. The lock is released before the catalogue request below, which needs no credential state.
+	key, err := resolveRelayKey(creds, "")
 	if err != nil {
 		return err
 	}

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -14,6 +16,7 @@ import (
 	"time"
 
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/credentiallock"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/tools"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
@@ -347,5 +350,73 @@ func TestBenchmarkModelSelectionDoesNotBecomeTheRememberedDefault(t *testing.T) 
 	}
 	if remembered := settings.ToolModel("claude"); remembered != "" {
 		t.Fatalf("benchmark persisted model %q", remembered)
+	}
+}
+
+// EveryAPI Connect spawns desktop-benchmark-catalog beside `everyapi auth credential`, which holds the cross-process credential lock while it rotates an OAuth2 relay key. A catalogue run that reads credentials.json and resolves outside that lock replays an already-rotated refresh token, and the gateway's reuse detector then revokes the whole refresh family plus its paired relay keys.
+func TestBenchmarkCatalogResolvesTheRelayKeyUnderTheCredentialLock(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	requests := make(chan string, 4)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests <- r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":[{"id":"chat-model","supported_endpoint_types":["openai"]}]}`)
+	}))
+	t.Cleanup(server.Close)
+	stale := &config.Credentials{APIBase: server.URL, AccessToken: "access", RelayKey: "stale-key", RelayKeySystemChecked: true, UserID: 42}
+	if err := config.Save(stale); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	previousOut := cliout.Out
+	cliout.Out = &out
+	t.Cleanup(func() { cliout.Out = previousOut })
+
+	unlock, err := credentiallock.Acquire()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Stands in for the concurrent locked refresher: the rotated key lands on disk after the sidecar was spawned, so only a run that loads under the lock can observe it.
+	rotated := *stale
+	rotated.RelayKey = "rotated-key"
+	if err := config.Save(&rotated); err != nil {
+		unlock()
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- BenchmarkCatalog(nil) }()
+
+	raced := ""
+	select {
+	case auth := <-requests:
+		raced = fmt.Sprintf("catalogue reached the gateway with %q while the credential lock was held", auth)
+	case err := <-done:
+		raced = fmt.Sprintf("catalogue finished (err=%v) while the credential lock was held", err)
+	case <-time.After(500 * time.Millisecond):
+	}
+	unlock()
+
+	select {
+	case err := <-done:
+		if raced == "" && err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("catalogue never finished after the credential lock was released")
+	}
+	if raced != "" {
+		t.Fatal(raced)
+	}
+	select {
+	case auth := <-requests:
+		if auth != "Bearer rotated-key" {
+			t.Fatalf("catalogue authorization = %q, want the relay key written under the lock", auth)
+		}
+	default:
+		t.Fatal("catalogue made no gateway request")
+	}
+	if !strings.Contains(out.String(), `"chat-model"`) {
+		t.Fatalf("catalogue output = %q", out.String())
 	}
 }

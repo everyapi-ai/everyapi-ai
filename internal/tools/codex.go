@@ -297,6 +297,10 @@ func writeCodexConfigTOMLWithCatalog(codexHome, apiBase, catalogPath, bootModel 
 	b.WriteString("env_key = \"OPENAI_API_KEY\"\n")
 	// Pin the routing surface: codex's WireApi default is Chat, which would hit /v1/chat/completions. We want the gateway's native /v1/responses surface (see the doc comment above).
 	b.WriteString("wire_api = \"responses\"\n")
+	// The gateway exposes Codex's standalone search companion endpoint beside
+	// /v1/responses. Custom providers default this capability off, which makes
+	// `everyapi use codex --transparent=false` silently omit the web tool.
+	b.WriteString("supports_standalone_web_search = true\n")
 	// EveryAPI's relay key is its own credential, not an OpenAI ChatGPT session token (already the codex default; written to match intent).
 	b.WriteString("requires_openai_auth = false\n")
 	// Static attribution is safe because it identifies the client kind, not a
