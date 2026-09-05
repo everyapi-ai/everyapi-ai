@@ -410,28 +410,66 @@ func parseJSONOnly(name string, args []string) (bool, error) {
 	return *jsonOutput, nil
 }
 
-func rejectIrrelevantActionFlags(fs *flag.FlagSet, command string) error {
-	allowed := map[string]bool{"app": true, "window-index": true, "window-id": true, "json": true, "restore-window": true, "no-screenshot": true, "session": true}
-	var commandFlags []string
+// actionBaseFlags are the flags every action subcommand accepts regardless of kind. dispatchAction registers one superset flag set for all of them and rejects the ones that do not belong to the requested kind, so the accepted set for an action is exactly this base plus actionKindFlags(command).
+var actionBaseFlags = []string{"app", "window-index", "window-id", "session", "restore-window", "no-screenshot", "json"}
+
+// actionKindFlags returns the kind-specific flags one action subcommand accepts on top of actionBaseFlags.
+func actionKindFlags(command string) []string {
 	switch command {
 	case "click":
-		commandFlags = []string{"element-index", "x", "y", "mouse-button", "click-count", "modifiers"}
+		return []string{"element-index", "x", "y", "mouse-button", "click-count", "modifiers"}
 	case "set-value":
-		commandFlags = []string{"element-index", "value", "value-stdin"}
+		return []string{"element-index", "value", "value-stdin"}
 	case "type-text":
-		commandFlags = []string{"text", "text-stdin"}
+		return []string{"text", "text-stdin"}
 	case "paste-text":
-		commandFlags = []string{"text", "text-stdin"}
+		return []string{"text", "text-stdin"}
 	case "press-key", "hotkey":
-		commandFlags = []string{"key"}
+		return []string{"key"}
 	case "scroll":
-		commandFlags = []string{"element-index", "x", "y", "direction", "amount"}
+		return []string{"element-index", "x", "y", "direction", "amount"}
 	case "drag":
-		commandFlags = []string{"from-element-index", "to-element-index", "from-x", "from-y", "to-x", "to-y"}
+		return []string{"from-element-index", "to-element-index", "from-x", "from-y", "to-x", "to-y"}
 	case "perform-secondary-action":
-		commandFlags = []string{"element-index", "action"}
+		return []string{"element-index", "action"}
 	}
-	for _, name := range commandFlags {
+	return nil
+}
+
+// CommandNames lists the `everyapi computer` subcommands the dispatcher accepts, in the order the usage text presents them.
+func CommandNames() []string {
+	return []string{"capabilities", "permissions", "list-apps", "list-windows", "get-app-state", "screenshot", "click", "perform-secondary-action", "scroll", "drag", "type-text", "press-key", "hotkey", "paste-text", "set-value"}
+}
+
+// CommandFlags returns the flag names `everyapi computer <command>` accepts, or nil for an unknown command. The agent command schema in cmd/workspace builds its computer entries from this rather than restating them, so the advertised flags cannot drift away from the flag sets dispatch actually parses.
+func CommandFlags(command string) []string {
+	switch command {
+	case "capabilities", "list-apps":
+		return []string{"json"}
+	case "permissions":
+		return []string{"request", "json"}
+	case "list-windows":
+		return []string{"app", "json"}
+	case "get-app-state":
+		return []string{"app", "window-index", "window-id", "session", "no-screenshot", "json"}
+	case "screenshot":
+		return []string{"app", "window-index", "window-id", "session", "out", "json"}
+	}
+	kind := actionKindFlags(command)
+	if kind == nil {
+		return nil
+	}
+	flags := make([]string, 0, len(actionBaseFlags)+len(kind))
+	flags = append(flags, actionBaseFlags...)
+	return append(flags, kind...)
+}
+
+func rejectIrrelevantActionFlags(fs *flag.FlagSet, command string) error {
+	allowed := make(map[string]bool, len(actionBaseFlags)+8)
+	for _, name := range actionBaseFlags {
+		allowed[name] = true
+	}
+	for _, name := range actionKindFlags(command) {
 		allowed[name] = true
 	}
 	var unexpected string

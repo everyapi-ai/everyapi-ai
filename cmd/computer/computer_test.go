@@ -582,3 +582,89 @@ func TestActionRejectsIrrelevantFlagsBeforeCallingService(t *testing.T) {
 		t.Fatal("service was called with irrelevant flags")
 	}
 }
+
+// computerFlagSample returns a parseable value for one flag name, so probing a flag exercises whether it is REGISTERED rather than whether its value is well formed.
+func computerFlagSample(t *testing.T, name string) string {
+	t.Helper()
+	switch name {
+	case "json", "no-screenshot", "restore-window", "text-stdin", "value-stdin":
+		return "true"
+	case "app":
+		return "TextEdit"
+	case "session":
+		return "probe"
+	case "request":
+		return "accessibility"
+	case "out":
+		return filepath.Join(t.TempDir(), "probe.png")
+	case "direction":
+		return "down"
+	case "key":
+		return "return"
+	case "action":
+		return "AXPress"
+	case "mouse-button":
+		return "left"
+	case "modifiers":
+		return "cmd"
+	case "text", "value":
+		return "probe"
+	}
+	return "1"
+}
+
+// TestCommandFlagsMatchTheParser is the anti-drift guard behind the agent command schema. cmd/workspace advertises computer flags straight from CommandFlags, so CommandFlags must describe what the dispatcher really parses: every advertised flag has to survive flag parsing, and every flag advertised for some OTHER computer command has to be refused — either as undefined or as irrelevant for this kind. Without this, the schema can promise flags like --pages or --restore-window that hard-fail at argument parse.
+func TestCommandFlagsMatchTheParser(t *testing.T) {
+	universe := map[string]bool{}
+	for _, command := range CommandNames() {
+		for _, name := range CommandFlags(command) {
+			universe[name] = true
+		}
+	}
+	for _, command := range CommandNames() {
+		advertised := map[string]bool{}
+		for _, name := range CommandFlags(command) {
+			advertised[name] = true
+		}
+		if len(advertised) == 0 {
+			t.Fatalf("CommandFlags(%q) is empty", command)
+		}
+		for name := range universe {
+			name := name
+			t.Run(command+"/"+name, func(t *testing.T) {
+				args := []string{command, "--" + name + "=" + computerFlagSample(t, name)}
+				if command != "capabilities" && command != "list-apps" && command != "permissions" && name != "app" {
+					args = append(args, "--app=TextEdit")
+				}
+				err := run(context.Background(), args, &fakeService{}, strings.NewReader("probe"), &bytes.Buffer{})
+				message := ""
+				if err != nil {
+					message = err.Error()
+				}
+				refused := strings.Contains(message, "flag provided but not defined") || strings.Contains(message, "does not accept")
+				if advertised[name] && refused {
+					t.Fatalf("computer %s advertises --%s but the parser refuses it: %s", command, name, message)
+				}
+				if !advertised[name] && !refused {
+					t.Fatalf("computer %s accepts --%s without advertising it in CommandFlags", command, name)
+				}
+			})
+		}
+	}
+}
+
+// TestCommandNamesMatchDispatch keeps CommandNames in step with the dispatcher's switch, so a subcommand can never be implemented yet stay invisible to the agent schema built from this list.
+func TestCommandNamesMatchDispatch(t *testing.T) {
+	for _, command := range CommandNames() {
+		err := run(context.Background(), []string{command}, &fakeService{}, strings.NewReader(""), &bytes.Buffer{})
+		if err != nil && strings.Contains(err.Error(), "unknown computer command") {
+			t.Errorf("CommandNames lists %q but dispatch rejects it", command)
+		}
+		if CommandFlags(command) == nil {
+			t.Errorf("CommandFlags(%q) = nil", command)
+		}
+	}
+	if err := run(context.Background(), []string{"teleport"}, &fakeService{}, strings.NewReader(""), &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "unknown computer command") {
+		t.Errorf("unknown subcommand error = %v", err)
+	}
+}

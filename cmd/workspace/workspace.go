@@ -31,6 +31,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/everyapi-ai/everyapi-ai/v3/cmd/computer"
 )
 
 type result struct {
@@ -2211,36 +2213,17 @@ func schemaOrchestrationFlags(command string) []string {
 	return nil
 }
 
+// schemaComputerFlags reports the computer-specific flags of one `computer <sub>` entry. It reads them from the computer package's own flag inventory instead of restating them, so the schema an agent drives cannot advertise a flag the dispatcher refuses at argument parse. "json" is dropped because every schema entry already carries it in the global flag prefix.
 func schemaComputerFlags(command string) []string {
-	if command == "computer capabilities" || command == "computer list-apps" {
-		return []string{}
+	names := computer.CommandFlags(strings.TrimPrefix(command, "computer "))
+	flags := make([]string, 0, len(names))
+	for _, name := range names {
+		if name == "json" {
+			continue
+		}
+		flags = append(flags, name)
 	}
-	if command == "computer list-windows" {
-		return []string{"app"}
-	}
-	if command == "computer permissions" {
-		return []string{"id"}
-	}
-	base := []string{"worktree", "session", "app", "window-id", "window-index", "restore-window", "no-screenshot"}
-	switch command {
-	case "computer click":
-		return append(base, "element-index", "x", "y", "click-count", "mouse-button", "modifiers")
-	case "computer drag":
-		return append(base, "from-element-index", "to-element-index", "from-x", "from-y", "to-x", "to-y")
-	case "computer get-app-state":
-		return base
-	case "computer hotkey", "computer press-key":
-		return append(base, "key")
-	case "computer paste-text", "computer type-text":
-		return append(base, "text", "text-stdin")
-	case "computer perform-secondary-action":
-		return append(base, "element-index", "action")
-	case "computer scroll":
-		return append(base, "element-index", "x", "y", "direction", "pages")
-	case "computer set-value":
-		return append(base, "element-index", "value", "value-stdin")
-	}
-	return base
+	return flags
 }
 
 func schemaLinearFlags(command string) []string {
@@ -2336,7 +2319,7 @@ var nativeSubcommands = map[string][]string{
 	"network":       {"list", "clear"},
 	"linear":        {"issue", "search", "list", "list-issues", "create", "save-issue", "assignee clear", "assignee set", "attach", "comment add", "due-date clear", "due-date set", "estimate clear", "estimate set", "label add", "label remove", "label set", "priority clear", "priority set", "project list", "relation add", "relation remove", "status set", "team labels", "team list", "team members", "team states"},
 	"set":           {"device", "offline", "headers", "credentials", "media", "viewport", "geolocation"},
-	"computer":      {"capabilities", "permissions", "list-apps", "list-windows", "get-app-state", "click", "perform-secondary-action", "scroll", "drag", "type-text", "press-key", "hotkey", "paste-text", "set-value"},
+	"computer":      computer.CommandNames(),
 	"agent":         {"hooks off", "hooks on", "hooks prepare-codex", "hooks status"},
 	"diagnostics":   {"memory"},
 	"artifacts":     {"delete", "list", "share", "unshare", "update"},

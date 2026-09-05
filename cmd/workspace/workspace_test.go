@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/everyapi-ai/everyapi-ai/v3/cmd/computer"
 )
 
 func TestStripHTML(t *testing.T) {
@@ -232,11 +234,11 @@ func TestAgentContextMatchesReferenceShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	data, ok := value.(map[string]any)
-	if !ok || data["schemaVersion"] != 1 || data["commandCount"] != 243 {
+	if !ok || data["schemaVersion"] != 1 || data["commandCount"] != 244 {
 		t.Fatalf("agent context = %#v", value)
 	}
 	commands, ok := data["commands"].([]map[string]any)
-	if !ok || len(commands) != 243 {
+	if !ok || len(commands) != 244 {
 		t.Fatalf("commands = %T/%d", data["commands"], len(commands))
 	}
 	for _, command := range commands {
@@ -595,5 +597,77 @@ func runGit(t *testing.T, dir string, args ...string) {
 	cmd.Dir = dir
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, output)
+	}
+}
+
+// TestComputerSchemaMatchesTheComputerDispatcher is the agent-facing half of the computer anti-drift guard. `agent-context` is the only programmatic discovery surface an agent has, so every computer entry must cover exactly the subcommands the dispatcher implements and advertise exactly the flags it parses. Advertising a flag the parser rejects turns the schema's own documented form into a hard argument error.
+func TestComputerSchemaMatchesTheComputerDispatcher(t *testing.T) {
+	entries := map[string][]string{}
+	for _, command := range buildAgentSchema() {
+		name := command["command"].(string)
+		if strings.HasPrefix(name, "computer ") {
+			entries[strings.TrimPrefix(name, "computer ")] = command["flags"].([]string)
+		}
+	}
+	if len(entries) != len(computer.CommandNames()) {
+		t.Fatalf("schema exposes %d computer commands, dispatcher implements %d", len(entries), len(computer.CommandNames()))
+	}
+	for _, sub := range computer.CommandNames() {
+		flags, ok := entries[sub]
+		if !ok {
+			t.Fatalf("computer %s missing from the agent schema", sub)
+		}
+		for _, name := range computer.CommandFlags(sub) {
+			if name == "json" {
+				continue
+			}
+			if !containsString(flags, name) {
+				t.Errorf("computer %s accepts --%s but the schema omits it: %v", sub, name, flags)
+			}
+		}
+		for _, name := range flags {
+			switch name {
+			case "help", "json", "pairing-code", "environment":
+				continue
+			}
+			if !containsString(computer.CommandFlags(sub), name) {
+				t.Errorf("computer %s schema advertises --%s, which the dispatcher refuses: %v", sub, name, flags)
+			}
+		}
+	}
+}
+
+// TestComputerSchemaFlagRegressions pins the four concrete mismatches the schema shipped: scroll advertised --pages instead of the real --amount, permissions advertised --id instead of the design's --request, get-app-state advertised the action-only --restore-window plus a --worktree the computer dispatcher never registers, and screenshot was absent entirely.
+func TestComputerSchemaFlagRegressions(t *testing.T) {
+	flagsFor := func(command string) []string {
+		for _, entry := range buildAgentSchema() {
+			if entry["command"] == command {
+				return entry["flags"].([]string)
+			}
+		}
+		t.Fatalf("%s missing from the agent schema", command)
+		return nil
+	}
+	for _, tc := range []struct {
+		command string
+		want    []string
+		reject  []string
+	}{
+		{"computer scroll", []string{"direction", "amount"}, []string{"pages"}},
+		{"computer permissions", []string{"request"}, []string{"id"}},
+		{"computer get-app-state", []string{"app", "no-screenshot"}, []string{"restore-window", "worktree"}},
+		{"computer screenshot", []string{"app", "out"}, []string{"restore-window"}},
+	} {
+		flags := flagsFor(tc.command)
+		for _, name := range tc.want {
+			if !containsString(flags, name) {
+				t.Errorf("%s schema flags = %v, want --%s", tc.command, flags, name)
+			}
+		}
+		for _, name := range tc.reject {
+			if containsString(flags, name) {
+				t.Errorf("%s schema flags = %v, must not advertise --%s", tc.command, flags, name)
+			}
+		}
 	}
 }
