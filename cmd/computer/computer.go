@@ -438,7 +438,7 @@ func actionKindFlags(command string) []string {
 
 // CommandNames lists the `everyapi computer` subcommands the dispatcher accepts, in the order the usage text presents them.
 func CommandNames() []string {
-	return []string{"capabilities", "permissions", "list-apps", "list-windows", "get-app-state", "screenshot", "click", "perform-secondary-action", "scroll", "drag", "type-text", "press-key", "hotkey", "paste-text", "set-value"}
+	return []string{"capabilities", "permissions", "list-apps", "list-windows", "get-app-state", "screenshot", "click", "set-value", "type-text", "paste-text", "press-key", "hotkey", "scroll", "drag", "perform-secondary-action"}
 }
 
 // CommandFlags returns the flag names `everyapi computer <command>` accepts, or nil for an unknown command. The agent command schema in cmd/workspace builds its computer entries from this rather than restating them, so the advertised flags cannot drift away from the flag sets dispatch actually parses.
