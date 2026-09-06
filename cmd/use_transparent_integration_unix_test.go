@@ -77,8 +77,8 @@ func TestUseTransparentChildEnvironmentAndCleanup(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdg)
 	const relayKey = "integration-real-relay-key"
-	// RelayKeySystemChecked marks the cache as already tiered. Without it ResolveRelayKey treats these credentials as a pre-tiering cache and spends its one-off re-resolution on a token-list call before the launch even starts — a real behaviour, but one this test is not about.
-	if err := config.Save(&config.Credentials{APIBase: gateway.URL, RelayKey: relayKey, RelayKeySystemChecked: true}); err != nil {
+	// RelayKeySystemChecked / RelayKeyQuotaChecked mark the cache as already tiered and already ranked. Without them ResolveRelayKey treats these credentials as a pre-tiering cache and spends its one-off re-resolution on a token-list call before the launch even starts — a real behaviour, but one this test is not about.
+	if err := config.Save(&config.Credentials{APIBase: gateway.URL, RelayKey: relayKey, RelayKeySystemChecked: true, RelayKeyQuotaChecked: true}); err != nil {
 		t.Fatal(err)
 	}
 	binDir := t.TempDir()

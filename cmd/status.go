@@ -68,7 +68,7 @@ func Status(args []string) error {
 	if creds.OAuthClientID != "" {
 		cliout.Println("")
 		cliout.Println(i18n.T("status.relay_key_mode"))
-		printRelayHealth(ctx, creds)
+		printRelayHealth(ctx, creds, 0)
 		cliout.Println("")
 		return nil
 	}
@@ -114,14 +114,32 @@ func Status(args []string) error {
 	// The origin is derived from the stored api_base rather than from a response body, so it is a weaker source than the username and email above — but it is still text this command did not author being printed to a terminal, and it goes through the same sanitizer for the same reason.
 	cliout.Printf("  %-10s %s/wallet\n", i18n.T("status.topup"), cliout.Sanitize(api.WebOriginFromBase(creds.APIBase)))
 
-	printRelayHealth(ctx, creds)
+	printRelayHealth(ctx, creds, perUnit)
 
 	cliout.Println("")
 	return nil
 }
 
+// printRelayKeyCap reports the relay key's OWN remaining quota when the key is capped, because "relay: ok" alone hides the failure this exists to surface: the probe runs ValidateUserToken, which only refuses a key at remain <= 0, while the gateway refuses a REQUEST whose pre-consume estimate exceeds remain_quota. A key stranded a few cents above zero therefore probes ok, reports a healthy account balance on the line above, and 403s "token quota is not enough" on every actual call — with nothing in this command's output pointing at the key.
+//
+// Silent for an unlimited key (nothing to warn about, and the common case keeps its one-line output) and best-effort throughout: this is a detail line on a diagnostic command, so a failed lookup or an unknown quota scale prints nothing rather than turning a working status into an error. perUnit is 0 on the OAuth2 relay-key path, which never reads quota_per_unit.
+func printRelayKeyCap(ctx context.Context, gw, relayKey string, perUnit float64) {
+	if perUnit <= 0 {
+		return
+	}
+	usage, err := api.New(gw, relayKey).GetTokenUsage(ctx)
+	if err != nil || usage == nil || usage.UnlimitedQuota {
+		return
+	}
+	cliout.Printf("             key %s is capped: %s left of %s (separate from the account quota above)\n",
+		style.Bold(cliout.Sanitize(usage.Name)),
+		style.Bold(fmt.Sprintf("$%.4f", float64(usage.TotalAvailable)/perUnit)),
+		fmt.Sprintf("$%.2f", float64(usage.TotalGranted)/perUnit))
+	cliout.Printf("             run 'everyapi token switch' to relay through a different key\n")
+}
+
 // printRelayHealth resolves the account's relay key and probes the relay path, emitting one `relay:` line. The quota line above comes from /api/user/self (UserAuth) and says nothing about whether the RELAY works: the access token can't relay at all (different auth path), and a relay key can be dead while the account quota is fine. We always emit a line — including `unknown` on transient lookup/probe failures — so the output shape stays consistent (a blank section is ambiguous). status reports account-level relay health, not a per-group override — always the default key path (group "").
-func printRelayHealth(ctx context.Context, creds *config.Credentials) {
+func printRelayHealth(ctx context.Context, creds *config.Credentials, perUnit float64) {
 	gw := config.ResolveAPIBaseForBase(creds.APIBase)
 	relayKey, rkErr := resolveRelayKeyLocked(creds, "")
 	switch {
@@ -136,6 +154,7 @@ func printRelayHealth(ctx context.Context, creds *config.Credentials) {
 		switch {
 		case perr == nil:
 			cliout.Printf("  relay:     %s\n", style.Bold("ok"))
+			printRelayKeyCap(ctx, gw, relayKey, perUnit)
 		case api.IsUnauthorized(perr):
 			cliout.Printf("  relay:     %s — relay key invalid / expired / disabled / out of quota\n", style.Bold("UNAVAILABLE"))
 			cliout.Printf("             (account quota above is separate; top up %s/wallet or run 'everyapi auth login')\n",

@@ -620,6 +620,7 @@ func TestStatusSanitizesGatewayOrigin(t *testing.T) {
 		Username:              "tony",
 		RelayKey:              "sk-everyapi-relay",
 		RelayKeySystemChecked: true,
+		RelayKeyQuotaChecked:  true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -649,5 +650,121 @@ func TestStatusSanitizesGatewayOrigin(t *testing.T) {
 	}
 	if !strings.Contains(out, "top up "+want) {
 		t.Errorf("relay-unauthorized hint missing sanitized topup origin %q:\n%q", want, out)
+	}
+}
+
+// "relay: ok" on its own hid the exact failure this line exists to name: the probe runs ValidateUserToken, which only refuses a key at remain <= 0, while the gateway refuses a REQUEST whose pre-consume estimate exceeds the key's remaining quota. A key stranded a few cents above zero therefore probes ok under a healthy account balance and 403s every actual call, with nothing in this command pointing at the key.
+func TestStatusReportsCappedRelayKeyQuota(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/api/status"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"data":    map[string]any{"quota_per_unit": 500000.0},
+			})
+		case strings.HasSuffix(r.URL.Path, "/api/user/self"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"data": map[string]any{
+					"id": 4, "username": "evan", "quota": 1331840000, "used_quota": 0, "request_count": 3,
+				},
+			})
+		case strings.HasSuffix(r.URL.Path, "/api/usage/token/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code": true, "message": "ok",
+				"data": map[string]any{
+					"name": "hermes-store", "total_granted": 10000000, "total_used": 9997755,
+					"total_available": 2245, "unlimited_quota": false,
+				},
+			})
+		default:
+			// /v1/models — the probe the "ok" verdict comes from. A capped key passes it.
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": []any{}})
+		}
+	}))
+	defer srv.Close()
+
+	if err := config.Save(&config.Credentials{
+		APIBase: srv.URL, AccessToken: "tok", UserID: 4, Username: "evan",
+		RelayKey: "sk-everyapi-relay", RelayKeyTokenID: 3620,
+		RelayKeySystemChecked: true, RelayKeyQuotaChecked: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	origLang := i18n.Language()
+	i18n.SetLanguage("en")
+	t.Cleanup(func() { i18n.SetLanguage(origLang) })
+	origOut := cliout.Out
+	var buf bytes.Buffer
+	cliout.Out = &buf
+	t.Cleanup(func() { cliout.Out = origOut })
+
+	if err := Status(nil); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "hermes-store is capped") {
+		t.Errorf("status did not name the capped relay key:\n%s", out)
+	}
+	if !strings.Contains(out, "$0.0045 left of $20.00") {
+		t.Errorf("status did not report the key's own remaining quota:\n%s", out)
+	}
+	if !strings.Contains(out, "everyapi token switch") {
+		t.Errorf("status did not offer the way off the capped key:\n%s", out)
+	}
+}
+
+// The common case keeps its one-line output: an unlimited key has no cap to report, and printing a detail line for it would be noise on every run.
+func TestStatusOmitsQuotaLineForUnlimitedRelayKey(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/api/status"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"data":    map[string]any{"quota_per_unit": 500000.0},
+			})
+		case strings.HasSuffix(r.URL.Path, "/api/user/self"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"data":    map[string]any{"id": 4, "username": "evan", "quota": 1000, "used_quota": 0, "request_count": 1},
+			})
+		case strings.HasSuffix(r.URL.Path, "/api/usage/token/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code": true, "message": "ok",
+				"data": map[string]any{"name": "Auto", "total_granted": 0, "total_used": 0, "total_available": 0, "unlimited_quota": true},
+			})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": []any{}})
+		}
+	}))
+	defer srv.Close()
+
+	if err := config.Save(&config.Credentials{
+		APIBase: srv.URL, AccessToken: "tok", UserID: 4, Username: "evan",
+		RelayKey: "sk-everyapi-relay", RelayKeySystemChecked: true, RelayKeyQuotaChecked: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	origLang := i18n.Language()
+	i18n.SetLanguage("en")
+	t.Cleanup(func() { i18n.SetLanguage(origLang) })
+	origOut := cliout.Out
+	var buf bytes.Buffer
+	cliout.Out = &buf
+	t.Cleanup(func() { cliout.Out = origOut })
+
+	if err := Status(nil); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if out := buf.String(); strings.Contains(out, "is capped") {
+		t.Errorf("unlimited relay key reported as capped:\n%s", out)
 	}
 }

@@ -363,7 +363,7 @@ func TestBenchmarkCatalogResolvesTheRelayKeyUnderTheCredentialLock(t *testing.T)
 		_, _ = io.WriteString(w, `{"data":[{"id":"chat-model","supported_endpoint_types":["openai"]}]}`)
 	}))
 	t.Cleanup(server.Close)
-	stale := &config.Credentials{APIBase: server.URL, AccessToken: "access", RelayKey: "stale-key", RelayKeySystemChecked: true, UserID: 42}
+	stale := &config.Credentials{APIBase: server.URL, AccessToken: "access", RelayKey: "stale-key", RelayKeySystemChecked: true, RelayKeyQuotaChecked: true, UserID: 42}
 	if err := config.Save(stale); err != nil {
 		t.Fatal(err)
 	}
