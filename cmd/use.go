@@ -389,7 +389,7 @@ func use(args []string, persistModelSelection bool) error {
 	}
 	interactive := cliprompt.IsInteractive()
 	bootModel := ""
-	if managedBootPickerNeeded(t, extraArgs) {
+	if managedBootPickerNeeded(t, extraArgs) && !claudeOwnsBootModel(t, extraArgs, model, pickModel) {
 		bootModel, err = resolveRememberedModelWithPersistence(t, settings, relayCatalog, model, pickModel, interactive, persistModelSelection)
 		if err != nil {
 			return err

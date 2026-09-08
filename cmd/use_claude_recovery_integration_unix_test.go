@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -100,17 +101,18 @@ func TestUseExecReceivesRecoveredClaudeSessionID(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := strings.Split(strings.TrimSuffix(string(argv), "\x00"), "\x00")
-	if len(got) != 4 || got[0] != "--append-system-prompt" ||
-		!strings.Contains(got[1], "EveryAPI Artifact delivery standard") || got[2] != "--resume" {
+	resume := slices.Index(got, "--resume")
+	if len(got) < 4 || got[0] != "--append-system-prompt" ||
+		!strings.Contains(got[1], "EveryAPI Artifact delivery standard") || resume < 0 || resume+1 >= len(got) {
 		t.Fatalf("exec argv = %#v, want --resume with a fresh session ID", got)
 	}
-	if got[3] == oldID {
-		t.Fatalf("exec resume ID = %q, want the recovered session ID", got[3])
+	if got[resume+1] == oldID {
+		t.Fatalf("exec resume ID = %q, want the recovered session ID", got[resume+1])
 	}
-	if !claudeSessionIDPattern.MatchString(got[3]) {
-		t.Fatalf("exec resume ID = %q, want UUID", got[3])
+	if !claudeSessionIDPattern.MatchString(got[resume+1]) {
+		t.Fatalf("exec resume ID = %q, want UUID", got[resume+1])
 	}
-	if _, err := os.Stat(filepath.Join(filepath.Dir(oldPath), got[3]+".jsonl")); err != nil {
+	if _, err := os.Stat(filepath.Join(filepath.Dir(oldPath), got[resume+1]+".jsonl")); err != nil {
 		t.Fatalf("recovered transcript for exec ID: %v", err)
 	}
 
