@@ -246,7 +246,50 @@ func TestResolveAppBlocksSensitiveBundleIDsCaseInsensitively(t *testing.T) {
 	}
 }
 
+func TestResolveAppAllowsBrowsersForDirectComputerUse(t *testing.T) {
+	t.Setenv("EVERYAPI_COMPUTER_USE_BLOCK_BROWSERS", "")
+	provider := fixtureProvider()
+	provider.apps = []App{{Name: "Safari", BundleID: "com.apple.Safari", PID: 56}}
+	service := NewService(provider, newMemoryStore(), time.Now)
+
+	app, err := service.ResolveApp(context.Background(), "com.apple.Safari")
+	if err != nil {
+		t.Fatalf("ResolveApp(browser): %v", err)
+	}
+	if app.BundleID != "com.apple.Safari" {
+		t.Fatalf("ResolveApp(browser) returned %#v", app)
+	}
+}
+
+func TestResolveAppBlocksBrowsersForEveryAPIUseLaunch(t *testing.T) {
+	t.Setenv("EVERYAPI_COMPUTER_USE_BLOCK_BROWSERS", "1")
+	provider := fixtureProvider()
+	provider.apps = []App{{Name: "Safari", BundleID: "com.apple.Safari", PID: 57}}
+	service := NewService(provider, newMemoryStore(), time.Now)
+
+	_, err := service.ResolveApp(context.Background(), "com.apple.Safari")
+	if ErrorCode(err) != CodeAppBlocked {
+		t.Fatalf("ResolveApp(browser) error = %v (%q), want %q", err, ErrorCode(err), CodeAppBlocked)
+	}
+}
+
+func TestResolveAppNeverLetsBrowserExceptionOverrideUnconditionalBlock(t *testing.T) {
+	const bundleID = "com.example.browser-overlap"
+	knownBlockedBundleIDs[bundleID] = "fixture app is always blocked"
+	t.Cleanup(func() { delete(knownBlockedBundleIDs, bundleID) })
+	t.Setenv(BlockBrowsersEnvironment, "")
+	provider := fixtureProvider()
+	provider.apps = []App{{Name: "Browser overlap", BundleID: bundleID, PID: 58}}
+	service := NewService(provider, newMemoryStore(), time.Now)
+
+	_, err := service.ResolveApp(context.Background(), bundleID)
+	if ErrorCode(err) != CodeAppBlocked {
+		t.Fatalf("ResolveApp(overlap) error = %v (%q), want %q", err, ErrorCode(err), CodeAppBlocked)
+	}
+}
+
 func TestResolveAppBlocksBrowsers(t *testing.T) {
+	t.Setenv(BlockBrowsersEnvironment, "1")
 	for _, testCase := range []struct{ name, bundleID string }{
 		{name: "Safari", bundleID: "com.apple.Safari"},
 		{name: "Safari Technology Preview", bundleID: "com.apple.SafariTechnologyPreview"},

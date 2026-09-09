@@ -21,6 +21,7 @@ import (
 
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/computeruse"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/tools"
 	"github.com/everyapi-ai/everyapi-sdk/api"
@@ -501,6 +502,10 @@ func use(args []string, persistModelSelection bool) error {
 	if err := exposeEveryAPIExecutable(env); err != nil {
 		return err
 	}
+	// Agents launched through `everyapi use` inherit this process-scoped fence.
+	// A direct `everyapi computer` invocation has no marker and can operate a
+	// browser when the user explicitly puts it in scope.
+	env[computeruse.BlockBrowsersEnvironment] = "1"
 
 	// Both preference-driven flags below are prepended to argv, and both can already be there without appearing in extraArgs: the `codex` on $PATH may be a wrapper that injects flags of its own before the real binary parses them. The probe asks the binary we are about to exec whether it would accept one more copy. See tools.FlagProbe.
 	flagProbe := tools.NewFlagProbe(t)
@@ -1053,6 +1058,7 @@ func nativeLaunchEnv(t *tools.Tool) (map[string]string, error) {
 	if err := exposeEveryAPIExecutable(env); err != nil {
 		return nil, err
 	}
+	env[computeruse.BlockBrowsersEnvironment] = "1"
 	return env, nil
 }
 

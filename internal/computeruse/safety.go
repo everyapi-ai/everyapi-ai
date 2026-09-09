@@ -2,6 +2,7 @@ package computeruse
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
@@ -10,6 +11,12 @@ import (
 
 // Browsers hold the user's logged-in sessions for every site they have ever signed into, so driving one is equivalent to acting as that user against arbitrary services — without any of those services seeing an EveryAPI credential or an audit trail. Reading is blocked on the same footing as clicking: an accessibility snapshot of a browser window returns page text from whatever authenticated session is open.
 const browserBlockReason = "web browsers are blocked because they carry the user's authenticated sessions to arbitrary sites"
+
+// BlockBrowsersEnvironment is set by `everyapi use` launches so browser windows
+// are denied by default through the shared computer-use CLI. It is a
+// process-scoped policy marker, not an unforgeable security boundary. Direct
+// `everyapi computer` invocations leave it unset and may operate browsers.
+const BlockBrowsersEnvironment = "EVERYAPI_COMPUTER_USE_BLOCK_BROWSERS"
 
 var knownBlockedBundleIDs = map[string]string{
 	"ai.everyapi.connect":           "EveryAPI Connect cannot control its own permission and credential surface",
@@ -111,22 +118,38 @@ var blockedBundlePrefixes = []struct {
 
 func blockedAppError(app App) error {
 	bundleID := strings.ToLower(app.BundleID)
-	reason, blocked := knownBlockedBundleIDs[bundleID]
-	if !blocked && knownBlockedBrowserBundleIDs[bundleID] {
-		reason, blocked = browserBlockReason, true
+	if reason, blocked := knownBlockedBundleIDs[bundleID]; blocked {
+		return NewError(CodeAppBlocked, fmt.Sprintf("application %q (%s) is blocked: %s", redactSensitiveText(app.Name), redactSensitiveText(app.BundleID), reason), nil)
 	}
-	if !blocked {
-		for _, entry := range blockedBundlePrefixes {
-			if strings.HasPrefix(bundleID, entry.prefix) {
-				reason, blocked = entry.reason, true
-				break
-			}
+	if browserBlocked(bundleID) {
+		if os.Getenv(BlockBrowsersEnvironment) == "1" {
+			return NewError(CodeAppBlocked, fmt.Sprintf("application %q (%s) is blocked: %s", redactSensitiveText(app.Name), redactSensitiveText(app.BundleID), browserBlockReason), nil)
+		}
+		return nil
+	}
+	reason, blocked := "", false
+	for _, entry := range blockedBundlePrefixes {
+		if strings.HasPrefix(bundleID, entry.prefix) {
+			reason, blocked = entry.reason, true
+			break
 		}
 	}
 	if !blocked {
 		return nil
 	}
 	return NewError(CodeAppBlocked, fmt.Sprintf("application %q (%s) is blocked: %s", redactSensitiveText(app.Name), redactSensitiveText(app.BundleID), reason), nil)
+}
+
+func browserBlocked(bundleID string) bool {
+	if knownBlockedBrowserBundleIDs[bundleID] {
+		return true
+	}
+	for _, entry := range blockedBundlePrefixes {
+		if entry.reason == browserBlockReason && strings.HasPrefix(bundleID, entry.prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func sensitiveMatches(text string) []sanitizer.Match {

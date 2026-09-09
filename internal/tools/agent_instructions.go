@@ -43,7 +43,7 @@ Every other account or platform subcommand changes state — it moves money, rev
 // turning desktop access into ambient authority. A desktop task authorizes
 // observation of the named target; mutation still requires a concrete outcome
 // in the user's request, and permission prompts remain state-changing.
-const computerUseInstructions = `EveryAPI Computer Use (macOS only): when the user's task explicitly involves a local desktop app, use this capability proactively. Do not wait for the user to mention ` + "`everyapi computer`" + `. Limit inspection to only the app and window the user put in scope; use ` + "`computer list-apps --json`" + ` only when needed to resolve that app, and do not report unrelated running apps.
+const computerUseInstructions = `EveryAPI Computer Use (macOS only): when the user's task explicitly involves a local desktop app, use this capability proactively. Do not wait for the user to mention ` + "`everyapi computer`" + `. Limit inspection to only the app and window the user put in scope; use ` + "`computer list-apps --json`" + ` only when needed to resolve that app, and do not report unrelated running apps. Browser targets are disabled by default for this ` + "`everyapi use`" + ` launch; this is a process-scoped policy marker, not an unforgeable security boundary. A direct ` + "`everyapi computer`" + ` invocation outside a launched agent may operate a browser when the user explicitly requests it.
 
 Observation commands may be run without another confirmation:
   computer capabilities --json
