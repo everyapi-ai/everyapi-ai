@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // The native helper (clients/desktop/native/computer-use-macos) replaces the
@@ -93,6 +94,15 @@ func (p *darwinProvider) Capabilities(ctx context.Context) (Capabilities, error)
 	capabilities.Supports.Actions.Drag = true
 	capabilities.Supports.Actions.PerformAction = true
 	capabilities.Supports.Actions.PasteText = true
+	// Keep this query non-installing and non-launching. Static operation support
+	// is still useful offline; runtime pointer support is unknown until a live
+	// helper explicitly reports it (older helpers omit this field).
+	var runtime struct {
+		IndependentPointer *bool `json:"independentPointer"`
+	}
+	if err := p.callRunningHelper(ctx, "capabilities", nil, &runtime, time.Second); err == nil {
+		capabilities.IndependentPointer = runtime.IndependentPointer
+	}
 	return capabilities, nil
 }
 
@@ -293,6 +303,16 @@ type darwinActionPayload struct {
 	RestoreWindow      bool     `json:"restoreWindow,omitempty"`
 }
 
+func darwinInputTimeout(kind ActionKind, text string, clickCount *int) time.Duration {
+	if kind == ActionClick && clickCount != nil && *clickCount > 1 {
+		return darwinActionTimeout + time.Duration(min(*clickCount, MaxClickCount))*200*time.Millisecond
+	}
+	if kind == ActionSetValue || kind == ActionTypeText {
+		return darwinActionTimeout + time.Duration(min(utf8.RuneCountInString(text), 1024))*250*time.Millisecond
+	}
+	return darwinActionTimeout
+}
+
 func (p *darwinProvider) Perform(ctx context.Context, req PerformRequest) error {
 	payload := darwinActionPayload{PID: req.Target.App.PID, BundleID: req.Target.App.BundleID, WindowID: uint32(req.Target.Window.ID), Kind: string(req.Kind), WindowFingerprint: req.ExpectedWindowFingerprint, Text: req.Text, Direction: req.Direction, Amount: req.Amount, SecondaryAction: req.SecondaryAction, MouseButton: req.MouseButton, ClickCount: req.ClickCount, RestoreWindow: req.RestoreWindow}
 	if req.ExpectedElement != nil {
@@ -328,7 +348,7 @@ func (p *darwinProvider) Perform(ctx context.Context, req PerformRequest) error 
 		payload.Modifiers = modifiers
 	}
 	var empty struct{}
-	if err := p.call(ctx, "perform", payload, &empty, darwinActionTimeout); err != nil {
+	if err := p.call(ctx, "perform", payload, &empty, darwinInputTimeout(req.Kind, req.Text, req.ClickCount)); err != nil {
 		if ErrorCode(err) == CodeActionTimeout {
 			return NewError(CodeActionOutcomeUnknown, "macOS action outcome is unknown after the helper call was interrupted; refresh state before deciding whether to retry", err)
 		}
@@ -430,6 +450,10 @@ func (p *darwinProvider) call(ctx context.Context, method string, params, result
 	if err := p.ensureHelper(ctx); err != nil {
 		return err
 	}
+	return p.callRunningHelper(ctx, method, params, result, rpcTimeout)
+}
+
+func (p *darwinProvider) callRunningHelper(ctx context.Context, method string, params, result any, rpcTimeout time.Duration) error {
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 	dialer := net.Dialer{Timeout: darwinDialTimeout}

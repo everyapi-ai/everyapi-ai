@@ -680,6 +680,8 @@ func TestClickRejectsInvalidMouseButtonAndClickCount(t *testing.T) {
 	requests := []ActionRequest{
 		{App: "com.apple.TextEdit", WindowIndex: intPtr(0), Kind: ActionClick, ElementIndex: intPtr(12), MouseButton: "double"},
 		{App: "com.apple.TextEdit", WindowIndex: intPtr(0), Kind: ActionClick, ElementIndex: intPtr(12), ClickCount: intPtr(0)},
+		{App: "com.apple.TextEdit", WindowIndex: intPtr(0), Kind: ActionClick, ElementIndex: intPtr(12), ClickCount: intPtr(101)},
+		{App: "com.apple.TextEdit", WindowIndex: intPtr(0), Kind: ActionClick, ElementIndex: intPtr(12), ClickCount: intPtr(2147483647)},
 	}
 	for _, request := range requests {
 		if _, err := service.Perform(context.Background(), request); ErrorCode(err) != CodeInvalidArgument {
@@ -707,6 +709,21 @@ func TestClickForwardsMouseButtonClickCountModifiersAndRestoreWindow(t *testing.
 	}
 	if performed.MouseButton != "right" || performed.ClickCount == nil || *performed.ClickCount != 2 || performed.Modifiers != "shift+cmd" || !performed.RestoreWindow {
 		t.Fatalf("forwarded PerformRequest = %+v, want MouseButton=right ClickCount=2 Modifiers=shift+cmd RestoreWindow=true", performed)
+	}
+}
+
+func TestClickAcceptsCountBounds(t *testing.T) {
+	for _, count := range []int{1, 2, 100} {
+		provider := fixtureProvider()
+		service := NewService(provider, newMemoryStore(), time.Now)
+		_, err := service.Perform(context.Background(), ActionRequest{App: "com.apple.TextEdit", WindowIndex: intPtr(0), Kind: ActionClick, X: intPtr(10), Y: intPtr(20), ClickCount: &count})
+		if err != nil {
+			t.Fatalf("count %d: %v", count, err)
+		}
+		performed, ok := provider.lastPerform()
+		if !ok || performed.ClickCount == nil || *performed.ClickCount != count {
+			t.Fatalf("count %d was not forwarded unchanged", count)
+		}
 	}
 }
 

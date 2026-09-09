@@ -28,6 +28,8 @@ Commands:
   get-app-state                 Read the accessibility tree
   screenshot                    Capture a window's own pixels as PNG
   click                         Click an element or window-local point
+  move                          Smoothly move the virtual cursor without clicking
+  hide-cursor                   Hide the virtual cursor when the operation is finished
   set-value                     Set an editable element value
   type-text                     Type into the focused receiver
   paste-text                    Paste text through the native clipboard
@@ -157,14 +159,18 @@ func writeSubcommandHelp(out io.Writer, command string) error {
 	case "screenshot":
 		flags = targetHelpFlags + `  --out <path>           Write the PNG to this file
 ` + jsonHelpFlags
-	case "click", "set-value", "type-text", "paste-text", "press-key", "hotkey", "scroll", "drag", "perform-secondary-action":
+	case "click", "move", "hide-cursor", "set-value", "type-text", "paste-text", "press-key", "hotkey", "scroll", "drag", "perform-secondary-action":
 		flags = targetHelpFlags
 		switch command {
+		case "move":
+			flags += `  --element-index <n>    Element from the latest state
+  --x <n> --y <n>       Window-local destination instead of an element
+`
 		case "click":
 			flags += `  --element-index <n>    Element from the latest state
   --x <n> --y <n>       Window-local point instead of an element
   --mouse-button <btn>   left (default), right, or middle
-  --click-count <n>      Clicks to synthesize, e.g. 2 for a double-click
+  --click-count <n>      Clicks to synthesize (1–100), e.g. 2 for a double-click
   --modifiers <chord>    Modifier keys held only for this click, e.g. cmd or cmd+shift
 `
 		case "set-value":
@@ -173,7 +179,8 @@ func writeSubcommandHelp(out io.Writer, command string) error {
   --value-stdin          Read the value from stdin
 `
 		case "type-text":
-			flags += `  --text <text>          Text for the focused receiver
+			flags += `  --element-index <n>    Click this input before typing (otherwise use the focused input)
+  --text <text>          Text to enter character by character
   --text-stdin           Read text from stdin
 `
 		case "paste-text":
@@ -265,7 +272,7 @@ func dispatch(ctx context.Context, command string, args []string, service comman
 		return result, *jsonOutput, err
 	case "screenshot":
 		return dispatchScreenshot(ctx, args, service)
-	case "click", "set-value", "type-text", "paste-text", "press-key", "hotkey", "scroll", "drag", "perform-secondary-action":
+	case "click", "move", "hide-cursor", "set-value", "type-text", "paste-text", "press-key", "hotkey", "scroll", "drag", "perform-secondary-action":
 		return dispatchAction(ctx, command, args, service, in)
 	default:
 		return nil, jsonRequested(args), invalid(fmt.Sprintf("unknown computer command %q", command))
@@ -336,7 +343,7 @@ func dispatchAction(ctx context.Context, command string, args []string, service 
 	amount := fs.Int("amount", 600, "scroll distance in pixels")
 	secondaryAction := fs.String("action", "", "accessibility action name")
 	mouseButton := fs.String("mouse-button", "", "mouse button: left, right, or middle")
-	fs.Var(&clickCount, "click-count", "number of clicks, e.g. 2 for a double-click")
+	fs.Var(&clickCount, "click-count", "number of clicks (1–100), e.g. 2 for a double-click")
 	modifiers := fs.String("modifiers", "", "modifier chord held for the click, e.g. cmd or cmd+shift")
 	restoreWindow := fs.Bool("restore-window", false, "bring the target window forward first; do not fail the action if that is not possible")
 	noScreenshot := fs.Bool("no-screenshot", false, "skip the window screenshot normally attached to the result")
@@ -356,6 +363,10 @@ func dispatchAction(ctx context.Context, command string, args []string, service 
 		if (request.ElementIndex == nil) == (request.X == nil || request.Y == nil) {
 			return nil, *jsonOutput, invalid("click requires exactly one of --element-index or --x with --y")
 		}
+	case "move":
+		request.Kind = computeruse.ActionMove
+	case "hide-cursor":
+		request.Kind = computeruse.ActionHideCursor
 	case "set-value":
 		request.Kind = computeruse.ActionSetValue
 		payload, err := resolveTextInput(*value, flagWasSet(fs, "value"), *valueStdin, true, "value", in)
@@ -416,12 +427,16 @@ var actionBaseFlags = []string{"app", "window-index", "window-id", "session", "r
 // actionKindFlags returns the kind-specific flags one action subcommand accepts on top of actionBaseFlags.
 func actionKindFlags(command string) []string {
 	switch command {
+	case "hide-cursor":
+		return []string{}
+	case "move":
+		return []string{"element-index", "x", "y"}
 	case "click":
 		return []string{"element-index", "x", "y", "mouse-button", "click-count", "modifiers"}
 	case "set-value":
 		return []string{"element-index", "value", "value-stdin"}
 	case "type-text":
-		return []string{"text", "text-stdin"}
+		return []string{"element-index", "text", "text-stdin"}
 	case "paste-text":
 		return []string{"text", "text-stdin"}
 	case "press-key", "hotkey":
@@ -438,7 +453,7 @@ func actionKindFlags(command string) []string {
 
 // CommandNames lists the `everyapi computer` subcommands the dispatcher accepts, in the order the usage text presents them.
 func CommandNames() []string {
-	return []string{"capabilities", "permissions", "list-apps", "list-windows", "get-app-state", "screenshot", "click", "set-value", "type-text", "paste-text", "press-key", "hotkey", "scroll", "drag", "perform-secondary-action"}
+	return []string{"capabilities", "permissions", "list-apps", "list-windows", "get-app-state", "screenshot", "click", "move", "hide-cursor", "set-value", "type-text", "paste-text", "press-key", "hotkey", "scroll", "drag", "perform-secondary-action"}
 }
 
 // CommandFlags returns the flag names `everyapi computer <command>` accepts, or nil for an unknown command. The agent command schema in cmd/workspace builds its computer entries from this rather than restating them, so the advertised flags cannot drift away from the flag sets dispatch actually parses.
@@ -522,12 +537,18 @@ func validateTargetFlags(app string, windowIndex, windowID *optionalInt) error {
 
 func validateActionFlags(request computeruse.ActionRequest) error {
 	switch request.Kind {
+	case computeruse.ActionMove:
+		element := request.ElementIndex != nil
+		coordinates := request.X != nil && request.Y != nil
+		if element == coordinates || (element && (request.X != nil || request.Y != nil)) || (!coordinates && (request.X != nil || request.Y != nil)) {
+			return invalid("move requires either --element-index or both --x and --y")
+		}
 	case computeruse.ActionClick:
 		if request.MouseButton != "" && request.MouseButton != "left" && request.MouseButton != "right" && request.MouseButton != "middle" {
 			return invalid("--mouse-button must be left, right, or middle")
 		}
-		if request.ClickCount != nil && *request.ClickCount <= 0 {
-			return invalid("--click-count must be positive")
+		if request.ClickCount != nil && (*request.ClickCount <= 0 || *request.ClickCount > computeruse.MaxClickCount) {
+			return invalid("--click-count must be between 1 and 100")
 		}
 	case computeruse.ActionSetValue:
 		if request.ElementIndex == nil {

@@ -7,6 +7,9 @@ import (
 	"time"
 )
 
+// MaxClickCount bounds native event allocation and routing work per request.
+const MaxClickCount = 100
+
 const (
 	CodeUnsupportedPlatform   = "unsupported_platform"
 	CodeDependencyMissing     = "dependency_missing"
@@ -78,11 +81,14 @@ type PermissionStatus struct {
 }
 
 type Capabilities struct {
-	Provider        string `json:"provider"`
-	ProviderVersion string `json:"providerVersion"`
-	ProtocolVersion int    `json:"protocolVersion"`
-	Platform        string `json:"platform"`
-	Supports        struct {
+	// Nil means no live helper reported its private window-routing dependency.
+	// True indicates runtime availability, not compatibility with every control.
+	IndependentPointer *bool  `json:"independentPointer"`
+	Provider           string `json:"provider"`
+	ProviderVersion    string `json:"providerVersion"`
+	ProtocolVersion    int    `json:"protocolVersion"`
+	Platform           string `json:"platform"`
+	Supports           struct {
 		Apps struct {
 			List      bool `json:"list"`
 			BundleIDs bool `json:"bundleIds"`
@@ -194,15 +200,17 @@ type StateRequest struct {
 type ActionKind string
 
 const (
-	ActionClick     ActionKind = "click"
-	ActionSetValue  ActionKind = "set-value"
-	ActionTypeText  ActionKind = "type-text"
-	ActionPasteText ActionKind = "paste-text"
-	ActionPressKey  ActionKind = "press-key"
-	ActionHotkey    ActionKind = "hotkey"
-	ActionScroll    ActionKind = "scroll"
-	ActionDrag      ActionKind = "drag"
-	ActionSecondary ActionKind = "perform-secondary-action"
+	ActionClick      ActionKind = "click"
+	ActionMove       ActionKind = "move"
+	ActionHideCursor ActionKind = "hide-cursor"
+	ActionSetValue   ActionKind = "set-value"
+	ActionTypeText   ActionKind = "type-text"
+	ActionPasteText  ActionKind = "paste-text"
+	ActionPressKey   ActionKind = "press-key"
+	ActionHotkey     ActionKind = "hotkey"
+	ActionScroll     ActionKind = "scroll"
+	ActionDrag       ActionKind = "drag"
+	ActionSecondary  ActionKind = "perform-secondary-action"
 )
 
 type ActionRequest struct {

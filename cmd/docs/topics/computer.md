@@ -48,10 +48,14 @@ everyapi computer screenshot --app <a>    That window's own pixels as PNG
 
 ## Acting
 
+The virtual cursor stays visible throughout an executing action, including long text input, then automatically hides after two idle seconds. Consecutive actions within this grace period keep it visible; read-only observation does not extend it. `hide-cursor --app <a>` hides it immediately, and target-window closure or minimization also removes it. Use `move --app <a> --x <n> --y <n>` for smooth pointer motion without clicking; coordinates are window-local. Clicks and scrolls first move the virtual cursor to their target, and drags traverse intermediate positions. Both commands also accept a window selector and `--no-screenshot`. These operations do not move or suppress the user's physical mouse.
+
+Scrolling is delivered in eased pixel steps that preserve the requested total distance, without extra momentum. Synthetic clicks have a brief hold before release; multi-click gaps respect the system double-click interval. Dragging pauses briefly after grabbing before moving. Accessibility semantic clicks retain their native action behavior. Multi-click commands receive additional timeout allowance for the paced sequence.
+
 ```
 everyapi computer click        Click an element or a window-local point
-everyapi computer set-value    Set an editable element's value
-everyapi computer type-text    Type into the focused receiver
+everyapi computer set-value    Click and replace text one character at a time
+everyapi computer type-text    Click an input and type character by character
 everyapi computer paste-text   Paste through the native clipboard
 everyapi computer press-key    Press one key
 everyapi computer hotkey       Press a modifier chord
@@ -98,6 +102,7 @@ click       --x <n> --y <n>        Window-local point instead of an element
             --modifiers <chord>    cmd | shift | alt/option | ctrl, + joined
 set-value   --value <text> | --value-stdin
 type-text   --text <text>  | --text-stdin
+            --element-index <n>  Optional; defaults to the focused input
 paste-text  --text <text>  | --text-stdin
 press-key   --key <key>            Key name or modifier chord
 hotkey      --key <key>            Modifier chord, e.g. cmd+a
@@ -113,7 +118,9 @@ perform-secondary-action
 
 Anything beyond a plain single left click — a different button, a click count, a modifier — forces a synthesized `CGEvent` click instead of the semantic `AXPress` / `AXConfirm` / `AXOpen` shortcut, because those Accessibility actions have no right-click or multi-click equivalent.
 
-`paste-text` delivers text through the pasteboard (save, write, `cmd+v`, restore) rather than synthesizing keystrokes, for element types that reject direct character input.
+`type-text` and `set-value` move the virtual cursor to the input, click it, and verify focus before entering individual Unicode characters. Ordinary character pauses vary between 70 and 130ms; whitespace and punctuation pause for 190ms. Each action is limited to 1024 Unicode scalars. `set-value` requires accessible text selection and checks that the final value matches. Read-only and secure fields are rejected, and typing stops if focus changes. The CLI allows additional time for paced input; disconnecting the caller does not cancel a helper operation already in progress.
+
+`paste-text` clicks and focuses the input, then delivers text through the pasteboard (save, write, `cmd+v`, restore). It deliberately remains a bulk paste; use `type-text` or `set-value` when visible character-by-character input is required.
 
 ## Screenshots
 

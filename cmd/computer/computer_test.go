@@ -84,6 +84,30 @@ func TestCapabilitiesJSONEnvelope(t *testing.T) {
 	}
 }
 
+func TestVirtualCursorMoveAndHideCommands(t *testing.T) {
+	for _, args := range [][]string{{"move", "--app", "com.apple.TextEdit", "--x", "40", "--y", "60", "--no-screenshot", "--json"}, {"hide-cursor", "--app", "com.apple.TextEdit", "--no-screenshot", "--json"}} {
+		service := &fakeService{}
+		var out bytes.Buffer
+		if err := run(context.Background(), args, service, strings.NewReader(""), &out); err != nil {
+			t.Fatalf("%s: %v", args[0], err)
+		}
+		if len(service.actionRequests) != 1 || string(service.actionRequests[0].Kind) != args[0] {
+			t.Fatalf("incorrect cursor action: %+v", service.actionRequests)
+		}
+	}
+}
+
+func TestTypingCanSelectAnInputBeforeClickingAndTyping(t *testing.T) {
+	service := &fakeService{}
+	err := run(context.Background(), []string{"type-text", "--app", "TextEdit", "--element-index", "12", "--text", "水杉", "--no-screenshot", "--json"}, service, strings.NewReader(""), &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(service.actionRequests) != 1 || service.actionRequests[0].ElementIndex == nil || *service.actionRequests[0].ElementIndex != 12 {
+		t.Fatal("input target was lost")
+	}
+}
+
 func TestPermissionsCanRequestMacOSConsent(t *testing.T) {
 	service := &fakeService{}
 	var out bytes.Buffer
@@ -305,6 +329,19 @@ func TestClickRejectsInvalidMouseButton(t *testing.T) {
 	}
 	if len(service.actionRequests) != 0 {
 		t.Fatal("service was called for an invalid mouse button")
+	}
+}
+
+func TestClickRejectsUnboundedCount(t *testing.T) {
+	service := &fakeService{}
+	for _, count := range []string{"0", "-1", "101", "2147483647"} {
+		err := run(context.Background(), []string{"click", "--app", "TextEdit", "--x", "1", "--y", "2", "--click-count", count}, service, strings.NewReader(""), &bytes.Buffer{})
+		if computeruse.ErrorCode(err) != computeruse.CodeInvalidArgument {
+			t.Fatalf("count %s: error = %v, want invalid_argument", count, err)
+		}
+	}
+	if len(service.actionRequests) != 0 {
+		t.Fatal("invalid count reached service")
 	}
 }
 

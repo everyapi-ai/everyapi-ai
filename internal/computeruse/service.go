@@ -458,6 +458,13 @@ func (l *localOperationLocker) Lock(ctx context.Context) (func(), error) {
 
 func validateActionRequest(req ActionRequest) error {
 	switch req.Kind {
+	case ActionMove:
+		element := req.ElementIndex != nil
+		coordinates := req.X != nil && req.Y != nil
+		if element == coordinates || (element && (req.X != nil || req.Y != nil)) || (!coordinates && (req.X != nil || req.Y != nil)) || (element && *req.ElementIndex <= 0) {
+			return NewError(CodeInvalidArgument, "move requires either a positive element-index or both x and y", nil)
+		}
+	case ActionHideCursor:
 	case ActionClick:
 		if req.ElementIndex == nil && (req.X == nil || req.Y == nil) {
 			return NewError(CodeInvalidArgument, "click requires element-index or both x and y", nil)
@@ -471,8 +478,8 @@ func validateActionRequest(req ActionRequest) error {
 		if req.MouseButton != "" && req.MouseButton != "left" && req.MouseButton != "right" && req.MouseButton != "middle" {
 			return NewError(CodeInvalidArgument, "mouse-button must be left, right, or middle", nil)
 		}
-		if req.ClickCount != nil && *req.ClickCount <= 0 {
-			return NewError(CodeInvalidArgument, "click-count must be positive", nil)
+		if req.ClickCount != nil && (*req.ClickCount <= 0 || *req.ClickCount > MaxClickCount) {
+			return NewError(CodeInvalidArgument, "click-count must be between 1 and 100", nil)
 		}
 	case ActionSetValue:
 		if req.ElementIndex == nil || *req.ElementIndex <= 0 {
