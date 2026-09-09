@@ -89,6 +89,21 @@ func TestAgentInstructionsListRunnableCapabilities(t *testing.T) {
 	}
 }
 
+func TestAgentInstructionsProhibitHardLineBreaksInProse(t *testing.T) {
+	t.Setenv("TMUX", "")
+	t.Setenv(TerminalModeEnvironment, "native")
+
+	instructions := AgentInstructions()
+	for _, required := range []string{
+		"Do not use hard line breaks in prose",
+		"let the renderer wrap text naturally",
+	} {
+		if !strings.Contains(instructions, required) {
+			t.Errorf("agent instructions missing %q: %s", required, instructions)
+		}
+	}
+}
+
 // TestAgentInstructionsAdvertiseComputerUse makes the local desktop capability discoverable to launched agents. Observation is proactive only when the user's task puts a desktop app in scope; GUI mutation remains separately authorized.
 func TestAgentInstructionsAdvertiseComputerUse(t *testing.T) {
 	t.Setenv("TMUX", "")

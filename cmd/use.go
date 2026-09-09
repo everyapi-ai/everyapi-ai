@@ -35,7 +35,7 @@ USAGE
   everyapi use [<tool>] [--group <name> | --channel <name>] [--model <id>] [--sanitize] [--transparent[=false]] [-- tool args...]
 
 ARGUMENTS
-	<tool>                 claude | codex | opencode | gemini | antigravity
+	<tool>                 claude | codex | opencode | mimo-code | gemini | antigravity
 	                       aider | goose | crush | cline | openclaw | continue
 	                       kilo | pi | vibe | copilot | droid | openhands
 	                       forge | llxprt | grok
@@ -93,6 +93,7 @@ EXAMPLES
   everyapi use codex --channel byteplus
   everyapi use codex -- resume          (reattach the sole live project tmux, otherwise open the current-directory picker)
   everyapi use opencode --model gpt-5
+	 everyapi use mimo-code --model mimo-v2.5-pro
 	 everyapi use continue --model gpt-5
 	 everyapi use kilo --model gpt-5
 	 everyapi use pi --model gpt-5

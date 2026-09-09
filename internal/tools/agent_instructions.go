@@ -22,6 +22,8 @@ const (
 // The scoping sentence is not filler either. Without it a model told to consult EveryAPI's documentation reaches for it on questions about the user's own project, which it says nothing about.
 const cliCapabilityInstructions = `EveryAPI CLI: the executable named by EVERYAPI_CLI_PATH (fall back to ` + "`everyapi`" + ` only when that variable is unavailable) answers questions about this gateway and this account directly. Prefer running it over answering from recalled knowledge — which is frequently wrong or out of date for this platform — and over asking the user to go look something up.
 
+Output formatting: Do not use hard line breaks in prose; let the renderer wrap text naturally. Use newlines only for paragraph boundaries and structures that require them, such as lists, tables, and code blocks.
+
 Read-only. Run these yourself, unprompted, whenever one would answer the question:
   docs list | docs <topic> | docs search <query>  the handbook, offline
   auth status                                     identity, quota, usage

@@ -418,6 +418,20 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: prepareOpenCodeWithModels,
 	},
 
+	"mimo-code": {
+		Name:                "mimo-code",
+		ExecName:            "mimo",
+		InstallHint:         "Install MiMo Code: https://mimo.xiaomi.com/mimocode/install",
+		InstallCmd:          "npm install -g @mimo-ai/cli || npm install -g @mimo-ai/cli --registry=https://mirrors.cloud.tencent.com/npm/ || npm install -g @mimo-ai/cli --registry=https://registry.npmmirror.com",
+		ExtraBinDirs:        []string{".mimocode/bin"},
+		RequiredEndpoint:    "openai",
+		AlternativeEndpoint: "openai-response",
+		envFn: func(_, token string) map[string]string {
+			return map[string]string{openCodeCredentialEnv: token}
+		},
+		prepareCatalogFn: prepareMiMoWithModels,
+	},
+
 	// Google's Gemini CLI supports API-key auth and a custom Gemini API origin through documented environment variables. prepareGemini overlays system settings so cached OAuth state cannot override the process-scoped key.
 	"gemini": {
 		Name:             "gemini",
@@ -917,6 +931,6 @@ func Lookup(name string) (*Tool, error) {
 func Names() []string {
 	// Deterministic order matters for both the error message and the picker UX. Hand-coded to match the ordering most likely to reflect user demand.
 	return []string{
-		"claude", "codex", "opencode", "gemini", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "pi-web", "pi-harness", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang", "open-webui", "deepseek-harness",
+		"claude", "codex", "opencode", "mimo-code", "gemini", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "pi-web", "pi-harness", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang", "open-webui", "deepseek-harness",
 	}
 }
