@@ -107,15 +107,11 @@ func (p *darwinProvider) Capabilities(ctx context.Context) (Capabilities, error)
 }
 
 func (p *darwinProvider) Permissions(ctx context.Context) (PermissionStatus, error) {
-	var wire struct {
-		Accessibility PermissionState `json:"accessibility"`
-		Automation    PermissionState `json:"automation"`
-		Screenshot    PermissionState `json:"screenshot"`
-	}
+	var wire PermissionStatus
 	if err := p.call(ctx, "permissions", nil, &wire, 5*time.Second); err != nil {
 		return PermissionStatus{}, err
 	}
-	return PermissionStatus{Accessibility: wire.Accessibility, Automation: wire.Automation, Screenshot: wire.Screenshot}, nil
+	return wire, nil
 }
 
 func (p *darwinProvider) RequestPermission(ctx context.Context, kind string) error {
@@ -566,6 +562,10 @@ func (p *darwinProvider) locateOrInstallHelperApp(ctx context.Context) (string, 
 // The command is local, secret-free, and absent from v1, which makes a failed
 // or mismatched probe an unambiguous signal to install the current artifact.
 func helperSupportsProtocol(ctx context.Context, appPath string) bool {
+	identity, err := exec.CommandContext(ctx, "/usr/bin/plutil", "-extract", "CFBundleIdentifier", "raw", "-o", "-", filepath.Join(appPath, "Contents", "Info.plist")).Output()
+	if err != nil || strings.TrimSpace(string(identity)) != "ai.everyapi.computer-use" {
+		return false
+	}
 	executable := filepath.Join(appPath, "Contents", "MacOS", darwinHelperExecutable)
 	if info, err := os.Stat(executable); err != nil || info.IsDir() {
 		return false

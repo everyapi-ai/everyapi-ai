@@ -78,6 +78,14 @@ type PermissionStatus struct {
 	Accessibility PermissionState `json:"accessibility"`
 	Automation    PermissionState `json:"automation"`
 	Screenshot    PermissionState `json:"screenshot"`
+	Helper        *HelperIdentity `json:"helper,omitempty"`
+}
+
+// Report the responding daemon, not the bundle we would launch next.
+type HelperIdentity struct {
+	PID        int    `json:"pid"`
+	Executable string `json:"executable"`
+	BundleID   string `json:"bundleId"`
 }
 
 type Capabilities struct {

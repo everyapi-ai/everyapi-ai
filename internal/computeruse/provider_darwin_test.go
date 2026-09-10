@@ -27,6 +27,43 @@ func TestHumanTypingTimeoutAllowsCharacterDelays(t *testing.T) {
 	}
 }
 
+func TestPermissionsPreservesRespondingHelperIdentity(t *testing.T) {
+	dir, err := os.MkdirTemp("/tmp", "helper-id.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	p := &darwinProvider{stateDir: dir}
+	if err := os.WriteFile(p.tokenPath(), []byte("test-token"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	l, err := net.Listen("unix", p.socketPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = l.Close() })
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			line, err := bufio.NewReader(c).ReadBytes('\n')
+			if err == nil && len(line) > 0 {
+				_, _ = io.WriteString(c, `{"ok":true,"result":{"accessibility":"denied","automation":"unknown","screenshot":"granted","helper":{"pid":123,"executable":"/Applications/EveryAPI Connect.app/Contents/Resources/EveryAPI Computer Use.app/Contents/MacOS/everyapi-computer-use-macos","bundleId":"ai.everyapi.computer-use"}}}`+"\n")
+			}
+			_ = c.Close()
+		}
+	}()
+	status, err := p.Permissions(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Helper == nil || status.Helper.PID != 123 || status.Helper.BundleID != "ai.everyapi.computer-use" {
+		t.Fatalf("responding identity was lost: %+v", status.Helper)
+	}
+}
+
 func TestHumanClickTimeoutAllowsPacedMultiClick(t *testing.T) {
 	count := 100
 	if got := darwinInputTimeout(ActionClick, "", &count); got < darwinActionTimeout+20*time.Second {
@@ -174,7 +211,20 @@ func writeProtocolProbe(t *testing.T, output string, exitCode int) string {
 	if err := os.WriteFile(executable, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(app, "Contents", "Info.plist"), []byte(`<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>ai.everyapi.computer-use</string></dict></plist>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	return app
+}
+
+func TestHelperRejectsDevelopmentBundle(t *testing.T) {
+	app := writeProtocolProbe(t, "2", 0)
+	if err := os.WriteFile(filepath.Join(app, "Contents", "Info.plist"), []byte(`<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>ai.everyapi.computer-use.dev</string></dict></plist>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if helperSupportsProtocol(context.Background(), app) {
+		t.Fatal("development helper accepted for production endpoint")
+	}
 }
 
 func TestHelperSupportsCurrentProtocol(t *testing.T) {
