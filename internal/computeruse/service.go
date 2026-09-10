@@ -123,9 +123,6 @@ func (s *Service) resolveAppLocked(ctx context.Context, selector string) (App, e
 		}
 		return App{}, NewError(CodeAppAmbiguous, fmt.Sprintf("application name %q matches multiple processes: %s; use a bundle ID or pid:<number>", redactSensitiveText(selector), strings.Join(candidates, ", ")), nil)
 	}
-	if err := blockedAppError(matches[0]); err != nil {
-		return App{}, err
-	}
 	return matches[0], nil
 }
 

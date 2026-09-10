@@ -18,7 +18,6 @@ const (
 	CodeAppNotFound           = "app_not_found"
 	CodeAppStale              = "app_stale"
 	CodeAppAmbiguous          = "app_ambiguous"
-	CodeAppBlocked            = "app_blocked"
 	CodeWindowNotFound        = "window_not_found"
 	CodeWindowStale           = "window_stale"
 	CodeWindowNotFocused      = "window_not_focused"

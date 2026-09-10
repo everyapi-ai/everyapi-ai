@@ -121,8 +121,6 @@ func TestAgentInstructionsAdvertiseComputerUse(t *testing.T) {
 		"computer screenshot --app <selector>",
 		"explicitly involves a local desktop app",
 		"only the app and window the user put in scope",
-		"Browser targets are disabled by default for this `everyapi use` launch",
-		"not an unforgeable security boundary",
 	} {
 		if !strings.Contains(instructions, required) {
 			t.Errorf("computer-use instructions are missing %q: %s", required, instructions)

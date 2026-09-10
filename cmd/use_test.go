@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
-	"github.com/everyapi-ai/everyapi-ai/v3/internal/computeruse"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/tools"
 	"github.com/everyapi-ai/everyapi-sdk/api"
 	"github.com/everyapi-ai/everyapi-sdk/config"
@@ -589,9 +588,6 @@ func TestNativeLaunchEnvExposesTheCurrentEveryAPIExecutable(t *testing.T) {
 	if got := env["EVERYAPI_CLI_PATH"]; got != want {
 		t.Fatalf("EVERYAPI_CLI_PATH = %q, want current executable %q", got, want)
 	}
-	if got := env[computeruse.BlockBrowsersEnvironment]; got != "1" {
-		t.Fatalf("%s = %q, want 1", computeruse.BlockBrowsersEnvironment, got)
-	}
 
 	antigravity, err := tools.Lookup("antigravity")
 	if err != nil {
@@ -603,9 +599,6 @@ func TestNativeLaunchEnvExposesTheCurrentEveryAPIExecutable(t *testing.T) {
 	}
 	if got := env[tools.CLIPathEnvironment]; got != want {
 		t.Fatalf("Antigravity %s = %q, want current executable %q", tools.CLIPathEnvironment, got, want)
-	}
-	if got := env[computeruse.BlockBrowsersEnvironment]; got != "1" {
-		t.Fatalf("Antigravity %s = %q, want 1", computeruse.BlockBrowsersEnvironment, got)
 	}
 }
 

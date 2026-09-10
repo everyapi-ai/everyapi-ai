@@ -136,13 +136,11 @@ A successful GUI action stays successful when its best-effort state refresh fail
 
 `action_outcome_unknown` is different and means exactly what it says: the helper call was interrupted, or returned an invalid receipt, after the action was already handed off. **The action may already have happened.** Refresh state and look before deciding whether to retry.
 
-## What is blocked, and what that is worth
+## Application access
 
-The provider maintains a list of known web browsers, terminal apps, password managers, Keychain Access, Passwords, System Settings, and EveryAPI Connect as defense-in-depth friction. Non-browser entries are always blocked. Browser entries are blocked by default for agents launched through `everyapi use` using a process-scoped marker; this is a default policy, not an unforgeable isolation boundary. A direct `everyapi computer` invocation leaves the browser fence disabled so a user can explicitly operate a browser.
+Computer Use accepts all application types, including browsers, terminals, password managers, Keychain Access, Passwords, System Settings, and EveryAPI Connect. Direct CLI calls and agents launched through `everyapi use` use the same application resolution. There is no bundle-ID blocklist, and the former browser-blocking environment marker is ignored.
 
-When the fence is enabled, browsers are refused for observation as well as for action. An accessibility snapshot of a browser window returns page text from whatever authenticated session happens to be open, so reading one is not meaningfully safer than clicking in it. Release channels and browser-installed web apps are covered by prefix (`com.google.Chrome.canary`, `com.google.Chrome.app.<id>`, `com.microsoft.edgemac.Beta`), except where a vendor prefix would overreach — `com.operasoftware.Opera` also matches Opera Mail, so Opera is enumerated per channel instead. Channel naming is not consistent enough to enumerate: Chrome's beta and dev builds and Firefox's beta and ESR builds ship under their stable identifier, while canary and Developer Edition do not.
-
-Bundle-ID blocking is not a comprehensive application classifier, and it should not be read as one. Unlisted apps, editors with integrated terminals, embedded web views, and renamed or newly released browsers may expose equivalent capabilities. Run `everyapi computer list-apps --json` to read a real bundle identifier before adding one. The explicit `--app` target, macOS TCC, and the caller's same-user authority remain the real trust boundary.
+The explicit `--app` target, macOS TCC, and the caller's same-user authority remain the trust boundary.
 
 Observed text is stripped of terminal control sequences and scanned for credentials before output. Text you type or set is rejected when it matches the built-in secret detectors. Prefer `--text-stdin` and `--value-stdin` to keep ordinary text out of your shell history.
 
