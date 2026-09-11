@@ -2239,9 +2239,9 @@ func ensureToolInstalled(t *tools.Tool) error {
 	if !cliprompt.IsInteractive() || !tools.CanAutoInstall(t) {
 		return &tools.ErrToolNotFound{Tool: t}
 	}
-	// The auto-installer shells out to a package manager (npm) through a non-interactive shell that doesn't source the user's rc files. If that command isn't resolvable on PATH — the classic case being a version-manager npm exposed only as a shell function — offering the install just yields a cryptic "npm: command not found". Catch it here and tell the user exactly what to install first.
+	// The auto-installer shells out to a package manager through a non-interactive shell that doesn't source the user's rc files. If that command isn't resolvable on PATH — the classic case being a version-manager npm exposed only as a shell function — offering the install just yields a cryptic "command not found". Catch it here and tell the user exactly what to install first. A missing npm is handled rather than reported: RunInstall bootstraps a pinned Node runtime for it.
 	if missing := tools.InstallerMissing(t); missing != "" {
-		return fmt.Errorf(i18n.T("use.installer_missing"), t.ExecName, missing, t.InstallHint)
+		return fmt.Errorf(i18n.T(installerMissingKey()), t.ExecName, missing, t.InstallHint)
 	}
 	cliout.Printf(i18n.T("use.tool_not_installed")+"\n", t.ExecName)
 	cliout.Printf("  %s\n", t.InstallCmd)
@@ -2258,15 +2258,7 @@ func ensureToolInstalled(t *tools.Tool) error {
 		return &tools.ErrToolNotFound{Tool: t}
 	}
 	cliout.Printf(i18n.T("use.installing")+"\n", t.Name)
-	if err := tools.RunInstall(t); err != nil {
-		var notOnPath *tools.ErrInstalledButNotOnPath
-		if errors.As(err, &notOnPath) {
-			if len(notOnPath.Dirs) > 0 {
-				return fmt.Errorf(i18n.T("use.installed_not_on_path_dirs"),
-					notOnPath.Tool.ExecName, strings.Join(notOnPath.Dirs, ", "))
-			}
-			return fmt.Errorf(i18n.T("use.installed_not_on_path"), notOnPath.Tool.ExecName)
-		}
+	if err := describeInstallError(tools.RunInstall(t)); err != nil {
 		return err
 	}
 	cliout.Printf(i18n.T("use.installed")+"\n", t.Name)

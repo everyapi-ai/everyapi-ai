@@ -352,9 +352,12 @@ var Registry = map[string]*Tool{
 		ExecName:    "claude",
 		InstallHint: "Install Claude Code: https://docs.claude.com/en/docs/claude-code/setup",
 		InstallCmd:  "curl -fsSL --connect-timeout 5 https://claude.ai/install.sh | bash || curl -fsSL https://dl.everyapi.ai/claude-code/install.sh | bash",
+		// The mirror stays first — it is checksum-verified and reachable from mainland China — but it can no longer be the only path: it serves win32-x64 and refuses ARM64 outright, which left Claude Code uninstallable on every Snapdragon-class Windows machine. Anthropic's own install.ps1 is the fallback that covers those, and it also rescues anyone the mirror fails for.
+		//
+		// try/catch is the right control flow here specifically because the mirror script signals failure with `throw` (a terminating error try/catch is guaranteed to catch), including its explicit ARM64 refusal. Do NOT restructure this around $LASTEXITCODE or move the official script into the try: claude.ai/install.ps1 reports failure with `exit`, which through `iex` ends the whole PowerShell process rather than surfacing to a catch, so a fallback placed after it would never run.
 		InstallCmdWindows: []string{
 			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
-			"irm https://dl.everyapi.ai/claude-code/install.ps1 | iex",
+			"try { irm https://dl.everyapi.ai/claude-code/install.ps1 | iex } catch { irm https://claude.ai/install.ps1 | iex }",
 		},
 		InstallCmdUnixOnly: true,
 		// claude.ai/install.sh hands off to `<binary> install`, which links the launcher into ~/.local/bin — the same off-PATH cohort gemini hits.

@@ -1,7 +1,11 @@
 package tools
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"runtime"
@@ -74,6 +78,8 @@ func InstallCommand(t *Tool) string {
 // InstallerMissing reports the executable the platform-selected installer needs in order to run ("npm" for `npm install -g …`, "curl" for `curl … | bash`, or the first structured Windows argv element) when it is NOT resolvable on $PATH; it returns "" when the command is present, or when the tool has no auto-installer to gate.
 //
 // Why this exists: RunInstall shells the InstallCmd out through a non-interactive `sh -c`, which does NOT source the user's ~/.zshrc / ~/.bashrc. A Node version manager (nvm/fnm/volta) commonly exposes `npm` only as a shell function or via a PATH entry added in those rc files, so a user whose interactive shell "has npm" can still hand RunInstall a shell where `npm` resolves to nothing — yielding a cryptic "npm: command not found" (exit 127). Detecting it up front lets the caller print an actionable message instead.
+//
+// A missing npm is NOT reported on a platform EveryAPI can bootstrap Node for: RunInstall downloads a pinned, checksum-verified runtime and puts it on the installer's PATH, so blocking here would refuse an install that is about to succeed. Every other prerequisite, and npm on a platform with no pinned archive, still gates.
 func InstallerMissing(t *Tool) string {
 	req := installRequires(t)
 	if req == "" {
@@ -82,8 +88,35 @@ func InstallerMissing(t *Tool) string {
 	if _, err := exec.LookPath(req); err == nil {
 		return ""
 	}
+	if req == "npm" && canBootstrapNode() {
+		return ""
+	}
 	return req
 }
+
+// canBootstrapNode reports whether this platform has a pinned Node archive, which is what decides between "we can rescue a missing npm" and "tell the user to install Node".
+func canBootstrapNode() bool {
+	_, ok := nodeArchives[runtime.GOOS+"/"+runtime.GOARCH]
+	return ok
+}
+
+// ErrInstallerExecBlocked reports that the installer's executable was found but the OS refused to start it. This is distinct from "not installed" and needs a different remedy: the file resolved, so no amount of installing prerequisites helps — something denied process creation.
+//
+// The canonical case is Windows, where AppLocker/WDAC policy or an EDR attack-surface-reduction rule blocks a non-Microsoft process from spawning powershell.exe. Connect hits it while the user's own PowerShell window runs the same command fine, so a message that says "not installed" sends people chasing the wrong thing entirely.
+type ErrInstallerExecBlocked struct {
+	Tool       *Tool
+	Executable string
+	Err        error
+}
+
+func (e *ErrInstallerExecBlocked) Error() string {
+	return fmt.Sprintf(
+		"%s installer could not start %s: %v. The file exists and resolved, so this is the OS refusing to create the process — typically an AppLocker/WDAC policy or endpoint-security rule blocking it. Run the installer yourself from a shell you control: %s",
+		e.Tool.ExecName, e.Executable, e.Err, InstallCommand(e.Tool),
+	)
+}
+
+func (e *ErrInstallerExecBlocked) Unwrap() error { return e.Err }
 
 // installRequires returns the executable selected for the current platform, or "" when no installer is available. Installer commands are compile-time literals (see the SECURITY INVARIANT on Tool.InstallCmd), so this is a stable, trustworthy command name.
 func installRequires(t *Tool) string {
@@ -124,16 +157,63 @@ func RunInstall(t *Tool) error {
 	}
 	// Unix shell installers prefer bash with pipefail so a failed download cannot masquerade as success. Native Windows installers retain their structured argv and never pass nested quoting through cmd.exe.
 	cmd := buildInstallCommand(command, runtime.GOOS)
+	env, err := installEnv(t, os.Stderr)
+	if err != nil {
+		return err
+	}
+	cmd.Env = env
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
+		// Process creation denied is a policy problem, not a missing-prerequisite problem, and wrapping it as a plain install failure is what makes it unreadable.
+		if errors.Is(err, fs.ErrPermission) {
+			return &ErrInstallerExecBlocked{Tool: t, Executable: installerExecutableName(command), Err: err}
+		}
 		return fmt.Errorf("install %s: %w", t.Name, err)
 	}
 	if _, searched, err := resolveExecDirs(t); err != nil {
 		return &ErrInstalledButNotOnPath{Tool: t, Dirs: searched}
 	}
 	return nil
+}
+
+// installEnv returns the environment for the installer subprocess, or nil to inherit unchanged. Its only job today is the npm rescue: when the selected installer needs npm and the ambient PATH has none, bootstrap EveryAPI's private Node runtime and prepend its bin directory for this one child process.
+//
+// Deliberately scoped to the child: the user's PATH, shell profile and system packages are left alone. That also sidesteps the Windows trap where editing PATH does nothing for the already-running process, since environment changes only reach processes started afterwards.
+func installEnv(t *Tool, progress io.Writer) ([]string, error) {
+	if installRequires(t) != "npm" {
+		return nil, nil
+	}
+	if _, err := exec.LookPath("npm"); err == nil {
+		return nil, nil
+	}
+	binDir, err := EnsureNode(context.Background(), progress)
+	if err != nil {
+		return nil, fmt.Errorf("install %s needs npm and no Node.js runtime could be prepared: %w", t.Name, err)
+	}
+	npmPath, ok := findExecutable(binDir, "npm")
+	if !ok {
+		return nil, fmt.Errorf("install %s needs npm but the bootstrapped Node.js in %s has none", t.Name, binDir)
+	}
+	// Built before withExecDirOnPath rather than after: that helper returns its argument unchanged when the directory is already on PATH, so starting from nil could hand back a nil map and panic on the next assignment.
+	env := make(map[string]string, 2)
+	// Aim the global install at a directory every EveryAPI resolver and Connect's own detection already search, instead of npm's default prefix inside the versioned Node directory that nothing else knows about.
+	if prefix, err := managedNpmPrefix(); err == nil {
+		env["npm_config_prefix"] = prefix
+	}
+	return mergeEnv(withExecDirOnPath(env, npmPath)), nil
+}
+
+// installerExecutableName names the binary RunInstall tried to start, for error messages. Structured Windows argv carries it directly; a shell installer is started through cmd.exe or bash rather than its own leading word.
+func installerExecutableName(command installCommandSpec) string {
+	if command.executable != "" {
+		return command.executable
+	}
+	if runtime.GOOS == "windows" {
+		return "cmd"
+	}
+	return "bash"
 }
 
 // ErrInstalledButNotOnPath signals that the install command exited cleanly but the executable still can't be resolved — not on $PATH and not in any fallback directory we know to search. The canonical example is `npm install -g …` succeeding while npm's global bin directory is on neither $PATH nor a version-manager env var; the same shape applies to an installer with a fixed output dir (Antigravity writes ~/.local/bin). Dirs carries the directories that WERE searched — the tool's ExtraBinDirs plus, for npm tools, the npm global candidates — so the message can point the user at a concrete place to add to PATH instead of guessing.

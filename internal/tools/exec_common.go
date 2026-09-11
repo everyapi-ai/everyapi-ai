@@ -200,6 +200,23 @@ func mergeEnvRemoving(set map[string]string, unset []string) []string {
 	return out
 }
 
+// withManagedNodeOnPath appends EveryAPI's bootstrapped Node runtime to the child's PATH when one has been unpacked, and returns env unchanged otherwise.
+//
+// This is the other half of the npm bootstrap in node.go. `npm install -g` writes a launcher, not a self-contained binary: on POSIX the global bin entry is a `#!/usr/bin/env node` script, and on Windows the generated `.cmd` shim falls back to a bare `node` on PATH when no node.exe sits beside it. A user who had no npm to begin with has no node either, so a tool installed through the bootstrap would install cleanly and then die with `env: node: No such file or directory` on the very first launch — the exact failure the bootstrap exists to remove. The private runtime lives in an EveryAPI-owned directory that is deliberately on nobody's PATH, so every launch has to put it on the child's PATH itself.
+//
+// Appended, never prepended, for the same reason withExecDirOnPath appends: a node the user already has must keep winning over ours.
+func withManagedNodeOnPath(env map[string]string) map[string]string {
+	binDir := managedNodeBinDir()
+	if binDir == "" {
+		return env
+	}
+	nodePath, ok := findExecutable(binDir, "node")
+	if !ok {
+		return env
+	}
+	return withExecDirOnPath(env, nodePath)
+}
+
 // withExecDirOnPath returns env with the directory of execPath APPENDED to the PATH the launched child will inherit, unless it's already there.
 //
 // This matters when ResolveExec located the tool OUTSIDE $PATH (an npm global bin dir a version manager never added to PATH): the tool's interpreter and siblings live in that SAME dir — a Node CLI like gemini is a `#!/usr/bin/env node` script whose `node` sits right next to it. If we launch the resolved absolute path without putting that dir on the child's PATH, the shebang can't find node and the tool dies instantly with a cryptic `env: node: No such file or directory`. Appending the dir makes the co-located interpreter (and any npm/sibling the tool shells out to) resolvable as a FALLBACK. Deliberately appended, not prepended: a node/npm the user already has first on PATH must keep winning — a prepend would let a stale off-PATH install (old nvm dir exported via NVM_BIN) shadow the working system interpreter.

@@ -56,7 +56,15 @@ The installer put a binary somewhere your current shell does not search. Open a 
 
 ## "<tool> is not installed, but its installer needs <x>"
 
-The installer runs in a plain non-login shell, so anything your shell rc adds — and anything that exists only as a shell function — is invisible to it. Install the named prerequisite properly, or install the tool yourself with the command the message prints.
+On macOS and Linux the installer runs in a plain non-login shell, so anything your shell rc adds — and anything that exists only as a shell function — is invisible to it. Install the named prerequisite properly, or install the tool yourself with the command the message prints.
+
+On Windows the wording differs because the cause does: the installer runs through `cmd.exe`, there is no login shell or shell function involved, and PATH changes only reach programs started *after* the change. If you installed the prerequisite recently, close EveryAPI Connect (or your terminal) and open it again before retrying.
+
+A missing `npm` is the one prerequisite that does not stop an install. EveryAPI downloads a pinned, checksum-verified Node.js runtime into its own directory — `%LOCALAPPDATA%\EveryAPI\node` on Windows, `~/.local/share/everyapi/node` elsewhere — and uses it just for that install. Nothing is added to your `PATH` and no system package manager runs. Packages installed this way land in `%LOCALAPPDATA%\EveryAPI\bin` or `~/.local/bin`, which every EveryAPI lookup already searches. Delete those directories to undo it.
+
+## "<tool> installer could not start <x>"
+
+The installer's executable resolved but the operating system refused to create the process, so installing more prerequisites cannot help. On Windows this is nearly always an AppLocker or WDAC policy, or an endpoint-security rule that blocks a non-Microsoft process from spawning `powershell.exe` — which is why the same command usually works when you run it in your own PowerShell window. Do that, using the command the message prints.
 
 ## Transparent mode silently did not engage
 

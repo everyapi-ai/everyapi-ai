@@ -1414,6 +1414,8 @@ installed = "%s installiert."
 installed_not_on_path = "%s wurde installiert, ist aber noch nicht in $PATH. Öffne eine neue Shell oder füge das Bin-Verzeichnis des Installers zu PATH hinzu."
 installed_not_on_path_dirs = "%[1]s wurde installiert, aber weder in $PATH noch in den bekannten Installationsverzeichnissen gefunden (durchsucht: %[2]s). Füge das Verzeichnis mit der Binärdatei zu PATH hinzu oder öffne eine neue Shell und versuche es erneut."
 installer_missing = "%[1]s ist nicht installiert, aber sein Installer benötigt %[2]q, das nicht in deinem PATH liegt (der Installer läuft in einer einfachen Nicht-Login-Shell, daher sind Pfade aus deiner Shell-rc — oder Befehle, die nur als Shell-Funktion existieren — hier nicht sichtbar). Installiere %[2]s und versuche es erneut — oder installiere %[1]s selbst:\n  %[3]s"
+installer_missing_windows = "%[1]s ist nicht installiert, und sein Installer benötigt %[2]q, das nicht in deinem PATH liegt. Unter Windows wirken PATH-Änderungen nur auf danach gestartete Programme — wenn du %[2]s gerade erst installiert hast, schließe diese Anwendung und öffne sie neu. Andernfalls installiere %[2]s und versuche es erneut — oder installiere %[1]s selbst:\n  %[3]s"
+installer_exec_blocked = "Der Installer von %[1]s konnte %[2]s nicht starten: Das Betriebssystem hat die Prozesserstellung verweigert. Die Datei existiert, weitere Abhängigkeiten zu installieren hilft also nicht — meist ist eine AppLocker-/WDAC-Richtlinie oder eine Endpoint-Security-Regel die Ursache. Führe den Installer selbst in einer Shell deiner Wahl aus:\n  %[3]s"
 
 [upstream]
 none = "Keine Upstream-Anbieter konfiguriert."

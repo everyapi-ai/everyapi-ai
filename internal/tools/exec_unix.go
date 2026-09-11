@@ -38,7 +38,7 @@ func ExecWithOptions(t *Tool, opts ExecOptions) error {
 	}
 	cmd := exec.Command(path, opts.Args...)
 	cmd.Args = append([]string{t.ExecName}, opts.Args...)
-	cmd.Env = mergeEnvRemoving(withExecDirOnPath(opts.Env, path), opts.UnsetEnv)
+	cmd.Env = mergeEnvRemoving(withManagedNodeOnPath(withExecDirOnPath(opts.Env, path)), opts.UnsetEnv)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

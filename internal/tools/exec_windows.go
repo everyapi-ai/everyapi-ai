@@ -36,7 +36,7 @@ func ExecWithOptions(t *Tool, opts ExecOptions) error {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Env = mergeEnvRemoving(withExecDirOnPath(opts.Env, path), opts.UnsetEnv)
+	cmd.Env = mergeEnvRemoving(withManagedNodeOnPath(withExecDirOnPath(opts.Env, path)), opts.UnsetEnv)
 
 	// Notify is installed BEFORE Start so there's no window where a console Ctrl+C lands on our default (fatal) disposition and orphans a just-started child.
 	sigCh := make(chan os.Signal, 8)

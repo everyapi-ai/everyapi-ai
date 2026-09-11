@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,17 +25,43 @@ func ResolveExec(t *Tool) (string, error) {
 }
 
 // ResolveInstallerOwnedExec prefers the native installer's fixed directory, while ordinary launches continue to honor an explicitly selected PATH shim.
+//
+// A failure returns ErrExecNotResolved, which names the tool and the directories searched. The bare os.ErrNotExist this used to return reaches the user as the string "file does not exist" — a message that identifies neither the file nor anything to do about it, and that sends people debugging the wrong subsystem.
 func ResolveInstallerOwnedExec(t *Tool) (string, error) {
 	if t == nil {
 		return "", os.ErrNotExist
 	}
-	for _, dir := range extraBinDirs(t) {
+	owned := extraBinDirs(t)
+	for _, dir := range owned {
 		if path, ok := findExecutable(dir, t.ExecName); ok {
 			return path, nil
 		}
 	}
-	return ResolveExec(t)
+	path, searched, err := resolveExecDirs(t)
+	if err != nil {
+		return "", &ErrExecNotResolved{Tool: t, Dirs: dedupeStrings(append(owned, searched...))}
+	}
+	return path, nil
 }
+
+// ErrExecNotResolved reports that a tool's executable could not be found anywhere we know to look, carrying the searched directories so the message can be specific. It unwraps to os.ErrNotExist so existing errors.Is checks keep working.
+type ErrExecNotResolved struct {
+	Tool *Tool
+	Dirs []string
+}
+
+func (e *ErrExecNotResolved) Error() string {
+	name := "tool"
+	if e.Tool != nil && e.Tool.ExecName != "" {
+		name = e.Tool.ExecName
+	}
+	if len(e.Dirs) > 0 {
+		return fmt.Sprintf("%s was not found on PATH or in its known install directories (searched: %s)", name, strings.Join(e.Dirs, ", "))
+	}
+	return fmt.Sprintf("%s was not found on PATH", name)
+}
+
+func (e *ErrExecNotResolved) Unwrap() error { return os.ErrNotExist }
 
 // LookupExecName resolves a bare executable name for launching, the way Exec launches tools: exec.LookPath first, then the ExtraBinDirs of the registry entry running that binary (if any), then the npm global bin dirs (env-derived, then `npm prefix -g`). The env return is ready for exec.Cmd.Env, with the resolved dir appended to the child's PATH so a co-located node/npm resolves — nil means "inherit unchanged" (the $PATH fast path). ok=false when nothing resolves; callers should keep the bare name so exec.Command's own not-found error still surfaces.
 //
@@ -43,17 +70,28 @@ func ResolveInstallerOwnedExec(t *Tool) (string, error) {
 // Exported for the mcp subcommands, which launch client CLIs outside the *Tool plumbing — without this they'd fail for exactly the off-PATH cohort `use` handles.
 func LookupExecName(execName string) (path string, env []string, ok bool) {
 	if p, err := exec.LookPath(execName); err == nil {
+		// Even an on-PATH tool can need the bootstrapped runtime: a package installed through the npm bootstrap lands in a directory the user may well have on PATH (~/.local/bin), while the node its launcher shebang needs is only in EveryAPI's private Node dir.
+		if withNode := withManagedNodeOnPath(nil); withNode != nil {
+			return p, mergeEnv(withNode), true
+		}
 		return p, nil, true
 	}
 	// Mirror resolveExecDirs: an installer-specific dir beats npm's global root, and applies even when the tool isn't npm-installed.
-	dirs := extraBinDirs(toolByExecName(execName))
+	registered := toolByExecName(execName)
+	dirs := extraBinDirs(registered)
+	// The bootstrapped-npm prefix is reached only through the registry, exactly like ExtraBinDirs above. It resolves to a shared directory (~/.local/bin), so consulting it for an unregistered name would mean answering with whatever unrelated binary happens to sit there.
+	if registered != nil {
+		if d := managedNpmBinDir(); d != "" {
+			dirs = dedupeStrings(append(dirs, d))
+		}
+	}
 	dirs = dedupeStrings(append(dirs, npmEnvBinDirs()...))
 	if d := npmPrefixBinDir(); d != "" {
 		dirs = dedupeStrings(append(dirs, d))
 	}
 	for _, dir := range dirs {
 		if p, found := findExecutable(dir, execName); found {
-			return p, mergeEnv(withExecDirOnPath(nil, p)), true
+			return p, mergeEnv(withManagedNodeOnPath(withExecDirOnPath(nil, p))), true
 		}
 	}
 	return "", nil, false
@@ -77,8 +115,11 @@ func resolveExecDirs(t *Tool) (path string, searched []string, err error) {
 	if !installUsesNpm(t) {
 		return "", searched, os.ErrNotExist
 	}
-	// Cheap, subprocess-free candidates first (env vars only), so the common version-manager case resolves without ever shelling out.
+	// Cheap, subprocess-free candidates first (env vars only), so the common version-manager case resolves without ever shelling out. The bootstrapped-npm prefix is one of them: when RunInstall had to download Node to get npm, the package landed under that prefix rather than anywhere on PATH. Omitting it would let an install succeed and still report the tool as missing.
 	searched = dedupeStrings(append(searched, npmEnvBinDirs()...))
+	if dir := managedNpmBinDir(); dir != "" {
+		searched = dedupeStrings(append(searched, dir))
+	}
 	for _, dir := range searched {
 		if p, ok := findExecutable(dir, t.ExecName); ok {
 			return p, searched, nil

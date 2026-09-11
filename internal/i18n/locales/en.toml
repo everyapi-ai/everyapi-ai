@@ -1396,6 +1396,8 @@ installed = "%s installed."
 installed_not_on_path = "%s installed, but not on $PATH yet. Open a new shell, or add the installer's bin directory to PATH."
 installed_not_on_path_dirs = "%[1]s installed, but not found on $PATH or in its known install directories (searched: %[2]s). Add the directory holding the binary to PATH, or open a new shell, then re-run."
 installer_missing = "%[1]s is not installed, but its installer needs %[2]q, which isn't on your PATH (the installer runs in a plain non-login shell, so anything your shell rc adds — or a command that exists only as a shell function — won't be visible here). Install %[2]s, then re-run — or install %[1]s yourself:\n  %[3]s"
+installer_missing_windows = "%[1]s is not installed, and its installer needs %[2]q, which isn't on your PATH. On Windows, PATH changes only reach programs started afterwards — if you installed %[2]s recently, close this app and open it again. Otherwise install %[2]s, then re-run — or install %[1]s yourself:\n  %[3]s"
+installer_exec_blocked = "%[1]s installer could not start %[2]s: the operating system denied process creation. The file exists, so installing more prerequisites won't help — this is usually an AppLocker/WDAC policy or an endpoint-security rule. Run the installer yourself from a shell you control:\n  %[3]s"
 
 [upstream]
 none = "No upstream providers configured."

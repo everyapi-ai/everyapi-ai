@@ -1416,6 +1416,8 @@ installed = "%s instalado."
 installed_not_on_path = "%s se instaló, pero todavía no está en $PATH. Abre una shell nueva o añade el directorio bin del instalador a PATH."
 installed_not_on_path_dirs = "%[1]s se instaló, pero no se encontró en $PATH ni en sus directorios de instalación conocidos (se buscó en: %[2]s). Añade a PATH el directorio que contiene el binario, o abre una shell nueva y vuelve a ejecutar."
 installer_missing = "%[1]s no está instalado, pero su instalador necesita %[2]q, que no está en tu PATH (el instalador se ejecuta en una shell sin login que no carga tu configuración, así que las rutas que añade tu rc — o un comando que solo existe como función de shell — no son visibles aquí). Instala %[2]s y vuelve a ejecutar, o instala %[1]s tú mismo:\n  %[3]s"
+installer_missing_windows = "%[1]s no está instalado y su instalador necesita %[2]q, que no está en tu PATH. En Windows, los cambios de PATH solo llegan a los programas iniciados después — si acabas de instalar %[2]s, cierra esta aplicación y vuelve a abrirla. Si no, instala %[2]s y vuelve a ejecutar, o instala %[1]s tú mismo:\n  %[3]s"
+installer_exec_blocked = "El instalador de %[1]s no pudo iniciar %[2]s: el sistema operativo denegó la creación del proceso. El archivo existe, así que instalar más dependencias no ayudará — suele ser una directiva AppLocker/WDAC o una regla de seguridad del endpoint. Ejecuta el instalador tú mismo desde una shell que controles:\n  %[3]s"
 
 [upstream]
 none = "No hay proveedores upstream configurados."

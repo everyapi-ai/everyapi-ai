@@ -1380,6 +1380,8 @@ installed = "%s 已安裝。"
 installed_not_on_path = "%s 已安裝，但還不在 $PATH 中。請開啟新的 shell，或將安裝器的 bin 目錄加入 PATH。"
 installed_not_on_path_dirs = "%[1]s 已安裝，但在 $PATH 和已知的安裝目錄中都找不到（已搜尋：%[2]s）。請將該執行檔所在目錄加入 PATH，或開啟新的 shell 後重試。"
 installer_missing = "%[1]s 尚未安裝，但其安裝器需要 %[2]q，而它不在你的 PATH 中（安裝器在不載入設定的非登入 shell 中執行，因此 shell rc 加入的路徑、或僅以 shell 函式形式存在的命令在這裡都看不到）。請先安裝 %[2]s 再重試，或自行安裝 %[1]s：\n  %[3]s"
+installer_missing_windows = "%[1]s 尚未安裝，其安裝器需要 %[2]q，而它不在你的 PATH 中。在 Windows 上，PATH 的變更只對之後啟動的程式生效 —— 如果你剛安裝過 %[2]s，請先關閉本應用程式再重新開啟。否則請先安裝 %[2]s 再重試，或自行安裝 %[1]s：\n  %[3]s"
+installer_exec_blocked = "%[1]s 的安裝器無法啟動 %[2]s：作業系統拒絕建立處理程序。該檔案存在，因此再安裝任何前置相依套件都無濟於事 —— 這通常是 AppLocker/WDAC 原則或端點安全軟體的攔截。請在你自己的 shell 中手動執行安裝指令：\n  %[3]s"
 
 [upstream]
 none = "未設定上游供應商。"

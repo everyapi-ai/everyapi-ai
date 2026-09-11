@@ -81,7 +81,7 @@ func TestExistingUnixInstallersHaveReviewedWindowsCommands(t *testing.T) {
 	cases := map[string][]string{
 		"claude": {
 			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
-			"irm https://dl.everyapi.ai/claude-code/install.ps1 | iex",
+			"try { irm https://dl.everyapi.ai/claude-code/install.ps1 | iex } catch { irm https://claude.ai/install.ps1 | iex }",
 		},
 		"openhands": {
 			"powershell", "-ExecutionPolicy", "ByPass", "-Command",
@@ -115,10 +115,38 @@ func TestClaudeInstallerUsesTheChinaMirrorFallback(t *testing.T) {
 	}
 	wantWindows := []string{
 		"powershell", "-ExecutionPolicy", "ByPass", "-Command",
-		"irm https://dl.everyapi.ai/claude-code/install.ps1 | iex",
+		"try { irm https://dl.everyapi.ai/claude-code/install.ps1 | iex } catch { irm https://claude.ai/install.ps1 | iex }",
 	}
 	if !reflect.DeepEqual(tool.InstallCmdWindows, wantWindows) {
 		t.Errorf("claude InstallCmdWindows = %q, want %q", tool.InstallCmdWindows, wantWindows)
+	}
+}
+
+// The EveryAPI Claude mirror serves win32-x64 and refuses ARM64 by design, so a Windows installer that reaches ONLY the mirror leaves every ARM64 machine unable to install Claude Code at all. The official install.ps1 must remain reachable as the fallback.
+//
+// The ordering assertion is not cosmetic. The mirror reports failure with `throw`, which try/catch is guaranteed to catch; claude.ai/install.ps1 reports failure with `exit`, which through `iex` terminates the PowerShell process instead of raising to a catch. Putting the official script in the try block would therefore make the catch unreachable and silently delete the fallback, so the mirror has to be the one being tried.
+func TestClaudeWindowsInstallerFallsBackToTheOfficialOrigin(t *testing.T) {
+	tool, err := Lookup("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := strings.Join(tool.InstallCmdWindows, " ")
+	official := strings.Index(command, "https://claude.ai/install.ps1")
+	mirror := strings.Index(command, "https://dl.everyapi.ai/claude-code/install.ps1")
+	if official < 0 {
+		t.Fatalf("claude Windows installer never reaches the official origin, so ARM64 Windows cannot install it: %q", command)
+	}
+	if mirror < 0 {
+		t.Fatalf("claude Windows installer has no EveryAPI mirror path: %q", command)
+	}
+	if !strings.Contains(command, "try {") || !strings.Contains(command, "catch {") {
+		t.Fatalf("claude Windows installer has no try/catch, so the second origin is unreachable: %q", command)
+	}
+	if mirror > official {
+		t.Errorf("the mirror must be the origin inside try{} — it signals failure with throw, while the official script exits the process and would make the catch unreachable: %q", command)
+	}
+	if strings.Index(command, "catch {") > official {
+		t.Errorf("the official origin must sit in the catch block to act as the ARM64 fallback: %q", command)
 	}
 }
 
