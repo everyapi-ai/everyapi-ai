@@ -289,7 +289,40 @@ everyapi settings set gateway_region cn               # use the China-accelerate
 everyapi auth login --api-base http://localhost:8787   # local dev / self-hosted
 everyapi auth login --no-browser                       # don't auto-open the browser (scan the QR)
 everyapi auth login --no-qr                            # don't render the QR (non-UTF-8 terminals / piping)
+everyapi auth login --alias work                       # store this account under a name you choose
 ```
+
+Signing in while another account is already signed in **keeps both** — see `everyapi auth accounts` below.
+
+### `everyapi auth accounts <sub>` — several accounts on one machine
+
+Every account this machine has signed into stays available. Only one is *active* at a time; the rest sit beside it until you switch or name one explicitly.
+
+```bash
+everyapi auth accounts list                    # every stored account, active one marked '*'
+everyapi auth accounts list --format=json      # identity only — never token material
+everyapi auth accounts switch                  # interactive picker
+everyapi auth accounts switch personal         # switch by name
+everyapi auth accounts rename personal home    # names are yours to choose
+everyapi auth accounts remove personal         # sign out of one account
+everyapi auth logout                           # sign out of the account in effect; the others stay on disk
+everyapi auth logout --all                     # sign out of every account
+```
+
+Signing out never promotes another account for you. The machine is left genuinely signed out and the remaining accounts are one `everyapi auth accounts switch` away — a logout that silently made a different account active would have the next `everyapi use` relay, and bill, through an account you did not pick.
+
+To run a single command as a different account **without switching**, use the global `--account` flag or `EVERYAPI_ACCOUNT`:
+
+```bash
+everyapi --account work stats usage            # before the command
+everyapi stats usage --account work            # or after it — both work
+everyapi --account work use claude             # launch a tool on the other account's relay key
+EVERYAPI_ACCOUNT=work everyapi models list     # for a whole shell session
+```
+
+`--account` is parsed before any command sees it, and scanning stops at a bare `--`, so `everyapi use claude -- --account x` still forwards `--account x` to claude untouched. Because the selection is resolved before the first credential read, side-effecting writes (a rotated relay key cached during the call) land on the selected account, not on the active one. The selection is exported to child processes, so a tmux-mode `use` launch stays on the account you asked for.
+
+Storage: the active account remains at `~/.config/everyapi/credentials.json` exactly as before — nothing that reads that file needs to change. The others live one-file-per-account under `~/.config/everyapi/accounts/` at the same mode `0600`, with `accounts/index.json` recording which name the active file belongs to. An install that has only ever had one account has no `accounts/` directory at all and needs no migration.
 
 Sample terminal QR rendering (Unicode half-block characters; ~18-20 rows tall):
 
@@ -512,7 +545,7 @@ Settings live in `~/.config/everyapi/settings.json` (same directory as `credenti
 
 ## Configuration files
 
-Credentials live in `~/.config/everyapi/credentials.json` (or `$XDG_CONFIG_HOME/everyapi/` if `$XDG_CONFIG_HOME` is set), file mode `0600`. Written by `everyapi auth login`, read by every other command.
+Credentials live in `~/.config/everyapi/credentials.json` (or `$XDG_CONFIG_HOME/everyapi/` if `$XDG_CONFIG_HOME` is set), file mode `0600`. Written by `everyapi auth login`, read by every other command. When more than one account is signed in, this file always holds the **active** one and the rest live under `~/.config/everyapi/accounts/` — see `everyapi auth accounts` above.
 
 > ⚠️ **Tokens are stored in plaintext**. File mode `0600` + private `$HOME` path matches the convention of industry CLIs like `gh auth` / `aws configure`, but **for home-machine-theft / malware threat models**, any process that can read this file can call the EveryAPI API as you (including the MCP tools — see the §money-path friction step below). Recommended:
 > - Don't `everyapi auth login` on shared / public machines

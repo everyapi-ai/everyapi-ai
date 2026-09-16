@@ -19,10 +19,40 @@
 # constante Lang* et de son inclusion dans SupportedLanguages.
 
 [auth]
-usage = "utilisation : everyapi auth <login|logout|status|credential>"
-unknown_sub = "sous-commande auth inconnue %q (essayez : login, logout, status, credential)"
+usage = "utilisation : everyapi auth <login|logout|status|accounts|credential>"
+unknown_sub = "sous-commande auth inconnue %q (essayez : login, logout, status, accounts, credential)"
 not_logged_in = "non connecté — exécutez d'abord 'everyapi auth login'"
 session_expired = "votre session a expiré — exécutez 'everyapi auth login' à nouveau"
+
+[accounts]
+usage = '''
+everyapi auth accounts — les comptes EveryAPI connectés sur cette machine
+
+UTILISATION
+  everyapi auth accounts list [--format=json]   liste les comptes enregistrés
+  everyapi auth accounts switch [<name>]        active un autre compte (sélecteur si le nom est omis)
+  everyapi auth accounts rename <old> <new>     renomme un compte
+  everyapi auth accounts remove <name>          déconnecte un compte
+
+Exécuter une seule commande avec un autre compte sans changer le compte actif :
+  everyapi --account <name> <command>
+  EVERYAPI_ACCOUNT=<name> everyapi <command>
+
+Ajoutez un compte avec 'everyapi auth login' ; celui déjà connecté est conservé.
+'''
+unknown_sub = "sous-commande accounts inconnue %q (essayez : list, switch, rename, remove)"
+none = "Aucun compte enregistré — exécutez d'abord 'everyapi auth login'."
+list_hint = "Changez avec 'everyapi auth accounts switch <name>', ou exécutez une commande avec un autre compte via 'everyapi --account <name> …'."
+pick = "Choisissez le compte à activer :"
+needs_name = "aucun terminal pour afficher le sélecteur — exécutez 'everyapi auth accounts switch <name>'"
+already_active = "%s est déjà le compte actif."
+switched = "Basculé vers %s."
+renamed = "%s renommé en %s."
+removed = "Déconnecté de %s."
+remaining = "%d autre(s) compte(s) restent enregistrés — utilisez 'everyapi auth accounts switch' pour en réactiver un."
+unknown = "compte inconnu %q — exécutez 'everyapi auth accounts list' pour voir les comptes enregistrés"
+exists = "un compte nommé %q existe déjà"
+invalid_name = "nom de compte invalide %q — jusqu'à %d caractères parmi a-z, 0-9, point, tiret ou tiret bas"
 
 [common]
 canceled = "Annulé."
@@ -41,6 +71,7 @@ rows_of_total = "%d ligne(s) sur %d au total :"
 
 [launcher]
 usage_header = "everyapi — la CLI EveryAPI\n\nUTILISATION\n  everyapi <commande> [args]"
+global_flags = "\nOPTIONS GLOBALES\n  **--account** <name>   exécuter avec un compte enregistré au lieu du compte actif (voir 'everyapi auth accounts')\n"
 usage_footer = "\nExécutez 'everyapi <commande> help' pour ses sous-commandes et options."
 welcome = "everyapi — choisissez une commande :"
 pick_category = "everyapi — choisissez une catégorie :"
@@ -156,6 +187,9 @@ lint_hint = "  publication tout de même ; exécutez 'everyapi docs artifacts' p
 login = "Authentifier cet appareil auprès d'EveryAPI"
 logout = "Supprimer les identifiants de cet appareil"
 status = "Afficher quota, utilisation et solde actuels"
+login_add = "Se connecter à un autre compte en conservant celui-ci"
+accounts_switch = "Activer un autre compte enregistré"
+accounts_list = "Lister tous les comptes enregistrés sur cette machine"
 
 [launcher.subs.version]
 update = "Vérifier une version plus récente et lancer la mise à niveau correspondante"
@@ -1287,6 +1321,7 @@ active_marker = "'*' marque le nœud actif (utilisé par défaut par start/stop/
 
 [status]
 relay_key_mode = "  connecté avec une clé relais (OAuth2) — le quota du compte nécessite un 'everyapi auth login' complet ; affichage de l'état du relais uniquement :"
+account = "compte :"
 quota = "quota :"
 requests = "requêtes :"
 topup = "rechargement :"
@@ -1322,11 +1357,16 @@ code_hint = "Si la page ne se pré-remplit pas, saisissez le code : %s"
 browser_opened = "Navigateur ouvert. Approuvez là-bas (ou terminez sur votre téléphone) ; ceci se terminera tout seul."
 no_relay_note_1 = "Note : votre compte n'a pas encore de relay API key. `everyapi use` en requiert une"
 no_relay_note_2 = "EveryAPI dashboard ; `everyapi use` ou `everyapi auth status` la récupérera automatiquement (pas besoin de se reconnecter)."
-logged_in_saved = "\nConnecté en tant que %s. Identifiants enregistrés dans %s/credentials.json\n"
+logged_in_saved = "\nConnecté en tant que %s. Identifiants enregistrés dans %s\n"
+account_parked = "%s conservé ; %s est maintenant le compte actif."
+account_switch_hint = "Basculez entre eux avec 'everyapi auth accounts switch'."
+alias_with_account = "--alias ne peut pas être combiné avec --account : le compte actualisé a déjà un nom"
+account_mismatch = "ce compte n'est pas %q — retirez --account pour l'ajouter comme nouveau compte"
 
 [logout]
 cached_key_warn = "  avertissement : impossible de supprimer les identifiants d'outil en cache dans %s (%v) — supprimez-les manuellement"
 done = "Déconnecté."
+done_all = "Déconnecté de tous les comptes."
 
 [update]
 up_to_date = "everyapi %s — à jour."

@@ -18,10 +18,40 @@
 # Code-Änderungen nötig.
 
 [auth]
-usage = "Verwendung: everyapi auth <login|logout|status|credential>"
-unknown_sub = "unbekannter auth-Unterbefehl %q (versuche: login, logout, status, credential)"
+usage = "Verwendung: everyapi auth <login|logout|status|accounts|credential>"
+unknown_sub = "unbekannter auth-Unterbefehl %q (möglich: login, logout, status, accounts, credential)"
 not_logged_in = "nicht angemeldet — führe zuerst 'everyapi auth login' aus"
 session_expired = "deine Sitzung ist abgelaufen — führe 'everyapi auth login' erneut aus"
+
+[accounts]
+usage = '''
+everyapi auth accounts — die auf diesem Rechner angemeldeten EveryAPI-Konten
+
+VERWENDUNG
+  everyapi auth accounts list [--format=json]   gespeicherte Konten auflisten
+  everyapi auth accounts switch [<name>]        ein Konto aktiv schalten (Auswahl, wenn der Name fehlt)
+  everyapi auth accounts rename <old> <new>     ein Konto umbenennen
+  everyapi auth accounts remove <name>          von einem Konto abmelden
+
+Einen einzelnen Befehl mit einem anderen Konto ausführen, ohne zu wechseln:
+  everyapi --account <name> <command>
+  EVERYAPI_ACCOUNT=<name> everyapi <command>
+
+Mit 'everyapi auth login' ein Konto hinzufügen; das bereits angemeldete bleibt erhalten.
+'''
+unknown_sub = "unbekannter accounts-Unterbefehl %q (möglich: list, switch, rename, remove)"
+none = "Keine Konten gespeichert — führe zuerst 'everyapi auth login' aus."
+list_hint = "Mit 'everyapi auth accounts switch <name>' wechseln oder mit 'everyapi --account <name> …' einen einzelnen Befehl anders ausführen."
+pick = "Wähle das Konto, das aktiv werden soll:"
+needs_name = "kein Terminal für die Auswahl — führe 'everyapi auth accounts switch <name>' aus"
+already_active = "%s ist bereits das aktive Konto."
+switched = "Zu %s gewechselt."
+renamed = "%s in %s umbenannt."
+removed = "Von %s abgemeldet."
+remaining = "Es sind noch %d weitere Konten gespeichert — mit 'everyapi auth accounts switch' zu einem davon wechseln."
+unknown = "unbekanntes Konto %q — 'everyapi auth accounts list' zeigt die gespeicherten"
+exists = "ein Konto namens %q existiert bereits"
+invalid_name = "ungültiger Kontoname %q — höchstens %d Zeichen aus a-z, 0-9, Punkt, Bindestrich oder Unterstrich"
 
 [common]
 canceled = "Abgebrochen."
@@ -40,6 +70,7 @@ rows_of_total = "%d Zeile(n) von %d insgesamt:"
 
 [launcher]
 usage_header = "everyapi — die EveryAPI-CLI\n\nVERWENDUNG\n  everyapi <Befehl> [Argumente]"
+global_flags = "\nGLOBALE FLAGS\n  **--account** <name>   mit einem gespeicherten Konto statt dem aktiven ausführen (siehe 'everyapi auth accounts')\n"
 usage_footer = "\nFühre 'everyapi <Befehl> help' aus für Unterbefehle und Flags."
 welcome = "everyapi — wähle einen Befehl:"
 pick_category = "everyapi — wähle eine Kategorie:"
@@ -155,6 +186,9 @@ lint_hint = "  wird trotzdem veröffentlicht; 'everyapi docs artifacts' zeigt al
 login = "Dieses Gerät bei EveryAPI authentifizieren"
 logout = "Anmeldedaten dieses Geräts entfernen"
 status = "Aktuelle Quota, Nutzung und Saldo anzeigen"
+login_add = "Bei einem weiteren Konto anmelden und dieses behalten"
+accounts_switch = "Ein anderes gespeichertes Konto aktiv schalten"
+accounts_list = "Alle auf diesem Rechner gespeicherten Konten auflisten"
 
 [launcher.subs.version]
 update = "Auf neuere Version prüfen und das passende Upgrade ausführen"
@@ -1282,6 +1316,7 @@ active_marker = "'*' markiert den aktiven Knoten (wird standardmäßig von start
 
 [status]
 relay_key_mode = "  mit einem Relay-Schlüssel (OAuth2) angemeldet — das Kontoguthaben erfordert ein vollständiges 'everyapi auth login'; es wird nur der Relay-Status angezeigt:"
+account = "Konto:"
 quota = "Quota:"
 requests = "Anfragen:"
 topup = "Aufladung:"
@@ -1317,11 +1352,16 @@ code_hint = "Falls die Seite nicht vorausgefüllt ist, gib den Code ein: %s"
 browser_opened = "Browser geöffnet. Bestätige dort (oder auf deinem Handy); dies wird automatisch abgeschlossen."
 no_relay_note_1 = "Hinweis: dein Konto hat noch keinen Relay-API-Key. `everyapi use` benötigt einen"
 no_relay_note_2 = "EveryAPI-Dashboard, danach holen `everyapi use` oder `everyapi auth status` den Key automatisch (kein erneutes Login nötig)."
-logged_in_saved = "\nAls %s angemeldet. Credentials gespeichert in %s/credentials.json\n"
+logged_in_saved = "\nAls %s angemeldet. Credentials gespeichert in %s\n"
+account_parked = "%s wurde behalten; %s ist jetzt das aktive Konto."
+account_switch_hint = "Mit 'everyapi auth accounts switch' dazwischen wechseln."
+alias_with_account = "--alias lässt sich nicht mit --account kombinieren: das aktualisierte Konto hat bereits einen Namen"
+account_mismatch = "das ist ein anderes Konto als %q — lass --account weg, um es als neues Konto anzumelden"
 
 [logout]
 cached_key_warn = "  Warnung: zwischengespeicherte Tool-Anmeldedaten unter %s konnten nicht entfernt werden (%v) — bitte manuell löschen"
 done = "Abgemeldet."
+done_all = "Von allen Konten abgemeldet."
 
 [update]
 up_to_date = "everyapi %s — aktuell."

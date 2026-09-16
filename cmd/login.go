@@ -39,6 +39,7 @@ func Login(args []string) error {
 	noBrowser := fs.Bool("no-browser", false, "skip opening the browser automatically")
 	noQR := fs.Bool("no-qr", false, "skip rendering the QR code (useful for non-UTF-8 terminals or when piping output)")
 	format := fs.String("format", "human", "output format (human or json-lines)")
+	alias := fs.String("alias", "", "name to store this account under (default: derived from the username)")
 	if err := fs.Parse(args); err != nil {
 		if loginMachineRequested(args) {
 			return machineLoginError("invalid_request", err)
@@ -48,7 +49,7 @@ func Login(args []string) error {
 	if *format == "json-lines" {
 		var usedHumanFlag bool
 		fs.Visit(func(f *flag.Flag) {
-			if f.Name == "no-browser" || f.Name == "no-qr" {
+			if f.Name == "no-browser" || f.Name == "no-qr" || f.Name == "alias" {
 				usedHumanFlag = true
 			}
 		})
@@ -144,7 +145,7 @@ func Login(args []string) error {
 
 	// OAuth2 fallback path: the access token is itself the relay key, so it's saved directly with no management session / relay-key resolution.
 	if oauth2 {
-		return finishOAuth2Login(pctx, resolvedAPIBase, client, start, stopWatcher)
+		return finishOAuth2Login(pctx, resolvedAPIBase, *alias, client, start, stopWatcher)
 	}
 
 	res, err := client.PollUntilDone(pctx, start.DeviceCode, start.Interval)
@@ -166,13 +167,13 @@ func Login(args []string) error {
 		}
 	}
 
-	creds, err := saveLegacyLoginCredentials(ctx, resolvedAPIBase, res)
+	creds, account, err := saveLegacyLoginCredentials(ctx, resolvedAPIBase, *alias, res)
 	if err != nil {
 		return err
 	}
 
-	dir, _ := config.ConfigDir()
-	cliout.Printf(i18n.T("login.logged_in_saved"), style.Bold(cliout.Sanitize(res.Username)), dir)
+	cliout.Printf(i18n.T("login.logged_in_saved"), style.Bold(cliout.Sanitize(res.Username)), loginCredentialPath(account))
+	printLoginAccountNotice(account)
 
 	// Resolve the relay API key now (and cache it) so `everyapi use` works on first try. The access token alone can't relay — it's a management credential — so without this step `use` would 401.
 	//
@@ -254,7 +255,7 @@ func startDeviceFlow(ctx context.Context, client deviceFlowStarter) (*api.Device
 }
 
 // finishOAuth2Login completes the OAuth2 device flow. The issued access token is itself a relay key (sk-everyapi-…), so it's stored as both the relay key and the access token — the CLI is "logged in" and `everyapi use` relays. There is no management session in this mode, so role lookup, status, and token-admin commands are limited.
-func finishOAuth2Login(ctx context.Context, apiBase string, client *api.Client, start *api.DeviceAuthStartResp, stopWatcher func()) error {
+func finishOAuth2Login(ctx context.Context, apiBase, alias string, client *api.Client, start *api.DeviceAuthStartResp, stopWatcher func()) error {
 	tok, err := client.OAuth2PollUntilDone(ctx, oauth2CLIClientID, start.DeviceCode, start.Interval)
 	stopWatcher()
 	if err != nil {
@@ -273,17 +274,42 @@ func finishOAuth2Login(ctx context.Context, apiBase string, client *api.Client, 
 		}
 	}
 	// The access token is itself the relay key; keep the refresh token + expiry so ResolveRelayKey can renew it before the 90-day key lapses.
-	if _, err := saveOAuth2LoginCredentials(apiBase, tok); err != nil {
+	_, account, err := saveOAuth2LoginCredentials(apiBase, alias, tok)
+	if err != nil {
 		return err
 	}
-	dir, _ := config.ConfigDir()
-	cliout.Printf(i18n.T("login.logged_in_saved"), style.Bold("EveryAPI"), dir)
+	cliout.Printf(i18n.T("login.logged_in_saved"), style.Bold("EveryAPI"), loginCredentialPath(account))
+	printLoginAccountNotice(account)
 	cliout.Println(i18n.T("login.next_hint"))
 	return nil
 }
 
+// loginCredentialPath is the file the completed login actually wrote, for the "credentials saved to …" line. It is resolved from the account the login landed on rather than assumed to be credentials.json, because `everyapi --account <name> auth login` renews a parked account and writes accounts/<name>.json — naming credentials.json there would point the user at a file this login did not touch and imply the active account changed when it did not.
+//
+// Falls back to the config directory if the path cannot be resolved: the message is orientation, and a login that succeeded must not fail on it.
+func loginCredentialPath(account loginAccountResult) string {
+	if account.Name != "" {
+		if path, err := config.AccountPath(account.Name); err == nil {
+			return path
+		}
+	}
+	dir, _ := config.ConfigDir()
+	return dir
+}
+
+// printLoginAccountNotice tells the user which account name the session landed under, and names the previously-active account when one was kept. Silent on a single-account machine that stayed single-account: introducing account names to someone who only has one would be noise.
+func printLoginAccountNotice(account loginAccountResult) {
+	if account.Parked == "" {
+		return
+	}
+	cliout.Printf(i18n.T("login.account_parked")+"\n",
+		cliout.Sanitize(account.Parked),
+		style.Bold(cliout.Sanitize(account.Name)))
+	cliout.Println(i18n.T("login.account_switch_hint"))
+}
+
 // saveLegacyLoginCredentials owns the flow-independent completion work shared by interactive and desktop machine login: enrich the account metadata when possible and atomically persist the management credential.
-func saveLegacyLoginCredentials(ctx context.Context, apiBase string, res *api.DeviceAuthPollResult) (*config.Credentials, error) {
+func saveLegacyLoginCredentials(ctx context.Context, apiBase, alias string, res *api.DeviceAuthPollResult) (*config.Credentials, loginAccountResult, error) {
 	creds := &config.Credentials{
 		APIBase:     apiBase,
 		AccessToken: res.AccessToken,
@@ -299,14 +325,15 @@ func saveLegacyLoginCredentials(ctx context.Context, apiBase string, res *api.De
 		creds.AvatarURL = self.AvatarURL
 	}
 	roleCancel()
-	if err := config.Save(creds); err != nil {
-		return nil, fmt.Errorf("save credentials: %w", err)
+	outcome, err := commitLoginCredentials(creds, alias)
+	if err != nil {
+		return nil, loginAccountResult{}, err
 	}
-	return creds, nil
+	return creds, outcome, nil
 }
 
 // saveOAuth2LoginCredentials persists the OAuth fallback bundle for both human and machine login. The access token is also the relay key in this flow.
-func saveOAuth2LoginCredentials(apiBase string, tok *api.OAuth2Token) (*config.Credentials, error) {
+func saveOAuth2LoginCredentials(apiBase, alias string, tok *api.OAuth2Token) (*config.Credentials, loginAccountResult, error) {
 	creds := &config.Credentials{
 		APIBase:           apiBase,
 		AccessToken:       tok.AccessToken,
@@ -315,11 +342,133 @@ func saveOAuth2LoginCredentials(apiBase string, tok *api.OAuth2Token) (*config.C
 		RelayKeyExpiresAt: tok.ExpiresAt,
 		OAuthClientID:     oauth2CLIClientID,
 	}
-	if err := config.Save(creds); err != nil {
-		return nil, fmt.Errorf("save credentials: %w", err)
+	outcome, err := commitLoginCredentials(creds, alias)
+	if err != nil {
+		return nil, loginAccountResult{}, err
 	}
-	return creds, nil
+	return creds, outcome, nil
 }
+
+// loginAccountResult reports where a completed login landed: the account name it is stored under, and the name of the previously-active account that was parked to make room (empty when nothing was parked).
+type loginAccountResult struct {
+	Name   string
+	Parked string
+}
+
+// commitLoginCredentials persists a completed login into the multi-account store.
+//
+// Signing into a DIFFERENT account keeps the previous one: it is parked under its own name in accounts/ and the new credential becomes active. Signing into the SAME account again is an ordinary refresh and overwrites in place — re-login after an expiry must not mint a second copy of one account, and that holds whether the account being re-authenticated is the active one or a parked one (see parkedAccountFor).
+//
+// When the process was pinned with `--account <name>`, the login refreshes THAT slot and leaves the active account alone, which is how a parked account whose session expired gets renewed without switching the machine over to it and back.
+func commitLoginCredentials(creds *config.Credentials, alias string) (loginAccountResult, error) {
+	alias = strings.TrimSpace(alias)
+	if alias != "" && !config.ValidAccountName(alias) {
+		return loginAccountResult{}, fmt.Errorf(i18n.T("accounts.invalid_name"), alias, config.MaxAccountNameLen)
+	}
+	if pinned := config.SelectedAccountName(); pinned != "" {
+		if alias != "" && alias != pinned {
+			return loginAccountResult{}, errors.New(i18n.T("login.alias_with_account"))
+		}
+		// `--account <name> auth login` means "renew that slot", so the credential that comes back has to belong to that slot. Authenticating as somebody else would replace the stored credential while the name kept saying otherwise — the pinned account's session gone, with the listing still showing its name. A credential that cannot be read is not a contradiction, so that case refreshes as before; the plain `auth login` below is the path that adds a different account under a name of its own.
+		if stored, storedErr := config.LoadAccount(pinned); storedErr == nil && !sameLoginAccount(stored, creds) {
+			return loginAccountResult{}, fmt.Errorf(i18n.T("login.account_mismatch"), pinned)
+		}
+		if err := config.Save(creds); err != nil {
+			return loginAccountResult{}, fmt.Errorf("save credentials: %w", err)
+		}
+		return loginAccountResult{Name: pinned}, nil
+	}
+
+	// A corrupt or unreadable active credential is treated as "no account there": it is about to be replaced, and refusing the login would leave the user with no way to repair it from the CLI.
+	activeCreds, loadErr := config.Load()
+	if loadErr != nil {
+		activeCreds = nil
+	}
+	activeName, err := config.ActiveAccountName()
+	if err != nil {
+		return loginAccountResult{}, err
+	}
+
+	refreshesActive := activeCreds != nil && sameLoginAccount(activeCreds, creds)
+	name := alias
+	// Set when the login re-authenticates an account that is currently PARKED: that slot is refreshed rather than duplicated, and its superseded credential file has to go before the new one takes the name.
+	staleParked := ""
+	switch {
+	case refreshesActive:
+		if name == "" {
+			name = activeName
+		}
+	case alias == "":
+		// Both computed before anything moves, so the active account is still visible and the new name cannot collide with it.
+		if existing := parkedAccountFor(creds); existing != "" {
+			name, staleParked = existing, existing
+			break
+		}
+		name, err = config.UniqueAccountName(config.DeriveAccountName(creds))
+		if err != nil {
+			return loginAccountResult{}, err
+		}
+	}
+	// An explicit alias is a request for that exact name, so a collision is an error rather than something to silently disambiguate into alias-2. The check covers a re-login into the account already active too — `--alias work` while signed in as `home` would otherwise just point the index at `work`, hiding the parked account that already holds the name behind a credential that is not its own and destroying it on the next switch. Only the no-op case is exempt: renaming the active account to the name it already has.
+	if alias != "" && !(refreshesActive && alias == activeName) {
+		taken, existsErr := config.AccountExists(alias)
+		if existsErr != nil {
+			return loginAccountResult{}, existsErr
+		}
+		if taken {
+			return loginAccountResult{}, fmt.Errorf(i18n.T("accounts.exists"), alias)
+		}
+	}
+
+	// Dropped before anything else moves. DeleteAccount resolves a name through whichever account is active RIGHT NOW, so this is the only point at which it is guaranteed to reach accounts/<name>.json instead of the credentials.json that is about to carry the same name. What it removes is one login older than the credential being written a few lines down.
+	if staleParked != "" {
+		if err := config.DeleteAccount(staleParked); err != nil {
+			return loginAccountResult{}, err
+		}
+	}
+	parked := ""
+	if !refreshesActive && activeCreds != nil {
+		if err := config.ParkActive(activeName); err != nil {
+			return loginAccountResult{}, err
+		}
+		parked = activeName
+	}
+	if err := config.Save(creds); err != nil {
+		return loginAccountResult{}, fmt.Errorf("save credentials: %w", err)
+	}
+	if err := config.SetActiveAccountName(name); err != nil {
+		return loginAccountResult{}, err
+	}
+	return loginAccountResult{Name: name, Parked: parked}, nil
+}
+
+// parkedAccountFor returns the name of the stored, non-active account whose credential identifies the same account as creds, or "" when none does.
+//
+// Re-authenticating a PARKED account is the ordinary fix for a parked session that expired, and without this it lands as a brand-new account: `work` keeps the superseded token while the live session shows up as `work-2`. That is a second row for one account in `auth accounts list`, and — because a new login does not revoke the old token — a still-usable credential left on disk under the name the user recognizes.
+//
+// Best effort: a listing or a credential this cannot read simply means no match, and the login proceeds as a new account rather than failing.
+func parkedAccountFor(creds *config.Credentials) string {
+	infos, err := config.ListAccounts()
+	if err != nil {
+		return ""
+	}
+	for _, info := range infos {
+		if info.Active {
+			continue
+		}
+		stored, loadErr := config.LoadAccount(info.Name)
+		if loadErr != nil {
+			continue
+		}
+		if sameLoginAccount(stored, creds) {
+			return info.Name
+		}
+	}
+	return ""
+}
+
+// sameLoginAccount reports whether two credentials identify one account, i.e. whether a login should overwrite in place rather than park the old one. The rule lives on Credentials because the store applies it too — the accounts index stamps the active credential's identity and checks it back — and two copies of "what makes an account the same account" would be one copy too many.
+func sameLoginAccount(a, b *config.Credentials) bool { return a.SameAccount(b) }
 
 // startLoginKeyWatcher puts stdin into raw mode for the duration of the device-auth poll and watches for single keystrokes:
 //

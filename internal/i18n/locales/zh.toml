@@ -4,10 +4,40 @@
 # 两边都缺会返回 key 本身（开发期肉眼可见地失败）。
 
 [auth]
-usage = "用法：everyapi auth <login|logout|status|credential>"
-unknown_sub = "未知 auth 子命令 %q（可用：login、logout、status、credential）"
+usage = "用法：everyapi auth <login|logout|status|accounts|credential>"
+unknown_sub = "未知 auth 子命令 %q（可用：login、logout、status、accounts、credential）"
 not_logged_in = "未登录 — 先运行 'everyapi auth login'"
 session_expired = "登录已过期 — 重新运行 'everyapi auth login'"
+
+[accounts]
+usage = '''
+everyapi auth accounts — 本机已登录的 EveryAPI 账号
+
+用法
+  everyapi auth accounts list [--format=json]   列出已保存的账号
+  everyapi auth accounts switch [<name>]        切换当前账号（省略名称时弹出选择器）
+  everyapi auth accounts rename <old> <new>     给账号改名
+  everyapi auth accounts remove <name>          退出某个账号
+
+不切换当前账号，只让单条命令用别的账号运行：
+  everyapi --account <name> <command>
+  EVERYAPI_ACCOUNT=<name> everyapi <command>
+
+用 'everyapi auth login' 添加账号；已登录的账号会保留。
+'''
+unknown_sub = "未知 accounts 子命令 %q（可用：list、switch、rename、remove）"
+none = "尚未保存任何账号 — 先运行 'everyapi auth login'。"
+list_hint = "用 'everyapi auth accounts switch <name>' 切换，或用 'everyapi --account <name> …' 让单条命令走别的账号。"
+pick = "选择要切换到的账号："
+needs_name = "当前没有终端无法显示选择器 — 请运行 'everyapi auth accounts switch <name>'"
+already_active = "%s 已经是当前账号。"
+switched = "已切换到 %s。"
+renamed = "已将 %s 改名为 %s。"
+removed = "已退出 %s。"
+remaining = "本机还保存着 %d 个其他账号 — 用 'everyapi auth accounts switch' 切回其中一个。"
+unknown = "未知账号 %q — 运行 'everyapi auth accounts list' 查看已保存的账号"
+exists = "已存在名为 %q 的账号"
+invalid_name = "账号名 %q 不合法 — 最多 %d 个字符，只能用 a-z、0-9、点、短横线或下划线"
 
 [common]
 canceled = "已取消。"
@@ -26,6 +56,7 @@ rows_of_total = "共 %d 行，总计 %d 行："
 
 [launcher]
 usage_header = "everyapi — EveryAPI 命令行\n\n用法\n  everyapi <命令> [参数]"
+global_flags = "\n全局参数\n  **--account** <name>   用已保存的某个账号运行本次命令，而不是当前账号（见 'everyapi auth accounts'）\n"
 usage_footer = "\n运行 'everyapi <命令> help' 查看子命令与参数。"
 welcome = "everyapi — 选一个命令："
 pick_category = "everyapi — 选一个类别："
@@ -141,6 +172,9 @@ lint_hint = "  仍将发布；运行 'everyapi docs artifacts' 查看查看器�
 login = "登录此设备到 EveryAPI"
 logout = "清除本设备凭证"
 status = "显示当前额度、用量与余额"
+login_add = "登录另一个账号，保留当前账号"
+accounts_switch = "切换到另一个已保存的账号"
+accounts_list = "列出本机保存的所有账号"
 
 [launcher.subs.version]
 update = "检查新版本并执行匹配的升级"
@@ -1249,6 +1283,7 @@ active_marker = "'*' 标记活动节点（start/stop/status/logs 默认使用它
 
 [status]
 relay_key_mode = "  当前使用中继密钥（OAuth2）登录 — 账户额度需要完整的 'everyapi auth login'；这里仅显示中继健康状态："
+account = "账号："
 quota = "额度："
 requests = "请求数："
 topup = "充值："
@@ -1284,11 +1319,16 @@ code_hint = "若页面未自动填充，请输入验证码：%s"
 browser_opened = "浏览器已打开。请在浏览器或手机端完成授权；本机将自动继续。"
 no_relay_note_1 = "提示：你的账户尚未创建 relay API key。`everyapi use` 需要一个"
 no_relay_note_2 = "EveryAPI dashboard 创建后，下次 `everyapi use` 或 `everyapi auth status` 会自动拉取（无需重新登录）。"
-logged_in_saved = "\n已以 %s 登录。凭证已保存到 %s/credentials.json\n"
+logged_in_saved = "\n已以 %s 登录。凭证已保存到 %s\n"
+account_parked = "已保留 %s；%s 现在是当前账号。"
+account_switch_hint = "用 'everyapi auth accounts switch' 在账号之间切换。"
+alias_with_account = "--alias 不能和 --account 一起用：要刷新的账号已经有名字了"
+account_mismatch = "这不是 %q 这个账号 — 去掉 --account 即可把它作为新账号登录"
 
 [logout]
 cached_key_warn = "  警告：无法删除位于 %s 的缓存工具凭据（%v）— 请手动删除"
 done = "已注销。"
+done_all = "已退出全部账号。"
 
 [update]
 up_to_date = "everyapi %s — 已是最新。"

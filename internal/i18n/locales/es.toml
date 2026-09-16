@@ -20,10 +20,40 @@
 # SupportedLanguages.
 
 [auth]
-usage = "uso: everyapi auth <login|logout|status|credential>"
-unknown_sub = "subcomando auth desconocido %q (prueba: login, logout, status, credential)"
+usage = "uso: everyapi auth <login|logout|status|accounts|credential>"
+unknown_sub = "subcomando de auth desconocido %q (prueba: login, logout, status, accounts, credential)"
 not_logged_in = "no has iniciado sesión — ejecuta primero 'everyapi auth login'"
 session_expired = "tu sesión expiró — ejecuta 'everyapi auth login' de nuevo"
+
+[accounts]
+usage = '''
+everyapi auth accounts — las cuentas de EveryAPI con sesión iniciada en esta máquina
+
+USO
+  everyapi auth accounts list [--format=json]   lista las cuentas guardadas
+  everyapi auth accounts switch [<name>]        activa otra cuenta (selector si se omite el nombre)
+  everyapi auth accounts rename <old> <new>     cambia el nombre de una cuenta
+  everyapi auth accounts remove <name>          cierra la sesión de una cuenta
+
+Ejecuta un solo comando con otra cuenta sin cambiar la activa:
+  everyapi --account <name> <command>
+  EVERYAPI_ACCOUNT=<name> everyapi <command>
+
+Añade una cuenta con 'everyapi auth login'; la que ya tiene sesión se conserva.
+'''
+unknown_sub = "subcomando de accounts desconocido %q (prueba: list, switch, rename, remove)"
+none = "No hay cuentas guardadas: ejecuta primero 'everyapi auth login'."
+list_hint = "Cambia con 'everyapi auth accounts switch <name>', o ejecuta un comando con otra cuenta con 'everyapi --account <name> …'."
+pick = "Elige la cuenta que quieres activar:"
+needs_name = "no hay terminal para mostrar el selector: ejecuta 'everyapi auth accounts switch <name>'"
+already_active = "%s ya es la cuenta activa."
+switched = "Se cambió a %s."
+renamed = "Se renombró %s como %s."
+removed = "Sesión cerrada en %s."
+remaining = "Quedan %d cuenta(s) guardadas: usa 'everyapi auth accounts switch' para volver a entrar con una."
+unknown = "cuenta desconocida %q: ejecuta 'everyapi auth accounts list' para ver las guardadas"
+exists = "ya existe una cuenta llamada %q"
+invalid_name = "nombre de cuenta no válido %q: usa hasta %d caracteres de a-z, 0-9, punto, guion o guion bajo"
 
 [common]
 canceled = "Cancelado."
@@ -42,6 +72,7 @@ rows_of_total = "%d fila(s) de %d total:"
 
 [launcher]
 usage_header = "everyapi — la CLI de EveryAPI\n\nUSO\n  everyapi <comando> [args]"
+global_flags = "\nOPCIONES GLOBALES\n  **--account** <name>   ejecuta con una de las cuentas guardadas en vez de la activa (ver 'everyapi auth accounts')\n"
 usage_footer = "\nEjecuta 'everyapi <comando> help' para ver sus subcomandos y opciones."
 welcome = "everyapi — elige un comando:"
 pick_category = "everyapi — elige una categoría:"
@@ -157,6 +188,9 @@ lint_hint = "  se publicará igualmente; ejecuta 'everyapi docs artifacts' para 
 login = "Autenticar este dispositivo con EveryAPI"
 logout = "Eliminar las credenciales de este dispositivo"
 status = "Mostrar cuota, uso y saldo actuales"
+login_add = "Inicia sesión en otra cuenta y conserva esta"
+accounts_switch = "Activa otra de las cuentas guardadas"
+accounts_list = "Lista todas las cuentas guardadas en esta máquina"
 
 [launcher.subs.version]
 update = "Buscar una versión más nueva y ejecutar la actualización correspondiente"
@@ -1284,6 +1318,7 @@ active_marker = "'*' marca el nodo activo (usado por start/stop/status/logs por 
 
 [status]
 relay_key_mode = "  sesión iniciada con una clave de relay (OAuth2) — la cuota de la cuenta requiere un 'everyapi auth login' completo; mostrando solo el estado del relay:"
+account = "cuenta:"
 quota = "cuota:"
 requests = "peticiones:"
 topup = "recarga:"
@@ -1319,11 +1354,16 @@ code_hint = "Si la página no se prellena, introduce el código: %s"
 browser_opened = "Navegador abierto. Aprueba ahí (o termina en tu teléfono); esto continuará por sí solo."
 no_relay_note_1 = "Nota: tu cuenta aún no tiene relay API key. `everyapi use` necesita una"
 no_relay_note_2 = "EveryAPI dashboard, luego `everyapi use` o `everyapi auth status` la traerán automáticamente (no hace falta volver a iniciar sesión)."
-logged_in_saved = "\nSesión iniciada como %s. Credenciales guardadas en %s/credentials.json\n"
+logged_in_saved = "\nSesión iniciada como %s. Credenciales guardadas en %s\n"
+account_parked = "Se conservó %s; ahora %s es la cuenta activa."
+account_switch_hint = "Alterna entre ellas con 'everyapi auth accounts switch'."
+alias_with_account = "--alias no puede combinarse con --account: la cuenta que se actualiza ya tiene nombre"
+account_mismatch = "esa es una cuenta distinta de %q: quita --account para añadirla como cuenta nueva"
 
 [logout]
 cached_key_warn = "  advertencia: no se pudieron eliminar las credenciales de herramienta en caché en %s (%v) — elimínalas manualmente"
 done = "Sesión cerrada."
+done_all = "Sesión cerrada en todas las cuentas."
 
 [update]
 up_to_date = "everyapi %s — al día."

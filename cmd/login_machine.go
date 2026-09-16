@@ -107,7 +107,7 @@ func runLoginMachine(ctx context.Context, apiBase string, client loginMachineCli
 		if tok == nil || strings.TrimSpace(tok.AccessToken) == "" {
 			return failLoginMachine(out, "invalid_response", errors.New("empty OAuth credential"))
 		}
-		if _, saveErr := saveOAuth2LoginCredentials(apiBase, tok); saveErr != nil {
+		if _, _, saveErr := saveOAuth2LoginCredentials(apiBase, "", tok); saveErr != nil {
 			return failLoginMachine(out, "credential_store", saveErr)
 		}
 	} else {
@@ -119,7 +119,7 @@ func runLoginMachine(ctx context.Context, apiBase string, client loginMachineCli
 		if res == nil || res.State != api.PollAuthorized || strings.TrimSpace(res.AccessToken) == "" {
 			return failLoginMachine(out, "invalid_response", errors.New("invalid authorization result"))
 		}
-		creds, saveErr := saveLegacyLoginCredentials(ctx, apiBase, res)
+		creds, _, saveErr := saveLegacyLoginCredentials(ctx, apiBase, "", res)
 		if saveErr != nil {
 			return failLoginMachine(out, "credential_store", saveErr)
 		}

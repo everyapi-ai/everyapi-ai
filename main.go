@@ -111,6 +111,8 @@ type subcommand struct {
 	name string
 	desc string
 	args []string
+	// descKey overrides the i18n slug subcommandDesc would otherwise derive from args. Needed when one action is offered under two different framings — auth's `login` row reads "authenticate this device" when signed out and "add another account" when signed in, and both dispatch the same args.
+	descKey string
 }
 
 // mcpSubs is the picker menu for `everyapi mcp`. Extracted into its own var so `runMCP` can hand it to runSubPicker when invoked bare on a TTY without referencing the `commands` slice — that ref would close a commands → runMCP → lookup → commands package-init cycle and refuse to compile.
@@ -144,24 +146,36 @@ func authHeader() {
 	}
 }
 
-// authMenuSubs builds the interactive auth sub-menu by login state. login and logout are mutually exclusive; status is no longer a row — it's the header (see authHeader), shown on entry. Signed out → only login; signed in → only logout. Re-evaluated on every sub-picker re-render, so the menu flips the moment the user logs in or out.
-//
-// Offers logout only when a credential is present AND still authenticates. An expired / revoked token leaves the credentials file in place, so the old presence-only check showed "logout" to a user who is effectively signed out and actually needs "login" — directly contradicting the "session expired" header rendered right above it. sessionRejected returns false for a nil / legacy (no user_id) credential or any transport error, so those keep the historical logout row rather than false-walling the user on a flaky probe.
+// authMenuSubs builds the interactive auth sub-menu from the login state and how many accounts the machine holds. status is not a row — it's the header (see authHeader), shown on entry. Re-evaluated on every sub-picker re-render, so the menu flips the moment the user logs in, logs out, or switches account.
 func authMenuSubs() []subcommand {
 	creds, _ := config.Load()
-	return authMenuSubsFor(creds, sessionRejected)
+	accounts, _ := config.ListAccounts()
+	return authMenuSubsFor(creds, sessionRejected, len(accounts))
 }
 
-// authMenuSubsFor is the testable core of authMenuSubs: it owns the login-vs-logout decision given the loaded credential and a session probe, with the disk read (config.Load) and the real network probe (sessionRejected) injected by the caller. logout requires a present credential whose session the probe does NOT reject.
-func authMenuSubsFor(creds *config.Credentials, rejected func(*config.Credentials) bool) []subcommand {
-	if creds != nil && !rejected(creds) {
-		return []subcommand{
-			{name: "logout", desc: "Remove this device's credentials", args: []string{"logout"}},
-		}
+// authMenuSubsFor is the testable core of authMenuSubs, with the disk reads (config.Load, config.ListAccounts) and the real network probe (sessionRejected) injected by the caller.
+//
+// logout requires a present credential whose session the probe does NOT reject. An expired / revoked token leaves the credentials file in place, so a presence-only check would show "logout" to a user who is effectively signed out and actually needs "login" — directly contradicting the "session expired" header rendered right above it. sessionRejected returns false for a nil / legacy (no user_id) credential or any transport error, so those keep the historical logout row rather than false-walling the user on a flaky probe.
+//
+// login is offered in BOTH states rather than only when signed out: with multiple accounts it is also how a second one is added, and the launcher is the only place a user who never reads --help will find that.
+func authMenuSubsFor(creds *config.Credentials, rejected func(*config.Credentials) bool, accountCount int) []subcommand {
+	signedIn := creds != nil && !rejected(creds)
+	var subs []subcommand
+	if accountCount > 1 {
+		subs = append(subs, subcommand{name: "switch account", desc: "Make a different stored account the active one", args: []string{"accounts", "switch"}})
 	}
-	return []subcommand{
-		{name: "login", desc: "Authenticate this device with EveryAPI", args: []string{"login"}},
+	if signedIn {
+		subs = append(subs, subcommand{name: "add account", desc: "Sign in to another account and keep this one", args: []string{"login"}, descKey: "login_add"})
+	} else {
+		subs = append(subs, subcommand{name: "login", desc: "Authenticate this device with EveryAPI", args: []string{"login"}})
 	}
+	if accountCount > 0 {
+		subs = append(subs, subcommand{name: "accounts", desc: "List every account stored on this machine", args: []string{"accounts", "list"}})
+	}
+	if signedIn {
+		subs = append(subs, subcommand{name: "logout", desc: "Remove this device's credentials", args: []string{"logout"}})
+	}
+	return subs
 }
 
 // versionHeader prints the build version — the header above the version sub-picker (update / uninstall).
@@ -511,6 +525,8 @@ func renderUsage() string {
 	b.WriteString(i18n.T("launcher.usage_header"))
 	b.WriteString("\n")
 	b.WriteString(usageCommandList(isAdmin))
+	// The account selector is the one flag that applies to every row above, so it belongs in the shared help rather than in forty per-command usage blocks.
+	b.WriteString(i18n.T("launcher.global_flags"))
 	b.WriteString(i18n.T("launcher.usage_footer"))
 	b.WriteString("\n")
 	// **keyword** markers render bold on a styled terminal and strip to plain text when piped / NO_COLOR.
@@ -866,7 +882,10 @@ func commandDesc(c command) string {
 //
 // The `slug == ""` branch is defensive: every current subcommand in the registry sets a non-empty args slice, but a future entry that only wires up a `run` function with no args (e.g. a top-level shortcut row) would otherwise generate a `launcher.subs.X.` key with a trailing dot. Falling back to a space-stripped name keeps the resulting key human-readable.
 func subcommandDesc(parent string, s subcommand) string {
-	slug := strings.Join(s.args, "_")
+	slug := s.descKey
+	if slug == "" {
+		slug = strings.Join(s.args, "_")
+	}
 	if slug == "" {
 		slug = strings.ReplaceAll(s.name, " ", "_")
 	}
@@ -967,6 +986,77 @@ func runSubPicker(c command) error {
 	}
 }
 
+// accountEnvVar names the account a command should run as when no --account flag is given. main also exports it after resolving the flag, so any process this CLI re-executes — most importantly the copy of itself that `everyapi use` restarts inside a tmux session — inherits the same selection instead of silently falling back to the active account.
+const accountEnvVar = "EVERYAPI_ACCOUNT"
+
+// extractAccountFlag pulls the global `--account <name>` selection out of argv and returns the remaining arguments.
+//
+// It is handled here rather than as a flag on each command because every command reads credentials through config.Load, so one selection covers all ~40 of them; adding a flag to each would mean forty chances to forget one.
+//
+// Scanning stops at the first bare `--`, matching how `everyapi use` already splits its own options from the ones it forwards to the launched tool. That is what keeps `everyapi use claude -- --account foo` delivering `--account foo` to claude untouched, while `everyapi use claude --account work` selects the account here. A repeated flag takes its last value, the same as Go's flag package.
+func extractAccountFlag(args []string) (string, []string, error) {
+	name := ""
+	rest := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			rest = append(rest, args[i:]...)
+			break
+		}
+		flagName, value, hasValue := splitAccountFlag(arg)
+		if flagName != "account" {
+			rest = append(rest, arg)
+			continue
+		}
+		if hasValue {
+			if value == "" {
+				return "", nil, errors.New("--account needs an account name")
+			}
+			name = value
+			continue
+		}
+		if i+1 >= len(args) || args[i+1] == "--" {
+			return "", nil, errors.New("--account needs an account name")
+		}
+		name = args[i+1]
+		i++
+	}
+	return name, rest, nil
+}
+
+// splitAccountFlag decomposes one argv token into its flag name and attached value. Both the `-account` and `--account` spellings are accepted because Go's own flag package treats them as the same flag, and a user who learns one form on a subcommand will type it here.
+func splitAccountFlag(arg string) (name, value string, hasValue bool) {
+	if !strings.HasPrefix(arg, "-") || arg == "-" {
+		return "", "", false
+	}
+	trimmed := strings.TrimLeft(arg, "-")
+	if eq := strings.IndexByte(trimmed, '='); eq >= 0 {
+		return trimmed[:eq], trimmed[eq+1:], true
+	}
+	return trimmed, "", false
+}
+
+// applyAccountSelection pins this process to the requested account, falling back to the environment when no flag was given. An unknown name is fatal either way: running the command against whichever account happens to be active is the one outcome a user who asked for a specific one cannot want.
+//
+// A failure sourced from the environment names the variable. Without that, an EVERYAPI_ACCOUNT left in a shell profile after the account was removed makes EVERY command exit 1 — including the `auth accounts list` the error text tells the user to run — with nothing on screen connecting the failure to the variable that causes it.
+func applyAccountSelection(name string) error {
+	fromEnv := false
+	if strings.TrimSpace(name) == "" {
+		name = strings.TrimSpace(os.Getenv(accountEnvVar))
+		fromEnv = name != ""
+	}
+	if name == "" {
+		return nil
+	}
+	if err := cmd.ApplyAccountSelection(name); err != nil {
+		if fromEnv {
+			return fmt.Errorf("%s=%s: %w", accountEnvVar, name, err)
+		}
+		return err
+	}
+	return os.Setenv(accountEnvVar, name)
+}
+
 func main() {
 	// Resolve the user's language preference once at startup and publish it two ways: i18n.SetLanguage for CLI-originated strings, EVERYAPI_LANG env for the SDK to attach as Accept-Language on every API call (so backend errors come back translated). Resolution chain (first-wins):
 	//   1. settings.json's `language` field
@@ -975,7 +1065,18 @@ func main() {
 	// A broken / missing settings file falls through to the env chain rather than failing startup — the user shouldn't be locked out of `everyapi auth login` because the preference file is corrupt.
 	resolveLanguage()
 
-	if len(os.Args) < 2 {
+	// Resolve the global account selection before anything reads a credential. Everything downstream — dispatch, the launcher, the update prompt — then sees exactly one account, whichever the user asked for.
+	accountName, argv, accountErr := extractAccountFlag(os.Args[1:])
+	if accountErr != nil {
+		fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), accountErr)
+		os.Exit(2)
+	}
+	if err := applyAccountSelection(accountName); err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %s\n", i18n.T("common.error_prefix"), cliout.Sanitize(err.Error()))
+		os.Exit(1)
+	}
+
+	if len(argv) < 1 {
 		if cliprompt.IsInteractive() {
 			// The bare-`everyapi` launcher is the primary interactive surface — a user who only ever types `everyapi` and picks from the menu would otherwise never reach the auto-update check (it only fronts explicit-command dispatch below). Empty commandName is intentional: it isn't in updateCheckSkipCommands, so the check runs. "Update now" returns true → we ran the upgrade, skip the launcher.
 			if cmd.MaybePromptUpdate("") {
@@ -990,8 +1091,8 @@ func main() {
 		fmt.Print(renderUsage())
 		os.Exit(2)
 	}
-	name := os.Args[1]
-	args := os.Args[2:]
+	name := argv[0]
+	args := argv[1:]
 	if cmd.IsTmuxUseWrapperCommand(name) {
 		exitCode, err := cmd.RunTmuxUseWrapper()
 		if err != nil {

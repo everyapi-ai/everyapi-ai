@@ -109,6 +109,7 @@ func Status(args []string) error {
 	} else {
 		cliout.Printf("  %s\n", style.Bold(cliout.Sanitize(self.Username)))
 	}
+	printActiveAccountLine()
 	cliout.Printf("  %-10s %s\n", i18n.T("status.quota"), styledQuota(quotaUSD, usedUSD))
 	cliout.Printf("  %-10s %s\n", i18n.T("status.requests"), style.Bold(fmt.Sprintf("%d", self.RequestCount)))
 	// The origin is derived from the stored api_base rather than from a response body, so it is a weaker source than the username and email above — but it is still text this command did not author being printed to a terminal, and it goes through the same sanitizer for the same reason.
@@ -118,6 +119,29 @@ func Status(args []string) error {
 
 	cliout.Println("")
 	return nil
+}
+
+// printActiveAccountLine names which stored account this status describes. It prints only when the machine holds more than one, or when the command was pinned to one with --account: for the single-account user the name is noise, while the moment there are two the username alone stops answering "which of my accounts am I looking at".
+//
+// Best effort — a status read must not fail because the account listing could not be built.
+func printActiveAccountLine() {
+	name := config.SelectedAccountName()
+	if name == "" {
+		infos, err := config.ListAccounts()
+		if err != nil || len(infos) < 2 {
+			return
+		}
+		for _, info := range infos {
+			if info.Active {
+				name = info.Name
+				break
+			}
+		}
+	}
+	if name == "" {
+		return
+	}
+	cliout.Printf("  %-10s %s\n", i18n.T("status.account"), style.Bold(cliout.Sanitize(name)))
 }
 
 // printRelayKeyCap reports the relay key's OWN remaining quota when the key is capped, because "relay: ok" alone hides the failure this exists to surface: the probe runs ValidateUserToken, which only refuses a key at remain <= 0, while the gateway refuses a REQUEST whose pre-consume estimate exceeds remain_quota. A key stranded a few cents above zero therefore probes ok, reports a healthy account balance on the line above, and 403s "token quota is not enough" on every actual call — with nothing in this command's output pointing at the key.

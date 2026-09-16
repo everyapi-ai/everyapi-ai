@@ -736,6 +736,8 @@ func FuzzParseUseArgsDoesNotPanic(f *testing.F) {
 
 // TestResolveToolModel covers the non-interactive branches of the model-precedence chain (flag > env > picker > default). The picker branch needs a TTY + network and is exercised manually; here we pin that the flag wins, a pre-set env is respected, and a tool without ModelEnv is a clean no-op.
 func TestResolveToolModel(t *testing.T) {
+	// Pin the config home for every subtest: the non-interactive path consults preferredToolModel, which reads the on-disk hermes-last-model file, so a developer's real ~/.config/everyapi would otherwise decide the outcome.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	creds := &config.Credentials{APIBase: "https://api.everyapi.ai"}
 	hermes, err := tools.Lookup("hermes")
 	if err != nil {

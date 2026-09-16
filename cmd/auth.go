@@ -22,6 +22,8 @@ func Auth(args []string) error {
 		return Logout(args[1:])
 	case "status":
 		return Status(args[1:])
+	case "accounts":
+		return Accounts(args[1:])
 	case "credential":
 		return Credential(args[1:])
 	case "avatar":

@@ -16,10 +16,40 @@
 # the Lang* const + including it in SupportedLanguages.
 
 [auth]
-usage = "usage: everyapi auth <login|logout|status|credential>"
-unknown_sub = "unknown auth subcommand %q (try: login, logout, status, credential)"
+usage = "usage: everyapi auth <login|logout|status|accounts|credential>"
+unknown_sub = "unknown auth subcommand %q (try: login, logout, status, accounts, credential)"
 not_logged_in = "not logged in — run 'everyapi auth login' first"
 session_expired = "your session expired — run 'everyapi auth login' again"
+
+[accounts]
+usage = '''
+everyapi auth accounts — the EveryAPI accounts signed in on this machine
+
+USAGE
+  everyapi auth accounts list [--format=json]   list the stored accounts
+  everyapi auth accounts switch [<name>]        make an account the active one (picker when omitted)
+  everyapi auth accounts rename <old> <new>     give an account a different name
+  everyapi auth accounts remove <name>          sign out of one account
+
+Run a single command as another account without switching:
+  everyapi --account <name> <command>
+  EVERYAPI_ACCOUNT=<name> everyapi <command>
+
+Add an account with 'everyapi auth login'; the one already signed in is kept.
+'''
+unknown_sub = "unknown accounts subcommand %q (try: list, switch, rename, remove)"
+none = "No accounts stored — run 'everyapi auth login' first."
+list_hint = "Switch with 'everyapi auth accounts switch <name>', or run one command elsewhere with 'everyapi --account <name> …'."
+pick = "Pick the account to make active:"
+needs_name = "no terminal for the picker — run 'everyapi auth accounts switch <name>'"
+already_active = "%s is already the active account."
+switched = "Switched to %s."
+renamed = "Renamed %s to %s."
+removed = "Signed out of %s."
+remaining = "%d other account is still stored — 'everyapi auth accounts switch' to sign back in as one."
+unknown = "unknown account %q — run 'everyapi auth accounts list' to see the stored ones"
+exists = "an account named %q already exists"
+invalid_name = "invalid account name %q — use up to %d characters from a-z, 0-9, dot, dash or underscore"
 
 [common]
 canceled = "Canceled."
@@ -38,6 +68,7 @@ rows_of_total = "%d row(s) of %d total:"
 
 [launcher]
 usage_header = "everyapi — the EveryAPI CLI\n\nUSAGE\n  everyapi <command> [args]"
+global_flags = "\nGLOBAL FLAGS\n  **--account** <name>   run as one of the stored accounts instead of the active one (see 'everyapi auth accounts')\n"
 usage_footer = "\nRun 'everyapi <command> help' for a command's subcommands and flags."
 welcome = "everyapi — pick a command:"
 pick_category = "everyapi — pick a category:"
@@ -142,6 +173,9 @@ lint_hint = "  publishing anyway; run 'everyapi docs artifacts' for the viewer's
 login = "Authenticate this **device** with EveryAPI"
 logout = "Remove this device's **credentials**"
 status = "Show current **quota**, usage, and balance"
+login_add = "Sign in to another account and keep this one"
+accounts_switch = "Make a different stored account the active one"
+accounts_list = "List every account stored on this machine"
 
 [launcher.subs.version]
 update = "Check for a **newer release** and run the matching upgrade"
@@ -1264,6 +1298,7 @@ active_marker = "'*' marks the active node (used by start/stop/status/logs by de
 
 [status]
 relay_key_mode = "  signed in with a relay key (OAuth2) — account quota needs a full 'everyapi auth login'; showing relay health only:"
+account = "account:"
 quota = "quota:"
 requests = "requests:"
 topup = "topup:"
@@ -1299,11 +1334,16 @@ code_hint = "If the page doesn't pre-fill, enter the code: %s"
 browser_opened = "Browser opened. Approve there (or finish on your phone); this will finish on its own."
 no_relay_note_1 = "Note: your account has no relay API key yet. `everyapi use` needs one"
 no_relay_note_2 = "EveryAPI dashboard, then `everyapi use` or `everyapi auth status` will auto-fetch it (no re-login needed)."
-logged_in_saved = "\nLogged in as %s. Credentials saved to %s/credentials.json\n"
+logged_in_saved = "\nLogged in as %s. Credentials saved to %s\n"
+account_parked = "Kept %s; %s is now the active account."
+account_switch_hint = "Switch between them with 'everyapi auth accounts switch'."
+alias_with_account = "--alias cannot be combined with --account: the account being refreshed already has a name"
+account_mismatch = "that is a different account than %q — drop --account to sign in to it as a new account"
 
 [logout]
 cached_key_warn = "  warning: couldn't remove cached tool credentials at %s (%v) — delete it by hand"
 done = "Logged out."
+done_all = "Logged out of every account."
 
 [update]
 up_to_date = "everyapi %s — up to date."

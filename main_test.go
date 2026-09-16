@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -547,40 +548,120 @@ func TestProxyMenuSubs_StartStopMutuallyExclusive(t *testing.T) {
 	}
 }
 
-// TestAuthMenuSubs_LoginLogoutMutuallyExclusive locks the auth sub-menu's rule: it offers exactly one action — login when signed out, logout when signed in — and status is never a row (it's the header, see authHeader). Robust to whatever login state the test environment happens to be in: it asserts the shape, not which branch.
-func TestAuthMenuSubs_LoginLogoutMutuallyExclusive(t *testing.T) {
+// TestAuthMenuSubs_ShapeIsConsistent locks the auth sub-menu's invariants against whatever login state the developer's machine happens to be in: a sign-in row is always offered, logout appears at most once, and status is never a row (it's the header, see authHeader).
+func TestAuthMenuSubs_ShapeIsConsistent(t *testing.T) {
 	subs := authMenuSubs()
-	if len(subs) != 1 {
-		t.Fatalf("auth menu must offer exactly one action, got %+v", subs)
+	count := map[string]int{}
+	for _, s := range subs {
+		count[s.name]++
+		if s.name == "status" {
+			t.Errorf("status must be the header, not a row: %+v", subs)
+		}
 	}
-	switch subs[0].name {
-	case "login", "logout":
-	default:
-		t.Errorf("auth menu action must be login or logout, got %q", subs[0].name)
+	if count["login"]+count["add account"] != 1 {
+		t.Errorf("auth menu must offer exactly one sign-in row, got %+v", subs)
+	}
+	if count["logout"] > 1 {
+		t.Errorf("logout must appear at most once, got %+v", subs)
 	}
 }
 
-// TestAuthMenuSubsFor pins the login-vs-logout decision: logout only when a credential is present AND the session probe accepts it. An expired/revoked token (present file, probe rejects) must offer login, not logout — otherwise the menu contradicts the "session expired" header and strands the user on a logout they don't need.
+// TestAuthMenuSubsFor pins the row set for each (session, account-count) combination.
+//
+// The load-bearing case is "present + expired session": logout requires a credential the probe does NOT reject, because an expired token leaves the credentials file in place and offering logout there would contradict the "session expired" header rendered right above it. The account rows are the multi-account half — switching is only meaningful with something to switch to.
 func TestAuthMenuSubsFor(t *testing.T) {
 	creds := &config.Credentials{APIBase: "https://api.everyapi.ai", UserID: 1}
+	live := func(*config.Credentials) bool { return false }
+	expired := func(*config.Credentials) bool { return true }
 	cases := []struct {
 		name     string
 		creds    *config.Credentials
 		rejected func(*config.Credentials) bool
-		want     string
+		accounts int
+		want     []string
 	}{
-		{"no creds → login", nil, func(*config.Credentials) bool { return false }, "login"},
-		{"present + live session → logout", creds, func(*config.Credentials) bool { return false }, "logout"},
-		{"present + expired session → login", creds, func(*config.Credentials) bool { return true }, "login"},
+		{"no creds", nil, live, 0, []string{"login"}},
+		{"signed in, one account", creds, live, 1, []string{"add account", "accounts", "logout"}},
+		{"signed in, two accounts", creds, live, 2, []string{"switch account", "add account", "accounts", "logout"}},
+		{"expired session offers login not logout", creds, expired, 1, []string{"login", "accounts"}},
+		{"signed out but accounts parked", nil, live, 2, []string{"switch account", "login", "accounts"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			subs := authMenuSubsFor(tc.creds, tc.rejected)
-			if len(subs) != 1 {
-				t.Fatalf("want exactly one action, got %+v", subs)
+			subs := authMenuSubsFor(tc.creds, tc.rejected, tc.accounts)
+			got := make([]string, len(subs))
+			for i, s := range subs {
+				got[i] = s.name
 			}
-			if subs[0].name != tc.want {
-				t.Errorf("authMenuSubsFor = %q, want %q", subs[0].name, tc.want)
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("authMenuSubsFor = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestApplyAccountSelectionNamesTheEnvironmentVariable covers the dead end an EVERYAPI_ACCOUNT left in a shell profile creates once that account is removed: every command exits 1, including the `auth accounts list` the error text recommends. The failure has to name the variable, because nothing else on screen connects the two.
+func TestApplyAccountSelectionNamesTheEnvironmentVariable(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Cleanup(func() { _ = config.SelectAccount("") })
+
+	t.Setenv(accountEnvVar, "gone")
+	err := applyAccountSelection("")
+	if err == nil {
+		t.Fatal("a stale environment selection was accepted")
+	}
+	if !strings.Contains(err.Error(), accountEnvVar) {
+		t.Errorf("error %q must name %s", err, accountEnvVar)
+	}
+
+	// A flag-sourced failure stays unprefixed: the user can already see the flag they typed, and naming a variable they did not set would misdirect them.
+	t.Setenv(accountEnvVar, "")
+	err = applyAccountSelection("gone")
+	if err == nil {
+		t.Fatal("an unknown --account value was accepted")
+	}
+	if strings.Contains(err.Error(), accountEnvVar) {
+		t.Errorf("error %q must not blame the environment for a flag", err)
+	}
+}
+
+// TestExtractAccountFlag pins the global account selector's parsing, including the two rules that keep it from stealing arguments: scanning stops at a bare `--` so `everyapi use claude -- --account x` still forwards the flag to the launched tool, and a value-less flag is an error rather than a silent empty selection.
+func TestExtractAccountFlag(t *testing.T) {
+	cases := []struct {
+		name     string
+		args     []string
+		want     string
+		wantRest []string
+		wantErr  bool
+	}{
+		{"absent", []string{"stats", "usage"}, "", []string{"stats", "usage"}, false},
+		{"before the command", []string{"--account", "work", "use", "claude"}, "work", []string{"use", "claude"}, false},
+		{"after the command", []string{"stats", "usage", "--account", "work"}, "work", []string{"stats", "usage"}, false},
+		{"attached value", []string{"stats", "--account=work", "usage"}, "work", []string{"stats", "usage"}, false},
+		{"single dash spelling", []string{"-account=work", "stats"}, "work", []string{"stats"}, false},
+		{"last wins", []string{"--account", "a", "stats", "--account", "b"}, "b", []string{"stats"}, false},
+		{"after a bare separator it belongs to the child", []string{"use", "claude", "--", "--account", "x"}, "", []string{"use", "claude", "--", "--account", "x"}, false},
+		{"missing value", []string{"stats", "--account"}, "", nil, true},
+		{"empty attached value", []string{"--account=", "stats"}, "", nil, true},
+		{"value withheld by a separator", []string{"--account", "--", "stats"}, "", nil, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, rest, err := extractAccountFlag(tc.args)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("extractAccountFlag(%v) = %q, want error", tc.args, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("extractAccountFlag(%v): %v", tc.args, err)
+			}
+			if got != tc.want {
+				t.Errorf("name = %q, want %q", got, tc.want)
+			}
+			if !slices.Equal(rest, tc.wantRest) {
+				t.Errorf("rest = %v, want %v", rest, tc.wantRest)
 			}
 		})
 	}
