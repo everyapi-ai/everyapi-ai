@@ -1390,6 +1390,7 @@ claude_inflated_resume = "警告：這個 Claude 工作階段建立時注入了�
 claude_polluted_resume_recovered = "偵測到 Claude 工作階段 %s 於 %s 出現已知輸出污染（受影響的 assistant 訊息 %d 則）。已啟動乾淨的復原工作階段 %s；原始記錄保持不變。"
 claude_polluted_resume_selfrecovered = "工作階段 %s 曾出現已知輸出污染（%s），但其後已自行復原；將原樣恢復該工作階段並啟用回應防護。"
 claude_resume_redirected = "工作階段 %s 先前已完成復原；改為恢復其對應的乾淨復原工作階段 %s。"
+claude_project_permissions_owned = "目前專案的 .claude 設定宣告了 permissions 政策，因此本次啟動會將權限模式交給專案設定，不再套用已儲存的危險模式偏好。若僅本次需要略過權限確認，請在 `--` 之後明確傳入 --dangerously-skip-permissions。"
 sanitizer_warn = "警告：去敏代理未能啟動（%v）。\n"
 fallback_direct = "已回退到直連模式 — 流量將直接抵達 %s，不經過隱私過濾。\n"
 fallback_hint = "移除 --sanitize 即預設直連（不再有此提示）；或執行 'everyapi proxy start' 排查。\n\n"

@@ -1416,6 +1416,7 @@ claude_inflated_resume = "警告: この Claude セッションは、%d トー�
 claude_polluted_resume_recovered = "Claude セッション %s の %s で既知の出力汚染を検出しました（影響を受けた assistant メッセージ: %d 件）。クリーンな復旧セッション %s を開始しました。元の履歴は変更されていません。"
 claude_polluted_resume_selfrecovered = "セッション %s には過去に既知の出力汚染（%s）がありましたが、その後自力で回復しています。セッションはそのまま再開し、応答ガードを有効にします。"
 claude_resume_redirected = "セッション %s は以前に復旧済みです。対応するクリーンな復旧セッション %s を代わりに再開します。"
+claude_project_permissions_owned = "このプロジェクトの .claude 設定が permissions ポリシーを定義しているため、今回の起動では権限モードをプロジェクト設定に委ね、保存済みの危険モード設定は適用しません。今回だけ権限確認を省略する場合は、`--` の後に --dangerously-skip-permissions を明示的に渡してください。"
 sanitizer_warn = "警告: サニタイザプロキシが起動しませんでした (%v)。\n"
 fallback_direct = "直接モードにフォールバックします — トラフィックはプライバシーフィルタを通らずに %s に到達します。\n"
 fallback_hint = "--sanitize を外せば既定の直接接続になり、この警告は表示されません。デバッグは 'everyapi proxy start'。\n\n"

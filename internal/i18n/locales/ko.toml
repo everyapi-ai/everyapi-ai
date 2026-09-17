@@ -1413,6 +1413,7 @@ claude_inflated_resume = "경고: 이 Claude 세션은 %d 토큰으로 부풀려
 claude_polluted_resume_recovered = "Claude 세션 %s의 %s에서 알려진 출력 오염을 감지했습니다(영향받은 assistant 메시지 %d개). 깨끗한 복구 세션 %s을 시작했으며 원본 기록은 변경하지 않았습니다."
 claude_polluted_resume_selfrecovered = "세션 %s에서 과거에 알려진 출력 오염(%s)이 있었지만 이후 자체적으로 복구되었습니다. 세션을 그대로 재개하고 응답 가드를 활성화합니다."
 claude_resume_redirected = "세션 %s은 이전에 복구되었습니다. 해당하는 깨끗한 복구 세션 %s을 대신 재개합니다."
+claude_project_permissions_owned = "이 프로젝트의 .claude 설정이 permissions 정책을 정의하므로, 이번 실행은 권한 모드를 프로젝트 설정에 맡기고 저장된 위험 모드 환경설정을 적용하지 않습니다. 이번 실행에서만 권한 확인을 건너뛰려면 `--` 뒤에 --dangerously-skip-permissions를 직접 전달하세요."
 sanitizer_warn = "경고: 새너타이저 프록시가 시작되지 않음 (%v).\n"
 fallback_direct = "직접 모드로 대체 — 트래픽이 프라이버시 필터 없이 %s 에 도달합니다.\n"
 fallback_hint = "--sanitize 를 빼면 기본 직접 연결이 되어 이 경고가 표시되지 않습니다. 디버그는 'everyapi proxy start'.\n\n"

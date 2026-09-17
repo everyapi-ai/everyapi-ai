@@ -530,7 +530,12 @@ func use(args []string, persistModelSelection bool) error {
 
 	// Dangerous-mode prompt. Each tool exposes a single "skip every confirmation" switch — an argv flag (Tool.YoloFlag, claude/codex/gemini/grok) or an env var (Tool.YoloEnv, hermes' HERMES_YOLO_MODE). If the user hasn't already passed the flag via `-- <flags>`, use the persisted choice or ask once on a TTY. The prompt defaults to YES, but the mode stays disabled until the user confirms and the choice is saved.
 	yoloAlreadyPassed := t.YoloFlag != "" && containsFlag(extraArgs, t.YoloFlag)
-	if (t.YoloFlag != "" || t.YoloEnv != "") && !yoloAlreadyPassed && toolAllowsAutomaticYolo(t, extraArgs) {
+	// A project that states its own permissions policy keeps it: EveryAPI's dangerous-mode preference is global, and injecting the bypass would disarm that policy from outside the project. Said out loud whenever a flag was actually withheld, because a user who answered yes once expects it and would otherwise read its absence as the preference having been lost.
+	projectOwnsPermissionMode := claudeOwnsPermissionMode(t, extraArgs) && !yoloAlreadyPassed
+	if projectOwnsPermissionMode && announceProjectOwnedPermissionMode(extraArgs, settings.DangerousMode, interactive) {
+		cliout.Printf("%s\n", i18n.T("use.claude_project_permissions_owned"))
+	}
+	if (t.YoloFlag != "" || t.YoloEnv != "") && !yoloAlreadyPassed && !projectOwnsPermissionMode && toolAllowsAutomaticYolo(t, extraArgs) {
 		enable, perr := resolveLaunchPreference(
 			settings.DangerousMode,
 			interactive,
@@ -1007,27 +1012,35 @@ func launchNativeTool(t *tools.Tool, args []string) error {
 		if err != nil {
 			return err
 		}
-		enable, err := resolveLaunchPreference(
-			settings.DangerousMode,
-			cliprompt.IsInteractive(),
-			func() (bool, error) {
-				return cliprompt.YesNo(
-					bufio.NewReader(os.Stdin),
-					fmt.Sprintf(i18n.T("use.yolo_prompt"), t.YoloLabel),
-					true,
-				)
-			},
-			func(value bool) error {
-				settings.DangerousMode = boolPointer(value)
-				return config.SaveSettings(settings)
-			},
-		)
-		if err != nil {
-			return err
-		}
-		// Same wrapper hazard as the relayed path: probe before prepending.
-		if enable && tools.NewFlagProbe(t).Accepts(t.YoloFlag) {
-			args = append([]string{t.YoloFlag}, args...)
+		interactive := cliprompt.IsInteractive()
+		// Same project-owned permissions rule as the relayed path above: the native launch reaches the same globally stored preference, so it has to yield to a project policy the same way. No native tool is named "claude" today, so this only arms the rule for one that later is.
+		if claudeOwnsPermissionMode(t, args) {
+			if announceProjectOwnedPermissionMode(args, settings.DangerousMode, interactive) {
+				cliout.Printf("%s\n", i18n.T("use.claude_project_permissions_owned"))
+			}
+		} else {
+			enable, err := resolveLaunchPreference(
+				settings.DangerousMode,
+				interactive,
+				func() (bool, error) {
+					return cliprompt.YesNo(
+						bufio.NewReader(os.Stdin),
+						fmt.Sprintf(i18n.T("use.yolo_prompt"), t.YoloLabel),
+						true,
+					)
+				},
+				func(value bool) error {
+					settings.DangerousMode = boolPointer(value)
+					return config.SaveSettings(settings)
+				},
+			)
+			if err != nil {
+				return err
+			}
+			// Same wrapper hazard as the relayed path: probe before prepending.
+			if enable && tools.NewFlagProbe(t).Accepts(t.YoloFlag) {
+				args = append([]string{t.YoloFlag}, args...)
+			}
 		}
 	}
 	cliout.Printf("%s\n", nativeLaunchNotice(t))

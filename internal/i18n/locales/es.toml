@@ -1426,6 +1426,7 @@ claude_inflated_resume = "Advertencia: esta sesión de Claude se creó con un pr
 claude_polluted_resume_recovered = "Se detectó una corrupción conocida de la salida de Claude en la sesión %s a las %s (%d mensajes del asistente afectados). Se inició la sesión de recuperación limpia %s; el historial original se conservó sin cambios."
 claude_polluted_resume_selfrecovered = "La sesión %s contiene una corrupción de salida de Claude conocida en el pasado (a las %s), pero se recuperó por sí sola; se reanuda sin cambios con la protección de respuestas activada."
 claude_resume_redirected = "La sesión %s ya fue recuperada anteriormente; se reanuda en su lugar su sesión de recuperación limpia %s."
+claude_project_permissions_owned = "La configuración .claude de este proyecto define una política de permissions, por lo que este lanzamiento deja el modo de permisos en manos del proyecto y no aplica la preferencia de modo peligroso guardada. Para omitir los permisos solo en este lanzamiento, pasa --dangerously-skip-permissions después de `--`."
 sanitizer_warn = "Aviso: el proxy sanitizador no arrancó (%v).\n"
 fallback_direct = "Cayendo a modo directo — tu tráfico llegará a %s sin el filtro de privacidad.\n"
 fallback_hint = "Omite --sanitize para una conexión directa sin este aviso, o 'everyapi proxy start' para depurar.\n\n"

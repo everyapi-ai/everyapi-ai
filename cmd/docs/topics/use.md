@@ -102,6 +102,8 @@ Tools with a model-environment contract — Gemini, Aider, Goose, Crush, Cline, 
 
 Claude Code, Codex, OpenCode, and Grok are the four clients whose answer is remembered per tool in `settings.json` and reused on the next launch without asking again. They are only asked on the first launch, or when the remembered model stops being routable for the current key and group — a key that moved group, or a model the account lost. Pass a bare `--model` with no value to reopen the picker deliberately; that is also where the greyed-out unavailable entries are visible. The model-environment tools listed above remember nothing and open their picker on every interactive launch, so `--model <id>` remains the way to pin one for them.
 
+Claude Code's own configuration outranks that remembered answer. A launch reaches the client through argv, and argv outranks every settings file, so the CLI checks whether the project has already chosen a model before injecting one: a `.claude/settings.json` or `.claude/settings.local.json` in the working directory that sets the top-level `model` field, or sets `ANTHROPIC_MODEL` or one of the `ANTHROPIC_DEFAULT_*_MODEL` family redirects in its `env` block, keeps ownership of the boot model and no `--model` is added. The same applies to `--resume`, `--continue`, and an explicit `--model` or `--settings` of your own.
+
 ## Reasoning level
 
 `everyapi use codex` and `everyapi use pi` ask which reasoning level to launch at, once, then reuse the answer. A bare `--model` reopens that step along with the model picker, since the levels on offer belong to the model.
@@ -111,6 +113,8 @@ The two are gated differently because they know different things. Codex reads th
 ## Safety preferences
 
 On the first interactive launch the CLI asks whether to enable dangerous mode, and for Codex whether to bypass hook trust review. The answers are saved in `settings.json` and reused without prompting. The prompt defaults to Yes, but nothing dangerous is enabled before you confirm. Change them later with `everyapi settings set dangerous_mode false` / `codex_hook_trust_bypass false`.
+
+That saved answer is global, so it does not reach into a Claude Code project that states its own policy. When the working directory's `.claude/settings.json` or `.claude/settings.local.json` carries a non-empty `permissions` block — or when you pass `--permission-mode` yourself — the launch leaves the permission mode alone rather than prepending `--dangerously-skip-permissions`, because that flag bypasses the project's rules instead of merging with them. A settings-owned mode says so on the way past, since the flag you would otherwise have got is missing for a reason; a `--permission-mode` you typed needs no such note. Passing the flag explicitly after `--` still works and applies to that launch only.
 
 ## What the launched agent is told
 

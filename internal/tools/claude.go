@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -17,6 +18,22 @@ var claudeFamilies = map[string]claudeFamily{
 	"sonnet": {modelEnv: "ANTHROPIC_DEFAULT_SONNET_MODEL", nameEnv: "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME"},
 	"haiku":  {modelEnv: "ANTHROPIC_DEFAULT_HAIKU_MODEL", nameEnv: "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME"},
 	"fable":  {modelEnv: "ANTHROPIC_DEFAULT_FABLE_MODEL", nameEnv: "ANTHROPIC_DEFAULT_FABLE_MODEL_NAME"},
+}
+
+// claudeModelSelectionEnv is the variable a Claude Code configuration sets to name a session's model outright, as opposed to the per-family variables above which only redirect an alias. It is Claude Code's own variable rather than anything EveryAPI defines, and a project that sets it in the `env` block of its settings has chosen a model exactly as deliberately as one that sets the top-level `model` field.
+const claudeModelSelectionEnv = "ANTHROPIC_MODEL"
+
+// ClaudeModelSelectionEnvKeys names every environment variable through which a Claude Code configuration decides which model a session runs on: the outright selection, plus one alias redirect per family. Sorted, so a caller rendering or diffing the set gets a stable order.
+//
+// It is exported so the launcher can ask whether a project has already chosen a model without keeping a second copy of the family list. That copy is the failure this prevents: a family added to claudeFamilies has to reach that check too, and a hand-maintained list beside it would be one release behind from the day the family ships.
+func ClaudeModelSelectionEnvKeys() []string {
+	keys := make([]string, 0, len(claudeFamilies)+1)
+	keys = append(keys, claudeModelSelectionEnv)
+	for _, spec := range claudeFamilies {
+		keys = append(keys, spec.modelEnv)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // claudeVersion is one catalogue id's position within its family. The generation lives in `segments` (claude-opus-4-5 is 4.5); a trailing YYYYMMDD release stamp lives in `build`, separately, because Anthropic writes it in the same dash-separated position a version segment occupies and it is orders of magnitude larger than any real minor version.
