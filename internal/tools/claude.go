@@ -226,12 +226,63 @@ func compareClaudeVersions(a, b claudeVersion) int {
 	return 1
 }
 
-// prepareClaudeWithModels supplies the family overrides on the injected path. It needs neither the base URL nor the relay key: the overrides carry model ids only.
-func prepareClaudeWithModels(_, _ string, models []Model) (map[string]string, error) {
-	return claudeFamilyDefaultEnv(models), nil
+// claudeContextWindowEnv tells Claude Code how large the launch model's context window is, for the models its own catalogue cannot describe.
+//
+// Claude Code knows the window of the models it ships a table for and nothing else. Since 2.1.x an id outside that table no longer waits for the API to declare a window: the client assumes 200K, enforces it, and prints a notice offering `[1m]` — advice that means nothing for a DeepSeek or GLM model, on an id the user picked from a list EveryAPI served it. The number behind the notice is the real damage: a 128K model auto-compacts at 200K, which is to say never, so the session runs until the gateway rejects it for exceeding the upstream window.
+//
+// CLAUDE_CODE_AUTO_COMPACT_WINDOW is the knob that lands whatever shape the id has. The client reads it before it asks whether it recognises the model at all, so it covers both the launcher's --model (the real upstream id) and the synthetic claude-everyapi-* alias its own /model picker hands back — an alias that looks first-party enough to disqualify every other escape hatch. CLAUDE_CODE_MAX_CONTEXT_TOKENS travels with it because that is the value /context and the status line read; the client honours it only for ids that do not look first-party, so it corrects the display on the --model path and is ignored, harmlessly, on the alias.
+//
+// Only ids Claude Code cannot possibly know carry a number. A claude-* id gets no window from here: the client's table is authoritative there, and pinning one from the catalogue would override the 1M beta (ClaudeBootModelWithContextMarker) back down to whatever number the gateway happens to publish.
+//
+// A launch with nothing to pin BLANKS both variables rather than leaving them alone, for the reason claudeFamilyDefaultEnv blanks a family it cannot serve: mergeEnvRemoving passes every ambient variable through untouched, and this launcher is routinely run from inside another Claude Code session. Left alone, the 128K pinned for a DeepSeek launch would reach the nested `everyapi use claude` that session spawns and cap ITS 1M Opus run at 128K — the exact outcome the claude-* skip above exists to prevent, arrived at from the other side. An empty value reads as unset to the client (verified against 2.1.276: the unknown-model notice comes back), so blanking means "this launch has nothing to say", not "this launch says zero". The cost is the same one the ANTHROPIC_DEFAULT_* blanking already accepts: an export the user keeps in their shell does not survive a launch that has its own answer.
+//
+// The pin is process-wide, which is what makes it land on the alias the client's /model picker hands back — and also means a switch to another model INSIDE the session keeps the launch model's window. A session that starts on a 128K model and switches to Opus 5 compacts at 128K rather than at 200K. That is deliberate: the launch model is the one the session actually runs on, and compacting early costs tokens where the alternative loses the turn.
+func claudeContextWindowEnv(models []Model, bootModel string) map[string]string {
+	// No catalogue is the no-information case (the model-less Prepare path), not a catalogue that happens to describe nothing. Blanking on no information would strip a deliberate export from a launch this function knows nothing about — the same guard, for the same reason, as claudeFamilyDefaultEnv's.
+	if len(models) == 0 {
+		return nil
+	}
+	window := ""
+	if id := strings.TrimSpace(ClaudeCatalogueID(bootModel)); id != "" && !strings.HasPrefix(strings.ToLower(id), "claude-") {
+		for _, model := range models {
+			if strings.TrimSpace(model.ID) != id {
+				continue
+			}
+			// A model the gateway publishes no window for stays unpinned rather than guessed at: the catalogue omits the field when it is unknown, and inventing a number here would be indistinguishable from a verified one at every later reader.
+			if model.ContextWindow > 0 {
+				window = strconv.Itoa(model.ContextWindow)
+			}
+			break
+		}
+	}
+	return map[string]string{
+		"CLAUDE_CODE_AUTO_COMPACT_WINDOW": window,
+		"CLAUDE_CODE_MAX_CONTEXT_TOKENS":  window,
+	}
 }
 
-// prepareClaudeTransparentWithModels is the transparent counterpart. Model ids are public routing information, so the same overrides are safe on a path that must keep the relay key inside the connector process.
-func prepareClaudeTransparentWithModels(models []Model, _ string) (map[string]string, error) {
-	return claudeFamilyDefaultEnv(models), nil
+// claudeLaunchEnv is the overlay both launch paths share: the family overrides, plus the launch model's context window when Claude Code has no way to know it.
+func claudeLaunchEnv(models []Model, bootModel string) map[string]string {
+	env := claudeFamilyDefaultEnv(models)
+	window := claudeContextWindowEnv(models, bootModel)
+	if len(window) == 0 {
+		return env
+	}
+	if env == nil {
+		env = make(map[string]string, len(window))
+	}
+	for key, value := range window {
+		env[key] = value
+	}
+	return env
+}
+
+// prepareClaudeWithModels supplies the overlay on the injected path. It needs neither the base URL nor the relay key: the overrides carry model ids and token counts only.
+func prepareClaudeWithModels(_, _ string, models []Model, bootModel string) (map[string]string, error) {
+	return claudeLaunchEnv(models, bootModel), nil
+}
+
+// prepareClaudeTransparentWithModels is the transparent counterpart. Model ids and their published windows are public routing information, so the same overlay is safe on a path that must keep the relay key inside the connector process.
+func prepareClaudeTransparentWithModels(models []Model, bootModel string) (map[string]string, error) {
+	return claudeLaunchEnv(models, bootModel), nil
 }

@@ -366,8 +366,8 @@ var Registry = map[string]*Tool{
 		YoloLabel:        "skip all permission prompts (--dangerously-skip-permissions)",
 		RequiredEndpoint: "anthropic",
 		transparentEnvFn: transparentStandaloneClaudeEnv,
-		// Both paths pin the family aliases from the launch catalogue. CLAUDE_CODE_USE_GATEWAY below is what makes this necessary — see claudeFamilyDefaultEnv.
-		prepareCatalogFn:            ignoreBootModel(prepareClaudeWithModels),
+		// Both paths pin the family aliases from the launch catalogue, and the launch model's context window when it is one Claude Code has no table for. CLAUDE_CODE_USE_GATEWAY below is what makes the first necessary — see claudeFamilyDefaultEnv and claudeContextWindowEnv.
+		prepareCatalogFn:            prepareClaudeWithModels,
 		prepareTransparentCatalogFn: prepareClaudeTransparentWithModels,
 		envFn: func(apiBase, token string) map[string]string {
 			return map[string]string{

@@ -324,3 +324,74 @@ func TestClaudeCatalogueIDReversesTheMarker(t *testing.T) {
 		}
 	}
 }
+
+// A model outside Claude Code's own table has to be told, or the client assumes 200K for it: a 128K model would then auto-compact only after the gateway has already rejected the request for exceeding the upstream window, and the user is handed a notice that offers "[1m]" for a DeepSeek model.
+func TestClaudeContextWindowEnvPinsAnUnknownModelsWindow(t *testing.T) {
+	models := []Model{{ID: "deepseek-chat", ContextWindow: 128000}, {ID: "claude-opus-5", ContextWindow: 200000}}
+	// Spaced, because cliout.Sanitize strips control bytes off a catalogue id without trimming it — the same shape ClaudeBootModelWithContextMarker has to defend against.
+	got := claudeContextWindowEnv(models, "  deepseek-chat  ")
+	want := map[string]string{
+		"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "128000",
+		"CLAUDE_CODE_MAX_CONTEXT_TOKENS":  "128000",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("claudeContextWindowEnv() = %#v, want %#v", got, want)
+	}
+}
+
+// A launch with nothing to pin has to clear the pin, not skip it: the ambient environment passes through untouched, and this launcher is routinely run from inside another Claude Code session, so the window pinned for an outer 128K launch would otherwise cap the nested 1M Opus run at 128K. An empty value reads as unset to the client.
+func TestClaudeContextWindowEnvClearsWhatItCannotPin(t *testing.T) {
+	models := []Model{{ID: "deepseek-chat"}, {ID: "glm-4.7", ContextWindow: 200000}, {ID: "claude-opus-5", ContextWindow: 200000}}
+	cleared := map[string]string{"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "", "CLAUDE_CODE_MAX_CONTEXT_TOKENS": ""}
+	for name, bootModel := range map[string]string{
+		"claude id, the client's own table wins": "claude-opus-5",
+		"claude id carrying the 1M marker":       "claude-opus-5[1m]",
+		"claude id the sanitizer left spaced":    "  claude-opus-5  ",
+		"no published window":                    "deepseek-chat",
+		"not in the catalogue":                   "kimi-k2",
+		"no boot model at all":                   "",
+	} {
+		if got := claudeContextWindowEnv(models, bootModel); !reflect.DeepEqual(got, cleared) {
+			t.Errorf("claudeContextWindowEnv(%s) = %#v, want the pin cleared", name, got)
+		}
+	}
+}
+
+// No catalogue at all is the no-information case, not a catalogue that describes nothing: blanking there would strip a deliberate export from a launch this code knows nothing about.
+func TestClaudeContextWindowEnvStaysOutOfAModelLessLaunch(t *testing.T) {
+	if got := claudeContextWindowEnv(nil, "deepseek-chat"); got != nil {
+		t.Fatalf("claudeContextWindowEnv(no catalogue) = %#v, want nil", got)
+	}
+}
+
+// The overlay is one map: a launch on an unknown model carries the family overrides AND its window, because the two answer different questions and the client needs both.
+func TestClaudeLaunchEnvCarriesFamiliesAndWindowTogether(t *testing.T) {
+	models := append(modelsFromIDs("claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5", "claude-fable-5"),
+		Model{ID: "deepseek-chat", ContextWindow: 128000})
+	got := claudeLaunchEnv(models, "deepseek-chat")
+	if got["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] != "128000" || got["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] != "128000" {
+		t.Fatalf("claudeLaunchEnv() lost the context window: %#v", got)
+	}
+	if got["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "claude-opus-5" {
+		t.Fatalf("claudeLaunchEnv() lost the family overrides: %#v", got)
+	}
+}
+
+// The wiring is half the fix: the claude entry used to discard the boot model (ignoreBootModel), so no prepare hook could see which model the launch had settled on and the window could not be pinned at all.
+func TestClaudePrepareHooksReceiveTheBootModel(t *testing.T) {
+	tool := Registry["claude"]
+	models := []Model{{ID: "deepseek-chat", ContextWindow: 128000}}
+	injected, err := tool.PrepareWithModels("https://api.everyapi.ai", "sk-test", models, "deepseek-chat")
+	if err != nil {
+		t.Fatalf("PrepareWithModels() error = %v", err)
+	}
+	transparent, err := tool.PrepareTransparentWithModels(models, "deepseek-chat")
+	if err != nil {
+		t.Fatalf("PrepareTransparentWithModels() error = %v", err)
+	}
+	for name, env := range map[string]map[string]string{"injected": injected, "transparent": transparent} {
+		if env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] != "128000" || env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] != "128000" {
+			t.Errorf("%s prepare = %#v, want the launch model's 128000-token window", name, env)
+		}
+	}
+}
