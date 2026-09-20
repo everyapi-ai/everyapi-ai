@@ -1,13 +1,21 @@
 package tools
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-func TestAgentInstructionsAlwaysCarryArtifactDeliveryStandard(t *testing.T) {
+// The default is the one that matters here: `artifact_reports` exists so somebody can decline a
+// behaviour that already shipped, so an untouched settings file has to keep producing exactly what
+// it produced before the setting existed.
+func TestAgentInstructionsCarryArtifactDeliveryStandardByDefault(t *testing.T) {
 	t.Setenv("TMUX", "")
 	t.Setenv(TerminalModeEnvironment, "native")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	instructions := AgentInstructions()
 	for _, required := range []string{
@@ -23,6 +31,65 @@ func TestAgentInstructionsAlwaysCarryArtifactDeliveryStandard(t *testing.T) {
 	}
 	if strings.Contains(instructions, "inside tmux session") {
 		t.Fatalf("native agent instructions contain tmux context: %s", instructions)
+	}
+}
+
+// artifact_reports=false has to remove the standard and nothing else. Declining the report is not
+// declining the CLI capability list or the Computer Use fence — that is what EVERYAPI_NO_AGENT_CONTEXT
+// is for, and collapsing the two would make the narrow switch cost far more than it says it does.
+func TestArtifactReportsSettingRemovesOnlyTheArtifactSection(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		off  bool
+		want bool
+	}{
+		{name: "explicit false drops it", off: true, want: false},
+		{name: "explicit true keeps it", off: false, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("TMUX", "")
+			t.Setenv(TerminalModeEnvironment, "native")
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			enabled := !tc.off
+			if err := config.SaveSettings(&config.Settings{ArtifactReports: &enabled}); err != nil {
+				t.Fatal(err)
+			}
+
+			instructions := AgentInstructions()
+			if got := strings.Contains(instructions, "EveryAPI Artifact delivery standard"); got != tc.want {
+				t.Errorf("artifact standard present = %v, want %v: %s", got, tc.want, instructions)
+			}
+			// The sections the switch must not touch.
+			for _, required := range []string{"EveryAPI CLI", "docs list", "EveryAPI Computer Use", "computer get-app-state"} {
+				if !strings.Contains(instructions, required) {
+					t.Errorf("turning artifact reports off also dropped %q: %s", required, instructions)
+				}
+			}
+			// A dropped section must not leave the remaining ones run together, which is what the separator check downstream relies on.
+			if strings.Contains(instructions, "\n\n\n") {
+				t.Errorf("instructions contain a doubled separator: %q", instructions)
+			}
+		})
+	}
+}
+
+// An unreadable settings file must not silently change launch behaviour — and must never fail the
+// launch either. Enabled is the safe answer: worst case the agent offers a report nobody wanted.
+func TestArtifactReportsSurviveAnUnreadableSettingsFile(t *testing.T) {
+	t.Setenv("TMUX", "")
+	t.Setenv(TerminalModeEnvironment, "native")
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	path := filepath.Join(dir, "everyapi", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(AgentInstructions(), "EveryAPI Artifact delivery standard") {
+		t.Error("a corrupt settings file silently disabled the artifact standard")
 	}
 }
 

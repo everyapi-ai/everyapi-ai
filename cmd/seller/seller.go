@@ -427,7 +427,7 @@ func sellerSetupOAuth(in *bufio.Reader, provider string) error {
 	}
 	defaultModels := map[string]string{
 		"codex":  "gpt-4o,gpt-4o-mini,o1,o1-mini",
-		"claude": "claude-3-5-sonnet-latest,claude-3-opus-latest",
+		"claude": "claude-fable-5,claude-fable-5-1,claude-haiku-4-5,claude-opus-5,claude-sonnet-5",
 		"gemini": "gemini-1.5-pro,gemini-1.5-flash",
 	}[provider]
 	models, err := cliprompt.Line(in, i18n.T("seller.prompt_models"), defaultModels)

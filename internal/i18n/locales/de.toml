@@ -333,6 +333,8 @@ terminal_mode_tmux = "tmux-Sitzung"
 codex_bypass_label = "Codex-Hook-Vertrauen umgehen"
 dangerous_mode_label = "Gefährlicher Modus"
 claude_long_context_label = "Claude 1M Kontext (Opus)"
+artifact_reports_label = "Artefakt-Abschlussberichte"
+artifact_reports_needs_login = "Diese Einstellung erfordert eine vollständige Verwaltungsanmeldung. Führe 'everyapi auth login' aus oder ändere sie auf der Artifacts-Seite im Dashboard."
 bool_on = "an"
 bool_off = "aus"
 usage = '''
@@ -349,6 +351,7 @@ SCHLÜSSEL
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
   terminal_mode                            native | tmux
   claude_long_context                      true | false  (Opus 1M context, default on)
+  artifact_reports                         true | false  (account-wide; agent publishes a completion report, default on)
 
 Die Einstellungsdatei ist einfaches JSON unter dem Pfad, den
 'everyapi settings list' anzeigt. Manuelles Bearbeiten ist in Ordnung;

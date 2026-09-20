@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
+	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
 // codexTestHome redirects ConfigDir() at a fresh tmp dir for one test, by hijacking XDG_CONFIG_HOME (which the SDK's ConfigDir honors first). Returns the resolved CODEX_HOME prepareCodex should produce so the test can assert paths without re-computing the join.
@@ -169,6 +170,34 @@ func TestPrepareCodexAddsArtifactStandardAndOnlyCurrentTmuxContext(t *testing.T)
 	}
 	if strings.Contains(string(body), "You are running inside tmux session") {
 		t.Fatalf("Codex native config retained stale tmux instructions:\n%s", body)
+	}
+}
+
+// The setting has to reach the file the tool actually reads, not just AgentInstructions(). Codex is
+// the strictest of the four surfaces — the text is embedded in a generated config.toml rather than
+// passed as an argument — so a wiring mistake between the preference and the launch shows up here.
+func TestPrepareCodexHonoursTheArtifactReportsSetting(t *testing.T) {
+	_, codexHome := codexTestHome(t)
+	t.Setenv("TMUX", "")
+	t.Setenv(TerminalModeEnvironment, "native")
+	disabled := false
+	if err := config.SaveSettings(&config.Settings{ArtifactReports: &disabled}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prepareCodex("https://api.everyapi.ai", "token"); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(codexHome, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "EveryAPI Artifact delivery standard") {
+		t.Errorf("artifact_reports=false still reached Codex:\n%s", body)
+	}
+	// Declining the report must not cost the capability list — Codex still needs developer_instructions.
+	if !strings.Contains(string(body), "developer_instructions") || !strings.Contains(string(body), "EveryAPI CLI") {
+		t.Errorf("turning artifact reports off dropped the capability list too:\n%s", body)
 	}
 }
 

@@ -319,6 +319,8 @@ terminal_mode_tmux = "tmux 会话"
 codex_bypass_label = "Codex hook 信任绕过"
 dangerous_mode_label = "危险模式"
 claude_long_context_label = "Claude 1M 上下文（Opus）"
+artifact_reports_label = "产物完成报告"
+artifact_reports_needs_login = "该设置需要完整的管理登录。请运行 'everyapi auth login'，或在控制台的 Artifacts 页面修改。"
 bool_on = "开"
 bool_off = "关"
 usage = '''
@@ -335,6 +337,7 @@ KEY
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
   terminal_mode                            native | tmux
   claude_long_context                      true | false  (Opus 1M context, default on)
+  artifact_reports                         true | false  (account-wide; agent publishes a completion report, default on)
 
 设置文件是 'everyapi settings list' 打印的路径上的纯 JSON。可手动编辑；
 CLI 下次启动时会重新读取。

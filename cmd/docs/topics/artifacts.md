@@ -11,6 +11,18 @@ everyapi artifacts delete [--json] <url>
 
 `share` prints the URL. `update` replaces the content behind an existing URL, so a report can be revised without invalidating a link you already handed out. `delete` revokes it immediately. `list` shows what you currently have published, with expiry.
 
+## Turning the automatic report off
+
+The standard tells the agent to publish a report at the end of every task. If you do not want that, decline it once instead of per session:
+
+```
+everyapi settings set artifact_reports false
+```
+
+That removes the instruction from the next launch. It does not disable anything: `everyapi artifacts share` keeps working, and an agent still publishes when you ask it to. Set it back to `true`, or `everyapi settings` and toggle the row, to get the automatic report again.
+
+This is deliberately narrower than `EVERYAPI_NO_AGENT_CONTEXT=1`, which suppresses *all* injected context — the CLI capability list and the Computer Use guidance included — and is the wrong tool for declining just the report.
+
 One file, up to 5 MiB, `.html` or `.htm`. There is no second request for assets — whatever the file does not contain, the reader will not see.
 
 ## How a report is served

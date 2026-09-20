@@ -13,11 +13,17 @@ import (
 	"strings"
 
 	"github.com/everyapi-ai/everyapi-ai/v3/cmd/token"
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/artifactreports"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
+
+// keyArtifactReports is the one settings key whose value does not live in settings.json. Named rather than
+// repeated as a literal because three separate paths have to agree on it — runSet intercepts it, runGet
+// refreshes for it, and writeKey refuses it — and a typo in any of them fails open to the wrong behaviour.
+const keyArtifactReports = "artifact_reports"
 
 func Run(args []string) error {
 	if len(args) == 0 {
@@ -56,6 +62,9 @@ func runList(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	// The artifact switch is account state; a list that printed a week-old cache would be worse than
+	// slow. Bounded and best-effort — an unreachable gateway prints what was last known.
+	artifactreports.Refresh(cliout.WithCtx())
 	s, err := config.LoadSettings()
 	if err != nil {
 		return err
@@ -68,6 +77,7 @@ func runList(args []string) error {
 	cliout.Printf("  %s: %s\n", i18n.T("settings.codex_bypass_label"), displayOptionalBool(s.CodexHookTrustBypass))
 	cliout.Printf("  %s: %s\n", i18n.T("settings.dangerous_mode_label"), displayOptionalBool(s.DangerousMode))
 	cliout.Printf("  %s: %s\n", i18n.T("settings.claude_long_context_label"), displayOptionalBool(s.ClaudeLongContext))
+	cliout.Printf("  %s: %s\n", i18n.T("settings.artifact_reports_label"), displayBool(artifactreports.Enabled()))
 	path, _ := config.SettingsPath()
 	if path != "" {
 		cliout.Printf("\n%s %s\n", i18n.T("settings.file_at"), path)
@@ -78,6 +88,9 @@ func runList(args []string) error {
 func runGet(args []string) error {
 	if len(args) != 1 {
 		return errors.New(i18n.T("settings.usage_get"))
+	}
+	if args[0] == keyArtifactReports {
+		artifactreports.Refresh(cliout.WithCtx())
 	}
 	s, err := config.LoadSettings()
 	if err != nil {
@@ -98,6 +111,13 @@ func runSet(args []string) error {
 		return errors.New(i18n.T("settings.usage_set"))
 	}
 	key, value := args[0], args[1]
+	// artifact_reports lives on the account, not in this file, so it cannot go through the
+	// load / writeKey / save path the local preferences use. Intercepted before that path rather
+	// than inside writeKey because writeKey is a pure struct mutation with no context and no error
+	// channel for "the gateway rejected this".
+	if key == keyArtifactReports {
+		return setArtifactReports(value)
+	}
 	s, err := config.LoadSettings()
 	if err != nil {
 		return err
@@ -172,11 +192,19 @@ func settingRows() []settingRow {
 		{"codex_hook_trust_bypass", i18n.T("settings.codex_bypass_label"), func(s *config.Settings) string { return displayOptionalBool(s.CodexHookTrustBypass) }, editCodexHookTrustBypass},
 		{"dangerous_mode", i18n.T("settings.dangerous_mode_label"), func(s *config.Settings) string { return displayOptionalBool(s.DangerousMode) }, editDangerousMode},
 		{"claude_long_context", i18n.T("settings.claude_long_context_label"), func(s *config.Settings) string { return displayOptionalBool(s.ClaudeLongContext) }, editClaudeLongContext},
+		{"artifact_reports", i18n.T("settings.artifact_reports_label"), func(*config.Settings) string { return displayBool(artifactreports.Enabled()) }, editArtifactReports},
 		{"", i18n.T("settings.default_key_label"), func(*config.Settings) string { return labelDefaultRelayKey() }, editDefaultRelayKey},
 	}
 }
 
 func runInteractive() error {
+	// Same reason runList refreshes, and this is the surface most people actually use: the artifact row
+	// renders account state out of a local cache that only `use` / `list` / `get` ever top up. Without
+	// this, turning the switch off on the dashboard and then opening the editor on another machine shows
+	// the stale answer — and pressing Enter on the preselected option confirms the wrong one. Once per
+	// invocation rather than per menu pass: editArtifactReports writes through, so the loop's reload
+	// already sees every change made from here. Bounded and best-effort, as everywhere else.
+	artifactreports.Refresh(cliout.WithCtx())
 	selected := 0
 	for {
 		// Reload every pass: an editor may have written the file (and the key editor writes credentials.json out from under us), so the menu must re-read rather than render a stale copy of what it just saved.
@@ -306,6 +334,57 @@ func editClaudeLongContext(s *config.Settings) error {
 	return editOptionalBool(s, i18n.T("settings.claude_long_context_label"), s.ClaudeLongContext, func(v *bool) { s.ClaudeLongContext = v })
 }
 
+// Two states, not the tri-state its neighbours use: this one is account state, and an account always has
+// an answer. "Unset" would be offering to forget a value that lives somewhere else and would come straight
+// back on the next sync.
+//
+// Writes through to the account rather than to the struct the caller handed us, which is why it ignores s
+// entirely — the row's value renderer reads the cache that artifactreports.Set refreshes.
+func editArtifactReports(*config.Settings) error {
+	opts := []string{i18n.T("settings.bool_on"), i18n.T("settings.bool_off")}
+	cur := 0
+	if !artifactreports.Enabled() {
+		cur = 1
+	}
+	idx, err := cliprompt.PickWithSelected(i18n.T("settings.artifact_reports_label"), opts, cur)
+	if err != nil {
+		return err
+	}
+	if err := artifactReportsWrite(idx == 0); err != nil {
+		return err
+	}
+	cliout.Println(i18n.T("settings.saved"))
+	return nil
+}
+
+// setArtifactReports is the `settings set artifact_reports <bool>` path.
+func setArtifactReports(value string) error {
+	enabled, err := strconv.ParseBool(strings.TrimSpace(value))
+	if err != nil {
+		return fmt.Errorf("%s must be true or false", keyArtifactReports)
+	}
+	if err := artifactReportsWrite(enabled); err != nil {
+		return err
+	}
+	cliout.Println(i18n.T("settings.saved"))
+	return nil
+}
+
+// artifactReportsWrite pushes the choice to the account, translating the one failure a user can act on.
+//
+// A missing management session is its own message on purpose. The generic transport error would read as
+// "the network failed", and the fix — log in, or use the dashboard — is nothing like the fix for a network
+// failure. It says "needs a full management login" rather than "not signed in" because ErrNoSession also
+// covers an OAuth2 relay-key login, which IS signed in: telling that user they are not would send them to
+// re-run the flow that produced this exact state (see the same warning in status.go and topup.go).
+func artifactReportsWrite(enabled bool) error {
+	err := artifactreports.Set(cliout.WithCtx(), enabled)
+	if errors.Is(err, artifactreports.ErrNoSession) {
+		return errors.New(i18n.T("settings.artifact_reports_needs_login"))
+	}
+	return err
+}
+
 // editOptionalBool keeps the third state. These preferences distinguish "not set" (ask on first interactive use) from an explicit false, so the editor has to offer unset as a choice rather than collapsing it into off.
 func editOptionalBool(s *config.Settings, label string, current *bool, apply func(*bool)) error {
 	opts := []string{i18n.T("settings.bool_on"), i18n.T("settings.bool_off"), i18n.T("settings.unset")}
@@ -376,6 +455,12 @@ func readKey(s *config.Settings, key string) (string, bool) {
 		return labelOptionalBool(s.DangerousMode), true
 	case "claude_long_context":
 		return labelOptionalBool(s.ClaudeLongContext), true
+	case keyArtifactReports:
+		// The EFFECTIVE value, not the raw cache. Its neighbours are tri-state because "not chosen yet" is
+		// a state their first interactive use resolves; this one is account state with only two positions,
+		// offered as two positions by its editor, and every launch behaves as one of them. Printing "unset"
+		// because the cache has never been filled would report a third state nothing can be in.
+		return strconv.FormatBool(artifactreports.Enabled()), true
 	}
 	return "", false
 }
@@ -420,20 +505,31 @@ func writeKey(s *config.Settings, key, value string) error {
 		}
 		s.TerminalMode = v
 		return nil
+	case keyArtifactReports:
+		// Reached only if a future caller routes around runSet, which intercepts this key. Saying so beats
+		// the "unknown setting key" this would otherwise fall through to — the key is real, the path is wrong.
+		return fmt.Errorf("%s is stored on your account; set it with 'everyapi settings set %s <true|false>'", keyArtifactReports, keyArtifactReports)
 	case "codex_hook_trust_bypass", "dangerous_mode", "claude_long_context":
 		v, err := strconv.ParseBool(strings.TrimSpace(value))
 		if err != nil {
 			return fmt.Errorf("%s must be true or false", key)
 		}
+		// Every key spelled out, no default: the outer case list and this switch have to be kept in step
+		// by hand, and a default silently routes a key added to only one of them into whichever field the
+		// default names — here that would have been the Codex hook-trust bypass, i.e. `settings set
+		// <new_key> true` quietly disabling a safety review. An unhandled key falls through to the
+		// unknown-key error below instead.
 		switch key {
 		case "codex_hook_trust_bypass":
 			s.CodexHookTrustBypass = &v
+			return nil
 		case "dangerous_mode":
 			s.DangerousMode = &v
-		default:
+			return nil
+		case "claude_long_context":
 			s.ClaudeLongContext = &v
+			return nil
 		}
-		return nil
 	}
 	return fmt.Errorf(i18n.T("settings.unknown_key"), key)
 }
@@ -444,6 +540,12 @@ func labelOptionalBool(value *bool) string {
 		return "unset"
 	}
 	return strconv.FormatBool(*value)
+}
+
+// displayBool is displayOptionalBool for a value that has no third state — the account-backed switch, which
+// is always either on or off no matter what the local cache does or does not hold.
+func displayBool(value bool) string {
+	return displayOptionalBool(&value)
 }
 
 // displayOptionalBool is the HUMAN form for the list and the editor, where "true" next to a translated label was the only English left on the screen.

@@ -154,7 +154,10 @@ func TestTerminalModeWriteReadRoundTrip(t *testing.T) {
 	}
 }
 
-func TestSafetyPreferencesWriteReadRoundTrip(t *testing.T) {
+// Every tri-state key, not just the safety pair this started as: they share one writeKey branch, so
+// a key added to that branch without a readKey case reads back as "unknown setting" from `settings get`
+// while `settings set` cheerfully accepts it.
+func TestOptionalBooleanPreferencesWriteReadRoundTrip(t *testing.T) {
 	s := &config.Settings{}
 	for _, key := range []string{"codex_hook_trust_bypass", "dangerous_mode", "claude_long_context"} {
 		if got, ok := readKey(s, key); !ok || got != "unset" {
@@ -178,9 +181,32 @@ func TestSafetyPreferencesWriteReadRoundTrip(t *testing.T) {
 	}
 }
 
+// artifact_reports is the one key writeKey must NOT write: it lives on the account, and a local write
+// would leave this machine disagreeing with the dashboard and with every other machine. The refusal has
+// to name the right command, because the key IS real — falling through to "unknown setting key" would
+// send someone looking for a typo they did not make.
+func TestWriteKeyRefusesTheAccountBackedKey(t *testing.T) {
+	s := &config.Settings{}
+	err := writeKey(s, "artifact_reports", "false")
+	if err == nil {
+		t.Fatal("writeKey wrote an account-backed setting into the local file")
+	}
+	if !strings.Contains(err.Error(), "everyapi settings set artifact_reports") {
+		t.Errorf("error does not point at the supported command: %v", err)
+	}
+	if s.ArtifactReports != nil {
+		t.Error("the refused write still mutated the local settings struct")
+	}
+	// readKey still has to answer for it, and with the EFFECTIVE value: this key has two positions, not
+	// the three its neighbours have, so an empty cache reads as the shipped default rather than "unset".
+	if got, ok := readKey(&config.Settings{}, "artifact_reports"); !ok || got != "true" {
+		t.Errorf("readKey(artifact_reports) = %q,%v; want true,true", got, ok)
+	}
+}
+
 // The editor is the only surface most people ever see, and it used to ask two hard-coded questions — so gateway_region, codex_hook_trust_bypass and dangerous_mode existed in the file, in `settings set`, and in `settings list`, but were invisible and unreachable there. Tie the two together: every key writeKey accepts has to have a row.
 func TestSettingRowsCoverEverySettingsKey(t *testing.T) {
-	keys := []string{"language", "menu_layout", "gateway_region", "terminal_mode", "codex_hook_trust_bypass", "dangerous_mode", "claude_long_context"}
+	keys := []string{"language", "menu_layout", "gateway_region", "terminal_mode", "codex_hook_trust_bypass", "dangerous_mode", "claude_long_context", "artifact_reports"}
 	rows := settingRows()
 	rowKeys := make(map[string]bool, len(rows))
 	for _, row := range rows {
@@ -272,8 +298,8 @@ func TestEditorMenuRendersEveryRow(t *testing.T) {
 		lines = append(lines, line)
 	}
 	lines = append(lines, i18n.T("settings.done"))
-	if len(lines) != 9 {
-		t.Fatalf("menu has %d lines, want 8 settings plus Done", len(lines))
+	if len(lines) != 10 {
+		t.Fatalf("menu has %d lines, want 9 settings plus Done", len(lines))
 	}
 	// The value column has to show what is in effect, not the raw field: an unset tri-state reads "unset", not "false".
 	if got := lines[2]; got != "Gateway region: cn" {
@@ -291,7 +317,12 @@ func TestEditorMenuRendersEveryRow(t *testing.T) {
 	if got := lines[6]; got != "Claude 1M context (Opus): unset" {
 		t.Errorf("claude long context rendered as %q", got)
 	}
-	if got := lines[7]; got != "Default API key: not set" {
+	// "on", not "unset": the row's editor offers two positions, so a third one in the value column would
+	// name a state nothing can be in. The others keep their tri-state because theirs is a real state.
+	if got := lines[7]; got != "Artifact completion reports: on" {
+		t.Errorf("artifact reports rendered as %q", got)
+	}
+	if got := lines[8]; got != "Default API key: not set" {
 		t.Errorf("relay key row rendered as %q", got)
 	}
 	t.Log("interactive editor:\n  " + strings.Join(lines, "\n  "))

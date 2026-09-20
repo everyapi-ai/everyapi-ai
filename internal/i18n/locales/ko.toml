@@ -329,6 +329,8 @@ terminal_mode_tmux = "tmux 세션"
 codex_bypass_label = "Codex 훅 신뢰 건너뛰기"
 dangerous_mode_label = "위험 모드"
 claude_long_context_label = "Claude 1M 컨텍스트 (Opus)"
+artifact_reports_label = "아티팩트 완료 보고서"
+artifact_reports_needs_login = "이 설정에는 전체 관리 로그인이 필요합니다. 'everyapi auth login'을 실행하거나 대시보드의 Artifacts 페이지에서 변경하세요."
 bool_on = "켬"
 bool_off = "끔"
 usage = '''
@@ -345,6 +347,7 @@ everyapi settings — CLI 환경설정 조회 / 변경
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
   terminal_mode                            native | tmux
   claude_long_context                      true | false  (Opus 1M context, default on)
+  artifact_reports                         true | false  (account-wide; agent publishes a completion report, default on)
 
 설정 파일은 'everyapi settings list' 가 출력하는 경로의 일반 JSON 입니다.
 수동 편집 가능하며, CLI 는 다음 실행 시 다시 읽습니다.

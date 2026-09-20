@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/artifactreports"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
@@ -85,7 +86,7 @@ enable dangerous mode (and, for Codex, whether to bypass hook trust review).
 Your choices are saved in settings.json and reused without prompting. The
 prompt defaults to Yes, but no dangerous option is enabled before you confirm.
 
-Terminal preference: the first interactive launch asks whether to use the native terminal or a persistent tmux session, then saves 'terminal_mode' in settings.json. Tmux launches expose the session name and attach command to every client. Codex, Claude Code, OpenCode, and Kilo receive the EveryAPI Artifact delivery standard on every launch, plus proactive tmux context when applicable. A bare Codex resume reattaches the sole live tmux session for the same project instead of starting a duplicate; dead EveryAPI sessions are pruned before launch. A non-interactive launch always uses the native terminal. Change it later with 'everyapi settings set terminal_mode native|tmux'.
+Terminal preference: the first interactive launch asks whether to use the native terminal or a persistent tmux session, then saves 'terminal_mode' in settings.json. Tmux launches expose the session name and attach command to every client. Codex, Claude Code, OpenCode, and Kilo receive the EveryAPI Artifact delivery standard on every launch — turn it off with 'everyapi settings set artifact_reports false', which stops the agent publishing a completion report on its own without disabling 'everyapi artifacts' — plus proactive tmux context when applicable. A bare Codex resume reattaches the sole live tmux session for the same project instead of starting a duplicate; dead EveryAPI sessions are pruned before launch. A non-interactive launch always uses the native terminal. Change it later with 'everyapi settings set terminal_mode native|tmux'.
 
 EXAMPLES
   everyapi use claude                  (transparent by default)
@@ -235,6 +236,11 @@ func use(args []string, persistModelSelection bool) error {
 	if err := relaunchUseInTerminal(args); err != nil {
 		return err
 	}
+
+	// Top the account switch up once per launch, before anything reads it. Placed after the terminal
+	// relaunch so a tmux launch pays for it in the child that actually builds the tool config, not twice.
+	// Best-effort and bounded: see internal/artifactreports.
+	artifactreports.Refresh(cliout.WithCtx())
 
 	// The gateway to dial: settings.gateway_region is applied here (not just at login) so `everyapi settings set gateway_region cn/global` takes effect without a re-login. creds.APIBase stays the login value — login is its only author — so the RelayKey cache Save below never rewrites the stored api_base. A self-hosted --api-base survives because ResolveAPIBaseForBase returns a non-official creds base as-is.
 	gw := config.ResolveAPIBaseForBase(creds.APIBase)

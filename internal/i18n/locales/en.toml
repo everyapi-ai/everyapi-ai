@@ -320,6 +320,8 @@ terminal_mode_tmux = "tmux session"
 codex_bypass_label = "Codex hook trust bypass"
 dangerous_mode_label = "Dangerous mode"
 claude_long_context_label = "Claude 1M context (Opus)"
+artifact_reports_label = "Artifact completion reports"
+artifact_reports_needs_login = "This setting needs a full management login. Run 'everyapi auth login', or change it on the dashboard's Artifacts page."
 bool_on = "on"
 bool_off = "off"
 usage = '''
@@ -336,6 +338,7 @@ KEYS
   language                                 en | zh | zh-TW | ja | ko | es | de | fr
   terminal_mode                            native | tmux
   claude_long_context                      true | false  (Opus 1M context, default on)
+  artifact_reports                         true | false  (account-wide; agent publishes a completion report, default on)
 
 The settings file is plain JSON at the path 'everyapi settings list'
 prints. Hand-editing is fine; the CLI re-reads on next invocation.
