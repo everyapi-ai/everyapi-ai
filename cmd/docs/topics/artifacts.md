@@ -19,7 +19,7 @@ The standard tells the agent to publish a report at the end of every task. If yo
 everyapi settings set artifact_reports false
 ```
 
-That removes the instruction from the next launch. It does not disable anything: `everyapi artifacts share` keeps working, and an agent still publishes when you ask it to. Set it back to `true`, or `everyapi settings` and toggle the row, to get the automatic report again.
+Agents read this account setting immediately before publishing, so the change applies to sessions that are already running as well as future launches. Only a successful live `true` permits an automatic report; if the preference cannot be read, the agent skips it rather than risk ignoring an opt-out. This does not disable anything: `everyapi artifacts share` keeps working, and an agent still publishes when you ask it to. Set it back to `true`, or use `everyapi settings` and toggle the row, to get the automatic report again.
 
 This is deliberately narrower than `EVERYAPI_NO_AGENT_CONTEXT=1`, which suppresses *all* injected context — the CLI capability list and the Computer Use guidance included — and is the wrong tool for declining just the report.
 

@@ -1,12 +1,73 @@
 package settings
 
 import (
+	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliout"
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/i18n"
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
+
+func TestRunGetArtifactReportsUsesOnlyALiveAnswer(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		body    string
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "live false replaces cached true",
+			body: `{"success":true,"data":{"id":7,"artifact_reports":false}}`,
+			want: "false\n",
+		},
+		{
+			name:    "gateway rejection does not print cached true",
+			body:    `{"success":false,"message":"unavailable"}`,
+			wantErr: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			t.Cleanup(server.Close)
+
+			if err := config.Save(&config.Credentials{
+				APIBase:     server.URL,
+				AccessToken: "token",
+				RelayKey:    "sk-everyapi-test",
+				UserID:      7,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			settings := &config.Settings{}
+			settings.SetArtifactReportsCache(true, 7, time.Now())
+			if err := config.SaveSettings(settings); err != nil {
+				t.Fatal(err)
+			}
+
+			var out bytes.Buffer
+			previous := cliout.Out
+			cliout.Out = &out
+			t.Cleanup(func() { cliout.Out = previous })
+
+			err := runGet([]string{keyArtifactReports})
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("runGet error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if got := out.String(); got != tc.want {
+				t.Fatalf("stdout = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
 
 // TestWriteKey covers the validation centralised in writeKey — the actual disk roundtrip is config's responsibility, tested there; we just make sure the dispatcher refuses garbage before the file is touched.
 func TestWriteKey(t *testing.T) {

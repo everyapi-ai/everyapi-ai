@@ -173,10 +173,9 @@ func TestPrepareCodexAddsArtifactStandardAndOnlyCurrentTmuxContext(t *testing.T)
 	}
 }
 
-// The setting has to reach the file the tool actually reads, not just AgentInstructions(). Codex is
-// the strictest of the four surfaces — the text is embedded in a generated config.toml rather than
-// passed as an argument — so a wiring mistake between the preference and the launch shows up here.
-func TestPrepareCodexHonoursTheArtifactReportsSetting(t *testing.T) {
+// Codex embeds the standard in a generated config.toml. It must keep the live gate even when the cached
+// preference is false, otherwise a dashboard change cannot affect this running agent in either direction.
+func TestPrepareCodexReadsTheArtifactReportsSettingAtCompletion(t *testing.T) {
 	_, codexHome := codexTestHome(t)
 	t.Setenv("TMUX", "")
 	t.Setenv(TerminalModeEnvironment, "native")
@@ -192,8 +191,9 @@ func TestPrepareCodexHonoursTheArtifactReportsSetting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(body), "EveryAPI Artifact delivery standard") {
-		t.Errorf("artifact_reports=false still reached Codex:\n%s", body)
+	if !strings.Contains(string(body), "EveryAPI Artifact delivery standard") ||
+		!strings.Contains(string(body), "settings get artifact_reports") {
+		t.Errorf("Codex config lost the live artifact preference gate:\n%s", body)
 	}
 	// Declining the report must not cost the capability list — Codex still needs developer_instructions.
 	if !strings.Contains(string(body), "developer_instructions") || !strings.Contains(string(body), "EveryAPI CLI") {

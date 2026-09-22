@@ -22,6 +22,9 @@ func TestAgentInstructionsCarryArtifactDeliveryStandardByDefault(t *testing.T) {
 		"EveryAPI Artifact delivery standard",
 		"Summary, Deliverables, Verification, and Follow-ups",
 		"EVERYAPI_CLI_PATH",
+		"settings get artifact_reports",
+		"only when that command succeeds and its trimmed output is exactly `true`",
+		"fails, or returns anything else, do not publish automatically",
 		"artifacts share <report.html> --json",
 		"never invent a link",
 	} {
@@ -34,17 +37,15 @@ func TestAgentInstructionsCarryArtifactDeliveryStandardByDefault(t *testing.T) {
 	}
 }
 
-// artifact_reports=false has to remove the standard and nothing else. Declining the report is not
-// declining the CLI capability list or the Computer Use fence — that is what EVERYAPI_NO_AGENT_CONTEXT
-// is for, and collapsing the two would make the narrow switch cost far more than it says it does.
-func TestArtifactReportsSettingRemovesOnlyTheArtifactSection(t *testing.T) {
+// The standard itself is always present so a running agent can observe either direction of a dashboard
+// change. The account value gates publication at task completion rather than freezing the choice at launch.
+func TestArtifactReportsSettingIsReadLiveInsteadOfFrozenAtLaunch(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		off  bool
-		want bool
 	}{
-		{name: "explicit false drops it", off: true, want: false},
-		{name: "explicit true keeps it", off: false, want: true},
+		{name: "cached false", off: true},
+		{name: "cached true", off: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("TMUX", "")
@@ -56,14 +57,17 @@ func TestArtifactReportsSettingRemovesOnlyTheArtifactSection(t *testing.T) {
 			}
 
 			instructions := AgentInstructions()
-			if got := strings.Contains(instructions, "EveryAPI Artifact delivery standard"); got != tc.want {
-				t.Errorf("artifact standard present = %v, want %v: %s", got, tc.want, instructions)
+			if !strings.Contains(instructions, "EveryAPI Artifact delivery standard") {
+				t.Errorf("artifact standard was frozen out at launch: %s", instructions)
 			}
-			// The sections the switch must not touch.
+			// The live gate and unrelated sections must all reach the launched agent.
 			for _, required := range []string{"EveryAPI CLI", "docs list", "EveryAPI Computer Use", "computer get-app-state"} {
 				if !strings.Contains(instructions, required) {
 					t.Errorf("turning artifact reports off also dropped %q: %s", required, instructions)
 				}
+			}
+			if !strings.Contains(instructions, "settings get artifact_reports") {
+				t.Error("the live preference read did not reach the launched agent")
 			}
 			// A dropped section must not leave the remaining ones run together, which is what the separator check downstream relies on.
 			if strings.Contains(instructions, "\n\n\n") {

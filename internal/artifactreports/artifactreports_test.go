@@ -81,9 +81,9 @@ func TestRefreshCachesTheAccountValue(t *testing.T) {
 	}
 }
 
-// The TTL is the whole reason a launch does not pay for a round-trip every time. Without this the
-// refresh would be correct and still unshippable.
-func TestRefreshSkipsTheGatewayWhileTheCacheIsFresh(t *testing.T) {
+// The dashboard changes the account without touching this machine's settings.json. Even a fresh local
+// cache must therefore be ignored by an explicit live read.
+func TestGetReconcilesAFreshCacheWithTheAccount(t *testing.T) {
 	calls := 0
 	server := selfServer(t, `{"success":true,"data":{"id":1,"artifact_reports":true}}`, &calls)
 	login(t, server.URL)
@@ -94,34 +94,41 @@ func TestRefreshSkipsTheGatewayWhileTheCacheIsFresh(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	Refresh(context.Background())
-
-	if calls != 0 {
-		t.Fatalf("gateway calls = %d, want 0 while the cache is fresh", calls)
+	got, err := Get(context.Background())
+	if err != nil {
+		t.Fatal(err)
 	}
-	if Enabled() {
-		t.Error("a fresh cache was overwritten")
+
+	if calls != 1 {
+		t.Fatalf("gateway calls = %d, want 1 for the live read", calls)
+	}
+	if !got {
+		t.Error("Get returned the stale cached value")
+	}
+	if !Enabled() {
+		t.Error("the account value did not replace the fresh local cache")
 	}
 }
 
-func TestRefreshExpiresTheCache(t *testing.T) {
-	calls := 0
-	server := selfServer(t, `{"success":true,"data":{"id":1,"artifact_reports":true}}`, &calls)
+func TestGetFailsClosedWhenTheAccountCannotAnswer(t *testing.T) {
+	server := selfServer(t, `{"success":false,"message":"unavailable"}`, nil)
 	login(t, server.URL)
 
 	settings := loadSettings(t)
-	settings.SetArtifactReportsCache(false, testAccountID, time.Now().Add(-2*config.ArtifactReportsCacheTTL))
+	settings.SetArtifactReportsCache(true, testAccountID, time.Now())
 	if err := config.SaveSettings(settings); err != nil {
 		t.Fatal(err)
 	}
 
-	Refresh(context.Background())
-
-	if calls != 1 {
-		t.Fatalf("gateway calls = %d, want 1 once the cache has expired", calls)
+	got, err := Get(context.Background())
+	if err == nil {
+		t.Fatal("Get reported a live answer when the account rejected the request")
+	}
+	if got {
+		t.Error("Get authorized an automatic report from the cached true value")
 	}
 	if !Enabled() {
-		t.Error("an expired cache was not replaced by the account value")
+		t.Error("a failed live read discarded the offline fallback cache")
 	}
 }
 
@@ -148,7 +155,7 @@ func TestRefreshKeepsTheCacheWhenTheAccountCannotAnswer(t *testing.T) {
 			login(t, base)
 
 			settings := loadSettings(t)
-			settings.SetArtifactReportsCache(false, testAccountID, time.Now().Add(-2*config.ArtifactReportsCacheTTL))
+			settings.SetArtifactReportsCache(false, testAccountID, time.Now())
 			if err := config.SaveSettings(settings); err != nil {
 				t.Fatal(err)
 			}
@@ -203,7 +210,7 @@ func TestSetWritesTheAccountAndTheCache(t *testing.T) {
 		t.Error("Set did not update the local cache")
 	}
 	if !loadSettings(t).ArtifactReportsFresh(time.Now(), testAccountID) {
-		t.Error("Set left the cache without a sync timestamp, so the next launch would re-fetch it")
+		t.Error("Set left the cache without its compatibility sync timestamp")
 	}
 }
 
@@ -230,8 +237,8 @@ func TestSetSurfacesAGatewayRejection(t *testing.T) {
 }
 
 // settings.json is per-machine and `everyapi auth accounts switch` does not touch it, so a cached switch
-// has to remember whose it is. Without that, signing in as somebody else inherits their predecessor's
-// decision for the rest of the TTL — silently, and in the direction that suppresses reports.
+// has to remember whose it is. Without that, signing in as somebody else can inherit their predecessor's
+// decision while offline — silently, and in the direction that suppresses reports.
 func TestCacheDoesNotCrossAccounts(t *testing.T) {
 	calls := 0
 	server := selfServer(t, `{"success":true,"data":{"id":2,"artifact_reports":true}}`, &calls)
@@ -254,7 +261,7 @@ func TestCacheDoesNotCrossAccounts(t *testing.T) {
 	}
 	Refresh(context.Background())
 	if calls != 1 {
-		t.Fatalf("gateway calls = %d, want 1: another account's cache must not count as fresh", calls)
+		t.Fatalf("gateway calls = %d, want 1 for the newly active account", calls)
 	}
 	if !Enabled() {
 		t.Error("the refreshed value for the new account was not used")

@@ -90,7 +90,12 @@ func runGet(args []string) error {
 		return errors.New(i18n.T("settings.usage_get"))
 	}
 	if args[0] == keyArtifactReports {
-		artifactreports.Refresh(cliout.WithCtx())
+		enabled, err := artifactreports.Get(cliout.WithCtx())
+		if err != nil {
+			return err
+		}
+		cliout.Println(strconv.FormatBool(enabled))
+		return nil
 	}
 	s, err := config.LoadSettings()
 	if err != nil {

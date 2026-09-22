@@ -169,7 +169,7 @@ Claude Code, Codex, OpenCode, and Kilo launches receive a process-scoped deliver
 
 The standard also carries the viewer's constraints, because a report that reaches for an external stylesheet or a `fetch` is refused silently rather than loudly: see the `artifacts` topic.
 
-`everyapi settings set artifact_reports false` declines it. The switch lives on the account, so it covers every machine signed in to it, and it removes only this standard — the capability list and the Computer Use guidance still reach the launch, unlike `EVERYAPI_NO_AGENT_CONTEXT=1`. `everyapi artifacts share` keeps working either way.
+`everyapi settings set artifact_reports false` declines it. The switch lives on the account, so it covers every machine signed in to it. Agents read the live value immediately before publishing, so changing it also affects sessions that are already running; only an exact successful `true` authorizes an automatic report. The capability list and Computer Use guidance are unaffected, and `everyapi artifacts share` keeps working either way.
 
 ## Examples
 

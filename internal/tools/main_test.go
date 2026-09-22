@@ -7,9 +7,8 @@ import (
 
 // TestMain points the whole package at a throwaway config dir.
 //
-// Launch behaviour reads settings.json — `artifact_reports` decides whether
-// AgentInstructions carries the artifact delivery standard, and more settings
-// will land on this path. Without this, those assertions are really assertions
+// Launch tests write settings.json, and more settings will land on this path.
+// Without this, those assertions are really assertions
 // about the machine running the tests: a developer who turns the report off for
 // their own sessions would watch this package fail, and CI would still be green.
 // Tests that need particular settings write them into their own temp dir with

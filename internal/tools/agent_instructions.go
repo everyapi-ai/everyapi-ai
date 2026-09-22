@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-
-	"github.com/everyapi-ai/everyapi-ai/v3/internal/artifactreports"
 )
 
 const (
@@ -34,6 +32,7 @@ Read-only. Run these yourself, unprompted, whenever one would answer the questio
   models list | models pricing                    routable models and rates
   stats perf | stats upstream | doctor            model, provider, local health
   token list                                      this account's keys, masked
+  settings get artifact_reports                   live automatic-report preference
 
 The documentation covers EveryAPI, not the user's own project; do not reach for it on unrelated questions.
 
@@ -62,34 +61,21 @@ GUI actions are ` + "`computer click`" + `, ` + "`computer set-value`" + `, ` + 
 // The colour warning is here even though the service now forces a light scheme, because the underlying advice ("say what your colours are") is what keeps a report readable, and the fallback palette is a floor rather than a design.
 //
 // The closing verification step is the one that catches everything else. "Never invent a link" already prevented a fabricated URL; it did not prevent handing over a real URL to a report the agent had never looked at. It names where the document actually lives because the share URL returns the frame, not the report — an agent that fetches the share URL and finds its own <title> there has confirmed nothing about the body.
-const artifactReportInstructions = "EveryAPI Artifact delivery standard: after completing a user task, publish a completion report unless the user explicitly opts out. Build a self-contained HTML file with Summary, Deliverables, Verification, and Follow-ups sections. Sanitize it: never include credentials, secrets, private user data, or raw sensitive logs. Invoke the EveryAPI executable named by EVERYAPI_CLI_PATH (fall back to `everyapi` only when that variable is unavailable) as `artifacts share <report.html> --json`, return only the official URL from the successful command, then remove the temporary local report. If publishing fails, state the failure and still provide the normal text result; never invent a link. Revise an already-published report with `artifacts update <url> <report.html> --json`, and revoke it with `artifacts delete <url> --json`.\n\nThe report renders inside a cross-origin sandboxed iframe under a strict CSP, and anything the viewer refuses fails silently rather than erroring. Write for that environment: inline every asset, because external CSS, JS, fonts and images are all blocked and images and fonts must be `data:` URIs; do not use fetch, XHR or localStorage, because the frame has no network access and no same-origin storage. State your own colours — set `background-color` and `color` explicitly on `html` and `body` rather than relying on user-agent defaults; the viewer serves reports on a white canvas and forces a light `color-scheme`, so a document that leaves its palette implicit is at the mercy of the reader's OS theme. After the share or update command succeeds, look at the result before giving the URL to the user: the share URL returns the EveryAPI frame, and the document itself is served from that frame's iframe source, so open the URL in a browser if you have one and otherwise fetch the document and confirm it carries the content you wrote."
+const artifactReportInstructions = "EveryAPI Artifact delivery standard: after completing a user task, first read the live account preference by invoking the EveryAPI executable named by EVERYAPI_CLI_PATH (fall back to `everyapi` only when that variable is unavailable) as `settings get artifact_reports`. Publish an automatic completion report only when that command succeeds and its trimmed output is exactly `true`. If it returns `false`, fails, or returns anything else, do not publish automatically; still publish when the user explicitly asks for one. When authorized, build a self-contained HTML file with Summary, Deliverables, Verification, and Follow-ups sections. Sanitize it: never include credentials, secrets, private user data, or raw sensitive logs. Invoke the same EveryAPI executable as `artifacts share <report.html> --json`, return only the official URL from the successful command, then remove the temporary local report. If publishing fails, state the failure and still provide the normal text result; never invent a link. Revise an already-published report with `artifacts update <url> <report.html> --json`, and revoke it with `artifacts delete <url> --json`.\n\nThe report renders inside a cross-origin sandboxed iframe under a strict CSP, and anything the viewer refuses fails silently rather than erroring. Write for that environment: inline every asset, because external CSS, JS, fonts and images are all blocked and images and fonts must be `data:` URIs; do not use fetch, XHR or localStorage, because the frame has no network access and no same-origin storage. State your own colours — set `background-color` and `color` explicitly on `html` and `body` rather than relying on user-agent defaults; the viewer serves reports on a white canvas and forces a light `color-scheme`, so a document that leaves its palette implicit is at the mercy of the reader's OS theme. After the share or update command succeeds, look at the result before giving the URL to the user: the share URL returns the EveryAPI frame, and the document itself is served from that frame's iframe source, so open the URL in a browser if you have one and otherwise fetch the document and confirm it carries the content you wrote."
 
 // AgentInstructions is the common process-scoped standard for clients with a
-// documented system-instruction surface. The capability list applies to every
-// launch; artifact delivery is opt-out via the `artifact_reports` setting, and
-// tmux lifecycle context is appended only when the launch is actually inside an
-// EveryAPI-managed tmux session.
+// documented system-instruction surface. The capability list and live-gated
+// artifact standard apply to every launch; tmux lifecycle context is appended
+// only when the launch is actually inside an EveryAPI-managed tmux session.
 //
 // Capabilities first, deliberately: "you can find this out yourself" applies to
 // most turns, while "publish a report" applies once at the end of a task.
 func AgentInstructions() string {
-	sections := []string{cliCapabilityInstructions, computerUseInstructions}
-	if artifactReportsEnabled() {
-		sections = append(sections, artifactReportInstructions)
-	}
+	sections := []string{cliCapabilityInstructions, computerUseInstructions, artifactReportInstructions}
 	if tmux := TmuxAgentInstructions(); tmux != "" {
 		sections = append(sections, tmux)
 	}
 	return strings.Join(sections, "\n\n")
-}
-
-// artifactReportsEnabled reads the account switch out of the local cache.
-//
-// Cache only, deliberately: this is called while assembling a tool's configuration, sometimes more than
-// once per launch, and it must not turn into a network call per surface. The launch path tops the cache
-// up once, up front — see cmd.Use and internal/artifactreports.Refresh.
-func artifactReportsEnabled() bool {
-	return artifactreports.Enabled()
 }
 
 // TmuxAgentInstructions returns process-scoped context only for a verified tmux launch. The environment variables are public integration points for every client; clients with a documented instruction surface also receive this text proactively.
