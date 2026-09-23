@@ -4341,14 +4341,17 @@ func fetchPage(state *browserState, location string) error {
 		}
 		return fmt.Errorf("offline mode prevents fetching %s", location)
 	}
-	request, err := http.NewRequest(http.MethodGet, location, nil)
+	// Bound the fetch. http.DefaultClient has no Timeout at all, so a server that accepts the connection and then never answers held this call — and with it the whole CLI command — open indefinitely, with no context to cancel it from. The deadline covers the body read as well as the handshake, and cancelling on return releases the connection instead of leaking it. 30s matches the download fetch further down this file.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, location, nil)
 	if err != nil {
 		return err
 	}
 	for key, value := range state.Headers {
 		request.Header.Set(key, value)
 	}
-	resp, err := http.DefaultClient.Do(request)
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(request)
 	if err != nil {
 		return err
 	}
