@@ -84,4 +84,4 @@ Tokens are stored in plaintext. Mode `0600` in a private home directory matches 
 sed -i 's/sk-everyapi-[A-Za-z0-9]*/REDACTED/g' debug.log
 ```
 
-Transparent mode (the default for Claude Code and Codex) avoids this entirely — the key never enters the child's environment. See the `use` topic.
+Transparent mode (the default for Codex; Claude Code opts in with `--transparent`) avoids this entirely — the key never enters the child's environment. See the `use` topic.

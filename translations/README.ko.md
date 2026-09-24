@@ -143,10 +143,10 @@ everyapi use librefang         # LibreFang 시작(네이티브 EveryAPI 자격 �
 everyapi use open-webui        # Open WebUI 서버 → EveryAPI 를 OpenAI 백엔드로
 everyapi use deepseek-harness  # DeepSeek Harness web UI(dsh) → provider 와 자격 증명 생성
 everyapi use hermes --model gpt-5.1      # 모델 고정, 선택기 건너뛰기
-everyapi use claude                      # 기본은 투명 모드: api.anthropic.com 유지
+everyapi use claude                      # 기본은 API key 라우팅
 everyapi use codex                       # api.openai.com 유지
 everyapi use antigravity                 # Google 공식 Origin 유지
-everyapi use claude --transparent=false  # 투명 모드 해제: 게이트웨이 Base URL + relay key 주입
+everyapi use claude --transparent         # 투명 모드 활성화: connector 로 api.anthropic.com 사용
 everyapi use                             # 인자 없음 → 설치된 도구 대화형 선택기
 ```
 
@@ -203,11 +203,11 @@ everyapi use                             # 인자 없음 → 설치된 도구 �
 
 > ⚠️ **서브프로세스 env 안전 참고**: 위 환경 변수에는 당신의 relay API key 가 들어 있습니다. 서드파티 CLI 는 debug / verbose 모드에서 env 를 로깅할 수 있습니다 —— `everyapi use` 실행 전에, 켜려는 debug 플래그가 `*_TOKEN` / `*_API_KEY` 를 흘리지 않는지 확인하세요. debug 로그를 공유하기 전에 `sed -i 's/sk-everyapi-[A-Za-z0-9]*/REDACTED/g'` 를 실행하세요.
 
-#### 투명 Connector(기본)
+#### 투명 Connector
 
-투명 모드는 서드파티 Base URL 을 설정하는 대신, 지원 클라이언트가 벤더 공식 API Origin 에 그대로 머물게 합니다. 이를 지원하는 모든 도구에서 기본값이며, 해제하려면 `--transparent=false` 를 넘기세요. CLI 는 임의의 loopback 포트에 임시 HTTP CONNECT proxy 를 띄우고, 실행마다 CA 를 생성하며 그 개인 키는 메모리에만 존재합니다. 자식 프로세스에는 proxy URL, 공개 CA 번들, 비밀이 아닌 자리표시자 자격 증명만 전달됩니다. 등록된 모델 경로는 로컬에서 복호화되어 실제 relay key 와 함께 EveryAPI 로 중계되고, 다른 HTTPS 호스트는 원시 CONNECT 패스스루를 사용합니다. 보호된 모델 접두 아래의 알 수 없는 경로는 차단되며, 중계 실패가 벤더로 폴백하는 일은 없습니다.
+투명 모드는 서드파티 Base URL 을 설정하는 대신, 지원 클라이언트가 벤더 공식 API Origin 에 그대로 머물게 합니다. Codex 는 기본값으로 투명 모드를 사용하고, Claude Code 는 기본적으로 API key 주입을 사용합니다. 공식 Origin 클라이언트가 투명 모드의 자리표시자 자격 증명을 비활성화된 구독 인증으로 해석할 수 있기 때문입니다. Claude Code 에서 켜려면 `--transparent` 를 넘기세요. CLI 는 임의의 loopback 포트에 임시 HTTP CONNECT proxy 를 띄우고, 실행마다 CA 를 생성하며 그 개인 키는 메모리에만 존재합니다. 자식 프로세스에는 proxy URL, 공개 CA 번들, 비밀이 아닌 자리표시자 자격 증명만 전달됩니다. 등록된 모델 경로는 로컬에서 복호화되어 실제 relay key 와 함께 EveryAPI 로 중계되고, 다른 HTTPS 호스트는 원시 CONNECT 패스스루를 사용합니다. 보호된 모델 접두 아래의 알 수 없는 경로는 차단되며, 중계 실패가 벤더로 폴백하는 일은 없습니다.
 
-Claude Code 와 Codex CLI 로 검증했으며, 기본값이 적용되는 것도 이 두 도구입니다. 네이티브 Antigravity 와 LibreFang 은 connector 를 우회합니다. 나머지 등록된 도구는 문서화된 주입/설정 경로를 사용하므로, 미지원 도구에 명시적으로 `--transparent` 를 넘기면 분명하게 실패합니다.
+Claude Code 와 Codex CLI 로 검증했습니다. Codex 는 connector 가 기본값이고, Claude Code 는 `--transparent` 가 필요합니다. 네이티브 Antigravity 와 LibreFang 은 connector 를 우회합니다. 나머지 등록된 도구는 문서화된 주입/설정 경로를 사용하므로, 미지원 도구에 명시적으로 `--transparent` 를 넘기면 분명하게 실패합니다.
 
 `--sanitize` 는 투명 모드와 충돌하지 않고 조합됩니다: connector 가 sanitizer 를 거쳐 중계하므로(자식 → connector → sanitizer → 게이트웨이) 마스킹과 Claude 복구 응답 가드가 두 실행 경로 모두에 적용됩니다.
 

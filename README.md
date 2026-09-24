@@ -164,10 +164,10 @@ everyapi use librefang         # LibreFang start (native EveryAPI credential pro
 everyapi use open-webui        # Open WebUI server → EveryAPI as its OpenAI backend
 everyapi use deepseek-harness  # DeepSeek Harness web UI (dsh) → generated provider + credential
 everyapi use hermes --model gpt-5.1      # pin the model, skip the picker
-everyapi use claude                      # transparent by default: stays on api.anthropic.com
+everyapi use claude                      # API-key routing by default
 everyapi use codex                       # stays on api.openai.com
 everyapi use antigravity                 # stays on Google's official origin
-everyapi use claude --transparent=false  # opt out: inject the gateway Base URL + relay key
+everyapi use claude --transparent         # opt in: stay on api.anthropic.com via connector
 everyapi use                             # no arg → interactive picker over installed tools
 ```
 
@@ -226,11 +226,11 @@ Provider names are not CLI names: use `qwen-code` or `kimi-code` for those vendo
 
 > ⚠️ **Subprocess env safety note**: the env vars above contain your relay API key. Third-party CLIs in debug / verbose mode may log env — before running `everyapi use`, make sure the debug flag you turn on does not leak `*_TOKEN` / `*_API_KEY`. Before sharing debug logs, run `sed -i 's/sk-everyapi-[A-Za-z0-9]*/REDACTED/g'`.
 
-#### Transparent connector (default)
+#### Transparent connector
 
-Transparent mode keeps supported clients on their vendor's official API origin instead of setting a third-party Base URL. It is the default for every tool that supports it; pass `--transparent=false` to opt out. The CLI starts an ephemeral HTTP CONNECT proxy on a random loopback port, creates a per-run CA whose private key stays in memory, and gives the child only the proxy URL, public CA bundle, and a non-secret placeholder credential. Registered model routes are decrypted locally and relayed to EveryAPI with the real relay key; other HTTPS hosts use raw CONNECT passthrough. An unknown path beneath a protected model prefix is blocked, and a relay failure never falls back to the vendor.
+Transparent mode keeps supported clients on their vendor's official API origin instead of setting a third-party Base URL. It is the default for Codex; Claude Code uses API-key injection by default because its official-origin client can treat the connector placeholder as subscription auth. Pass `--transparent` to opt Claude into the connector. The CLI starts an ephemeral HTTP CONNECT proxy on a random loopback port, creates a per-run CA whose private key stays in memory, and gives the child only the proxy URL, public CA bundle, and a non-secret placeholder credential. Registered model routes are decrypted locally and relayed to EveryAPI with the real relay key; other HTTPS hosts use raw CONNECT passthrough. An unknown path beneath a protected model prefix is blocked, and a relay failure never falls back to the vendor.
 
-Verified against Claude Code and Codex CLI, which are the tools it defaults on for. Native Antigravity and LibreFang bypass the connector; the other registered tools use their documented injected/configured path, so an explicit unsupported `--transparent` fails loudly.
+Verified against Claude Code and Codex CLI. Codex defaults to the connector; Claude requires explicit `--transparent`. Native Antigravity and LibreFang bypass the connector; the other registered tools use their documented injected/configured path, so an explicit unsupported `--transparent` fails loudly.
 
 `--sanitize` composes with transparent mode rather than conflicting with it: the connector relays through the sanitizer (child → connector → sanitizer → gateway), so masking and the Claude recovery response guard apply on either launch path.
 

@@ -143,10 +143,10 @@ everyapi use librefang         # Lanza LibreFang (proceso nativo de credenciales
 everyapi use open-webui        # Servidor Open WebUI → EveryAPI como su backend OpenAI
 everyapi use deepseek-harness  # UI web de DeepSeek Harness (dsh) → proveedor y credencial generados
 everyapi use hermes --model gpt-5.1      # fija el modelo y salta el selector
-everyapi use claude                      # modo transparente por defecto: se queda en api.anthropic.com
+everyapi use claude                      # enrutamiento por API key de forma predeterminada
 everyapi use codex                       # se queda en api.openai.com
 everyapi use antigravity                 # conserva el Origin oficial de Google
-everyapi use claude --transparent=false  # desactiva el modo transparente: inyecta base URL de la pasarela + clave de relay
+everyapi use claude --transparent         # activa el modo transparente: api.anthropic.com mediante connector
 everyapi use                             # sin argumentos → selector interactivo de herramientas instaladas
 ```
 
@@ -203,11 +203,11 @@ Los nombres de proveedor no son nombres de CLI: usa `qwen-code` o `kimi-code` pa
 
 > ⚠️ **Nota de seguridad sobre el entorno del subproceso**: las variables de entorno anteriores contienen tu clave de API de relay. Los CLI de terceros pueden registrar el entorno en modo debug/verbose —— antes de ejecutar `everyapi use`, comprueba que el flag de debug que vas a activar no filtre `*_TOKEN` / `*_API_KEY`. Ejecuta `sed -i 's/sk-everyapi-[A-Za-z0-9]*/REDACTED/g'` sobre los logs de debug antes de compartirlos.
 
-#### Connector transparente (por defecto)
+#### Connector transparente
 
-El modo transparente mantiene a los clientes compatibles en el Origin oficial de la API del proveedor en lugar de configurar una base URL de terceros. Es el comportamiento por defecto en todas las herramientas que lo soportan; pasa `--transparent=false` para desactivarlo. El CLI levanta un proxy HTTP CONNECT efímero en un puerto de loopback aleatorio y genera una CA por ejecución cuya clave privada solo existe en memoria. Al proceso hijo solo se le pasan la URL del proxy, el bundle público de la CA y credenciales de marcador de posición no secretas. Las rutas de modelos registradas se descifran localmente y se retransmiten a EveryAPI con tu clave de relay real; el resto de hosts HTTPS usan CONNECT en modo pasarela. Las rutas desconocidas bajo un prefijo de modelo protegido se bloquean, y un fallo de retransmisión nunca cae de vuelta al proveedor.
+El modo transparente mantiene a los clientes compatibles en el Origin oficial de la API del proveedor en lugar de configurar una base URL de terceros. Es el comportamiento por defecto para Codex; Claude Code usa inyección de API key de forma predeterminada porque su cliente en el Origin oficial puede interpretar el marcador como autenticación de suscripción desactivada. Pasa `--transparent` para activarlo en Claude Code. El CLI levanta un proxy HTTP CONNECT efímero en un puerto de loopback aleatorio y genera una CA por ejecución cuya clave privada solo existe en memoria. Al proceso hijo solo se le pasan la URL del proxy, el bundle público de la CA y credenciales de marcador de posición no secretas. Las rutas de modelos registradas se descifran localmente y se retransmiten a EveryAPI con tu clave de relay real; el resto de hosts HTTPS usan CONNECT en modo pasarela. Las rutas desconocidas bajo un prefijo de modelo protegido se bloquean, y un fallo de retransmisión nunca cae de vuelta al proveedor.
 
-Está verificado con Claude Code y el Codex CLI, que son también las herramientas donde aplica el valor por defecto. El Antigravity nativo y LibreFang saltan el connector. Las demás herramientas registradas usan sus rutas documentadas de inyección o configuración, así que pasar `--transparent` explícitamente a una herramienta no soportada falla de forma visible.
+Está verificado con Claude Code y el Codex CLI. Codex usa el connector por defecto; Claude Code requiere `--transparent`. El Antigravity nativo y LibreFang saltan el connector. Las demás herramientas registradas usan sus rutas documentadas de inyección o configuración, así que pasar `--transparent` explícitamente a una herramienta no soportada falla de forma visible.
 
 `--sanitize` no entra en conflicto con el modo transparente, se combina con él: el connector retransmite a través del sanitizador (hijo → connector → sanitizador → pasarela), de modo que el enmascarado y las protecciones de respuesta de recuperación de Claude aplican en ambas rutas de ejecución.
 

@@ -73,10 +73,14 @@ FLAGS
                          official API origin and relays registered model routes
                          through a process-scoped local TLS connector, so the
                          EveryAPI relay key never reaches the child's env or
-						 config. ON BY DEFAULT for claude/codex. Antigravity
+						 config. ON BY DEFAULT for codex. Claude uses the injected
+						 API-key path by default because Claude Code can interpret
+						 transparent placeholder auth as a disabled subscription.
+						 Antigravity
 						 and LibreFang use their native integrations instead.
-                         Pass --transparent=false to fall back
-                         to injecting the gateway Base URL + relay key.
+						 Pass --transparent to opt in; Claude defaults to
+						 API-key injection. Pass --transparent=false to force
+						 the injected path for tools that default to transparent.
 						 Other routed tools use their documented injected path.
   --                     End of everyapi's option parsing; remaining args are
                          forwarded verbatim to the tool's argv.
@@ -89,8 +93,8 @@ prompt defaults to Yes, but no dangerous option is enabled before you confirm.
 Terminal preference: the first interactive launch asks whether to use the native terminal or a persistent tmux session, then saves 'terminal_mode' in settings.json. Tmux launches expose the session name and attach command to every client. Codex, Claude Code, OpenCode, and Kilo receive the EveryAPI Artifact delivery standard on every launch — turn it off with 'everyapi settings set artifact_reports false', which stops the agent publishing a completion report on its own without disabling 'everyapi artifacts' — plus proactive tmux context when applicable. A bare Codex resume reattaches the sole live tmux session for the same project instead of starting a duplicate; dead EveryAPI sessions are pruned before launch. A non-interactive launch always uses the native terminal. Change it later with 'everyapi settings set terminal_mode native|tmux'.
 
 EXAMPLES
-  everyapi use claude                  (transparent by default)
-  everyapi use claude --transparent=false
+  everyapi use claude                  (API-key routing by default)
+  everyapi use claude --transparent
   everyapi use codex --channel byteplus
   everyapi use codex -- resume          (reattach the sole live project tmux, otherwise open the current-directory picker)
   everyapi use opencode --model gpt-5
@@ -122,7 +126,7 @@ EXAMPLES
 //
 // Usage:
 //
-//	everyapi use <tool>            (the registered tools are listed in useUsage, which TestUseUsageListsEveryRegisteredTool keeps in step with tools.Names(); an enumeration here would be a second copy to forget) everyapi use            (no arg → interactive picker over installed tools) everyapi use claude --group byteplus   (relay through the key bound to the "byteplus" group instead of the default key; --channel is an alias for --group) everyapi use claude --channel  (bare --group/--channel, no value → interactive picker over the routing groups your enabled keys are bound to) everyapi use claude --sanitize (opt in to the local sanitizer proxy, which is off by default; it chains behind the transparent connector) everyapi use claude --transparent=false (opt out of transparent mode, injecting the gateway Base URL + relay key instead) everyapi use claude -- --dangerously-skip-permissions (everything after `--` is forwarded verbatim to the tool's argv)
+//	everyapi use <tool>            (the registered tools are listed in useUsage, which TestUseUsageListsEveryRegisteredTool keeps in step with tools.Names(); an enumeration here would be a second copy to forget) everyapi use            (no arg → interactive picker over installed tools) everyapi use claude --group byteplus   (relay through the key bound to the "byteplus" group instead of the default key; --channel is an alias for --group) everyapi use claude --channel  (bare --group/--channel, no value → interactive picker over the routing groups your enabled keys are bound to) everyapi use claude --sanitize (opt in to the local sanitizer proxy, which is off by default; it chains behind the transparent connector when explicitly selected) everyapi use claude --transparent (opt in to transparent mode) everyapi use claude --transparent=false (force the injected gateway Base URL + relay key path) everyapi use claude -- --dangerously-skip-permissions (everything after `--` is forwarded verbatim to the tool's argv)
 //
 // Flags may appear before or after the tool name; a value attached with `=` (`--channel=byteplus`) is always explicit. Space form (`--channel team-a`) consumes the next token as the value unless it's another flag or a known tool name — so `everyapi use claude --channel` opens the picker while `--channel team-a claude` is explicit. A group literally named like a registered tool needs the `=` form when it appears before the tool positional. A bare `--` ends everyapi's option parsing; everything after is forwarded raw to the tool — use it for tool flags like claude's `--dangerously-skip-permissions` or codex's `--dangerously-bypass-*`.
 func Use(args []string) error {
@@ -253,8 +257,11 @@ func use(args []string, persistModelSelection bool) error {
 	}
 
 	extraArgs = toolArgsForLaunch(t, extraArgs)
-	// Transparent mode is the default wherever a tool has an adapter for it: the tool keeps talking to its vendor's official origin and the relay key never reaches the child's env or config. A tool without an adapter has no third-party origin to preserve (hermes is EveryAPI-native and routes at <apiBase>/v1 by design), so it silently keeps the injected path — defaulting must not break it. An explicit --transparent on such a tool already failed in useToolPreflight.
-	transparent := t.SupportsTransparent()
+	// Claude Code defaults to the injected API-key path. Its official-origin
+	// client can interpret the connector placeholder as Anthropic subscription
+	// auth and reject the launch before the request reaches EveryAPI. Other
+	// tools retain their registry-defined transparent default.
+	transparent := t.SupportsTransparent() && t.TransparentByDefault()
 	if transparentFlag != nil {
 		transparent = *transparentFlag
 	}
@@ -1478,7 +1485,7 @@ func parseUseArgs(args []string) (toolName, group string, pickGroup, sanitize bo
 
 // parseUseArgsWithTransparent layers the transparent flag onto the stable parser without changing its long-standing return contract. Tokens after `--` are never inspected, so a tool may receive a flag with the same name verbatim. Like Go boolean flags, the supported forms are a bare flag and an attached =true/false value; repeated flags use the last value.
 //
-// transparent is tri-state: nil means the user said nothing, so Use applies the per-tool default. A non-nil value is an explicit request, which Use honors even when that means erroring on a tool with no transparent adapter. The distinction matters now that transparent is the default — "unset" must fall back silently where the mode does not apply, while an explicit --transparent on the same tool must still fail loudly.
+// transparent is tri-state: nil means the user said nothing, so Use applies the per-tool default. A non-nil value is an explicit request, which Use honors even when that means erroring on a tool with no transparent adapter. The distinction lets Claude default to API-key injection while preserving an explicit --transparent request.
 func parseUseArgsWithTransparent(args []string) (toolName, group string, pickGroup, sanitize bool, transparent *bool, extraArgs []string, model string, pickModel bool, err error) {
 	filtered := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {

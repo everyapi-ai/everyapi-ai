@@ -133,7 +133,7 @@ Some third-party CLIs dump their environment in verbose mode. Before sharing a l
 sed -i 's/sk-everyapi-[A-Za-z0-9]*/REDACTED/g' debug.log
 ```
 
-Then rotate the key: `everyapi token revoke <id>` and mint a new one. Transparent mode avoids the exposure entirely for Claude Code and Codex, since the key never enters the child's environment.
+Then rotate the key: `everyapi token revoke <id>` and mint a new one. Transparent mode avoids the exposure entirely for Codex; Claude Code can opt in with `--transparent` when the key should never enter the child's environment.
 
 ## Reporting it
 

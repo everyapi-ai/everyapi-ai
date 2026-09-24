@@ -22,10 +22,12 @@ const (
 	ambientNoProxy = ".corp.internal,10.0.0.0/8"
 )
 
-// TestUseDefaultsToTransparentForSupportedTool is the end-to-end pin for this PR's headline behavior: a bare `everyapi use claude`, no flags, must launch through the connector. Nothing else asserted it — the parser tests cover only flag parsing and TestTransparentDefaultResolution covers only Tool.SupportsTransparent, so the resolution inside Use (the code that actually decides) could silently regress to the injected path.
+// TestUseDefaultsToInjectedForClaude is the end-to-end guard that a bare
+// `everyapi use claude` launch uses API-key injection. Explicit transparent
+// mode remains covered by the connector tests.
 //
 // The launched child's environment is the only honest evidence of which path ran: transparent keeps ANTHROPIC_BASE_URL on the official Anthropic origin, points HTTPS_PROXY at the loopback connector, and withholds the relay key; the injected path uses a process-local base URL and hands the relay key to the child. Asserting on the launch banner would only re-read our own Printf.
-func TestUseDefaultsToTransparentForSupportedTool(t *testing.T) {
+func TestUseDefaultsToInjectedForClaude(t *testing.T) {
 	switch {
 	case os.Getenv(useDefaultShimEnv) == "1":
 		// Stands in for the real `claude`: record what env we were handed.
@@ -52,7 +54,7 @@ func TestUseDefaultsToTransparentForSupportedTool(t *testing.T) {
 		args            []string
 		wantTransparent bool
 	}{
-		{"bare invocation defaults to transparent", []string{"claude"}, true},
+		{"bare invocation defaults to the injected API-key path", []string{"claude"}, false},
 		{"explicit opt-out uses the injected path", []string{"claude", "--transparent=false"}, false},
 		// --sanitize moves the catalogue onto the sanitizer's socket, so the injected base URL is the sanitizer's address and no catalogue proxy of its own gets started. Both facts have to leave NO_PROXY set.
 		{"injected path with the transforms merged", []string{"claude", "--transparent=false", "--sanitize"}, false},
@@ -73,13 +75,14 @@ func TestUseDefaultsToTransparentForSupportedTool(t *testing.T) {
 			envPath := filepath.Join(t.TempDir(), "env.json")
 			shimDir := t.TempDir()
 			shim := "#!/bin/sh\n" +
-				useDefaultShimEnv + "=1 exec \"$EVERYAPI_TEST_USE_TEST_BINARY\" -test.run=^TestUseDefaultsToTransparentForSupportedTool$\n"
+				useDefaultShimEnv + "=1 exec \"$EVERYAPI_TEST_USE_TEST_BINARY\" -test.run=^TestUseDefaultsToInjectedForClaude$\n"
 			if err := os.WriteFile(filepath.Join(shimDir, "claude"), []byte(shim), 0o755); err != nil {
 				t.Fatal(err)
 			}
 
-			child := exec.Command(os.Args[0], "-test.run=^TestUseDefaultsToTransparentForSupportedTool$")
-			// Hermetic: strip the host's proxy variables. socksOnlyEgressVar reads them, so a developer or CI runner with a SOCKS proxy exported would send Use down the injected path and make the "bare invocation defaults to transparent" case pass for the wrong reason — or fail for a reason that has nothing to do with the code.
+			child := exec.Command(os.Args[0], "-test.run=^TestUseDefaultsToInjectedForClaude$")
+			// Hermetic: strip the host's proxy variables. The launch-mode decision
+			// must be tested independently of a developer or CI runner's proxy.
 			hostEnv := []string{}
 			for _, kv := range os.Environ() {
 				name, _, _ := strings.Cut(kv, "=")

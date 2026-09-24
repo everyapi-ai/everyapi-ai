@@ -143,10 +143,10 @@ everyapi use librefang         # LibreFang 启动（原生 EveryAPI 凭证流程
 everyapi use open-webui        # Open WebUI server → 以 EveryAPI 作为其 OpenAI 后端
 everyapi use deepseek-harness  # DeepSeek Harness web UI（dsh）→ 生成 provider + 凭证
 everyapi use hermes --model gpt-5.1      # 锁定模型，跳过选择器
-everyapi use claude                      # 默认透明：仍请求 api.anthropic.com
+everyapi use claude                      # 默认 API key 路由
 everyapi use codex                       # 仍请求 api.openai.com
 everyapi use antigravity                 # 仍请求 Google 官方 Origin
-everyapi use claude --transparent=false  # 退出透明模式：注入网关 Base URL + relay key
+everyapi use claude --transparent         # 启用透明：通过 connector 请求 api.anthropic.com
 everyapi use                             # 无参 → 交互式选择已安装的工具
 ```
 
@@ -203,11 +203,11 @@ Provider 名不等于 CLI 名：这两家厂商的官方客户端请用 `qwen-co
 
 > ⚠️ **Subprocess env 安全提示**：上面这些环境变量包含你的 relay API key。第三方 CLI 的 debug / verbose 模式可能会把 env 写进日志 —— `everyapi use` 之前确认你打开的 debug flag 不会泄漏 `*_TOKEN` / `*_API_KEY`。分享 debug 日志前先跑 `sed -i 's/sk-everyapi-[A-Za-z0-9]*/REDACTED/g'`。
 
-#### 透明 Connector（默认）
+#### 透明 Connector
 
-透明模式让受支持的客户端继续请求供应商官方 API Origin，而不是设置第三方 Base URL。所有支持它的工具都默认启用；传 `--transparent=false` 可退出。CLI 会在随机 loopback 端口启动临时 HTTP CONNECT proxy，每次运行生成一张 CA，其私钥只存在于内存中；子进程只收到代理地址、公开 CA bundle 和无秘密的占位凭证。已注册的模型路径在本机解密后携带真实 relay key 转发给 EveryAPI；其它 HTTPS 域名走原样 CONNECT 直通。受保护模型前缀下的未知路径会被阻止，转发失败也绝不会回落到供应商直连。
+透明模式让受支持的客户端继续请求供应商官方 API Origin，而不是设置第三方 Base URL。Codex 默认启用；Claude Code 默认使用 API key 注入，因为官方 Origin 客户端可能把透明模式的占位凭证当作订阅认证。Claude Code 传 `--transparent` 才启用透明模式。CLI 会在随机 loopback 端口启动临时 HTTP CONNECT proxy，每次运行生成一张 CA，其私钥只存在于内存中；子进程只收到代理地址、公开 CA bundle 和无秘密的占位凭证。已注册的模型路径在本机解密后携带真实 relay key 转发给 EveryAPI；其它 HTTPS 域名走原样 CONNECT 直通。受保护模型前缀下的未知路径会被阻止，转发失败也绝不会回落到供应商直连。
 
-已针对 Claude Code 和 Codex CLI 验证过 —— 它们也正是默认启用透明模式的工具。原生 Antigravity 和 LibreFang 绕过 connector；其它已注册工具走各自文档化的注入/配置路径，所以对不支持的工具显式传 `--transparent` 会明确报错。
+已针对 Claude Code 和 Codex CLI 验证过。Codex 默认启用透明模式，Claude Code 需要显式传 `--transparent`。原生 Antigravity 和 LibreFang 绕过 connector；其它已注册工具走各自文档化的注入/配置路径，所以对不支持的工具显式传 `--transparent` 会明确报错。
 
 `--sanitize` 与透明模式是组合关系而非冲突：connector 会经由 sanitizer 转发（子进程 → connector → sanitizer → 网关），所以掩码与 Claude 恢复响应守卫在两条启动路径上都生效。
 

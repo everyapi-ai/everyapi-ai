@@ -78,7 +78,7 @@ The pattern behind the table: wherever a client supports a process-scoped or lif
 
 ## Transparent mode
 
-Default for Claude Code and Codex. Instead of pointing the client at a third-party base URL, the CLI starts an ephemeral HTTP CONNECT proxy on a random loopback port, mints a per-run CA whose private key never leaves memory, and gives the child only the proxy URL, the public CA bundle, and a non-secret placeholder credential. Registered model routes are decrypted locally and relayed to EveryAPI with the real key; every other HTTPS host is raw CONNECT passthrough.
+Default for Codex. Claude Code uses the injected API-key path by default because its official-origin client can interpret the connector placeholder as subscription auth. Pass `--transparent` to opt Claude into the connector. Instead of pointing the client at a third-party base URL, the CLI starts an ephemeral HTTP CONNECT proxy on a random loopback port, mints a per-run CA whose private key never leaves memory, and gives the child only the proxy URL, the public CA bundle, and a non-secret placeholder credential. Registered model routes are decrypted locally and relayed to EveryAPI with the real key; every other HTTPS host is raw CONNECT passthrough.
 
 What that buys: the relay key is absent from the child's environment and from any generated config, and the client stays on `api.anthropic.com` / `api.openai.com`.
 
@@ -92,7 +92,7 @@ What it does not buy, stated plainly:
 - Claude Code still treats the placeholder as API-key auth, so claude.ai connectors stay disabled even though the origin is official.
 - If `ALL_PROXY` is your only proxy variable, transparent mode declines and the launch falls back to the injected path — Go's proxy resolution never reads `ALL_PROXY`. Set `HTTPS_PROXY` instead to keep it on.
 
-Opt out per launch with `--transparent=false`. `--sanitize` composes with it rather than conflicting: the connector relays through the sanitizer.
+Opt in for Claude per launch with `--transparent`; use `--transparent=false` to force the injected path for tools that default to transparent. `--sanitize` composes with transparent mode when it is explicitly selected.
 
 ## Choosing a model
 
@@ -175,7 +175,7 @@ The standard also carries the viewer's constraints, because a report that reache
 
 ```
 everyapi use claude
-everyapi use claude --transparent=false
+everyapi use claude --transparent
 everyapi use codex --channel byteplus
 everyapi use codex -- resume
 everyapi use hermes --model gpt-5.1

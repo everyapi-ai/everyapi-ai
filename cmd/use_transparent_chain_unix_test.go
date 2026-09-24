@@ -39,7 +39,7 @@ func TestUseWiresTheSanitizerAsTheConnectorUpstream(t *testing.T) {
 		runChainShim(t)
 		return
 	case os.Getenv(useChainCallerEnv) == "1":
-		if err := Use([]string{"claude", "--sanitize"}); err != nil {
+		if err := Use([]string{"claude", "--sanitize", "--transparent"}); err != nil {
 			t.Fatal(err)
 		}
 		return
@@ -97,7 +97,7 @@ func TestUseWiresTheSanitizerAsTheConnectorUpstream(t *testing.T) {
 	)
 	out, err := child.CombinedOutput()
 	if err != nil {
-		t.Fatalf("use --sanitize failed: %v\n%s", err, out)
+		t.Fatalf("use --sanitize --transparent failed: %v\n%s", err, out)
 	}
 	assertLaunchLineReportsOnlyDestination(t, string(out), gateway.URL)
 	assertTopologyLogged(t, configRoot, gateway.URL)

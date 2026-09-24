@@ -143,10 +143,10 @@ everyapi use librefang         # LibreFang 起動（ネイティブ EveryAPI 資
 everyapi use open-webui        # Open WebUI サーバー → EveryAPI を OpenAI バックエンドに
 everyapi use deepseek-harness  # DeepSeek Harness web UI（dsh）→ provider と資格情報を生成
 everyapi use hermes --model gpt-5.1      # モデルを固定してピッカーをスキップ
-everyapi use claude                      # 既定で透過：api.anthropic.com のまま
+everyapi use claude                      # 既定は API キールーティング
 everyapi use codex                       # api.openai.com のまま
 everyapi use antigravity                 # Google 公式 Origin のまま
-everyapi use claude --transparent=false  # 透過を無効化：ゲートウェイ Base URL + relay key を注入
+everyapi use claude --transparent         # 透過を有効化：connector 経由で api.anthropic.com
 everyapi use                             # 引数なし → インストール済みツールの対話ピッカー
 ```
 
@@ -203,11 +203,11 @@ everyapi use                             # 引数なし → インストール�
 
 > ⚠️ **サブプロセス env の安全上の注意**：上記の環境変数にはあなたの relay API key が含まれます。サードパーティ CLI は debug / verbose モードで env をログに書くことがあります —— `everyapi use` の前に、有効化する debug フラグが `*_TOKEN` / `*_API_KEY` を漏らさないか確認してください。debug ログを共有する前に `sed -i 's/sk-everyapi-[A-Za-z0-9]*/REDACTED/g'` を実行してください。
 
-#### 透過 Connector（既定）
+#### 透過 Connector
 
-透過モードは、サードパーティの Base URL を設定する代わりに、対応クライアントをベンダー公式の API Origin に留めます。対応するすべてのツールで既定です。無効化するには `--transparent=false` を渡してください。CLI はランダムな loopback ポートで一時的な HTTP CONNECT proxy を起動し、実行ごとに CA を生成します（その秘密鍵はメモリ内のみ）。子プロセスには proxy URL、公開 CA バンドル、秘密でないプレースホルダー資格情報だけが渡されます。登録済みモデルルートはローカルで復号され、実際の relay key を付けて EveryAPI にリレーされます。他の HTTPS ホストは素の CONNECT パススルーです。保護されたモデルプレフィックス配下の未知パスはブロックされ、リレー失敗時にベンダーへフォールバックすることはありません。
+透過モードは、サードパーティの Base URL を設定する代わりに、対応クライアントをベンダー公式の API Origin に留めます。Codex では既定ですが、Claude Code は既定で API キー注入を使います。公式 Origin のクライアントが透過モードのプレースホルダーを無効なサブスクリプション認証として解釈することがあるためです。Claude Code で有効にするには `--transparent` を渡してください。CLI はランダムな loopback ポートで一時的な HTTP CONNECT proxy を起動し、実行ごとに CA を生成します（その秘密鍵はメモリ内のみ）。子プロセスには proxy URL、公開 CA バンドル、秘密でないプレースホルダー資格情報だけが渡されます。登録済みモデルルートはローカルで復号され、実際の relay key を付けて EveryAPI にリレーされます。他の HTTPS ホストは素の CONNECT パススルーです。保護されたモデルプレフィックス配下の未知パスはブロックされ、リレー失敗時にベンダーへフォールバックすることはありません。
 
-Claude Code と Codex CLI で検証済みで、既定で有効になるのもこの 2 つです。ネイティブの Antigravity と LibreFang は connector をバイパスします。その他の登録済みツールは文書化された注入/設定パスを使うため、非対応ツールに明示的に `--transparent` を渡すと明確に失敗します。
+Claude Code と Codex CLI で検証済みです。Codex は connector が既定で有効で、Claude Code は `--transparent` が必要です。ネイティブの Antigravity と LibreFang は connector をバイパスします。その他の登録済みツールは文書化された注入/設定パスを使うため、非対応ツールに明示的に `--transparent` を渡すと明確に失敗します。
 
 `--sanitize` は透過モードと競合せず組み合わさります：connector は sanitizer 経由でリレーするため（子プロセス → connector → sanitizer → ゲートウェイ）、マスキングと Claude のリカバリ応答ガードはどちらの起動パスでも有効です。
 

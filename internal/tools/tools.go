@@ -77,6 +77,11 @@ type Tool struct {
 
 	// transparentEnvFn supplies tool-specific placeholder credentials and CA wiring for the process-scoped connector. It must never receive or return the EveryAPI relay key. A nil function means this tool has not yet been verified with transparent mode.
 	transparentEnvFn func(caPath string) (set map[string]string, unset []string)
+	// transparentByDefault controls the launch mode when the user does not pass
+	// --transparent. Claude Code uses API-key injection by default because its
+	// official-origin client can interpret the connector placeholder as
+	// subscription auth and reject the launch before sending a request.
+	transparentByDefault bool
 
 	// prepareTransparentFn is the transparent counterpart of prepareFn. It writes only public routing configuration and placeholder credentials; the real relay key remains inside the connector process.
 	prepareTransparentFn        func() (map[string]string, error)
@@ -294,6 +299,13 @@ func (t *Tool) SupportsTransparent() bool {
 	return t != nil && t.transparentEnvFn != nil
 }
 
+// TransparentByDefault reports whether an omitted --transparent flag selects
+// the process-scoped connector for this tool. A tool may support explicit
+// transparent launches without opting into that default.
+func (t *Tool) TransparentByDefault() bool {
+	return t != nil && t.transparentByDefault
+}
+
 func transparentClaudeEnv(caPath string) (map[string]string, []string) {
 	return map[string]string{
 			"ANTHROPIC_BASE_URL":                         "https://api.anthropic.com",
@@ -361,11 +373,12 @@ var Registry = map[string]*Tool{
 		},
 		InstallCmdUnixOnly: true,
 		// claude.ai/install.sh hands off to `<binary> install`, which links the launcher into ~/.local/bin — the same off-PATH cohort gemini hits.
-		ExtraBinDirs:     []string{".local/bin"},
-		YoloFlag:         "--dangerously-skip-permissions",
-		YoloLabel:        "skip all permission prompts (--dangerously-skip-permissions)",
-		RequiredEndpoint: "anthropic",
-		transparentEnvFn: transparentStandaloneClaudeEnv,
+		ExtraBinDirs:         []string{".local/bin"},
+		YoloFlag:             "--dangerously-skip-permissions",
+		YoloLabel:            "skip all permission prompts (--dangerously-skip-permissions)",
+		RequiredEndpoint:     "anthropic",
+		transparentEnvFn:     transparentStandaloneClaudeEnv,
+		transparentByDefault: false,
 		// Both paths pin the family aliases from the launch catalogue, and the launch model's context window when it is one Claude Code has no table for. CLAUDE_CODE_USE_GATEWAY below is what makes the first necessary — see claudeFamilyDefaultEnv and claudeContextWindowEnv.
 		prepareCatalogFn:            prepareClaudeWithModels,
 		prepareTransparentCatalogFn: prepareClaudeTransparentWithModels,
@@ -398,6 +411,7 @@ var Registry = map[string]*Tool{
 		FlagProbeArgs:               []string{"exec", "--help"},
 		RequiredEndpoint:            "openai-response",
 		transparentEnvFn:            transparentCodexEnv,
+		transparentByDefault:        true,
 		prepareTransparentFn:        prepareCodexTransparent,
 		prepareTransparentCatalogFn: prepareCodexTransparentWithModels,
 		envFn: func(_, token string) map[string]string {

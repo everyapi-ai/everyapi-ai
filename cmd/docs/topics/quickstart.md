@@ -55,7 +55,7 @@ everyapi use gemini
 everyapi use
 ```
 
-The last form opens a picker over the tools actually installed on the machine. `everyapi use` sets whatever environment variables or config that particular client expects and execs it. For Claude Code and Codex the default is transparent mode: the client stays on its vendor's official API origin and the relay key never enters its environment. Full details in the `use` topic.
+The last form opens a picker over the tools actually installed on the machine. `everyapi use` sets whatever environment variables or config that particular client expects and execs it. Codex defaults to transparent mode; Claude Code defaults to API-key injection and can opt into transparent mode with `--transparent`. Full details in the `use` topic.
 
 ## 3b. Call the API directly
 

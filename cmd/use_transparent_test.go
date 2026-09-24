@@ -242,9 +242,10 @@ func TestTransparentConnectorChainsThroughRecoveryGuard(t *testing.T) {
 	}
 }
 
-// TestTransparentDefaultResolution pins the default-on policy per tool, which is the contract the whole flip rests on:
+// TestTransparentDefaultResolution pins the per-tool transparent policy:
 //
-//   - a tool with an adapter defaults to transparent;
+//   - Claude supports explicit transparent mode but defaults to API-key injection;
+//   - Codex has an adapter and defaults to transparent;
 //   - tools without one (Hermes is EveryAPI-native; Antigravity and LibreFang keep their native authentication/router paths) stay direct;
 //   - an explicit --transparent on such a tool still fails loudly, because the user asked for something that cannot be delivered.
 //
@@ -256,7 +257,11 @@ func TestTransparentDefaultResolution(t *testing.T) {
 			t.Fatalf("Lookup(%s): %v", name, err)
 		}
 		if !tool.SupportsTransparent() {
-			t.Errorf("%s must support transparent — it is in the default-on set", name)
+			t.Errorf("%s must support explicit transparent mode", name)
+		}
+		wantDefault := name == "codex"
+		if got := tool.TransparentByDefault(); got != wantDefault {
+			t.Errorf("%s TransparentByDefault() = %v, want %v", name, got, wantDefault)
 		}
 	}
 	for _, name := range []string{"gemini", "openhands", "forge", "llxprt", "hermes"} {

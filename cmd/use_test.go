@@ -186,7 +186,7 @@ func TestParseUseArgs(t *testing.T) {
 }
 
 func TestParseUseArgsWithTransparent(t *testing.T) {
-	// wantTransparent is the tri-state the parser reports: nil = the user said nothing (Use then applies the per-tool default), non-nil = an explicit request. "unset" and "explicitly false" are NOT interchangeable now that transparent is the default — unset falls back silently on a tool with no adapter, explicit-true errors there.
+	// wantTransparent is the tri-state the parser reports: nil means Use applies the per-tool default; a non-nil value is an explicit request. Unset and explicitly false remain distinct because tools can choose different defaults.
 	cases := []struct {
 		name            string
 		args            []string
