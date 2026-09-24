@@ -113,7 +113,8 @@ func updateRun(args []string) (dispatched bool, err error) {
 
 	// cmp < 0: outdated. Pick a method based on where the binary lives.
 	method := detectInstallMethod()
-	cliout.Printf("\n"+i18n.T("update.update_available")+"\n", ver, latest)
+	// latest is the release tag ("v3.38.4") while the stamped version is bare, so both drop the "v" or the line reads "3.38.3 → v3.38.4".
+	cliout.Printf("\n"+i18n.T("update.update_available")+"\n", strings.TrimPrefix(ver, "v"), strings.TrimPrefix(latest, "v"))
 	renderChangelog(changelogRelease(ctx, latest))
 	cliout.Printf(i18n.T("update.install_method")+"\n\n", methodDisplayName(method))
 

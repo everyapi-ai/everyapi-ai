@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/everyapi-ai/everyapi-ai/v3/internal/cliprompt"
@@ -249,7 +250,8 @@ func handleUpdatePrompt(currentVer string, cache *updateCheckCache) bool {
 	}
 
 	// The picker's title combines the "version → version" notice and the question, so the user sees one rendering instead of a separate Printf line followed by a picker. Keeps the layout compact on small terminals.
-	title := fmt.Sprintf(i18n.T("update.notice"), currentVer, cache.LatestVersion) +
+	// LatestVersion is the release tag ("v3.38.4") while the stamped version is bare, so both drop the "v" to read as the same kind of value.
+	title := fmt.Sprintf(i18n.T("update.notice"), strings.TrimPrefix(currentVer, "v"), strings.TrimPrefix(cache.LatestVersion, "v")) +
 		"\n" + i18n.T("update.choice_prompt")
 	choices := []string{
 		choiceUpdate: i18n.T("update.choice_yes"),

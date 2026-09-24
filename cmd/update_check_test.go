@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -542,6 +543,10 @@ func TestMaybePromptUpdate_LauncherPathPrompts(t *testing.T) {
 	prompted := false
 	withPrompt(t, func(title string, choices []string) (int, error) {
 		prompted = true
+		// The cached tag carries a "v" the stamped version does not; the notice must not mix the two ("0.2.7 → v0.2.8").
+		if !strings.Contains(title, "0.2.7 → 0.2.8") || strings.Contains(title, "v0.2") {
+			t.Errorf("update notice should show both versions without the tag's v prefix, got %q", title)
+		}
 		return choiceLater, nil // "remind me later" — don't run an upgrade
 	})
 
