@@ -53,10 +53,14 @@ FLAGS
   --model <id>           choose the model for this launch, and remember it.
 						 Model-selected tools skip their native picker.
                          codex/opencode boot on it — it is written into their
-                         process-scoped config. claude is OFFERED it first in the
-                         catalog it discovers; claude still makes the final
-                         call, so a session that already has a model of its
-                         own may keep it. claude, codex, opencode and grok remember
+                         process-scoped config. claude boots on it through its
+                         own --model; a remembered choice (not an explicit one)
+                         yields to the project's .claude settings and to
+                         --resume/--continue.
+                         '--model default' (the first entry in claude's picker)
+                         leaves claude on its own default, which follows the
+                         newest Opus the key can route instead of pinning one
+                         version. claude, codex, opencode and grok remember
                          the choice and reuse it without asking; only their first
                          launch, or one whose remembered model this key can no
                          longer route, opens EveryAPI's picker, where
@@ -410,6 +414,10 @@ func use(args []string, persistModelSelection bool) error {
 		}
 	}
 	extraArgs = managedBootModelArgs(t, extraArgs, bootModel, settings.ClaudeLongContextEnabled())
+	if t.Name == "claude" && bootModel == tools.ClaudeDefaultModel {
+		// The argv now carries the family alias; everything below keys on a catalogue id, so it sees the Opus id that alias resolves to.
+		bootModel, _ = tools.ClaudeDefaultModelID(launchModelsForTool(t, relayCatalog, ""))
+	}
 
 	// Reasoning level, for the clients that have one. Runs after both model paths — the ModelEnv picker above and the managed picker just now — because the levels on offer depend on which model was chosen. Called unconditionally, including for a metadata-only invocation: the call also clears an inherited ReasoningLevelEnv, and skipping it here would let a nested launch forward the outer session's level.
 	if err := resolveReasoningLevel(t, settings, relayCatalog, launchedModelID(t, bootModel), interactive, toolInvocationNeedsEndpoint(extraArgs), pickModel); err != nil {
@@ -788,12 +796,24 @@ func resolveRememberedModelWithPersistence(
 	for _, m := range available {
 		offered = append(offered, m.ID)
 	}
+	// Claude Code's default is routable exactly when the catalogue serves the Opus id it resolves to; it is never in `offered`, because it is a selection rather than a catalogue id.
+	routable := func(model string) bool {
+		if t.Name == "claude" && model == tools.ClaudeDefaultModel {
+			_, served := tools.ClaudeDefaultModelID(available)
+			return served
+		}
+		return slices.Contains(offered, model)
+	}
 
 	if modelFlag != "" {
 		if modelUnavailableForTool(t, modelFlag) {
 			return "", fmt.Errorf("model %q is unavailable to %s", modelFlag, t.ExecName)
 		}
-		if len(catalog) > 0 && !slices.Contains(offered, modelFlag) {
+		if len(catalog) > 0 && t.Name == "claude" && modelFlag == tools.ClaudeDefaultModel && !routable(modelFlag) {
+			return "", fmt.Errorf(
+				"claude's default model is not available with this relay key/group: it serves no Opus model for the default to resolve to — run `everyapi use claude --model` to choose from the live list")
+		}
+		if len(catalog) > 0 && !routable(modelFlag) {
 			return "", fmt.Errorf(
 				"model %q is not available to %s with this relay key/group — run `everyapi use %s --model` to choose from the live list",
 				modelFlag, t.ExecName, t.ExecName)
@@ -808,7 +828,7 @@ func resolveRememberedModelWithPersistence(
 		remember("")
 	}
 	// A remembered model that the account can no longer route is dropped rather than pinned: the key may have moved group, or the model may be gone.
-	if remembered != "" && len(catalog) > 0 && !slices.Contains(offered, remembered) {
+	if remembered != "" && len(catalog) > 0 && !routable(remembered) {
 		remembered = ""
 		if t.Name != "claude" {
 			remember("")
@@ -845,11 +865,23 @@ func pickManagedModelForTool(t *tools.Tool, catalog []api.RelayModel, preferred 
 	if len(choices) == 0 {
 		return "", fmt.Errorf(i18n.T("use.no_selectable_models"), t.ExecName)
 	}
+	// Claude Code's own default heads the list, so a first launch that just presses Enter keeps the model current instead of freezing today's newest id. Offered only when the catalogue serves the Opus id the default resolves to; without one the default is exactly the unroutable boot model pinning exists to avoid.
+	if t.Name == "claude" {
+		if id, served := tools.ClaudeDefaultModelID(launchModelsForTool(t, catalog, "")); served {
+			choices = append([]toolModelChoice{{
+				id:    tools.ClaudeDefaultModel,
+				label: fmt.Sprintf(i18n.T("use.claude_default_model_choice"), id),
+			}}, choices...)
+		}
+	}
 	labels := make([]string, len(choices))
 	disabled := make([]bool, len(choices))
 	initial := 0
 	for index, choice := range choices {
 		labels[index] = choice.id
+		if choice.label != "" {
+			labels[index] = choice.label
+		}
 		disabled[index] = choice.unavailable
 		if choice.id == preferred {
 			initial = index
@@ -878,6 +910,9 @@ func managedBootModelArgs(t *tools.Tool, args []string, bootModel string, claude
 	// Metadata-only invocations take no model and must not grow one, and a caller-supplied --model stays authoritative rather than being duplicated. Grok gets both for free — managedBootPickerNeeded gates it on toolInvocationNeedsEndpoint and its raw model flags are rejected earlier — but Claude's picker is unconditional, so the guard has to live here.
 	if t.Name == "claude" && (!toolInvocationNeedsEndpoint(args) || containsFlag(args, "--model")) {
 		return args
+	}
+	if t.Name == "claude" && bootModel == tools.ClaudeDefaultModel {
+		return append([]string{"--model", tools.ClaudeDefaultBootModel(claudeLongContext)}, args...)
 	}
 	if t.Name == "claude" && claudeLongContext {
 		// Claude Code selects Anthropic's 1M-context beta from the model string it boots on, so the id that travels here decides the session's context window. Passing the plain id pins an Opus launch to 200K — see tools.ClaudeBootModelWithContextMarker for why Opus and only Opus is marked, and why the marker cannot reach the gateway as a routing id. Off is a real choice, not a fallback: the beta is account-gated upstream, and a key whose channel lacks it rejects every request rather than running short.
@@ -1807,6 +1842,7 @@ func chatModelsForTool(catalog []api.RelayModel, tool *tools.Tool) []string {
 
 type toolModelChoice struct {
 	id          string
+	label       string // shown instead of id when set
 	unavailable bool
 }
 

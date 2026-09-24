@@ -106,6 +106,28 @@ func ClaudeCatalogueID(bootModel string) string {
 	return strings.TrimSuffix(bootModel, claudeContextMarker1M)
 }
 
+// ClaudeDefaultModel is the boot-model selection that leaves the choice to Claude Code's own default instead of pinning a catalogue id. It is a selection value, not a model id: `everyapi use claude` remembers it like any other pick and turns it into ClaudeDefaultBootModel at launch.
+//
+// It exists because a remembered id is frozen at the version that was current when it was picked. The family overrides claudeFamilyDefaultEnv sets move to the newest id on every launch, but a pinned `--model claude-opus-5` keeps booting Opus 5 after Opus 5.5 ships, and the in-session /model that could move it is session-scoped under EveryAPI (see claude_user_settings.go), so the user had no durable way back to the default.
+const ClaudeDefaultModel = "default"
+
+// claudeDefaultFamily is the family Claude Code's default resolves through in gateway mode. Verified against 2.1.281: with no --model the first request names the ANTHROPIC_DEFAULT_OPUS_MODEL override, and with that override blanked it falls back to the client's compiled-in claude-opus-4-7.
+const claudeDefaultFamily = "opus"
+
+// ClaudeDefaultBootModel is the --model argument that boots Claude Code on its default. The family alias rather than no argument at all, because the alias resolves through the same ANTHROPIC_DEFAULT_OPUS_MODEL override the default does while still carrying the 1M marker: Claude Code reads `opus[1m]` as the override's id plus the context-1m beta (verified against 2.1.281), and an absent --model has nowhere to put the marker, which would silently cap every default launch at 200K.
+func ClaudeDefaultBootModel(longContext bool) string {
+	if longContext {
+		return claudeDefaultFamily + claudeContextMarker1M
+	}
+	return claudeDefaultFamily
+}
+
+// ClaudeDefaultModelID is the catalogue id Claude Code's default resolves to for this launch — the id claudeFamilyDefaultEnv points the Opus override at — and whether the catalogue serves one. A catalogue with no Opus id leaves the override blank, so the default would resolve to the client's compiled-in id instead; callers must treat that as the default being unavailable rather than launch into the 403 that pinning a model exists to prevent.
+func ClaudeDefaultModelID(models []Model) (string, bool) {
+	candidate, served := claudeFamilyCandidates(models)[claudeDefaultFamily]
+	return candidate.id, served
+}
+
 // claudeFamilyCandidates resolves the newest catalogue id for each family Claude Code exposes an override for. Families the catalogue does not serve are absent from the result rather than present with a zero value, so a caller can tell "no id won this family" from "this family is not tracked".
 func claudeFamilyCandidates(models []Model) map[string]claudeCandidate {
 	chosen := make(map[string]claudeCandidate, len(claudeFamilies))

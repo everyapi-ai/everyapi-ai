@@ -1661,6 +1661,40 @@ func TestResolveRememberedModel(t *testing.T) {
 		}
 	})
 
+	t.Run("the Claude default is accepted, remembered, and reused", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		s := &config.Settings{}
+		got, err := resolveRememberedModel(claude, s, catalog, tools.ClaudeDefaultModel, false, true)
+		if err != nil || got != tools.ClaudeDefaultModel {
+			t.Fatalf("explicit default: got (%q, %v)", got, err)
+		}
+		if s.ToolModel("claude") != tools.ClaudeDefaultModel {
+			t.Fatalf("default was not remembered: %#v", s.ToolModels)
+		}
+		// interactive=true, yet no picker runs: the remembered default is routable because the catalogue serves an Opus id.
+		got, err = resolveRememberedModel(claude, s, catalog, "", false, true)
+		if err != nil || got != tools.ClaudeDefaultModel {
+			t.Fatalf("remembered default: got (%q, %v)", got, err)
+		}
+	})
+
+	t.Run("the Claude default needs an Opus id to resolve to", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		noOpus := []api.RelayModel{{ID: "claude-sonnet-4-6", SupportedEndpointTypes: []string{"anthropic"}}}
+		_, err := resolveRememberedModel(claude, &config.Settings{}, noOpus, tools.ClaudeDefaultModel, false, false)
+		if err == nil || !strings.Contains(err.Error(), "no Opus model") {
+			t.Fatalf("explicit default with no Opus: err = %v, want the reason named; the launch would 403 on the client's built-in model", err)
+		}
+		s := &config.Settings{ToolModels: map[string]string{"claude": tools.ClaudeDefaultModel}}
+		got, err := resolveRememberedModel(claude, s, noOpus, "", false, false)
+		if err != nil || got != "" {
+			t.Fatalf("remembered default without Opus: got (%q, %v), want it dropped for this launch", got, err)
+		}
+		if s.ToolModel("claude") != tools.ClaudeDefaultModel {
+			t.Fatalf("official Claude memory = %q, want fail-soft setting preserved", s.ToolModel("claude"))
+		}
+	})
+
 	t.Run("a flag naming an unavailable model is rejected", func(t *testing.T) {
 		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 		if _, err := resolveRememberedModel(claude, &config.Settings{}, catalog, "gpt-5", false, true); err == nil {
@@ -1958,6 +1992,20 @@ func TestManagedBootModelArgsClaude(t *testing.T) {
 			if !reflect.DeepEqual(got, []string{"--model", want}) {
 				t.Errorf("managedBootModelArgs(claude, %q) = %v, want [--model %s]", boot, got, want)
 			}
+		}
+	})
+
+	t.Run("boots the Claude default on the Opus family alias", func(t *testing.T) {
+		// The alias resolves through ANTHROPIC_DEFAULT_OPUS_MODEL, which follows the newest Opus on every launch; the marker still selects 1M context.
+		if got := managedBootModelArgs(claude, nil, tools.ClaudeDefaultModel, true); !reflect.DeepEqual(got, []string{"--model", "opus[1m]"}) {
+			t.Fatalf("long context on: %v", got)
+		}
+		if got := managedBootModelArgs(claude, nil, tools.ClaudeDefaultModel, false); !reflect.DeepEqual(got, []string{"--model", "opus"}) {
+			t.Fatalf("long context off: %v", got)
+		}
+		args := []string{"--model", "claude-haiku-4-5"}
+		if got := managedBootModelArgs(claude, args, tools.ClaudeDefaultModel, true); !reflect.DeepEqual(got, args) {
+			t.Fatalf("caller-supplied --model was overridden: %v", got)
 		}
 	})
 

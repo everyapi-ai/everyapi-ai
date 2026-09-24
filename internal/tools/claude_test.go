@@ -45,6 +45,17 @@ func TestClaudeFamilyDefaultEnvPinsEveryFamilyInTheCatalogue(t *testing.T) {
 	assertClaudeEnv(t, got, want)
 }
 
+func TestClaudeDefaultModelIDFollowsTheOpusOverride(t *testing.T) {
+	models := modelsFromIDs("claude-opus-5", "claude-opus-5-5", "claude-sonnet-5")
+	id, served := ClaudeDefaultModelID(models)
+	if !served || id != claudeFamilyDefaultEnv(models)["ANTHROPIC_DEFAULT_OPUS_MODEL"] || id != "claude-opus-5-5" {
+		t.Fatalf("ClaudeDefaultModelID = (%q, %v), want the newest Opus the override points at", id, served)
+	}
+	if _, served := ClaudeDefaultModelID(modelsFromIDs("claude-sonnet-5", "deepseek-v4-flash")); served {
+		t.Fatal("a catalogue without Opus must report the default as unavailable")
+	}
+}
+
 func TestClaudeFamilyDefaultEnvPicksNewestPerFamily(t *testing.T) {
 	// Catalogue order is the picker's preferred order, not a version order, so the newest must win regardless of position.
 	got := claudeFamilyDefaultEnv(modelsFromIDs(
