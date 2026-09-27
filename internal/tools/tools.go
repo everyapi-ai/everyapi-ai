@@ -308,9 +308,14 @@ func (t *Tool) TransparentByDefault() bool {
 
 func transparentClaudeEnv(caPath string) (map[string]string, []string) {
 	return map[string]string{
-			"ANTHROPIC_BASE_URL":                         "https://api.anthropic.com",
-			"ANTHROPIC_AUTH_TOKEN":                       transparentPlaceholderCredential,
-			"NODE_EXTRA_CA_CERTS":                        caPath,
+			"ANTHROPIC_BASE_URL":   "https://api.anthropic.com",
+			"ANTHROPIC_AUTH_TOKEN": transparentPlaceholderCredential,
+			"NODE_EXTRA_CA_CERTS":  caPath,
+			// Claude Code is distributed as a standalone Bun binary. Bun's
+			// TLS client only incorporates NODE_EXTRA_CA_CERTS reliably when
+			// system CA loading is enabled; without this, the connector's
+			// ephemeral CA is rejected as an unknown authority.
+			"NODE_USE_SYSTEM_CA":                         "1",
 			"ENABLE_TOOL_SEARCH":                         "1",
 			"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
 			// Claude Code gates /v1/models behind gateway mode even when discovery is enabled. Keep the official origin here: Connector intercepts it and the child still never receives EveryAPI's gateway URL or relay key. Gateway mode also swaps the family alias table for the gateway tier's, which resolves opus to a retired id; prepareTransparentCatalogFn corrects that from the catalogue.
