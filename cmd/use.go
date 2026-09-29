@@ -696,6 +696,7 @@ func applyAgentContext(t *tools.Tool, args []string) []string {
 	}
 	merged := append([]string(nil), args...)
 	appendInstructions := func(existing string) string {
+		existing = tools.StripAgentInstructions(existing)
 		if existing == "" {
 			return instructions
 		}

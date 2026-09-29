@@ -1027,6 +1027,12 @@ func TestApplyAgentContextMergesClaudeSystemPrompt(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Claude args without user prompt = %#v, want %#v", got, want)
 	}
+	tmuxInstructions := tools.AgentInstructions()
+	got = applyAgentContext(claude, []string{"--resume", "abc", "--append-system-prompt", tmuxInstructions})
+	want = []string{"--resume", "abc", "--append-system-prompt", tmuxInstructions}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("replayed Claude args = %#v, want the recorded instructions once %#v", got, want)
+	}
 	if got := applyAgentContext(claude, []string{"--help"}); !reflect.DeepEqual(got, []string{"--help"}) {
 		t.Fatalf("Claude help args = %#v, want unchanged", got)
 	}
@@ -1034,6 +1040,12 @@ func TestApplyAgentContextMergesClaudeSystemPrompt(t *testing.T) {
 	want = []string{"--append-system-prompt", tools.AgentInstructions(), "resume"}
 	if got := applyAgentContext(claude, []string{"resume"}); !reflect.DeepEqual(got, want) {
 		t.Fatalf("Claude native args = %#v, want artifact standard %#v", got, want)
+	}
+	// A session first launched inside tmux and restored outside it replays the tmux variant; the block is replaced by this launch's, and the user's own text survives.
+	got = applyAgentContext(claude, []string{"--resume", "abc", "--append-system-prompt=User instructions\n\n" + tmuxInstructions})
+	want = []string{"--resume", "abc", "--append-system-prompt=User instructions\n\n" + tools.AgentInstructions()}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("replayed tmux-era Claude args = %#v, want %#v", got, want)
 	}
 }
 

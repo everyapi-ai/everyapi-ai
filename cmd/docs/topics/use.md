@@ -171,6 +171,25 @@ The standard also carries the viewer's constraints, because a report that reache
 
 `everyapi settings set artifact_reports false` declines it. The switch lives on the account, so it covers every machine signed in to it. Agents read the live value immediately before publishing, so changing it also affects sessions that are already running; only an exact successful `true` authorizes an automatic report. The capability list and Computer Use guidance are unaffected, and `everyapi artifacts share` keeps working either way.
 
+## Restoring sessions after a restart
+
+The local hops a launch creates (the catalogue proxy, the sanitizer, the transparent connector) run inside the `everyapi use` process and bind a fresh loopback port each time. They end when the launch ends. A terminal that restores an agent session by relaunching the agent binary on its own therefore brings back a stale `ANTHROPIC_BASE_URL=http://127.0.0.1:<port>` with nothing listening on it, and every request fails with `ECONNREFUSED`.
+
+Resume through the CLI instead, so the hops are rebuilt: `everyapi use claude -- --resume <session-id>`. Replayed arguments are safe to pass back: the EveryAPI instructions a previous launch appended to `--append-system-prompt` are replaced rather than stacked.
+
+cmux can do this automatically from the release that ships external agent launchers (`agents.launchers`, cmux #10503). Declare the CLI in `~/.config/cmux/cmux.json`, and cmux re-supplies the prefix when it resumes a session it saw start under `everyapi`:
+
+```
+{ "agents": { "launchers": [ {
+  "id": "everyapi-claude",
+  "kinds": ["claude"],
+  "detect": { "argvExecutables": ["everyapi"] },
+  "resumeArgvPrefix": ["everyapi", "use", "claude", "--"]
+} ] } }
+```
+
+Sessions captured before the declaration existed carry no launcher record; resume those by hand once.
+
 ## Examples
 
 ```

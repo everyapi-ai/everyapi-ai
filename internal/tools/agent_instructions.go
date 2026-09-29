@@ -78,6 +78,20 @@ func AgentInstructions() string {
 	return strings.Join(sections, "\n\n")
 }
 
+// agentInstructionsHeading opens every block AgentInstructions has produced, whichever version or terminal mode produced it.
+var agentInstructionsHeading = strings.SplitN(cliCapabilityInstructions, " (", 2)[0]
+
+// StripAgentInstructions removes a block of EveryAPI instructions a previous launch appended to a system-prompt value, keeping whatever the user wrote ahead of it.
+//
+// Session managers replay a restored session's recorded argv: cmux resumes a Claude session wrapped by `everyapi use` as `everyapi use claude -- --resume <id> --append-system-prompt <recorded value>`, and the recorded value already ends with the instructions the original launch appended. Merging onto it verbatim stacks one more copy per restore. The block is always appended last, so everything from its heading onward is EveryAPI's to replace.
+func StripAgentInstructions(value string) string {
+	index := strings.Index(value, agentInstructionsHeading)
+	if index < 0 {
+		return value
+	}
+	return strings.TrimRight(value[:index], "\n")
+}
+
 // TmuxAgentInstructions returns process-scoped context only for a verified tmux launch. The environment variables are public integration points for every client; clients with a documented instruction surface also receive this text proactively.
 func TmuxAgentInstructions() string {
 	if os.Getenv("TMUX") == "" || os.Getenv(TerminalModeEnvironment) != "tmux" {
