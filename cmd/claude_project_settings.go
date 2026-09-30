@@ -121,9 +121,14 @@ func announceProjectOwnedPermissionMode(args []string, dangerousMode *bool, inte
 	return interactive
 }
 
-// claudeSettingsSetPermissions reports whether one settings file states a permissions policy. An absent block is no policy; so is an empty one, which states nothing that a bypass could override.
+// claudePermissionsWideningKeys are the permissions keys that can only grant, never restrict. Bypassing a block made of nothing else takes away nothing the project asked for, because --dangerously-skip-permissions already grants everything they could.
 //
-// Any other non-empty block counts, without inspecting which keys it holds. A block carrying only additionalDirectories does widen rather than restrict, so treating it as a policy withholds the bypass from a project that never asked for that — a small, visible, per-launch cost the printed notice explains. The alternative is a hand-maintained list of which permission keys are restrictive, and the day Claude Code adds one that this list has not learned yet, a real policy silently stops being honoured. Between erring toward asking and erring toward bypassing someone's rules, only one of those is recoverable by typing a flag.
+// This is deliberately a list of the harmless keys rather than of the restrictive ones. A key missing from it still counts as a policy, so the day Claude Code adds a new restrictive key it is honoured without anyone updating this list; the cost of a missing widening key is only an unneeded notice.
+var claudePermissionsWideningKeys = map[string]bool{"allow": true, "additionalDirectories": true}
+
+// claudeSettingsSetPermissions reports whether one settings file states a permissions policy that a bypass would override. An absent block is no policy; so is an empty one, and so is one holding only widening keys.
+//
+// The widening-only case is not an edge case. Claude Code writes an allow rule into .claude/settings.local.json every time the user answers a prompt with "always allow", so nearly every project the user has worked in carries one. Counting it as a policy withheld the saved dangerous-mode preference from almost everywhere, to protect rules that the bypass subsumes anyway.
 func claudeSettingsSetPermissions(settings map[string]json.RawMessage) bool {
 	raw, present := settings["permissions"]
 	if !present {
@@ -133,5 +138,10 @@ func claudeSettingsSetPermissions(settings map[string]json.RawMessage) bool {
 	if json.Unmarshal(raw, &block) != nil {
 		return true // same rule as everywhere else here: a file this cannot read is one it must not overrule
 	}
-	return len(block) > 0
+	for key := range block {
+		if !claudePermissionsWideningKeys[key] {
+			return true
+		}
+	}
+	return false
 }
