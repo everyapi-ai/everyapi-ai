@@ -175,20 +175,43 @@ The standard also carries the viewer's constraints, because a report that reache
 
 The local hops a launch creates (the catalogue proxy, the sanitizer, the transparent connector) run inside the `everyapi use` process and bind a fresh loopback port each time. They end when the launch ends. A terminal that restores an agent session by relaunching the agent binary on its own therefore brings back a stale `ANTHROPIC_BASE_URL=http://127.0.0.1:<port>` with nothing listening on it, and every request fails with `ECONNREFUSED`.
 
-Resume through the CLI instead, so the hops are rebuilt: `everyapi use claude -- --resume <session-id>`. Replayed arguments are safe to pass back: the EveryAPI instructions a previous launch appended to `--append-system-prompt` are replaced rather than stacked.
+Resume through the CLI instead, so the hops are rebuilt:
+
+```
+everyapi use claude -- --resume <session-id>
+everyapi use codex -- resume <session-id>
+```
+
+Codex also needs the provider configuration in its lifecycle-bound profile. Restoring the bare Codex binary can fail before making any request with a missing-provider error naming `everyapi_openai` (or `everyapi` in injected mode). The persistent `CODEX_HOME` retains the conversation, but not the launch's profile or connector. Resuming through EveryAPI creates a fresh profile and connection; replayed `--profile` arguments are replaced with the new profile. Do not copy an expired profile or loopback proxy into the persistent config.
+
+Replayed Claude arguments are also safe to pass back: the EveryAPI instructions a previous launch appended to `--append-system-prompt` are replaced rather than stacked.
 
 cmux can do this automatically from the release that ships external agent launchers (`agents.launchers`, cmux #10503). Declare the CLI in `~/.config/cmux/cmux.json`, and cmux re-supplies the prefix when it resumes a session it saw start under `everyapi`:
 
-```
-{ "agents": { "launchers": [ {
-  "id": "everyapi-claude",
-  "kinds": ["claude"],
-  "detect": { "argvExecutables": ["everyapi"] },
-  "resumeArgvPrefix": ["everyapi", "use", "claude", "--"]
-} ] } }
+```json
+{
+  "agents": {
+    "launchers": [
+      {
+        "id": "everyapi-claude",
+        "kinds": ["claude"],
+        "detect": { "argvExecutables": ["everyapi"] },
+        "resumeArgvPrefix": ["everyapi", "use", "claude", "--"]
+      },
+      {
+        "id": "everyapi-codex",
+        "kinds": ["codex"],
+        "detect": { "argvExecutables": ["everyapi"] },
+        "resumeArgvPrefix": ["everyapi", "use", "codex", "--"]
+      }
+    ]
+  }
+}
 ```
 
-Sessions captured before the declaration existed carry no launcher record; resume those by hand once.
+Back up the existing file and merge these entries into `agents.launchers`, preserving other settings and launchers. Keep each entry scoped to its agent kind: a Codex session must resume through `use codex`. Run `cmux config check` to validate the result, then `cmux reload-config` to apply it.
+
+Sessions captured before the declaration existed carry no launcher record. Resume those through EveryAPI once using the commands above, so cmux captures the launcher for subsequent restores.
 
 ## Examples
 

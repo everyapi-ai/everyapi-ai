@@ -441,6 +441,8 @@ func TestToolArgsForLaunchPreservesCodexResumeScope(t *testing.T) {
 		{"explicit all", []string{"resume", "--all"}, []string{"resume", "--all"}},
 		{"last session", []string{"resume", "--last"}, []string{"resume", "--last"}},
 		{"specific session", []string{"resume", "session-id"}, []string{"resume", "session-id"}},
+		{"restored profile before resume", []string{"--profile", "everyapi-codex-expired", "resume", "session-id"}, []string{"resume", "session-id"}},
+		{"restored profile after resume", []string{"resume", "session-id", "--profile=everyapi-codex-expired", "--all"}, []string{"resume", "session-id", "--all"}},
 		{"long profile", []string{"--profile", "personal", "prompt"}, []string{"prompt"}},
 		{"long profile equals", []string{"--profile=personal", "prompt"}, []string{"prompt"}},
 		{"short profile", []string{"-p", "personal", "prompt"}, []string{"prompt"}},
