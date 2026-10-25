@@ -173,6 +173,31 @@ func TestPrepareCodexAddsArtifactStandardAndOnlyCurrentTmuxContext(t *testing.T)
 	}
 }
 
+func TestPrepareCodexIncludesRepositoryPullRequestWorkflow(t *testing.T) {
+	_, codexHome := codexTestHome(t)
+	if _, err := prepareCodex("https://api.everyapi.ai", "token"); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(codexHome, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := string(body)
+	for _, required := range []string{
+		"Repository workflow:",
+		"After the relevant checks pass",
+		"commit the relevant changes, push the branch, and open a pull request",
+		"Do not finish with uncommitted local changes",
+		"Do not merge the pull request unless the user explicitly asks",
+		"a pull request is unnecessary",
+		"never claim that a pull request was opened when it was not",
+	} {
+		if !strings.Contains(config, required) {
+			t.Errorf("Codex config missing repository workflow instruction %q:\n%s", required, config)
+		}
+	}
+}
+
 // Codex embeds the standard in a generated config.toml. It must keep the live gate even when the cached
 // preference is false, otherwise a dashboard change cannot affect this running agent in either direction.
 func TestPrepareCodexReadsTheArtifactReportsSettingAtCompletion(t *testing.T) {

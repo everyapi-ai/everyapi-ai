@@ -326,11 +326,21 @@ func writeCodexConfigTOMLWithCatalog(codexHome, apiBase, catalogPath, bootModel 
 
 func codexAgentInstructionsConfig() string {
 	instructions := AgentInstructions()
+	if instructions != "" {
+		instructions += "\n\n"
+	}
+	instructions += codexWorkflowInstructions
 	if instructions == "" {
 		return ""
 	}
 	return "developer_instructions = " + tomlBasicQuote(instructions) + "\n"
 }
+
+// codexWorkflowInstructions closes the loop that otherwise leaves a successful
+// coding task stranded in the user's working tree. It is Codex-specific because
+// Codex has a documented developer_instructions surface; other clients receive
+// their own native workflow instructions where their contracts support them.
+const codexWorkflowInstructions = `Repository workflow: when you make or fix code in a Git repository, carry the task through the repository's normal contribution flow. After the relevant checks pass, create a focused branch if needed, commit the relevant changes, push the branch, and open a pull request against the repository's documented integration branch. Do not finish with uncommitted local changes or stop after editing files. Do not merge the pull request unless the user explicitly asks. For read-only questions or tasks with no code changes, a pull request is unnecessary. If credentials, repository policy, or network access prevents opening the pull request, report the exact blocker and the commands needed; never claim that a pull request was opened when it was not.`
 
 func codexCatalogConfig(path string) string {
 	if path == "" {
