@@ -405,6 +405,7 @@ func writeCodexModelCatalog(codexHome string, models []Model) (string, error) {
 			entry["availability_nux"] = nil
 			entry["upgrade"] = nil
 		}
+		addCodexUltrafastTier(entry, model.ID)
 		generated = append(generated, entry)
 	}
 	if len(generated) == 0 {
@@ -419,6 +420,30 @@ func writeCodexModelCatalog(codexHome string, models []Model) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// Codex's bundled catalog can lag API availability (0.164.0 lists only Fast
+// for these models). Codex drops a configured service_tier unless the model's
+// service_tiers advertises it, so fill this gap for the exact models documented
+// as generally available: https://developers.openai.com/api/docs/guides/ultrafast-mode
+// This advertises an opt-in capability; it does not change the launch's tier.
+func addCodexUltrafastTier(entry map[string]any, modelID string) {
+	switch modelID {
+	case "gpt-6-astra", "gpt-6.1-sol":
+	default:
+		return
+	}
+	tiers, _ := entry["service_tiers"].([]any)
+	for _, raw := range tiers {
+		if tier, ok := raw.(map[string]any); ok && tier["id"] == "ultrafast" {
+			return
+		}
+	}
+	entry["service_tiers"] = append(tiers, map[string]any{
+		"id":          "ultrafast",
+		"name":        "Ultrafast",
+		"description": "Fastest responses, increased usage",
+	})
 }
 
 func readCodexUserDefaults(codexHome string) (codexUserDefaults, error) {
