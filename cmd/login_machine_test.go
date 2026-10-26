@@ -179,6 +179,7 @@ func TestLoginMachineEmitsStableTerminalFailureCodes(t *testing.T) {
 	}{
 		{name: "expired", err: api.ErrDeviceAuthExpired, code: "expired"},
 		{name: "denied", err: api.ErrDeviceAuthDenied, code: "denied"},
+		{name: "region blocked", err: api.ErrDeviceAuthRegionBlocked, code: "region_blocked"},
 		{name: "cancelled", err: context.Canceled, code: "cancelled"},
 		{name: "unavailable", err: errors.New("backend included sk-everyapi-server-secret"), code: "unavailable"},
 	}

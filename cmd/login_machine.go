@@ -143,6 +143,8 @@ func loginMachinePollErrorCode(err error) string {
 		return "expired"
 	case errors.Is(err, api.ErrDeviceAuthDenied):
 		return "denied"
+	case errors.Is(err, api.ErrDeviceAuthRegionBlocked):
+		return "region_blocked"
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return "cancelled"
 	default:

@@ -1307,6 +1307,7 @@ browser_opened = "浏览器已打开。请核对页面上的校验短语与上�
 
 [login]
 cancelled = "已取消登录。"
+region_blocked = "当前网络不支持登录，请切换到中国大陆以外的网络后重试。"
 gateway_region_prompt = "选择 EveryAPI 网关区域"
 gateway_region_global = "全球网关（中国大陆以外推荐）"
 gateway_region_cn = "中国加速网关（中国大陆推荐）"

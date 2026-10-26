@@ -1322,6 +1322,7 @@ browser_opened = "Browser opened. Verify the phrase on the page matches the one 
 
 [login]
 cancelled = "Login cancelled."
+region_blocked = "Sign-in is not available from mainland China. Switch to a network outside mainland China and try again."
 gateway_region_prompt = "Choose your EveryAPI gateway region"
 gateway_region_global = "Global gateway (recommended outside mainland China)"
 gateway_region_cn = "China accelerated gateway (mainland China)"

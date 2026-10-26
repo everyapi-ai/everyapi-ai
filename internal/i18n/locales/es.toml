@@ -1342,6 +1342,7 @@ browser_opened = "Navegador abierto. Verifica que la frase de la página coincid
 
 [login]
 cancelled = "Inicio de sesión cancelado."
+region_blocked = "El inicio de sesión no está disponible desde China continental. Cambia a una red fuera de China continental y vuelve a intentarlo."
 gateway_region_prompt = "Elige la región de pasarela de EveryAPI"
 gateway_region_global = "Pasarela global (recomendada fuera de China continental)"
 gateway_region_cn = "Pasarela acelerada de China (China continental)"

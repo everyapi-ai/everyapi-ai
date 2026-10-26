@@ -1345,6 +1345,7 @@ browser_opened = "Navigateur ouvert. Vérifiez que la phrase sur la page corresp
 
 [login]
 cancelled = "Connexion annulée."
+region_blocked = "La connexion n’est pas disponible depuis la Chine continentale. Utilisez un réseau situé hors de Chine continentale, puis réessayez."
 gateway_region_prompt = "Choisissez la région de passerelle EveryAPI"
 gateway_region_global = "Passerelle globale (recommandée hors Chine continentale)"
 gateway_region_cn = "Passerelle accélérée Chine (Chine continentale)"

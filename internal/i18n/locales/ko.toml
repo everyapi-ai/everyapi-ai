@@ -1329,6 +1329,7 @@ browser_opened = "브라우저를 열었습니다. 페이지의 문구가 위와
 
 [login]
 cancelled = "로그인이 취소되었습니다."
+region_blocked = "중국 본토에서는 로그인할 수 없습니다. 중국 본토 이외의 네트워크로 전환한 후 다시 시도하세요."
 gateway_region_prompt = "EveryAPI 게이트웨이 지역 선택"
 gateway_region_global = "글로벌 게이트웨이 (중국 본토 외 지역 권장)"
 gateway_region_cn = "중국 가속 게이트웨이 (중국 본토)"

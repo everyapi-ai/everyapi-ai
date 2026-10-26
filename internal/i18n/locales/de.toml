@@ -1340,6 +1340,7 @@ browser_opened = "Browser geöffnet. Vergewissere dich, dass die Phrase auf der 
 
 [login]
 cancelled = "Anmeldung abgebrochen."
+region_blocked = "Die Anmeldung ist vom chinesischen Festland aus nicht verfügbar. Wechsle zu einem Netzwerk außerhalb des chinesischen Festlands und versuche es erneut."
 gateway_region_prompt = "EveryAPI-Gateway-Region auswählen"
 gateway_region_global = "Globales Gateway (außerhalb des chinesischen Festlands empfohlen)"
 gateway_region_cn = "China-beschleunigtes Gateway (chinesisches Festland)"

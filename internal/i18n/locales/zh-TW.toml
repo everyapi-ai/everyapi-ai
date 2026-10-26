@@ -1306,6 +1306,7 @@ browser_opened = "瀏覽器已開啟。請核對頁面上的校驗短語與上�
 
 [login]
 cancelled = "已取消登入。"
+region_blocked = "目前不支援從中國大陸網路登入，請切換到中國大陸以外的網路後再試。"
 gateway_region_prompt = "選擇 EveryAPI 閘道區域"
 gateway_region_global = "全球閘道（中國大陸以外推薦）"
 gateway_region_cn = "中國加速閘道（中國大陸推薦）"

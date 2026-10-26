@@ -1332,6 +1332,7 @@ browser_opened = "ブラウザを開きました。ページ上のフレーズ�
 
 [login]
 cancelled = "ログインをキャンセルしました。"
+region_blocked = "中国本土のネットワークからはサインインできません。中国本土以外のネットワークに切り替えて、もう一度お試しください。"
 gateway_region_prompt = "EveryAPI ゲートウェイ地域を選択"
 gateway_region_global = "グローバルゲートウェイ（中国本土以外に推奨）"
 gateway_region_cn = "中国高速ゲートウェイ（中国本土）"

@@ -157,6 +157,8 @@ func Login(args []string) error {
 			return fmt.Errorf("the code timed out before you authorized — run 'everyapi auth login' again")
 		case api.ErrDeviceAuthDenied:
 			return fmt.Errorf("authorization was denied in the browser")
+		case api.ErrDeviceAuthRegionBlocked:
+			return errors.New(i18n.T("login.region_blocked"))
 		default:
 			if errors.Is(err, context.Canceled) {
 				// Ctrl+C during the poll cancels the context; the UI told the user "Ctrl+C to cancel", so exit cleanly instead of dumping "Error: poll: context canceled" with a non-zero status.
@@ -264,6 +266,8 @@ func finishOAuth2Login(ctx context.Context, apiBase, alias string, client *api.C
 			return fmt.Errorf("the code timed out before you authorized — run 'everyapi auth login' again")
 		case api.ErrDeviceAuthDenied:
 			return fmt.Errorf("authorization was denied in the browser")
+		case api.ErrDeviceAuthRegionBlocked:
+			return errors.New(i18n.T("login.region_blocked"))
 		default:
 			if errors.Is(err, context.Canceled) {
 				// Ctrl+C during the poll cancels the context; the UI told the user "Ctrl+C to cancel", so exit cleanly instead of dumping "Error: poll: context canceled" with a non-zero status.
