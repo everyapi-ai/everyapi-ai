@@ -1712,7 +1712,9 @@ func launchModelsForTool(t *tools.Tool, catalog []api.RelayModel, preferred stri
 		}
 		if requiredEndpoint != "" && !relayModelSupportsEndpoint(model, requiredEndpoint) &&
 			(t.AlternativeEndpoint == "" || !relayModelSupportsEndpoint(model, t.AlternativeEndpoint)) {
-			continue
+			if t.ExecName != "claude" || !model.ClaudeMessagesBridge {
+				continue
+			}
 		}
 		id := cliout.Sanitize(model.ID)
 		if id == "" || modelUnavailableForTool(t, id) || seen[id] {

@@ -63,11 +63,15 @@ func startModelCatalogProxy(upstreamBase string, transform func(http.Handler) ht
 		return "", nil, fmt.Errorf("parse model catalog proxy upstream %q: %w", upstreamBase, err)
 	}
 	reverse := httputil.NewSingleHostReverseProxy(target)
+	// A clone of DefaultTransport keeps env proxy support, HTTP/2 and the dial/TLS timeouts the shared transport carried before; the only change is that a malformed proxy variable cannot put its value into the 502 body or the log (withholdProxyConfigError).
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = withholdProxyConfigError(transport.Proxy)
+	reverse.Transport = transport
 	reverse.ErrorLog = logger
 	reverse.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		// Method and path only. r.URL.String() would carry query-string credentials into the log — a real shape here, which is why the connector strips them before relaying (stripClientQueryCredentials).
 		logger.Printf("model catalog: relay %s %s to %s failed: %v", r.Method, r.URL.Path, target.Host, err)
-		http.Error(w, "model catalog upstream unavailable", http.StatusBadGateway)
+		http.Error(w, upstreamUnreachableMessage(target.Host, err), http.StatusBadGateway)
 	}
 	direct := reverse.Director
 	reverse.Director = func(r *http.Request) {
@@ -96,6 +100,29 @@ func startModelCatalogProxy(upstreamBase string, transform func(http.Handler) ht
 		})
 	}
 	return "http://" + listener.Addr().String(), stop, nil
+}
+
+// upstreamUnreachableMessage is the body of the 502 this hop answers with when the relay to the gateway produced no HTTP response at all — DNS, dial, TLS, reset, or an HTTP/2 stream error. A gateway that answered, even with a 5xx, is passed through untouched and never reaches here. The launched tool prints this body verbatim next to the status (Claude Code shows "502 <body> · Retrying"), so it has to name the hop and carry the transport cause: the previous "model catalog upstream unavailable" sent users looking at the model list when the gateway was simply unreachable from their machine.
+//
+// Echoing err is safe only because of two guarantees, both of which this body depends on. ReverseProxy hands it straight from Transport.RoundTrip, which — unlike http.Client — does not wrap it in a *url.Error carrying the request URL, so a query-string credential cannot surface. And the one RoundTrip error that does quote a user-supplied value, net/http's "invalid proxy address" for an unparsable HTTP_PROXY/HTTPS_PROXY, is replaced before it gets here by withholdProxyConfigError, because that value routinely carries a proxy username and password.
+func upstreamUnreachableMessage(host string, err error) string {
+	return fmt.Sprintf("everyapi CLI local proxy could not reach %s: %v", host, err)
+}
+
+var errInvalidProxyEnvironment = errors.New("HTTP_PROXY/HTTPS_PROXY holds an invalid proxy URL (value withheld because it can carry credentials)")
+
+// withholdProxyConfigError wraps a Transport.Proxy func so a proxy-configuration error names the problem without quoting the configured value. net/http's environment proxy reports a parse failure as `invalid proxy address "<raw value>"`, and that raw value is where proxy credentials live; without this, a typo in the user's HTTPS_PROXY would print their proxy password in the launched tool's TUI and its saved transcript. A nil proxy func stays nil, meaning no proxy.
+func withholdProxyConfigError(proxy func(*http.Request) (*url.URL, error)) func(*http.Request) (*url.URL, error) {
+	if proxy == nil {
+		return nil
+	}
+	return func(r *http.Request) (*url.URL, error) {
+		u, err := proxy(r)
+		if err != nil {
+			return nil, errInvalidProxyEnvironment
+		}
+		return u, nil
+	}
 }
 
 func serveLaunchModelCatalog(w http.ResponseWriter, r *http.Request, models, detailOnly []tools.Model) {
@@ -199,10 +226,7 @@ func rewriteModelAlias(r *http.Request, aliases map[string]string) error {
 		return errAliasRequestTooLarge
 	}
 	// Every early return has to put the consumed body back, or the request reaches the reverse proxy with an empty (already drained) reader.
-	restore := func() {
-		r.Body = io.NopCloser(bytes.NewReader(body))
-		r.ContentLength = int64(len(body))
-	}
+	restore := func() { setReplayableBody(r, body) }
 	start, end, found := topLevelStringValueRange(body, "model")
 	if !found {
 		restore()
@@ -230,10 +254,16 @@ func rewriteModelAlias(r *http.Request, aliases map[string]string) error {
 		rewritten = append(rewritten, body[end:]...)
 		body = rewritten
 	}
-	r.Body = io.NopCloser(bytes.NewReader(body))
-	r.ContentLength = int64(len(body))
+	setReplayableBody(r, body)
 	r.Header.Set("Content-Length", fmt.Sprint(len(body)))
 	return nil
+}
+
+// setReplayableBody installs an in-memory body together with GetBody. The body is already buffered here, and GetBody is what lets net/http's HTTP/2 transport replay the request after a GOAWAY, REFUSED_STREAM or peer PROTOCOL_ERROR that arrives once the body has been written; without it the transport gives up with "cannot retry err ... define Request.GetBody" and the user sees a 502. GOAWAY and REFUSED_STREAM tell the client the stream was not processed; a peer PROTOCOL_ERROR is retried because net/http classifies it as retryable (golang/go#47635), the same policy every http.Client POST with a bytes body already gets — including the sanitizer hop, whose bytes.NewReader body sets GetBody implicitly. ReverseProxy's outbound Clone keeps the field.
+func setReplayableBody(r *http.Request, body []byte) {
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	r.ContentLength = int64(len(body))
+	r.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(body)), nil }
 }
 
 func topLevelStringValueRange(body []byte, wantedKey string) (int, int, bool) {

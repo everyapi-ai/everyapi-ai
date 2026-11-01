@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -1449,6 +1450,30 @@ func TestLaunchModelsForClaudeUsesAnthropicProtocol(t *testing.T) {
 	claude, _ := tools.Lookup("claude")
 	if got := launchModelsForTool(claude, catalog, ""); len(got) != 2 || got[0].ID != "claude-ok" || got[1].ID != "qwen-anthropic" {
 		t.Fatalf("plain Claude launch catalog = %#v", got)
+	}
+}
+
+func TestLaunchModelsForClaudeIncludesClaudeMessagesBridge(t *testing.T) {
+	catalog := []api.RelayModel{
+		{ID: "claude-opus-5-5", SupportedEndpointTypes: []string{"anthropic"}},
+		{ID: "gpt-6.1-sol", OwnedBy: "openai", SupportedEndpointTypes: []string{"openai-response"}, ClaudeMessagesBridge: true},
+		{ID: "gpt-image", OwnedBy: "openai", SupportedEndpointTypes: []string{"openai-response", "image-generation"}, ClaudeMessagesBridge: true},
+		{ID: "responses-only", OwnedBy: "xai", SupportedEndpointTypes: []string{"openai-response"}},
+	}
+	claude, err := tools.Lookup("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := launchModelsForTool(claude, catalog, "")
+	ids := make([]string, 0, len(got))
+	for _, model := range got {
+		ids = append(ids, model.ID)
+	}
+	if !slices.Contains(ids, "gpt-6.1-sol") {
+		t.Fatalf("Claude catalogue omitted the Messages bridge model: %#v", ids)
+	}
+	if slices.Contains(ids, "responses-only") || slices.Contains(ids, "gpt-image") {
+		t.Fatalf("Claude catalogue included an unsafe model: %#v", ids)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -171,6 +172,91 @@ func TestRewriteModelAliasRewritesWithoutValidatingTheWholeBody(t *testing.T) {
 	}
 }
 
+// TestRewriteModelAliasLeavesBodyReplayable pins GetBody on both exits of the rewrite: the HTTP/2 transport can only replay a request after a GOAWAY, REFUSED_STREAM or peer PROTOCOL_ERROR when GetBody is set, and without it those edge-initiated retries surfaced as "cannot retry err ... define Request.GetBody" and a 502 in the launched tool.
+func TestRewriteModelAliasLeavesBodyReplayable(t *testing.T) {
+	const alias = "claude-everyapi-glm"
+	aliases := map[string]string{alias: "glm-4.7"}
+	for _, tc := range []struct{ name, body, want string }{
+		{name: "rewritten", body: `{"model":"` + alias + `","stream":true}`, want: `{"model":"glm-4.7","stream":true}`},
+		{name: "passed through", body: `{"model":"claude-opus-5","stream":true}`, want: `{"model":"claude-opus-5","stream":true}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req, err := http.NewRequest(http.MethodPost, "http://example.test/v1/messages", io.NopCloser(strings.NewReader(tc.body)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := rewriteModelAlias(req, aliases); err != nil {
+				t.Fatal(err)
+			}
+			if req.GetBody == nil {
+				t.Fatal("GetBody is nil; the HTTP/2 transport cannot replay this request")
+			}
+			// Drain the live body first, as the transport does before a retry, then confirm GetBody still yields the full forwarded bytes — twice, since a retry can itself be retried.
+			if _, err := io.ReadAll(req.Body); err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < 2; i++ {
+				replay, err := req.GetBody()
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, err := io.ReadAll(replay)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(got) != tc.want {
+					t.Fatalf("replay %d = %q, want %q", i, got, tc.want)
+				}
+			}
+			if req.ContentLength != int64(len(tc.want)) {
+				t.Fatalf("ContentLength = %d, want %d", req.ContentLength, len(tc.want))
+			}
+		})
+	}
+}
+
+// TestWithholdProxyConfigErrorKeepsCredentialsOutOf502 covers the one RoundTrip error that quotes a user-supplied value. net/http's environment proxy caches HTTP_PROXY/HTTPS_PROXY once per process, so the test cannot set the variable; it reproduces the exact error shape instead and drives it through a real Transport, the path ReverseProxy takes.
+func TestWithholdProxyConfigErrorKeepsCredentialsOutOf502(t *testing.T) {
+	const secret = "proxy-pass-must-not-leak"
+	raw := "http://user:" + secret + "@proxy.example:notaport"
+	broken := func(*http.Request) (*url.URL, error) {
+		return nil, fmt.Errorf("invalid proxy address %q: parse %q: invalid port \":notaport\" after host", raw, raw)
+	}
+	relay := func(proxy func(*http.Request) (*url.URL, error)) string {
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.Proxy = proxy
+		req, err := http.NewRequest(http.MethodPost, "http://gateway.example/v1/messages", strings.NewReader(`{}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = transport.RoundTrip(req)
+		if err == nil {
+			t.Fatal("RoundTrip succeeded through a proxy func that always fails")
+		}
+		return upstreamUnreachableMessage("gateway.example", err)
+	}
+	// Precondition: unwrapped, the credential really does reach the 502 body. Without this the assertion below could pass for a reason unrelated to the wrapper.
+	if got := relay(broken); !strings.Contains(got, secret) {
+		t.Fatalf("unwrapped proxy error no longer quotes its value, so this test proves nothing: %q", got)
+	}
+	got := relay(withholdProxyConfigError(broken))
+	if strings.Contains(got, secret) {
+		t.Fatalf("proxy credential leaked into the 502 body: %q", got)
+	}
+	if !strings.Contains(got, "HTTP_PROXY/HTTPS_PROXY") {
+		t.Fatalf("502 body does not point at the proxy configuration: %q", got)
+	}
+
+	if withholdProxyConfigError(nil) != nil {
+		t.Fatal("a nil proxy func (no proxy) must stay nil")
+	}
+	want := &url.URL{Scheme: "http", Host: "proxy.example:8080"}
+	working := withholdProxyConfigError(func(*http.Request) (*url.URL, error) { return want, nil })
+	if u, err := working(&http.Request{}); err != nil || u != want {
+		t.Fatalf("working proxy func = %v, %v; want %v, nil", u, err, want)
+	}
+}
+
 // TestModelCatalogProxyLogsUpstreamFailures covers the hop's only evidence of a failure. It sits closest to the gateway on both launch paths, so it is the first to see an outage, and it cannot log to stderr without corrupting the launched tool's TUI — leaving the file as the sole record behind the 502.
 func TestModelCatalogProxyLogsUpstreamFailures(t *testing.T) {
 	configRoot := t.TempDir()
@@ -194,9 +280,18 @@ func TestModelCatalogProxyLogsUpstreamFailures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	body, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusBadGateway {
 		t.Fatalf("status = %d, want 502", resp.StatusCode)
+	}
+	// The launched tool prints this body next to the status, so it is the user's only on-screen clue: it must name this hop and the transport cause, not the model catalogue, which had nothing to do with the failure.
+	deadHost := strings.TrimPrefix(deadURL, "http://")
+	if got := string(body); !strings.Contains(got, "everyapi CLI local proxy could not reach "+deadHost+": ") || !strings.Contains(got, "connect") {
+		t.Fatalf("502 body does not explain the failure: %q", got)
+	}
+	if strings.Contains(string(body), credential) {
+		t.Fatalf("query-string credential leaked into the 502 body: %q", body)
 	}
 	stop()
 	closeLog()
