@@ -82,3 +82,14 @@ func TestAgentSessionsCapsResultsAndSkipsSymlink(t *testing.T) {
 		t.Fatalf("providers = %#v", scan.Providers)
 	}
 }
+
+func TestAgentSessionsIgnoresCodexReasoningSummarySettingAsTitle(t *testing.T) {
+	projection := projectAgentTranscript(strings.Join([]string{
+		`{"type":"session_meta","payload":{"id":"codex-123","cwd":"/workspace/app"}}`,
+		`{"type":"turn_context","payload":{"cwd":"/workspace/app","model":"gpt-5","summary":"none"}}`,
+		`{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Fix the flaky test"}]}}`,
+	}, "\n"))
+	if projection.title != "" || projection.firstPrompt != "Fix the flaky test" {
+		t.Fatalf("projection = %#v, want no title and the first prompt to stand in", projection)
+	}
+}

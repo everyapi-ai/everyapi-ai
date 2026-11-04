@@ -13,6 +13,8 @@ checkin    Claim today's daily-grant quota
 account    Profile, 2FA, passkeys, OAuth, affiliate code, subscriptions
 use        Launch a third-party AI CLI routed through EveryAPI
 tmux       List / reattach / close the tmux sessions `use` left running
+sessions   List local agent session records
+clean      Delete local Claude Code / Codex / Pi session history
 token      Relay API keys
 models     Model catalog: list / pricing / groups
 stats      Usage, request log, model performance, upstream health
@@ -187,6 +189,27 @@ everyapi tmux kill --all [--yes]
 ```
 
 Session cleanup before a launch only ever removes strictly generated EveryAPI sessions whose sole window holds their sole, dead wrapper pane. A live detached agent, an ordinary tmux session of yours, or a managed session you added a pane to is preserved and never reused.
+
+## Local agent sessions
+
+`everyapi sessions list [--format=json] [--limit N]` lists the session records agent tools keep on this machine. `everyapi clean` deletes them. Both need no login and nothing leaves the machine.
+
+```
+everyapi clean claude                  Every Claude Code session
+everyapi clean codex                   Every Codex session (alias: chatgpt)
+everyapi clean pi                      Every Pi session
+everyapi clean all --older-than 30d    Sessions last written over 30 days ago
+everyapi clean all --dry-run           List what would be deleted
+everyapi clean <tool>... [--yes] [--format=json]
+```
+
+`--older-than` takes days (`30d`), weeks (`2w`) or a duration (`12h`). Without it every session of the named tools is selected; naming no tool is an error, so wiping everything takes the word `all`.
+
+- Claude Code: the transcript plus its subagent transcripts and tool results, its file-edit checkpoints under `~/.claude/file-history/`, its `~/.claude/session-env/` entry and any recovery marker `everyapi use` left beside it. Project memory and the prompt history are kept.
+- Codex: active and archived sessions, deleted one by one through `codex delete`, which keeps Codex's own thread index in step with the files. This needs Codex 0.166 or later on `PATH`; an older or missing Codex stops the run before anything is deleted.
+- Pi: the transcript plus the folder of subagent runs named after it.
+
+Sessions open in a running Claude Code are always kept, however long they have been idle, and so are sessions of any tool written in the last 10 minutes; each session is checked again just before it is deleted. Codex and Pi leave no record of which sessions are open, so close them before cleaning; Codex itself decides what `codex delete` does to a session it has loaded. `clean` asks for confirmation on a terminal and refuses to run without `--yes` anywhere else.
 
 ## Marketplace, messages and reports
 

@@ -314,7 +314,8 @@ func projectAgentValue(value any, projection *agentProjection) {
 	if projection.sessionID == "" {
 		projection.sessionID = agentSessionIdentifier(value)
 	}
-	if projection.title == "" {
+	// Codex's turn_context record carries the reasoning-summary setting under "summary" ("none", "auto", …), which is configuration, not a title.
+	if projection.title == "" && !isCodexTurnContext(value) {
 		projection.title = findAgentString(value, "title", "summary", "session_title")
 		if !sensibleAgentMetadata(projection.title) {
 			projection.title = ""
@@ -334,6 +335,11 @@ func projectAgentValue(value any, projection *agentProjection) {
 	} else if agentHasAssistantRole(value) {
 		projection.messageCount++
 	}
+}
+
+func isCodexTurnContext(value any) bool {
+	object, ok := value.(map[string]any)
+	return ok && object["type"] == "turn_context"
 }
 
 func agentSessionIdentifier(value any) string {
