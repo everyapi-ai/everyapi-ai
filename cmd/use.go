@@ -1710,11 +1710,8 @@ func launchModelsForTool(t *tools.Tool, catalog []api.RelayModel, preferred stri
 		if !chatCapable(model.SupportedEndpointTypes) {
 			continue
 		}
-		if requiredEndpoint != "" && !relayModelSupportsEndpoint(model, requiredEndpoint) &&
-			(t.AlternativeEndpoint == "" || !relayModelSupportsEndpoint(model, t.AlternativeEndpoint)) {
-			if t.ExecName != "claude" || !model.ClaudeMessagesBridge {
-				continue
-			}
+		if requiredEndpoint != "" && !relayModelServesTool(model, t, requiredEndpoint) {
+			continue
 		}
 		id := cliout.Sanitize(model.ID)
 		if id == "" || modelUnavailableForTool(t, id) || seen[id] {
@@ -2027,13 +2024,21 @@ func catalogSupportsEndpoint(catalog []api.RelayModel, endpoint string) bool {
 	return false
 }
 
+// relayModelServesTool reports whether a chat-capable model can be driven over the tool's wire protocol: natively on the required or alternative endpoint, or, for Claude Code, through the gateway's Messages bridge onto a Responses-only upstream. The launch preflight and the launch catalogue both ask this one question so they cannot disagree — when only the catalogue knew about the bridge, a key holding nothing but bridged models was refused before its catalogue was built.
+func relayModelServesTool(model api.RelayModel, tool *tools.Tool, requiredEndpoint string) bool {
+	if relayModelSupportsEndpoint(model, requiredEndpoint) ||
+		(tool.AlternativeEndpoint != "" && relayModelSupportsEndpoint(model, tool.AlternativeEndpoint)) {
+		return true
+	}
+	return tool.ExecName == "claude" && model.ClaudeMessagesBridge
+}
+
 func catalogSupportsToolEndpoint(catalog []api.RelayModel, tool *tools.Tool) bool {
 	for _, model := range catalog {
 		if !chatCapable(model.SupportedEndpointTypes) {
 			continue
 		}
-		if relayModelSupportsEndpoint(model, tool.RequiredEndpoint) ||
-			(tool.AlternativeEndpoint != "" && relayModelSupportsEndpoint(model, tool.AlternativeEndpoint)) {
+		if relayModelServesTool(model, tool, tool.RequiredEndpoint) {
 			return true
 		}
 	}

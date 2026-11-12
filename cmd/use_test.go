@@ -1477,6 +1477,42 @@ func TestLaunchModelsForClaudeIncludesClaudeMessagesBridge(t *testing.T) {
 	}
 }
 
+// The preflight runs before launchModelsForTool, so it has to accept every model that function will publish. A key whose only Claude-drivable models are bridged Responses models was refused with "no models available through the anthropic endpoint" before the launch catalogue was ever built.
+func TestCatalogSupportsToolEndpointAcceptsClaudeMessagesBridge(t *testing.T) {
+	claude, err := tools.Lookup("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bridged := []api.RelayModel{
+		{ID: "smart-everyapi", OwnedBy: "everyapi", SupportedEndpointTypes: []string{"openai"}},
+		{ID: "gpt-6.1-sol", OwnedBy: "openai", SupportedEndpointTypes: []string{"openai-response"}, ClaudeMessagesBridge: true},
+	}
+	if !catalogSupportsToolEndpoint(bridged, claude) {
+		t.Fatal("preflight refused a catalogue whose Messages bridge model launchModelsForTool publishes")
+	}
+	if models := launchModelsForTool(claude, bridged, ""); len(models) != 1 || models[0].ID != "gpt-6.1-sol" {
+		t.Fatalf("bridged launch catalogue = %#v", models)
+	}
+
+	unbridged := []api.RelayModel{
+		{ID: "smart-everyapi", OwnedBy: "everyapi", SupportedEndpointTypes: []string{"openai"}},
+		{ID: "responses-only", OwnedBy: "xai", SupportedEndpointTypes: []string{"openai-response"}},
+		{ID: "gpt-image", OwnedBy: "openai", SupportedEndpointTypes: []string{"openai-response", "image-generation"}, ClaudeMessagesBridge: true},
+	}
+	if catalogSupportsToolEndpoint(unbridged, claude) {
+		t.Fatal("preflight accepted a catalogue with no model Claude Code can drive")
+	}
+
+	codex, err := tools.Lookup("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	anthropicBridgeOnly := []api.RelayModel{{ID: "chat-only", SupportedEndpointTypes: []string{"openai"}, ClaudeMessagesBridge: true}}
+	if catalogSupportsToolEndpoint(anthropicBridgeOnly, codex) {
+		t.Fatal("the Claude Messages bridge satisfied a non-Claude tool's preflight")
+	}
+}
+
 func TestLaunchModelsForOpenCodeIncludesChatAndResponsesProtocols(t *testing.T) {
 	catalog := []api.RelayModel{
 		{ID: "gpt-chat", SupportedEndpointTypes: []string{"openai"}, ContextWindow: 131072, MaxOutput: 16384},

@@ -50,6 +50,17 @@ GET    /v1beta/models                    Gemini-shaped catalog
 GET    /v1beta/openai/models             OpenAI-shaped catalog, Gemini path
 ```
 
+## Synchronous audio generation
+
+These follow ElevenLabs' request shapes rather than OpenAI's, and answer with the audio bytes in one blocking call.
+
+```
+POST   /v1/music              Music (models music_v1, music_v2, music_v2_5)
+POST   /v1/sound-generation   Sound effects (model eleven_text_to_sound_v2)
+```
+
+`/v1/sound-generation` takes `text` (required), and optionally `duration_seconds` (0.5 to 30, omitted lets the model choose), `prompt_influence` (0 to 1), `loop`, `model` and `response_format` (`mp3`, or an ElevenLabs `mp3_*`, `wav_*` or `opus_*` output format). It is billed by the length of the returned audio.
+
 ## Async media: submit then poll
 
 Video and music are long-running, so they are submit-and-poll task channels rather than a single blocking call.
