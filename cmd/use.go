@@ -343,7 +343,12 @@ func use(args []string, persistModelSelection bool) error {
 	}
 	if catalogErr == nil && t.RequiredEndpoint != "" && toolInvocationNeedsEndpoint(extraArgs) &&
 		!catalogSupportsToolEndpoint(relayCatalog, t) {
-		return fmt.Errorf("no models available through the %s endpoint for this relay key; choose a compatible EveryAPI client or add a channel that supports this endpoint", t.RequiredEndpoint)
+		// Written for the person holding the key, not the operator: the usual cause is an auto key whose exclusions leave only route groups that serve another vendor's models, and "add a channel" is not something a buyer can do.
+		return fmt.Errorf(i18n.T("use.no_tool_models"), t.ExecName, api.WebOriginFromBase(gw))
+	}
+	// The launch succeeds here, but on models the user may not expect: Connect always launches with the auto key, so someone who narrowed that key to a GPT-only route group and clicks Claude gets Claude Code on GPT models. Say so before the client opens rather than leave them to find out from its /model picker.
+	if catalogErr == nil && toolInvocationNeedsEndpoint(extraArgs) && claudeRunsOnBridgeOnly(t, relayCatalog) {
+		cliout.Println(i18n.T("use.claude_bridge_only"))
 	}
 
 	// Resolve the upstream model for tools EveryAPI picks for (Hermes, Qwen Code, and Kimi Code). Sets t.ModelEnv in this process so the tool's prepareFn reads it when generating its config. Runs after the relay-key probe so we don't prompt for a model only to bail on a dead key, and uses the relay key (not the management token) so the catalog is scoped to what this key/group can actually reach. No-op for claude/codex/grok (ModelEnv == "").
@@ -2031,6 +2036,24 @@ func relayModelServesTool(model api.RelayModel, tool *tools.Tool, requiredEndpoi
 		return true
 	}
 	return tool.ExecName == "claude" && model.ClaudeMessagesBridge
+}
+
+// claudeRunsOnBridgeOnly reports that Claude Code can launch with this catalogue but only on models reached through the gateway's Messages bridge: no chat model serves the anthropic endpoint natively. A catalogue from an older gateway that omits endpoint metadata counts as native, so it never triggers the note.
+func claudeRunsOnBridgeOnly(tool *tools.Tool, catalog []api.RelayModel) bool {
+	if tool.ExecName != "claude" {
+		return false
+	}
+	bridged := false
+	for _, model := range catalog {
+		if !chatCapable(model.SupportedEndpointTypes) {
+			continue
+		}
+		if relayModelSupportsEndpoint(model, "anthropic") {
+			return false
+		}
+		bridged = bridged || model.ClaudeMessagesBridge
+	}
+	return bridged
 }
 
 func catalogSupportsToolEndpoint(catalog []api.RelayModel, tool *tools.Tool) bool {

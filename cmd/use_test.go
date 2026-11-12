@@ -1513,6 +1513,37 @@ func TestCatalogSupportsToolEndpointAcceptsClaudeMessagesBridge(t *testing.T) {
 	}
 }
 
+func TestClaudeRunsOnBridgeOnly(t *testing.T) {
+	claude, err := tools.Lookup("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	codex, err := tools.Lookup("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bridged := api.RelayModel{ID: "gpt-6.1-sol", SupportedEndpointTypes: []string{"openai-response"}, ClaudeMessagesBridge: true}
+	native := api.RelayModel{ID: "claude-opus-5-5", SupportedEndpointTypes: []string{"anthropic"}}
+	cases := []struct {
+		name    string
+		tool    *tools.Tool
+		catalog []api.RelayModel
+		want    bool
+	}{
+		{"bridged models only", claude, []api.RelayModel{bridged}, true},
+		{"a native model is present", claude, []api.RelayModel{bridged, native}, false},
+		{"older gateway without endpoint metadata", claude, []api.RelayModel{{ID: "claude-opus-5-5"}, bridged}, false},
+		{"nothing Claude Code can drive", claude, []api.RelayModel{{ID: "responses-only", SupportedEndpointTypes: []string{"openai-response"}}}, false},
+		{"bridged image model is not a chat model", claude, []api.RelayModel{{ID: "gpt-image", SupportedEndpointTypes: []string{"openai-response", "image-generation"}, ClaudeMessagesBridge: true}}, false},
+		{"another tool", codex, []api.RelayModel{bridged}, false},
+	}
+	for _, c := range cases {
+		if got := claudeRunsOnBridgeOnly(c.tool, c.catalog); got != c.want {
+			t.Errorf("%s: claudeRunsOnBridgeOnly = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
 func TestLaunchModelsForOpenCodeIncludesChatAndResponsesProtocols(t *testing.T) {
 	catalog := []api.RelayModel{
 		{ID: "gpt-chat", SupportedEndpointTypes: []string{"openai"}, ContextWindow: 131072, MaxOutput: 16384},
