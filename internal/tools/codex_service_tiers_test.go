@@ -27,8 +27,8 @@ func TestWriteCodexModelCatalogUltrafast(t *testing.T) {
 		{
 			name:    "supported models missing from older bundled catalog",
 			bundled: `{"models":[{"slug":"gpt-template","service_tiers":[{"id":"priority","name":"Fast"}]}]}`,
-			models:  []Model{{ID: "gpt-6.1-sol"}, {ID: "gpt-6-astra"}, {ID: "unknown-model"}},
-			want:    [][]string{{"ultrafast"}, {"ultrafast"}, {}},
+			models:  []Model{{ID: "gpt-6.1-sol"}, {ID: "gpt-6-astra"}, {ID: "gpt-6.2-sol"}, {ID: "gpt-6.2-astra"}, {ID: "unknown-model"}},
+			want:    [][]string{{"ultrafast"}, {"ultrafast"}, {"ultrafast"}, {"ultrafast"}, {}},
 		},
 		{
 			name:    "preserve newer bundled metadata without duplicating tiers",

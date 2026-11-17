@@ -439,7 +439,7 @@ func writeCodexModelCatalog(codexHome string, models []Model) (string, error) {
 // This advertises an opt-in capability; it does not change the launch's tier.
 func addCodexUltrafastTier(entry map[string]any, modelID string) {
 	switch modelID {
-	case "gpt-6-astra", "gpt-6.1-sol":
+	case "gpt-6-astra", "gpt-6.1-sol", "gpt-6.2-astra", "gpt-6.2-sol":
 	default:
 		return
 	}
