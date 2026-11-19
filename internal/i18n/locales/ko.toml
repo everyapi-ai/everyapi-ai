@@ -1560,6 +1560,7 @@ audit = "관리 감사 로그"
 redemption = "교환 코드"
 
 [admin.act]
+models = "모델 추가 / 제거"
 marketplace_status = "플래그 표시"
 on = "열기"
 off = "닫기"
@@ -1576,6 +1577,8 @@ status = "활성/비활성"
 clear_invalid = "사용됨/만료 정리"
 
 [admin.prompt]
+models_add = "추가할 모델 (쉼표로 구분, 비워 두면 추가 안 함):"
+models_remove = "제거할 모델 (쉼표로 구분, 비워 두면 제거 안 함):"
 id = "ID:"
 keyword = "키워드:"
 user_action = "작업:"
@@ -1604,6 +1607,33 @@ matches = "%d개 일치:"
 matches_total = "%d개 일치 / 전체 %d개:"
 
 [admin.channel]
+no_matches = "일치하는 채널이 없습니다."
+detail_title = "채널"
+f_name = "이름"
+f_kind = "종류"
+f_status = "상태"
+f_auth = "자격 증명"
+f_owner = "소유자"
+f_group = "그룹"
+f_tag = "태그"
+f_priority = "우선순위"
+f_weight = "가중치"
+f_tested = "최근 테스트"
+f_models = "모델"
+status_enabled = "활성"
+status_manual = "비활성"
+status_auto = "자동 비활성"
+status_retired = "퇴역"
+owner_platform = "플랫폼"
+auth_oauth = "OAuth"
+auth_key = "API 키"
+models_usage = "사용법: everyapi admin channel models <id> [--add <m1,m2>] [--remove <m1,m2>] [-y]"
+models_not_present = "채널 #%d에 없어 제거할 필요 없음: %s"
+models_nothing = "채널 #%d는 이미 원하는 상태입니다. 변경 사항이 없습니다."
+models_remove_all = "채널 #%d의 모델을 모두 제거할 수 없습니다. 최소 1개는 남겨야 합니다"
+models_needs_confirm = "확인 없이 모델을 변경하지 않습니다. 비대화형으로 적용하려면 -y를 붙이세요."
+models_confirm = "채널 #%d(%s)의 모델을 변경할까요?\n  추가: %s\n  제거: %s"
+models_updated = "채널 #%d는 이제 모델 %d개를 제공합니다."
 test_title = "채널 #%d 테스트:"
 empty_result = "(결과 없음)"
 tag_enabled = "태그 %q 활성화됨."
@@ -1631,6 +1661,10 @@ everyapi admin — 운영 명령(관리자 전용)
   user list [--page P]   페이지 사용자 목록
   user manage <id> --action enable|disable|delete|promote_admin|demote_admin
                          상태/역할 작업 적용(권한은 백엔드 검증)
+  channel list [flags]   채널 목록 (--kind, --keyword, --model, --group, --status, --page, --limit)
+  channel show <id>      채널 1개와 전체 모델 목록
+  channel models <id> --add <m1,m2> | --remove <m1,m2> [-y]
+                         채널 1개에 모델 추가 / 제거
   channel test <id>      채널 1건 상태 점검
   channel tag <name> --enable|--disable
                          태그가 붙은 모든 채널 일괄 전환

@@ -246,7 +246,8 @@ func writeCodexOfficialConfigTOMLWithCatalog(codexHome, catalogPath, bootModel s
 		// prevents Codex from logging a failed WebSocket handshake before its
 		// automatic HTTP fallback, while standalone search remains available.
 		"supports_websockets = false\n" +
-		"supports_standalone_web_search = true\n")
+		"supports_standalone_web_search = true\n" +
+		"http_headers = { " + codexImageToolHeader + " }\n")
 	return writeFileAtomic(filepath.Join(codexHome, "config.toml"), body, 0o644)
 }
 
@@ -320,9 +321,12 @@ func writeCodexConfigTOMLWithCatalog(codexHome, apiBase, catalogPath, bootModel 
 	// Static attribution is safe because it identifies the client kind, not a
 	// logical conversation. Codex itself owns and emits resumable thread/session
 	// identifiers; never mint X-EveryAPI-Session per launcher process.
-	b.WriteString("http_headers = { \"X-EveryAPI-Agent\" = \"codex\" }\n")
+	b.WriteString("http_headers = { \"X-EveryAPI-Agent\" = \"codex\", " + codexImageToolHeader + " }\n")
 	return writeFileAtomic(filepath.Join(codexHome, "config.toml"), []byte(b.String()), 0o644)
 }
+
+// codexImageToolHeader turns on Codex's built-in image tool for an EveryAPI provider. Codex has no provider flag for image generation the way supports_standalone_web_search covers search: it offers the tool only to the built-in OpenAI provider, a ChatGPT login, or a provider that sends a non-empty x-openai-actor-authorization header (codex-rs/core/src/tools/spec_plan.rs image_generation_available). The value is a fixed non-secret marker, and the header only ever reaches EveryAPI: the injected provider points at the gateway, and in transparent mode every /v1/ request to api.openai.com is either relayed to EveryAPI or refused by the connector. The tool then posts to <base_url>/images/generations and /images/edits, which the gateway serves.
+const codexImageToolHeader = `"x-openai-actor-authorization" = "everyapi"`
 
 func codexAgentInstructionsConfig() string {
 	instructions := AgentInstructions()

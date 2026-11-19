@@ -242,14 +242,21 @@ func adminUserDelete(args []string) error {
 // --- admin channel ------------------------------------------------
 
 func adminChannel(args []string) error {
+	const usage = "usage: everyapi admin channel {list|show|models|test|tag|add-oauth}"
 	if len(args) == 0 {
-		return errors.New("usage: everyapi admin channel {test|tag|add-oauth}")
+		return errors.New(usage)
 	}
 	if args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		cliout.Println("usage: everyapi admin channel {test|tag|add-oauth}")
+		cliout.Println(usage)
 		return nil
 	}
 	switch args[0] {
+	case "list":
+		return adminChannelList(args[1:])
+	case "show":
+		return adminChannelShow(args[1:])
+	case "models":
+		return adminChannelModels(args[1:])
 	case "test":
 		return adminChannelTest(args[1:])
 	case "tag":

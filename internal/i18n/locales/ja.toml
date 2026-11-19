@@ -1563,6 +1563,7 @@ audit = "管理監査ログ"
 redemption = "引き換えコード"
 
 [admin.act]
+models = "モデルの追加 / 削除"
 marketplace_status = "フラグを表示"
 on = "開く"
 off = "閉じる"
@@ -1579,6 +1580,8 @@ status = "有効化/無効化"
 clear_invalid = "使用済み/期限切れを削除"
 
 [admin.prompt]
+models_add = "追加するモデル（カンマ区切り、空欄で追加なし）："
+models_remove = "削除するモデル（カンマ区切り、空欄で削除なし）："
 id = "ID:"
 keyword = "キーワード:"
 user_action = "操作:"
@@ -1607,6 +1610,33 @@ matches = "%d 件一致："
 matches_total = "%d 件一致 / 全 %d 件："
 
 [admin.channel]
+no_matches = "一致するチャネルはありません。"
+detail_title = "チャネル"
+f_name = "名前"
+f_kind = "種類"
+f_status = "状態"
+f_auth = "認証情報"
+f_owner = "所有者"
+f_group = "グループ"
+f_tag = "タグ"
+f_priority = "優先度"
+f_weight = "重み"
+f_tested = "最終テスト"
+f_models = "モデル"
+status_enabled = "有効"
+status_manual = "無効"
+status_auto = "自動無効"
+status_retired = "廃止"
+owner_platform = "プラットフォーム"
+auth_oauth = "OAuth"
+auth_key = "API キー"
+models_usage = "使い方: everyapi admin channel models <id> [--add <m1,m2>] [--remove <m1,m2>] [-y]"
+models_not_present = "チャネル #%d にないため削除不要: %s"
+models_nothing = "チャネル #%d はすでに目的の状態です。変更はありません。"
+models_remove_all = "チャネル #%d のモデルをすべて削除することはできません。最低 1 つは残す必要があります"
+models_needs_confirm = "確認がないためモデルを変更しません。非対話で実行するには -y を付けてください。"
+models_confirm = "チャネル #%d（%s）のモデルを変更しますか？\n  追加: %s\n  削除: %s"
+models_updated = "チャネル #%d は現在 %d 個のモデルを提供しています。"
 test_title = "チャネル #%d テスト:"
 empty_result = "（結果なし）"
 tag_enabled = "タグ %q を有効化しました。"
@@ -1634,6 +1664,10 @@ everyapi admin — 運用コマンド（管理者専用）
   user list [--page P]   ページングされたユーザー一覧
   user manage <id> --action enable|disable|delete|promote_admin|demote_admin
                          状態/ロール操作を適用（権限は後端で検証）
+  channel list [flags]   チャネル一覧（--kind、--keyword、--model、--group、--status、--page、--limit）
+  channel show <id>      1 件のチャネルと全モデル一覧
+  channel models <id> --add <m1,m2> | --remove <m1,m2> [-y]
+                         1 件のチャネルにモデルを追加 / 削除
   channel test <id>      チャネルを 1 件ヘルスチェック
   channel tag <name> --enable|--disable
                          タグの付いた全チャネルを一括切替

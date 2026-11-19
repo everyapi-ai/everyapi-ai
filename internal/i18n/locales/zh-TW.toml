@@ -1537,6 +1537,7 @@ audit = "管理稽核日誌"
 redemption = "兌換碼"
 
 [admin.act]
+models = "新增 / 移除模型"
 marketplace_status = "查看開關"
 on = "開啟"
 off = "關閉"
@@ -1553,6 +1554,8 @@ status = "啟用/停用"
 clear_invalid = "清理已用/過期"
 
 [admin.prompt]
+models_add = "要新增的模型（逗號分隔，留空則不加）："
+models_remove = "要移除的模型（逗號分隔，留空則不刪）："
 id = "ID："
 keyword = "關鍵字："
 user_action = "操作："
@@ -1581,6 +1584,33 @@ matches = "%d 筆符合："
 matches_total = "%d 筆符合，共 %d 筆："
 
 [admin.channel]
+no_matches = "沒有符合的通道。"
+detail_title = "通道"
+f_name = "名稱"
+f_kind = "類型"
+f_status = "狀態"
+f_auth = "憑證"
+f_owner = "所屬"
+f_group = "分組"
+f_tag = "標籤"
+f_priority = "優先級"
+f_weight = "權重"
+f_tested = "最近測試"
+f_models = "模型"
+status_enabled = "已啟用"
+status_manual = "已停用"
+status_auto = "自動停用"
+status_retired = "已退役"
+owner_platform = "平台"
+auth_oauth = "OAuth"
+auth_key = "API key"
+models_usage = "用法：everyapi admin channel models <id> [--add <m1,m2>] [--remove <m1,m2>] [-y]"
+models_not_present = "通道 #%d 上沒有這些模型，無需移除：%s"
+models_nothing = "通道 #%d 已是目標狀態，無需修改。"
+models_remove_all = "拒絕移除通道 #%d 的全部模型：通道至少要保留一個模型"
+models_needs_confirm = "未確認，不修改模型；非互動執行請加 -y。"
+models_confirm = "修改通道 #%d（%s）的模型？\n  新增：%s\n  移除：%s"
+models_updated = "通道 #%d 現在提供 %d 個模型。"
 test_title = "通道 #%d 測試："
 empty_result = "（無結果）"
 tag_enabled = "標籤 %q 已啟用。"
@@ -1608,6 +1638,10 @@ everyapi admin — 運維命令（僅管理員）
   user list [--page P]   分頁使用者列表
   user manage <id> --action enable|disable|delete|promote_admin|demote_admin
                          套用狀態/角色操作（後端校驗權限）
+  channel list [flags]   列出通道（--kind、--keyword、--model、--group、--status、--page、--limit）
+  channel show <id>      查看單一通道及其完整模型清單
+  channel models <id> --add <m1,m2> | --remove <m1,m2> [-y]
+                         為單一通道新增或移除模型
   channel test <id>      健康檢查單一通道
   channel tag <name> --enable|--disable
                          依標籤批次翻轉所有通道

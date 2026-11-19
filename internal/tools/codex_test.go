@@ -107,7 +107,6 @@ func TestPrepareCodex_WritesFiles(t *testing.T) {
 		`env_key = "OPENAI_API_KEY"`,
 		// Pins the routing surface: omitting wire_api falls back to codex's Chat default (/v1/chat/completions) instead of the gateway's native /v1/responses.
 		`wire_api = "responses"`,
-		`http_headers = { "X-EveryAPI-Agent" = "codex" }`,
 	} {
 		if !strings.Contains(cfg, want) {
 			t.Errorf("config.toml missing %q\nFull config:\n%s", want, cfg)

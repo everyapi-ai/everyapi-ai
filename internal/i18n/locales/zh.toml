@@ -1538,6 +1538,7 @@ audit = "管理审计日志"
 redemption = "兑换码"
 
 [admin.act]
+models = "添加 / 移除模型"
 marketplace_status = "查看开关"
 on = "开启"
 off = "关闭"
@@ -1554,6 +1555,8 @@ status = "启用/禁用"
 clear_invalid = "清理已用/过期"
 
 [admin.prompt]
+models_add = "要添加的模型（逗号分隔，留空则不加）："
+models_remove = "要移除的模型（逗号分隔，留空则不删）："
 id = "ID："
 keyword = "关键词："
 user_action = "操作："
@@ -1582,6 +1585,33 @@ matches = "%d 条匹配："
 matches_total = "%d 条匹配，共 %d 条："
 
 [admin.channel]
+no_matches = "没有匹配的渠道。"
+detail_title = "渠道"
+f_name = "名称"
+f_kind = "类型"
+f_status = "状态"
+f_auth = "凭据"
+f_owner = "所属"
+f_group = "分组"
+f_tag = "标签"
+f_priority = "优先级"
+f_weight = "权重"
+f_tested = "最近测试"
+f_models = "模型"
+status_enabled = "已启用"
+status_manual = "已禁用"
+status_auto = "自动禁用"
+status_retired = "已退役"
+owner_platform = "平台"
+auth_oauth = "OAuth"
+auth_key = "API key"
+models_usage = "用法：everyapi admin channel models <id> [--add <m1,m2>] [--remove <m1,m2>] [-y]"
+models_not_present = "渠道 #%d 上没有这些模型，无需移除：%s"
+models_nothing = "渠道 #%d 已经是目标状态，无需修改。"
+models_remove_all = "拒绝移除渠道 #%d 的全部模型：渠道至少要保留一个模型"
+models_needs_confirm = "未确认，不修改模型；非交互执行请加 -y。"
+models_confirm = "修改渠道 #%d（%s）的模型？\n  添加：%s\n  移除：%s"
+models_updated = "渠道 #%d 现在提供 %d 个模型。"
 test_title = "渠道 #%d 测试："
 empty_result = "（无结果）"
 tag_enabled = "标签 %q 已启用。"
@@ -1609,6 +1639,10 @@ everyapi admin — 运维命令（仅管理员）
   user list [--page P]   分页用户列表
   user manage <id> --action enable|disable|delete|promote_admin|demote_admin
                          应用状态/角色操作（后端校验权限）
+  channel list [flags]   列出渠道（--kind、--keyword、--model、--group、--status、--page、--limit）
+  channel show <id>      查看单个渠道及其完整模型列表
+  channel models <id> --add <m1,m2> | --remove <m1,m2> [-y]
+                         给单个渠道添加或移除模型
   channel test <id>      健康检查单个渠道
   channel tag <name> --enable|--disable
                          按标签批量翻转所有渠道

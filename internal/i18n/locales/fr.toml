@@ -1576,6 +1576,7 @@ audit = "Journal d'audit d'administration"
 redemption = "Codes de rachat"
 
 [admin.act]
+models = "Ajouter / retirer des modèles"
 marketplace_status = "Afficher l'indicateur"
 on = "Ouvrir"
 off = "Fermer"
@@ -1592,6 +1593,8 @@ status = "Activer / désactiver"
 clear_invalid = "Purger les utilisés/expirés"
 
 [admin.prompt]
+models_add = "Modèles à ajouter (séparés par des virgules, vide pour aucun) :"
+models_remove = "Modèles à retirer (séparés par des virgules, vide pour aucun) :"
 id = "ID :"
 keyword = "Mot-clé :"
 user_action = "Action :"
@@ -1620,6 +1623,33 @@ matches = "%d correspondance(s) :"
 matches_total = "%d correspondance(s) sur %d au total :"
 
 [admin.channel]
+no_matches = "Aucun canal ne correspond."
+detail_title = "Canal"
+f_name = "Nom"
+f_kind = "Type"
+f_status = "État"
+f_auth = "Identifiants"
+f_owner = "Propriétaire"
+f_group = "Groupe"
+f_tag = "Étiquette"
+f_priority = "Priorité"
+f_weight = "Poids"
+f_tested = "Dernier test"
+f_models = "Modèles"
+status_enabled = "actif"
+status_manual = "désactivé"
+status_auto = "désactivé auto."
+status_retired = "retiré"
+owner_platform = "plateforme"
+auth_oauth = "OAuth"
+auth_key = "clé API"
+models_usage = "usage : everyapi admin channel models <id> [--add <m1,m2>] [--remove <m1,m2>] [-y]"
+models_not_present = "Absents du canal #%d, rien à retirer : %s"
+models_nothing = "Le canal #%d correspond déjà ; rien à changer."
+models_remove_all = "impossible de retirer tous les modèles du canal #%d ; un canal doit en garder au moins un"
+models_needs_confirm = "Les modèles ne sont pas modifiés sans confirmation ; passez -y pour appliquer sans interaction."
+models_confirm = "Modifier les modèles du canal #%d (%s) ?\n  ajouter : %s\n  retirer : %s"
+models_updated = "Le canal #%d sert désormais %d modèle(s)."
 test_title = "Test du canal #%d :"
 empty_result = "(aucun résultat)"
 tag_enabled = "Tag %q activé."
@@ -1647,6 +1677,10 @@ SOUS-COMMANDES
   user list [--page P]   Liste paginée des utilisateurs
   user manage <id> --action enable|disable|delete|promote_admin|demote_admin
                          Applique une action de statut/rôle (le backend vérifie le rôle)
+  channel list [flags]   Lister les canaux (--kind, --keyword, --model, --group, --status, --page, --limit)
+  channel show <id>      Un canal avec sa liste complète de modèles
+  channel models <id> --add <m1,m2> | --remove <m1,m2> [-y]
+                         Ajouter ou retirer des modèles d'un canal
   channel test <id>      Vérifier l'état d'un canal
   channel tag <name> --enable|--disable
                          Basculer en masse les canaux portant le tag

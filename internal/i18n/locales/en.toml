@@ -1553,6 +1553,7 @@ audit = "Admin audit log"
 redemption = "Redemption (voucher) codes"
 
 [admin.act]
+models = "Add / remove models"
 marketplace_status = "Show the flag"
 on = "Open"
 off = "Close"
@@ -1569,6 +1570,8 @@ status = "Enable / disable"
 clear_invalid = "Purge used/expired"
 
 [admin.prompt]
+models_add = "Models to add (comma-separated, blank for none):"
+models_remove = "Models to remove (comma-separated, blank for none):"
 id = "ID:"
 keyword = "Keyword:"
 user_action = "Action:"
@@ -1597,6 +1600,33 @@ matches = "%d match(es):"
 matches_total = "%d match(es) of %d total:"
 
 [admin.channel]
+no_matches = "No channels match."
+detail_title = "Channel"
+f_name = "Name"
+f_kind = "Kind"
+f_status = "Status"
+f_auth = "Credential"
+f_owner = "Owner"
+f_group = "Group"
+f_tag = "Tag"
+f_priority = "Priority"
+f_weight = "Weight"
+f_tested = "Last test"
+f_models = "Models"
+status_enabled = "enabled"
+status_manual = "disabled"
+status_auto = "auto-disabled"
+status_retired = "retired"
+owner_platform = "platform"
+auth_oauth = "OAuth"
+auth_key = "API key"
+models_usage = "usage: everyapi admin channel models <id> [--add <m1,m2>] [--remove <m1,m2>] [-y]"
+models_not_present = "Not on channel #%d, nothing to remove: %s"
+models_nothing = "Channel #%d already matches; nothing to change."
+models_remove_all = "refusing to remove every model from channel #%d; a channel must keep at least one"
+models_needs_confirm = "Refusing to change models without confirmation; pass -y to apply non-interactively."
+models_confirm = "Update models on channel #%d (%s)?\n  add:    %s\n  remove: %s"
+models_updated = "Channel #%d now serves %d model(s)."
 test_title = "Channel #%d test:"
 empty_result = "(empty result)"
 tag_enabled = "Tag %q enabled."
@@ -1624,6 +1654,10 @@ SUBCOMMANDS
   user list [--page P]   Paged user list
   user manage <id> --action enable|disable|delete|promote_admin|demote_admin
                          Apply a status/role action (backend enforces the role check)
+  channel list [flags]   List channels (--kind, --keyword, --model, --group, --status, --page, --limit)
+  channel show <id>      One channel with its full model list
+  channel models <id> --add <m1,m2> | --remove <m1,m2> [-y]
+                         Add or remove models on one channel
   channel test <id>      Health-check one channel
   channel tag <name> --enable|--disable
                          Bulk-flip every channel carrying the tag

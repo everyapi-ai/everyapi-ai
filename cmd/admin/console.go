@@ -49,6 +49,9 @@ func consoleAreas() []consoleArea {
 			{verb: "delete", descKey: "admin.act.delete", collect: collectID("user", "delete")},
 		}},
 		{name: "channel", descKey: "admin.area.channel", actions: []consoleAction{
+			{verb: "list", descKey: "admin.act.list", collect: noArgs("channel", "list")},
+			{verb: "show", descKey: "admin.act.show", collect: collectID("channel", "show")},
+			{verb: "models", descKey: "admin.act.models", collect: collectChannelModels},
 			{verb: "test", descKey: "admin.act.test", collect: collectID("channel", "test")},
 			{verb: "tag", descKey: "admin.act.tag", collect: collectChannelTag},
 		}},
@@ -184,6 +187,33 @@ func collectChannelTag(in *bufio.Reader) ([]string, error) {
 		return nil, err
 	}
 	return []string{"channel", "tag", name, "--" + state}, nil
+}
+
+// collectChannelModels prompts for the channel and the two model lists; leaving both blank cancels instead of sending an empty edit. The command itself still asks for confirmation before it writes.
+func collectChannelModels(in *bufio.Reader) ([]string, error) {
+	id, err := promptID(in, "admin.prompt.id")
+	if err != nil {
+		return nil, err
+	}
+	add, err := promptOptional(in, "admin.prompt.models_add")
+	if err != nil {
+		return nil, err
+	}
+	remove, err := promptOptional(in, "admin.prompt.models_remove")
+	if err != nil {
+		return nil, err
+	}
+	if add == "" && remove == "" {
+		return nil, cliprompt.ErrPickCancelled
+	}
+	args := []string{"channel", "models", id}
+	if add != "" {
+		args = append(args, "--add", add)
+	}
+	if remove != "" {
+		args = append(args, "--remove", remove)
+	}
+	return args, nil
 }
 
 func collectAbuseUpdate(in *bufio.Reader) ([]string, error) {
