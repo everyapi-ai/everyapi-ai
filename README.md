@@ -139,7 +139,7 @@ The main reason to install this CLI. It configures and launches supported coding
 everyapi use claude            # Claude Code → EveryAPI
 everyapi use codex             # OpenAI Codex CLI → EveryAPI
 everyapi use opencode          # OpenCode → process-scoped EveryAPI provider
-everyapi use gemini            # Google Gemini CLI → EveryAPI
+everyapi use gemini            # = everyapi use antigravity
 everyapi use antigravity       # Antigravity (native Google auth and routing)
 everyapi use aider             # Aider → EveryAPI (pick a model)
 everyapi use goose             # Goose CLI → EveryAPI (pick a model)
@@ -179,7 +179,6 @@ Each tool uses different conventions; the CLI remembers them:
 |---|---|
 | claude | env: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`; live compatible models through gateway discovery |
 | codex | env: `OPENAI_API_KEY` + persistent EveryAPI `CODEX_HOME` for sessions + lifecycle-bound `--profile` and key-scoped model catalog (codex routes via config, not `OPENAI_BASE_URL`) |
-| gemini | env: `GEMINI_API_KEY`, `GOOGLE_GEMINI_BASE_URL`, `GEMINI_MODEL`; isolated auth-mode settings overlay |
 | antigravity | native Antigravity launcher (`agy`) |
 | aider | OpenAI-compatible env plus `openai/<model>` LiteLLM model namespace |
 | goose | `GOOSE_PROVIDER=openai`, `GOOSE_MODEL`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` |
@@ -212,7 +211,7 @@ A key already cached from an earlier launch keeps being used — that lookup is 
 
 **model selection**: At launch, EveryAPI fetches the live catalog available to the selected relay key/group, removes incompatible media/embedding protocols, and injects the resulting snapshot into every routed client's native selector. Use `/model` in Claude Code, Codex, Qwen Code, or Kimi Code; use Grok's `/model`/`models` entry or `hermes model` for Hermes. Non-Claude model IDs are represented internally with Claude-compatible aliases but are displayed and sent upstream under their real IDs.
 
-Tools with a `ModelEnv` contract (Gemini, Aider, Goose, Crush, Cline, OpenClaw, Continue, Kilo, Pi, Vibe, GitHub Copilot CLI, Factory Droid, OpenHands, ForgeCode, LLxprt, Hermes, Qwen Code, and Kimi Code) open EveryAPI's picker; pass `--model <id>` to skip it. In a non-interactive run EveryAPI deterministically uses the first compatible model. Plain claude/codex/grok still own their boot-model behavior. `antigravity` launches native `agy` with Google authentication and `librefang` uses its first-party EveryAPI credential process. `pi-web`, `open-webui`, and `deepseek-harness` serve browser UIs: EveryAPI registers the provider and the whole compatible catalog up front, and the model is chosen inside that UI rather than by a terminal picker.
+Tools with a `ModelEnv` contract (Aider, Goose, Crush, Cline, OpenClaw, Continue, Kilo, Pi, Vibe, GitHub Copilot CLI, Factory Droid, OpenHands, ForgeCode, LLxprt, Hermes, Qwen Code, and Kimi Code) open EveryAPI's picker; pass `--model <id>` to skip it. In a non-interactive run EveryAPI deterministically uses the first compatible model. Plain claude/codex/grok still own their boot-model behavior. `antigravity` launches native `agy` with Google authentication and `librefang` uses its first-party EveryAPI credential process. `pi-web`, `open-webui`, and `deepseek-harness` serve browser UIs: EveryAPI registers the provider and the whole compatible catalog up front, and the model is chosen inside that UI rather than by a terminal picker.
 
 **reasoning level**: After the model, `everyapi use codex` and `everyapi use pi` ask which reasoning level to launch at, and remember the answer for the next launch — asked once, then reused without prompting, the same way as the safety preferences below. The two clients are gated differently because they know different things. Codex reads the levels its own bundled catalog publishes for that model (`low` … `ultra`, which differ per model — `gpt-5.6-sol` reaches `ultra`, `gpt-5.5` stops at `xhigh`) and receives the choice as `model_reasoning_effort`; it never consults the gateway for this, so a model Codex has not heard of gets no step. Pi has no per-model table for a custom provider, so its step appears only where the gateway has verified the model takes an effort (`supports_thinking` on `/v1/models`); it is offered `off` … `high` and receives the choice as `defaultThinkingLevel`. A remembered level the current model does not offer is dropped rather than pinned, and on the first launch after this shipped the cursor starts on the effort Codex already had in its persistent home, so accepting the default changes nothing. Both clients keep their own in-session controls — Codex's `/model`, pi's shift+tab — while the launcher retains the cross-launch choice because Codex's generated profile and Pi's isolated home are removed at exit.
 
@@ -269,7 +268,7 @@ The same process-scoped instructions advertise local macOS Computer Use without 
 
 The text comes from one place — `tools.AgentInstructions()` — and reaches clients three ways, in descending order of certainty:
 
-- **A named configuration surface**, guaranteed to be read: `claude` (`--append-system-prompt`), `codex` (`developer_instructions`), `opencode` and `kilo` (instructions file), `crush` (`options.context_paths`), `aider` (`--read`), `continue` (`rules`), `gemini` (`context.includeDirectories` in the settings overlay EveryAPI already owns).
+- **A named configuration surface**, guaranteed to be read: `claude` (`--append-system-prompt`), `codex` (`developer_instructions`), `opencode` and `kilo` (instructions file), `crush` (`options.context_paths`), `aider` (`--read`), `continue` (`rules`).
 - **The AGENTS.md convention**, best-effort: `newPreparedHome` writes `EVERYAPI.md` and `AGENTS.md` into every process-scoped client home, so any client that reads the convention out of its own home picks it up — and a client added later inherits it with no wiring, since that function is the single door all prepared homes come through.
 - **A managed block**, for a client whose only documented surface is a file the user owns. Goose is the case (`~/.config/goose/.goosehints`; `CONTEXT_FILE_NAME` selects a name, not a redirectable path). The launch writes a delimited block and removes exactly that block on exit, preserves the file's other content and mode, refuses to create the config directory, and converges on one block after a launch that was killed before its cleanup ran.
 

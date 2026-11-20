@@ -1,8 +1,11 @@
 package log
 
 import (
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/everyapi-ai/everyapi-sdk/api"
 )
 
 func TestParseWindow(t *testing.T) {
@@ -41,5 +44,17 @@ func TestWindowLabel(t *testing.T) {
 	}
 	if got := windowLabel(1700000000); got == "(open)" || got == "" {
 		t.Errorf("non-zero produced %q", got)
+	}
+}
+
+// use_time is stored in whole seconds; the list used to print it with an "ms" suffix, so a 49-second request read as 49 milliseconds.
+func TestFormatLogRow_UseTimeIsSeconds(t *testing.T) {
+	row := api.LogEntry{ID: 1, CreatedAt: time.Now().Unix(), ModelName: "gemini-4-neon-low", TokenName: "k", Quota: 10, PromptTokens: 25860, CompletionTokens: 29, UseTime: 49, ChannelID: 416}
+	got := formatLogRow(row)
+	if !strings.Contains(got, ", 49s, ch=#416") {
+		t.Fatalf("formatLogRow = %q, want the duration rendered as 49s", got)
+	}
+	if strings.Contains(got, "49ms") {
+		t.Fatalf("formatLogRow = %q still labels seconds as milliseconds", got)
 	}
 }

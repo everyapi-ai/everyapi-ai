@@ -139,14 +139,7 @@ func runList(args []string) error {
 	}
 	cliout.Printf(i18n.T("log.label.rows_window")+"\n", len(rows), total)
 	for _, r := range rows {
-		ts := time.Unix(r.CreatedAt, 0).Format("01-02 15:04:05")
-		model := cliout.Sanitize(r.ModelName)
-		if model == "" {
-			model = "-"
-		}
-		cliout.Printf("  %s  [#%d] %s via %s — quota=%d, tokens=%d/%d, %dms, ch=#%d\n",
-			ts, r.ID, model, emptyAs(cliout.Sanitize(r.TokenName), "(default)"),
-			r.Quota, r.PromptTokens, r.CompletionTokens, r.UseTime, r.ChannelID)
+		cliout.Printf("%s\n", formatLogRow(r))
 		if r.RequestID != "" {
 			cliout.Printf("    request_id: %s\n", cliout.Sanitize(r.RequestID))
 		}
@@ -155,6 +148,18 @@ func runList(args []string) error {
 		}
 	}
 	return nil
+}
+
+// formatLogRow renders one request log line. UseTime is the backend's `use_time`, recorded in whole seconds, so it is printed with an `s` unit.
+func formatLogRow(r api.LogEntry) string {
+	ts := time.Unix(r.CreatedAt, 0).Format("01-02 15:04:05")
+	model := cliout.Sanitize(r.ModelName)
+	if model == "" {
+		model = "-"
+	}
+	return fmt.Sprintf("  %s  [#%d] %s via %s — quota=%d, tokens=%d/%d, %ds, ch=#%d",
+		ts, r.ID, model, emptyAs(cliout.Sanitize(r.TokenName), "(default)"),
+		r.Quota, r.PromptTokens, r.CompletionTokens, r.UseTime, r.ChannelID)
 }
 
 func runStat(args []string) error {

@@ -342,13 +342,6 @@ func transparentCodexEnv(caPath string) (map[string]string, []string) {
 	}, []string{"OPENAI_BASE_URL", "OPENAI_API_BASE", "CODEX_API_KEY"}
 }
 
-func transparentGeminiEnv(caPath string) (map[string]string, []string) {
-	return map[string]string{
-		"GEMINI_API_KEY":      transparentPlaceholderCredential,
-		"NODE_EXTRA_CA_CERTS": caPath,
-	}, []string{"GOOGLE_GEMINI_BASE_URL", "GOOGLE_API_KEY"}
-}
-
 // joinBase concatenates the API base and a tool-specific suffix, avoiding double slashes. Centralized so adding a tool doesn't have to reinvent the join logic.
 func joinBase(base, suffix string) string {
 	base = strings.TrimRight(base, "/")
@@ -454,26 +447,7 @@ var Registry = map[string]*Tool{
 		prepareCatalogFn: prepareMiMoWithModels,
 	},
 
-	// Google's Gemini CLI supports API-key auth and a custom Gemini API origin through documented environment variables. prepareGemini overlays system settings so cached OAuth state cannot override the process-scoped key.
-	"gemini": {
-		Name:             "gemini",
-		ExecName:         "gemini",
-		InstallHint:      "Install Gemini CLI: https://github.com/google-gemini/gemini-cli#installation",
-		InstallCmd:       "npm install -g @google/gemini-cli || npm install -g @google/gemini-cli --registry=https://mirrors.cloud.tencent.com/npm/ || npm install -g @google/gemini-cli --registry=https://registry.npmmirror.com",
-		YoloFlag:         "--yolo",
-		YoloLabel:        "yolo mode — auto-approve every tool call (--yolo)",
-		ModelEnv:         "GEMINI_MODEL",
-		RequiredEndpoint: "gemini",
-		envFn: func(apiBase, token string) map[string]string {
-			return map[string]string{
-				"GEMINI_API_KEY":         token,
-				"GOOGLE_GEMINI_BASE_URL": joinBase(apiBase, ""),
-			}
-		},
-		prepareFn: prepareGemini,
-	},
-
-	// Antigravity CLI launches the locally authenticated `agy` client. agy owns its Google OAuth credential and upstream routing, so never pass the EveryAPI relay key or transparent-connector environment into the child.
+	// Antigravity CLI launches the locally authenticated `agy` client. `gemini` is an alias of this entry (see toolAliases): EveryAPI serves Gemini through Antigravity, so the familiar command opens agy rather than Google's separate Gemini CLI. agy owns its Google OAuth credential and upstream routing, so never pass the EveryAPI relay key or transparent-connector environment into the child.
 	"antigravity": {
 		Name:     "antigravity",
 		ExecName: "agy",
@@ -940,9 +914,18 @@ var Registry = map[string]*Tool{
 	},
 }
 
+// toolAliases maps an accepted command name to the registry entry it launches. An alias is not listed by Names, so pickers and `doctor` show each tool once.
+var toolAliases = map[string]string{
+	"gemini": "antigravity",
+}
+
 // Lookup returns the tool entry for `name`, or an error listing the supported names. cmd/use.go renders that error directly to the user.
 func Lookup(name string) (*Tool, error) {
-	t, ok := Registry[strings.ToLower(name)]
+	key := strings.ToLower(name)
+	if target, ok := toolAliases[key]; ok {
+		key = target
+	}
+	t, ok := Registry[key]
 	if !ok {
 		return nil, fmt.Errorf("unknown tool %q — supported: %s", name, strings.Join(Names(), ", "))
 	}
@@ -953,6 +936,6 @@ func Lookup(name string) (*Tool, error) {
 func Names() []string {
 	// Deterministic order matters for both the error message and the picker UX. Hand-coded to match the ordering most likely to reflect user demand.
 	return []string{
-		"claude", "codex", "opencode", "mimo-code", "gemini", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "pi-web", "pi-harness", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang", "open-webui", "deepseek-harness",
+		"claude", "codex", "opencode", "mimo-code", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "pi-web", "pi-harness", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang", "open-webui", "deepseek-harness",
 	}
 }

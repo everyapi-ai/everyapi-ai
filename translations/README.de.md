@@ -118,7 +118,7 @@ Das ist der Hauptgrund, dieses CLI zu installieren: einen unterstützten Coding-
 everyapi use claude            # Claude Code → EveryAPI
 everyapi use codex             # OpenAI Codex CLI → EveryAPI
 everyapi use opencode          # OpenCode → prozessbezogener EveryAPI-Provider
-everyapi use gemini            # Google Gemini CLI → EveryAPI
+everyapi use gemini            # = everyapi use antigravity
 everyapi use antigravity       # Antigravity (native Google-Auth und -Routing)
 everyapi use aider             # Aider → EveryAPI (mit Modellauswahl)
 everyapi use goose             # Goose CLI → EveryAPI (mit Modellauswahl)
@@ -156,7 +156,6 @@ Jedes Tool hat eigene Konventionen, aber das CLI merkt sie sich für dich:
 |---|---|
 | claude | env: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`; kompatible Live-Modelle über Gateway-Discovery |
 | codex | env: `OPENAI_API_KEY` plus ein persistentes EveryAPI-`CODEX_HOME` zum Erhalt der Sitzung, mit lebenszyklusgebundenem `--profile` und keybezogenem Modellkatalog (codex routet über Konfiguration, nicht über `OPENAI_BASE_URL`) |
-| gemini | env: `GEMINI_API_KEY`, `GOOGLE_GEMINI_BASE_URL`, `GEMINI_MODEL`; isoliertes Konfigurations-Overlay mit Auth-Modus |
 | antigravity | nativer Antigravity-Launcher (`agy`) |
 | aider | OpenAI-kompatible Env + LiteLLM-Modellnamensraum `openai/<model>` |
 | goose | `GOOSE_PROVIDER=openai`, `GOOSE_MODEL`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` |
@@ -189,7 +188,7 @@ Ein in einem früheren Lauf gecachter Key wird weiterverwendet —— diese Abfr
 
 **Modellauswahl**: Beim Start holt EveryAPI den Live-Katalog, der für den gewählten Relay-Key bzw. die Gruppe verfügbar ist, entfernt inkompatible Medien-/Embedding-Protokolle und injiziert diesen Snapshot in die native Auswahl jedes gerouteten Clients. Nutze `/model` in Claude Code, Codex, Qwen Code und Kimi Code; `/model` oder `models` in Grok; `hermes model` in Hermes. Nicht-Claude-Modell-IDs werden intern über Claude-kompatible Aliasse dargestellt, aber mit ihrer echten ID angezeigt und stromaufwärts gesendet.
 
-Tools mit `ModelEnv`-Vertrag (Gemini, Aider, Goose, Crush, Cline, OpenClaw, Continue, Kilo, Pi, Vibe, GitHub Copilot CLI, Factory Droid, OpenHands, ForgeCode, LLxprt, Hermes, Qwen Code, Kimi Code) öffnen die EveryAPI-Auswahl. Mit `--model <id>` überspringst du sie. In nicht-interaktiven Läufen verwendet EveryAPI deterministisch das erste kompatible Modell. Reines claude, codex und grok behalten ihr eigenes Startmodellverhalten. `antigravity` startet das native `agy` mit Google-Auth, und `librefang` nutzt seinen eigenen EveryAPI-Credential-Prozess. `pi-web`, `open-webui` und `deepseek-harness` liefern Browser-UIs: EveryAPI registriert den Provider und den gesamten kompatiblen Katalog im Voraus, und das Modell wird in dieser UI statt über eine Terminal-Auswahl gewählt.
+Tools mit `ModelEnv`-Vertrag (Aider, Goose, Crush, Cline, OpenClaw, Continue, Kilo, Pi, Vibe, GitHub Copilot CLI, Factory Droid, OpenHands, ForgeCode, LLxprt, Hermes, Qwen Code, Kimi Code) öffnen die EveryAPI-Auswahl. Mit `--model <id>` überspringst du sie. In nicht-interaktiven Läufen verwendet EveryAPI deterministisch das erste kompatible Modell. Reines claude, codex und grok behalten ihr eigenes Startmodellverhalten. `antigravity` startet das native `agy` mit Google-Auth, und `librefang` nutzt seinen eigenen EveryAPI-Credential-Prozess. `pi-web`, `open-webui` und `deepseek-harness` liefern Browser-UIs: EveryAPI registriert den Provider und den gesamten kompatiblen Katalog im Voraus, und das Modell wird in dieser UI statt über eine Terminal-Auswahl gewählt.
 
 **Reasoning-Level**: Nach dem Modell fragen `everyapi use codex` und `everyapi use pi`, mit welchem Reasoning-Level gestartet werden soll, und merken sich die Antwort für die nächsten Läufe —— einmal fragen, danach ohne Rückfrage wiederverwenden, genau wie bei den bisherigen Sicherheitseinstellungen. Die Bedingungen unterscheiden sich zwischen den beiden Clients, weil sich unterscheidet, was wir wissen. Codex liest die Stufen, die sein gebündelter Katalog für dieses Modell ausweist (`low` … `ultra`, je nach Modell —— `gpt-5.6-sol` reicht bis `ultra`, `gpt-5.5` bis `xhigh`), und nimmt die Wahl als `model_reasoning_effort` entgegen. Dafür wird das Gateway nicht gefragt, deshalb erscheint der Schritt bei Modellen, die Codex nicht kennt, gar nicht. Pi hat für Custom-Provider keine modellspezifische Tabelle, deshalb erscheint der Schritt nur, wenn das Gateway bestätigt, dass das Modell Effort akzeptiert (`supports_thinking` in `/v1/models`); die Auswahl reicht von `off` bis `high` und wird als `defaultThinkingLevel` übergeben. Ein gemerktes Level, das das aktuelle Modell nicht anbietet, wird verworfen statt festgenagelt. Beim ersten Lauf nach diesem Feature startet der Cursor auf dem Effort, der bereits in Codex' persistentem Home stand —— den Standard zu akzeptieren ändert also nichts. Die Steuerung innerhalb der Sitzung bleibt in beiden Clients erhalten —— `/model` in Codex, shift+tab in pi ——; der Launcher bewahrt deine Wahl nur über Läufe hinweg, weil Codex' generiertes Profil und Pis isoliertes Home beim Beenden gelöscht werden.
 

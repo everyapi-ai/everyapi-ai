@@ -254,7 +254,7 @@ func TestUseRejectsKnownFailuresBeforeCrossingTheTmuxBoundary(t *testing.T) {
 		// Every one of these is a pure function of the parsed arguments and the
 		// tool registry, so every one of them used to be written into a pane
 		// tmux was about to destroy.
-		{name: "transparent unsupported", credentials: validCredentials, useArgs: []string{"gemini", "--transparent"}, wantError: "transparent mode is not supported for gemini"},
+		{name: "transparent unsupported", credentials: validCredentials, useArgs: []string{"aider", "--transparent"}, wantError: "transparent mode is not supported for aider"},
 		{name: "model unsupported", credentials: validCredentials, useArgs: []string{"pi-web", "--model", "gpt-5"}, wantError: fmt.Sprintf(i18n.T("use.model_unsupported"), "pi-web", "pi-web")},
 		{name: "sanitize on a native tool", credentials: validCredentials, useArgs: []string{"librefang", "--sanitize"}, wantError: "--sanitize is not supported for native librefang"},
 		{name: "native model flag after the separator", credentials: validCredentials, useArgs: []string{"grok", "--", "--model", "grok-4"}, wantError: "cannot be selected through grok's native flags"},

@@ -152,7 +152,7 @@ func TestClaudeWindowsInstallerFallsBackToTheOfficialOrigin(t *testing.T) {
 
 func TestNpmInstallersRetryThroughTheChinaRegistry(t *testing.T) {
 	npmTools := []string{
-		"codex", "opencode", "gemini", "crush", "cline", "openclaw",
+		"codex", "opencode", "crush", "cline", "openclaw",
 		"continue", "deepseek-harness", "kilo", "pi", "pi-web", "pi-harness", "copilot", "droid",
 		"llxprt", "grok", "qwen-code", "kimi-code",
 	}
@@ -398,7 +398,7 @@ func TestCanAutoInstall_ClaudeCrossPlatform(t *testing.T) {
 
 // TestCanAutoInstall_NpmCrossPlatform asserts the npm-based installers stay available on every platform. npm itself is cross-platform, so gating these would needlessly send Windows users back to the install-hint URL when `npm install -g @openai/codex` would work.
 func TestCanAutoInstall_NpmCrossPlatform(t *testing.T) {
-	for _, name := range []string{"codex", "gemini", "openclaw", "continue", "kilo", "pi", "copilot", "droid"} {
+	for _, name := range []string{"codex", "openclaw", "continue", "kilo", "pi", "copilot", "droid"} {
 		tool, _ := Lookup(name)
 		if tool.InstallCmdUnixOnly {
 			t.Errorf("%s.InstallCmdUnixOnly = true, but npm is cross-platform", name)
@@ -437,7 +437,6 @@ func TestInstallPromptDefault(t *testing.T) {
 	cases := map[string]bool{
 		"claude":      false, // curl|bash → default No
 		"antigravity": false, // curl|bash → default No
-		"gemini":      true,  // npm → default Yes
 		"codex":       true,  // npm → default Yes
 		"grok":        true,  // npm → default Yes
 		"openclaw":    true,  // npm → default Yes

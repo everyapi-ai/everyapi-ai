@@ -355,15 +355,15 @@ func TestWindowsLocalAppDataBinDirsRejectEscape(t *testing.T) {
 	}
 }
 
-// TestLookupExecName_MatchesExecNameNotRegistryKey pins the lookup key. Gemini CLI and Antigravity are distinct registry entries and executable names; the MCP helper must resolve the real `gemini` entry.
+// TestLookupExecName_MatchesExecNameNotRegistryKey pins the lookup key. The registry key `antigravity` launches `agy`. `gemini` is only an alias of that entry, so no registered tool runs the Gemini CLI executable and the lookup must not answer for it.
 func TestLookupExecName_MatchesExecNameNotRegistryKey(t *testing.T) {
 	if got := toolByExecName("agy"); got == nil {
 		t.Error(`toolByExecName("agy") = nil, want the antigravity entry`)
 	} else if got.Name != "antigravity" {
 		t.Errorf(`toolByExecName("agy").Name = %q, want antigravity`, got.Name)
 	}
-	if got := toolByExecName("gemini"); got == nil || got.Name != "gemini" {
-		t.Errorf(`toolByExecName("gemini") = %#v, want the real Gemini CLI entry`, got)
+	if got := toolByExecName("gemini"); got != nil {
+		t.Errorf(`toolByExecName("gemini") = %q, want nil: gemini is an alias name, not an executable EveryAPI launches`, got.Name)
 	}
 	if got := toolByExecName(""); got != nil {
 		t.Errorf(`toolByExecName("") = %q, want nil`, got.Name)
@@ -516,26 +516,6 @@ func TestNonNpmToolsResolveFromTheirInstallDir(t *testing.T) {
 				t.Errorf("IsInstalled(%s) = false despite the binary being in its install dir", key)
 			}
 		})
-	}
-}
-
-// TestGeminiAutoInstall pins the registry wiring that makes `everyapi use gemini` self-install: without an InstallCmd, CanAutoInstall is false and the user only ever sees the hint.
-func TestGeminiAutoInstall(t *testing.T) {
-	tool, err := Lookup("gemini")
-	if err != nil {
-		t.Fatalf("Lookup(gemini): %v", err)
-	}
-	if tool.ExecName != "gemini" {
-		t.Errorf("ExecName = %q, want gemini", tool.ExecName)
-	}
-	if runtime.GOOS != "windows" && !CanAutoInstall(tool) {
-		t.Error("CanAutoInstall(gemini) = false, want true so `use` can offer the install")
-	}
-	if tool.InstallCmd != "npm install -g @google/gemini-cli || npm install -g @google/gemini-cli --registry=https://mirrors.cloud.tencent.com/npm/ || npm install -g @google/gemini-cli --registry=https://registry.npmmirror.com" {
-		t.Errorf("InstallCmd = %q", tool.InstallCmd)
-	}
-	if !tool.InstallPromptDefault() {
-		t.Error("npm install should default its reversible prompt to yes")
 	}
 }
 

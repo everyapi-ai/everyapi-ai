@@ -118,7 +118,7 @@ everyapi computer hotkey --app com.apple.TextEdit --window-index 0 --key cmd+a
 everyapi use claude            # Claude Code → EveryAPI
 everyapi use codex             # OpenAI Codex CLI → EveryAPI
 everyapi use opencode          # OpenCode → 프로세스 범위 EveryAPI provider
-everyapi use gemini            # Google Gemini CLI → EveryAPI
+everyapi use gemini            # = everyapi use antigravity
 everyapi use antigravity       # Antigravity(네이티브 Google 인증 및 라우팅)
 everyapi use aider             # Aider → EveryAPI(모델 선택)
 everyapi use goose             # Goose CLI → EveryAPI(모델 선택)
@@ -156,7 +156,6 @@ everyapi use                             # 인자 없음 → 설치된 도구 �
 |---|---|
 | claude | env: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`; 게이트웨이 탐색으로 실시간 호환 모델 |
 | codex | env: `OPENAI_API_KEY` + 세션 유지를 위한 영구 EveryAPI `CODEX_HOME` + 수명주기에 묶인 `--profile` 과 key 범위 모델 카탈로그(codex 는 `OPENAI_BASE_URL` 이 아니라 설정으로 라우팅) |
-| gemini | env: `GEMINI_API_KEY`, `GOOGLE_GEMINI_BASE_URL`, `GEMINI_MODEL`; 격리된 auth-mode 설정 오버레이 |
 | antigravity | 네이티브 Antigravity 런처(`agy`) |
 | aider | OpenAI 호환 env + `openai/<model>` LiteLLM 모델 네임스페이스 |
 | goose | `GOOSE_PROVIDER=openai`, `GOOSE_MODEL`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` |
@@ -189,7 +188,7 @@ everyapi use                             # 인자 없음 → 설치된 도구 �
 
 **모델 선택**: 실행 시 EveryAPI 는 선택된 relay key/group 에서 사용 가능한 실시간 카탈로그를 가져와 호환되지 않는 미디어/embedding 프로토콜을 제거하고, 그 스냅샷을 라우팅되는 각 클라이언트의 네이티브 선택기에 주입합니다. Claude Code, Codex, Qwen Code, Kimi Code 에서는 `/model` 을, Grok 에서는 `/model`/`models` 를, Hermes 에서는 `hermes model` 을 사용하세요. Claude 가 아닌 모델 ID 는 내부적으로 Claude 호환 별칭으로 표현되지만, 표시와 상위 전송은 실제 ID 로 이뤄집니다.
 
-`ModelEnv` 계약을 가진 도구(Gemini, Aider, Goose, Crush, Cline, OpenClaw, Continue, Kilo, Pi, Vibe, GitHub Copilot CLI, Factory Droid, OpenHands, ForgeCode, LLxprt, Hermes, Qwen Code, Kimi Code)는 EveryAPI 선택기를 엽니다. `--model <id>` 를 넘기면 건너뜁니다. 비대화형 실행에서는 EveryAPI 가 결정적으로 첫 번째 호환 모델을 사용합니다. 순수 claude/codex/grok 은 자체 부팅 모델 동작을 유지합니다. `antigravity` 는 Google 인증으로 네이티브 `agy` 를 실행하고, `librefang` 은 자체 EveryAPI 자격 증명 프로세스를 사용합니다. `pi-web`, `open-webui`, `deepseek-harness` 는 브라우저 UI 를 제공합니다. EveryAPI 가 provider 와 호환 카탈로그 전체를 미리 등록하고, 모델은 터미널 선택기가 아니라 그 UI 안에서 고릅니다.
+`ModelEnv` 계약을 가진 도구(Aider, Goose, Crush, Cline, OpenClaw, Continue, Kilo, Pi, Vibe, GitHub Copilot CLI, Factory Droid, OpenHands, ForgeCode, LLxprt, Hermes, Qwen Code, Kimi Code)는 EveryAPI 선택기를 엽니다. `--model <id>` 를 넘기면 건너뜁니다. 비대화형 실행에서는 EveryAPI 가 결정적으로 첫 번째 호환 모델을 사용합니다. 순수 claude/codex/grok 은 자체 부팅 모델 동작을 유지합니다. `antigravity` 는 Google 인증으로 네이티브 `agy` 를 실행하고, `librefang` 은 자체 EveryAPI 자격 증명 프로세스를 사용합니다. `pi-web`, `open-webui`, `deepseek-harness` 는 브라우저 UI 를 제공합니다. EveryAPI 가 provider 와 호환 카탈로그 전체를 미리 등록하고, 모델은 터미널 선택기가 아니라 그 UI 안에서 고릅니다.
 
 **reasoning level**: 모델 다음으로 `everyapi use codex` 와 `everyapi use pi` 는 어느 reasoning level 로 실행할지 묻고 그 답을 다음 실행을 위해 기억합니다 —— 한 번 묻고 이후에는 확인 없이 재사용하며, 아래 안전 설정과 동일한 방식입니다. 두 클라이언트의 조건이 다른 이유는 아는 정보가 다르기 때문입니다. Codex 는 자체 번들 카탈로그가 해당 모델에 대해 공개하는 단계(`low` … `ultra`, 모델마다 다름 —— `gpt-5.6-sol` 은 `ultra` 까지, `gpt-5.5` 는 `xhigh` 까지)를 읽고 선택을 `model_reasoning_effort` 로 받습니다. 이를 위해 게이트웨이에 묻지 않으므로 Codex 가 모르는 모델에는 이 단계가 나타나지 않습니다. Pi 는 custom provider 에 대한 모델별 테이블이 없어, 게이트웨이가 해당 모델이 effort 를 받는다고 확인한 경우(`/v1/models` 의 `supports_thinking`)에만 이 단계가 나타납니다. 선택지는 `off` … `high` 이며 `defaultThinkingLevel` 로 전달됩니다. 현재 모델이 제공하지 않는 기억된 레벨은 고정하지 않고 버립니다. 이 기능 출시 후 첫 실행에서는 커서가 Codex 의 영구 home 에 이미 있던 effort 에서 시작하므로, 기본값을 그대로 받아들이면 아무것도 바뀌지 않습니다. 두 클라이언트의 세션 내 컨트롤 —— Codex 의 `/model`, pi 의 shift+tab —— 은 그대로 유지되고, 실행 간 선택은 런처가 보관합니다. Codex 가 생성한 profile 과 Pi 의 격리 home 은 종료 시 삭제되기 때문입니다.
 

@@ -17,7 +17,7 @@ import (
 // TestRegistry_HasExpectedTools pins the V1 supported set. New tools can be added freely; removing one should be a deliberate spec change that breaks this test.
 func TestRegistry_HasExpectedTools(t *testing.T) {
 	want := []string{
-		"claude", "codex", "opencode", "mimo-code", "gemini", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "pi-web", "pi-harness", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang", "open-webui", "deepseek-harness",
+		"claude", "codex", "opencode", "mimo-code", "antigravity", "aider", "goose", "crush", "cline", "openclaw", "continue", "kilo", "pi", "pi-web", "pi-harness", "vibe", "copilot", "droid", "openhands", "forge", "llxprt", "grok", "qwen-code", "kimi-code", "hermes", "librefang", "open-webui", "deepseek-harness",
 	}
 	got := Names()
 	if len(got) != len(want) {
@@ -234,24 +234,6 @@ func TestPrepareOpenCodeAddsProcessScopedAgentInstructions(t *testing.T) {
 	cleanup()
 	if _, err := os.Stat(config.Instructions[0]); !os.IsNotExist(err) {
 		t.Fatalf("OpenCode agent instruction file remained after cleanup: %v", err)
-	}
-}
-
-// TestEnv_Gemini verifies Google's documented Gemini CLI environment contract.
-func TestEnv_Gemini(t *testing.T) {
-	tool, _ := Lookup("gemini")
-	env := tool.Env("https://api.everyapi.ai", "my-token")
-	if got := tool.ExecName; got != "gemini" {
-		t.Fatalf("ExecName = %q, want gemini", got)
-	}
-	if got := env["GEMINI_API_KEY"]; got != "my-token" {
-		t.Errorf("GEMINI_API_KEY = %q", got)
-	}
-	if got := env["GOOGLE_GEMINI_BASE_URL"]; got != "https://api.everyapi.ai" {
-		t.Errorf("GOOGLE_GEMINI_BASE_URL = %q", got)
-	}
-	if tool.Native {
-		t.Fatal("Gemini CLI must resolve an EveryAPI relay credential")
 	}
 }
 

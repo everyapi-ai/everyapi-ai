@@ -31,15 +31,15 @@ A bare `--group` or `--channel` with no value opens a picker over your enabled k
 ## Supported tools
 
 ```
-claude      codex       opencode    gemini      antigravity
-aider       goose       crush       cline       openclaw
-continue    kilo        pi          vibe        copilot
-droid       openhands   forge       llxprt      grok
-qwen-code   kimi-code   hermes      librefang
+claude      codex       opencode    antigravity aider
+goose       crush       cline       openclaw    continue
+kilo        pi          vibe        copilot     droid
+openhands   forge       llxprt      grok        qwen-code
+kimi-code   hermes      librefang
 open-webui  pi-web      deepseek-harness
 ```
 
-`antigravity` and `librefang` are native integrations: they keep their own authentication path and never receive a copied relay key. `open-webui`, `pi-web`, and `deepseek-harness` serve a browser UI — EveryAPI registers the provider and the whole compatible catalog up front, and the model is chosen inside that UI rather than by a terminal picker.
+`gemini` is an alias of `antigravity`: both launch the native `agy` client. `antigravity` and `librefang` are native integrations: they keep their own authentication path and never receive a copied relay key. `open-webui`, `pi-web`, and `deepseek-harness` serve a browser UI — EveryAPI registers the provider and the whole compatible catalog up front, and the model is chosen inside that UI rather than by a terminal picker.
 
 Provider names are not tool names. Use `qwen-code` and `kimi-code` for those vendors' official clients; to reach a provider's models from some other client, select them from that client's live catalog.
 
@@ -49,7 +49,6 @@ Provider names are not tool names. Use `qwen-code` and `kimi-code` for those ven
 claude      ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, live catalog
 codex       OPENAI_API_KEY, persistent EveryAPI CODEX_HOME, a
             lifecycle-bound --profile, key-scoped model catalog
-gemini      GEMINI_API_KEY, GOOGLE_GEMINI_BASE_URL, GEMINI_MODEL
 aider       OpenAI-compatible env plus openai/<model> for LiteLLM
 goose       GOOSE_PROVIDER=openai, GOOSE_MODEL, OPENAI_API_KEY
 crush       Process-scoped CRUSH_GLOBAL_CONFIG, key from env
@@ -152,7 +151,6 @@ kilo        the same, through its OpenCode-compatible config
 crush       options.context_paths
 aider       --read
 continue    rules in the generated config.yaml
-gemini      context.includeDirectories in the settings overlay EveryAPI owns
 ```
 
 **Through the AGENTS.md convention** — best-effort. Every process-scoped home EveryAPI creates carries `EVERYAPI.md` and `AGENTS.md`, so a client that reads the cross-tool convention out of its own home picks the pointer up, and one that does not sees an unused markdown file in a directory deleted when it exits. This covers grok, qwen-code, kimi-code, cline, droid, forge, llxprt, openclaw, pi, and vibe without naming any of them: the files are written by the single function all prepared homes come through, so a client added later inherits it.

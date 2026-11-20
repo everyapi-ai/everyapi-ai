@@ -118,7 +118,7 @@ everyapi computer hotkey --app com.apple.TextEdit --window-index 0 --key cmd+a
 everyapi use claude            # Claude Code → EveryAPI
 everyapi use codex             # OpenAI Codex CLI → EveryAPI
 everyapi use opencode          # OpenCode → 进程级 EveryAPI provider
-everyapi use gemini            # Google Gemini CLI → EveryAPI
+everyapi use gemini            # = everyapi use antigravity
 everyapi use antigravity       # Antigravity（原生 Google 认证与路由）
 everyapi use aider             # Aider → EveryAPI（选一个模型）
 everyapi use goose             # Goose CLI → EveryAPI（选一个模型）
@@ -156,7 +156,6 @@ everyapi use                             # 无参 → 交互式选择已安装�
 |---|---|
 | claude | env：`ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`；通过网关发现实时可用的兼容模型 |
 | codex | env：`OPENAI_API_KEY` + 持久化的 EveryAPI `CODEX_HOME`（保留会话）+ 生命周期绑定的 `--profile` 与按 key 限定的模型目录（codex 走配置路由，不读 `OPENAI_BASE_URL`） |
-| gemini | env：`GEMINI_API_KEY`、`GOOGLE_GEMINI_BASE_URL`、`GEMINI_MODEL`；隔离的 auth-mode 设置覆盖层 |
 | antigravity | 原生 Antigravity 启动器（`agy`） |
 | aider | OpenAI 兼容 env，外加 `openai/<model>` 的 LiteLLM 模型命名空间 |
 | goose | `GOOSE_PROVIDER=openai`、`GOOSE_MODEL`、`OPENAI_API_KEY`、`OPENAI_BASE_URL` |
@@ -189,7 +188,7 @@ everyapi use                             # 无参 → 交互式选择已安装�
 
 **模型选择**：启动时 EveryAPI 拉取所选 relay key/group 可用的实时目录，剔除不兼容的媒体/embedding 协议，把结果快照注入每个被路由客户端的原生选择器。在 Claude Code、Codex、Qwen Code、Kimi Code 里用 `/model`；Grok 用 `/model`/`models` 入口，Hermes 用 `hermes model`。非 Claude 的模型 ID 在内部用 Claude 兼容别名表示，但展示和发往上游时都用真实 ID。
 
-带 `ModelEnv` 契约的工具（Gemini、Aider、Goose、Crush、Cline、OpenClaw、Continue、Kilo、Pi、Vibe、GitHub Copilot CLI、Factory Droid、OpenHands、ForgeCode、LLxprt、Hermes、Qwen Code、Kimi Code）会打开 EveryAPI 的选择器；传 `--model <id>` 可跳过。非交互运行时 EveryAPI 确定性地取第一个兼容模型。裸 claude/codex/grok 仍自己决定启动模型。`antigravity` 用 Google 认证启动原生 `agy`，`librefang` 走它自己的一方 EveryAPI 凭证流程。`pi-web`、`open-webui`、`deepseek-harness` 提供的是浏览器 UI：EveryAPI 会提前注册好 provider 与整份兼容目录，模型在那个 UI 里选，而不是走终端选择器。
+带 `ModelEnv` 契约的工具（Aider、Goose、Crush、Cline、OpenClaw、Continue、Kilo、Pi、Vibe、GitHub Copilot CLI、Factory Droid、OpenHands、ForgeCode、LLxprt、Hermes、Qwen Code、Kimi Code）会打开 EveryAPI 的选择器；传 `--model <id>` 可跳过。非交互运行时 EveryAPI 确定性地取第一个兼容模型。裸 claude/codex/grok 仍自己决定启动模型。`antigravity` 用 Google 认证启动原生 `agy`，`librefang` 走它自己的一方 EveryAPI 凭证流程。`pi-web`、`open-webui`、`deepseek-harness` 提供的是浏览器 UI：EveryAPI 会提前注册好 provider 与整份兼容目录，模型在那个 UI 里选，而不是走终端选择器。
 
 **reasoning level**：选完模型后，`everyapi use codex` 和 `everyapi use pi` 会问用哪个 reasoning level 启动，并记住答案供下次使用 —— 问一次，之后沿用不再提示，和下面的安全偏好同理。这两个客户端的门槛不同，因为它们掌握的信息不同。Codex 读它自带目录为该模型公布的档位（`low` … `ultra`，各模型不同 —— `gpt-5.6-sol` 到 `ultra`，`gpt-5.5` 到 `xhigh` 为止），并以 `model_reasoning_effort` 接收选择；它不会为此询问网关，所以 Codex 没听说过的模型就没有这一步。Pi 对 custom provider 没有 per-model 表，所以它这一步只在网关已确认该模型接受 effort 时出现（`/v1/models` 上的 `supports_thinking`）；给出的是 `off` … `high`，以 `defaultThinkingLevel` 接收。当前模型不提供的历史档位会被丢弃而不是硬套；这一特性上线后第一次启动时，光标停在 Codex 持久化 home 里已有的 effort 上，所以直接回车不会改变任何东西。两个客户端各自的会话内控制仍然保留 —— Codex 的 `/model`、pi 的 shift+tab —— 而跨启动的选择由启动器保管，因为 Codex 生成的 profile 和 Pi 的隔离 home 都会在退出时删除。
 

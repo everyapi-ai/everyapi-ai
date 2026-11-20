@@ -2212,6 +2212,10 @@ func TestUseUsageListsNoUnregisteredTool(t *testing.T) {
 	}
 	for name := range usageToolNames(t) {
 		if !registered[name] {
+			// An alias such as `gemini` is accepted on the command line without being a separate entry in Names.
+			if _, err := tools.Lookup(name); err == nil {
+				continue
+			}
 			t.Errorf("`everyapi use --help` offers %q, which is not a registered tool", name)
 		}
 	}
