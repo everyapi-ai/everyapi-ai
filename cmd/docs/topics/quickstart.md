@@ -36,9 +36,9 @@ Re-running the install command upgrades in place. `everyapi version update` pick
 everyapi auth login
 ```
 
-The CLI renders a QR code and prints a short code and URL. Scan it with a phone already signed in to EveryAPI, or open the URL in a browser, and approve. The token lands in `~/.config/everyapi/credentials.json` with mode `0600`.
+The CLI prints the dashboard page that issues CLI authorization codes and asks for one. Open that page while signed in to EveryAPI, generate a code, and enter it in the terminal. The code is valid for 10 minutes and works once. The token lands in `~/.config/everyapi/credentials.json` with mode `0600`.
 
-You never type a password on the machine you are signing in from — that is the point of the device flow. See the `cli` topic for the flags (`--no-browser`, `--no-qr`, `--api-base`).
+You never type a password on the machine you are signing in from. See the `cli` topic for the flags (`--browser` for the QR approval flow, `--api-base`).
 
 Check it worked:
 

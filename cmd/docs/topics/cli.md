@@ -122,15 +122,20 @@ Page commands use a local, persisted page model: `goto` fetches and stores HTML,
 ## Signing in
 
 ```
-everyapi auth login          Device flow with a terminal QR
-everyapi auth login --no-browser
-everyapi auth login --no-qr
+everyapi auth login          Sign in with a one-time code from the dashboard
+everyapi auth login --browser
+everyapi auth login --browser --no-browser
+everyapi auth login --browser --no-qr
 everyapi auth login --api-base http://localhost:8787
 everyapi auth status         Identity, quota, usage, balance
 everyapi auth logout         Clear this device's credentials
 ```
 
-The device flow prints a short code and a URL, and renders the URL as a QR whose payload already carries the code. Scanning it from a phone that is already signed in gets you to an approval button with the code pre-filled. No password is typed on the machine being authorised, which is what removes the phishing surface.
+`auth login` prints the dashboard page that issues CLI authorization codes (`/cli/code`) and asks for one. Generate it there while signed in, then type or paste it into the terminal. A code lasts 10 minutes and works once, and generating a new one invalidates the previous one. Nothing is opened from the terminal, so a popup blocker or a browser that will not launch cannot strand the sign-in. Off a terminal the code is read from stdin: `echo "$CODE" | everyapi auth login`.
+
+`--browser` uses the device flow instead. It prints a short code and a URL, and renders the URL as a QR whose payload already carries the code. Scanning it from a phone that is already signed in gets you to an approval button with the code pre-filled. `--no-browser` and `--no-qr` only apply to this flow. Use it too against a self-hosted gateway older than the code endpoint; the CLI says so when it meets one.
+
+In both flows no password is typed on the machine being authorised, which is what removes the phishing surface.
 
 ## Reading your usage
 

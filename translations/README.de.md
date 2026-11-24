@@ -222,20 +222,22 @@ Dieser Modus ist experimentell und bewusst prozessbezogen:
 - der Connector sieht entschlüsselte Modellinhalte. Der CA-Signierschlüssel wird nie persistiert oder hochgeladen, und die öffentliche CA-Datei wird beim Beenden gelöscht;
 - dein Relay-Key liegt weder in der Umgebung des Kindprozesses noch in der generierten Client-Konfiguration, aber eine bereits vorhandene `~/.config/everyapi/credentials.json` bleibt für jeden Prozess lesbar, der unter demselben Systembenutzer läuft. Der transparente Modus ist Isolierung der Credential-Injektion, keine Sandbox gegen feindselige Kindprozesse.
 
-### `everyapi auth login` —— Device Authorization Grant + QR-Anmeldung
+### `everyapi auth login` —— einmaliger Autorisierungscode
 
-Nutzt den Device Authorization Grant (RFC-8628-Stil) + docs §7-5 Layer 1 „geräteübergreifende QR-Anmeldung":
+1. Die CLI gibt die Dashboard-Seite aus, die Codes ausstellt (`https://app.everyapi.ai/cli/code`), und fragt nach dem Code
+2. Melde dich dort im Dashboard an, klicke auf **Code erzeugen** und kopiere ihn. Ein Code gilt 10 Minuten und funktioniert einmal; ein neuer Code macht den vorherigen ungültig
+3. Gib den Code im Terminal ein. Die CLI tauscht ihn gegen ein Access Token und speichert es unter `~/.config/everyapi/credentials.json` (mode 0600)
 
-1. Das CLI erstellt eine Sitzung und **rendert einen QR-Code im Terminal**, zusätzlich zum kurzen Code und der URL
-2. Scanne den QR-Code mit dem Handy (oder öffne die URL in einem Browser, in dem du bereits bei EveryAPI angemeldet bist) —— die URL im QR-Code trägt bereits `?code=USR-789`, das Dashboard füllt den Code also automatisch aus und der Nutzer klickt nur noch auf Approve
-3. Das CLI erhält das Access Token und speichert es in `~/.config/everyapi/credentials.json` (Modus 0600)
+Aus dem Terminal wird nichts geöffnet, daher können Popup-Blocker oder ein Browser, der nicht startet, die Anmeldung nicht blockieren. `--browser` behält den bisherigen Device-Authorization-Grant-Ablauf (RFC-8628-Stil): ein QR im Terminal plus kurzer Code und URL, die du in einem bei EveryAPI angemeldeten Browser bestätigst.
 
 ```bash
-everyapi auth login                                    # Produktion; rendert standardmäßig QR und öffnet den Browser
-everyapi settings set gateway_region cn               # das China-beschleunigte Gateway für folgende Befehle nutzen
+everyapi auth login                                    # Produktion; fragt nach einem Einmalcode von /cli/code
+everyapi settings set gateway_region cn               # künftige Befehle über das China-Gateway leiten
 everyapi auth login --api-base http://localhost:8787   # lokale Entwicklung / Self-Hosting
-everyapi auth login --no-browser                       # Browser nicht öffnen (QR scannen)
-everyapi auth login --no-qr                            # keinen QR rendern (Nicht-UTF-8-Terminals / Pipe-Ausgabe)
+echo "$CODE" | everyapi auth login                     # nicht interaktiv: Code von stdin lesen
+everyapi auth login --browser                          # stattdessen im Browser bestätigen (QR + automatisches Öffnen)
+everyapi auth login --browser --no-browser             # Browser-Ablauf ohne automatisches Öffnen (QR scannen)
+everyapi auth login --browser --no-qr                  # Browser-Ablauf ohne QR (Nicht-UTF-8-Terminals / Piping)
 ```
 
 Beispiel für den im Terminal gerenderten QR-Code (Unicode-Halbblockzeichen, etwa 18-20 Zeilen hoch):

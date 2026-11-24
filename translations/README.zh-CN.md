@@ -222,20 +222,22 @@ Provider 名不等于 CLI 名：这两家厂商的官方客户端请用 `qwen-co
 - Connector 能看到解密后的模型内容。它的 CA 签名私钥永不写盘或上传，公开 CA 文件在退出时删除；
 - relay key 不进入子进程环境与生成的客户端配置，但现有的 `~/.config/everyapi/credentials.json` 仍能被同一 OS 用户下的任何进程读取。透明模式提供的是凭证注入隔离，不是针对恶意子进程的沙箱。
 
-### `everyapi auth login` — Device Authorization Grant + QR 登录
+### `everyapi auth login` — 一次性授权码登录
 
-走 Device Authorization Grant（RFC 8628 形态）+ docs §7-5 Layer 1 「设备到设备 QR 登录」：
+1. CLI 打印签发授权码的 dashboard 页面（`https://app.everyapi.ai/cli/code`），并提示输入授权码
+2. 在该页面登录 dashboard，点 **生成授权码** 并复制。授权码 10 分钟内有效、只能使用一次；生成新码后旧码立即失效
+3. 在终端输入授权码，CLI 用它换取 access token，落地到 `~/.config/everyapi/credentials.json`（mode 0600）
 
-1. CLI 创建一个 session，**渲染终端 QR + 打印短码 + URL**
-2. 用手机扫码（或在已登录 EveryAPI 的浏览器里打开 URL）—— QR 里的 URL 已带 `?code=USR-789`，dashboard 自动填好 code，用户只用点 Approve
-3. CLI 拿到 access token，落地到 `~/.config/everyapi/credentials.json`（mode 0600）
+全程不需要从终端打开浏览器，弹窗拦截或浏览器无法启动都不会卡住登录。`--browser` 保留原来的 Device Authorization Grant（RFC 8628 形态）流程：终端渲染 QR + 打印短码和 URL，在已登录 EveryAPI 的浏览器里确认。
 
 ```bash
-everyapi auth login                                    # 生产，默认渲染 QR + 自动开浏览器
+everyapi auth login                                    # 生产，提示输入 /cli/code 生成的一次性授权码
 everyapi settings set gateway_region cn               # 后续命令使用中国加速网关
 everyapi auth login --api-base http://localhost:8787   # 本地开发 / 自托管
-everyapi auth login --no-browser                       # 不自动开浏览器（用 QR 扫）
-everyapi auth login --no-qr                            # 不渲染 QR（非 UTF-8 终端 / piping）
+echo "$CODE" | everyapi auth login                     # 非交互：从 stdin 读取授权码
+everyapi auth login --browser                          # 改用浏览器确认（QR + 自动开浏览器）
+everyapi auth login --browser --no-browser             # 浏览器流程，不自动开浏览器（用 QR 扫）
+everyapi auth login --browser --no-qr                  # 浏览器流程，不渲染 QR（非 UTF-8 终端 / piping）
 ```
 
 QR 终端渲染样例（Unicode 半块字符；约 18-20 行高）：

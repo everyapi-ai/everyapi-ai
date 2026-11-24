@@ -222,20 +222,22 @@ Ce mode est expérimental et délibérément limité au processus :
 - le connecteur voit le contenu déchiffré des modèles. La clé de signature de la CA n'est jamais persistée ni téléversée, et le fichier public de la CA est supprimé à la sortie ;
 - votre clé de relais n'est ni dans l'environnement du processus enfant ni dans la configuration générée du client, mais un `~/.config/everyapi/credentials.json` préexistant reste lisible par tout processus s'exécutant sous le même utilisateur système. Le mode transparent est une isolation de l'injection d'identifiants, pas un bac à sable contre des processus enfants hostiles.
 
-### `everyapi auth login` —— Device Authorization Grant + connexion par QR
+### `everyapi auth login` —— code d'autorisation à usage unique
 
-Utilise le Device Authorization Grant (style RFC 8628) + la couche 1 de docs §7-5, « connexion par QR entre appareils » :
+1. La CLI affiche la page du tableau de bord qui émet les codes (`https://app.everyapi.ai/cli/code`) et demande le code
+2. Connectez-vous au tableau de bord sur cette page, cliquez sur **Générer un code** et copiez-le. Le code est valable 10 minutes et ne sert qu'une fois ; en générer un nouveau invalide le précédent
+3. Saisissez le code dans le terminal. La CLI l'échange contre un access token et l'enregistre dans `~/.config/everyapi/credentials.json` (mode 0600)
 
-1. Le CLI crée une session et **affiche un QR code dans le terminal**, en plus du code court et de l'URL
-2. Scannez le QR avec votre téléphone (ou ouvrez l'URL dans un navigateur où vous êtes déjà connecté à EveryAPI) —— l'URL contenue dans le QR porte déjà `?code=USR-789`, le tableau de bord remplit donc le code automatiquement et l'utilisateur n'a plus qu'à cliquer sur Approve
-3. Le CLI reçoit le jeton d'accès et l'enregistre dans `~/.config/everyapi/credentials.json` (mode 0600)
+Rien n'est ouvert depuis le terminal : un bloqueur de fenêtres ou un navigateur qui ne se lance pas ne peut plus bloquer la connexion. `--browser` conserve l'ancien flux Device Authorization Grant (style RFC 8628) : un QR dans le terminal avec un code court et une URL à approuver dans un navigateur déjà connecté à EveryAPI.
 
 ```bash
-everyapi auth login                                    # production ; affiche le QR et ouvre le navigateur par défaut
-everyapi settings set gateway_region cn               # utiliser la passerelle accélérée pour la Chine pour les commandes suivantes
-everyapi auth login --api-base http://localhost:8787   # développement local / auto-hébergement
-everyapi auth login --no-browser                       # ne pas ouvrir le navigateur (scannez le QR)
-everyapi auth login --no-qr                            # ne pas afficher le QR (terminaux non UTF-8 / sortie redirigée)
+everyapi auth login                                    # production ; demande un code à usage unique de /cli/code
+everyapi settings set gateway_region cn               # utiliser la passerelle accélérée pour la Chine ensuite
+everyapi auth login --api-base http://localhost:8787   # développement local / auto-hébergé
+echo "$CODE" | everyapi auth login                     # non interactif : lire le code sur stdin
+everyapi auth login --browser                          # approuver dans le navigateur (QR + ouverture auto)
+everyapi auth login --browser --no-browser             # flux navigateur sans l'ouvrir (scannez le QR)
+everyapi auth login --browser --no-qr                  # flux navigateur sans QR (terminaux non UTF-8 / piping)
 ```
 
 Exemple de QR rendu dans le terminal (caractères Unicode demi-bloc, environ 18-20 lignes de haut) :

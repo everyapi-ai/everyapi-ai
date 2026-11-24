@@ -222,20 +222,22 @@ Este modo es experimental y deliberadamente de alcance de proceso:
 - el connector ve el contenido descifrado de los modelos. La clave de firma de la CA nunca se persiste ni se sube, y el archivo público de la CA se elimina al salir;
 - tu clave de relay no está en el entorno del proceso hijo ni en la configuración generada del cliente, pero un `~/.config/everyapi/credentials.json` preexistente sigue siendo legible por cualquier proceso que corra como el mismo usuario del sistema. El modo transparente es aislamiento de inyección de credenciales, no un sandbox frente a procesos hijos hostiles.
 
-### `everyapi auth login` —— Device Authorization Grant + inicio de sesión por QR
+### `everyapi auth login` —— código de autorización de un solo uso
 
-Usa el Device Authorization Grant (estilo RFC 8628) + la Capa 1 de docs §7-5, "inicio de sesión por QR entre dispositivos":
+1. La CLI muestra la página del panel que emite los códigos (`https://app.everyapi.ai/cli/code`) y pide el código
+2. Inicia sesión en el panel en esa página, pulsa **Generar código** y cópialo. El código dura 10 minutos y sirve una sola vez; generar uno nuevo invalida el anterior
+3. Introduce el código en la terminal. La CLI lo canjea por un access token y lo guarda en `~/.config/everyapi/credentials.json` (mode 0600)
 
-1. El CLI crea una sesión y **renderiza un QR en la terminal** además de imprimir el código corto y la URL
-2. Escanea el QR con el móvil (o abre la URL en un navegador donde ya tengas sesión en EveryAPI) —— la URL dentro del QR ya lleva `?code=USR-789`, así que el dashboard rellena el código automáticamente y el usuario solo pulsa Approve
-3. El CLI recibe el token de acceso y lo guarda en `~/.config/everyapi/credentials.json` (modo 0600)
+No se abre nada desde la terminal, así que los bloqueadores de ventanas emergentes o un navegador que no arranca no pueden bloquear el inicio de sesión. `--browser` mantiene el flujo anterior de Device Authorization Grant (estilo RFC 8628): un QR en la terminal más un código corto y una URL que apruebas en un navegador con sesión iniciada en EveryAPI.
 
 ```bash
-everyapi auth login                                    # producción; renderiza QR y abre el navegador por defecto
-everyapi settings set gateway_region cn               # usar la pasarela acelerada de China en los comandos siguientes
-everyapi auth login --api-base http://localhost:8787   # desarrollo local / self-hosted
-everyapi auth login --no-browser                       # no abrir el navegador (escanea el QR)
-everyapi auth login --no-qr                            # no renderizar el QR (terminales sin UTF-8 / salida por tubería)
+everyapi auth login                                    # producción; pide un código de un solo uso de /cli/code
+everyapi settings set gateway_region cn               # usar la pasarela acelerada para China en los próximos comandos
+everyapi auth login --api-base http://localhost:8787   # desarrollo local / autoalojado
+echo "$CODE" | everyapi auth login                     # no interactivo: leer el código de stdin
+everyapi auth login --browser                          # aprobar en el navegador (QR + apertura automática)
+everyapi auth login --browser --no-browser             # flujo de navegador sin abrirlo (escanea el QR)
+everyapi auth login --browser --no-qr                  # flujo de navegador sin QR (terminales no UTF-8 / piping)
 ```
 
 Ejemplo del QR renderizado en terminal (caracteres Unicode de medio bloque, unas 18-20 filas de alto):

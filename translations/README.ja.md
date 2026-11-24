@@ -222,20 +222,22 @@ Claude Code と Codex CLI で検証済みです。Codex は connector が既定�
 - Connector は復号後のモデル内容を見ます。CA 署名鍵は書き出しもアップロードもされず、公開 CA ファイルは終了時に削除されます；
 - relay key は子プロセス環境と生成されたクライアント設定には含まれませんが、既存の `~/.config/everyapi/credentials.json` は同じ OS ユーザーで動く任意のプロセスから読めます。透過モードは資格情報注入の隔離であって、敵対的な子プロセスに対するサンドボックスではありません。
 
-### `everyapi auth login` —— Device Authorization Grant + QR サインイン
+### `everyapi auth login` —— ワンタイム認証コード
 
-Device Authorization Grant（RFC 8628 形式）+ docs §7-5 Layer 1「デバイス間 QR サインイン」を使います：
+1. CLI がコードを発行するダッシュボードのページ（`https://app.everyapi.ai/cli/code`）を表示し、コードの入力を求めます
+2. そのページでダッシュボードにサインインし、**コードを発行** を押してコピーします。コードの有効期限は 10 分で 1 回だけ使えます。新しいコードを発行すると以前のコードは無効になります
+3. ターミナルにコードを入力すると、CLI がアクセストークンと交換して `~/.config/everyapi/credentials.json`（mode 0600）に保存します
 
-1. CLI がセッションを作成し、**ターミナルに QR を描画 + 短いコードと URL を出力**
-2. スマートフォンで QR をスキャン（または EveryAPI にサインイン済みのブラウザで URL を開く）—— QR 内の URL には `?code=USR-789` が含まれており、dashboard がコードを自動入力するので、ユーザーは Approve を押すだけです
-3. CLI が access token を受け取り、`~/.config/everyapi/credentials.json`（mode 0600）に保存します
+ターミナルからブラウザーを開かないため、ポップアップブロックやブラウザーが起動しない環境でもサインインが止まりません。`--browser` では従来の Device Authorization Grant（RFC 8628 形式）フローを使えます。ターミナルに QR と短いコード・URL を表示し、EveryAPI にサインイン済みのブラウザーで承認します。
 
 ```bash
-everyapi auth login                                    # 本番。既定で QR 描画 + ブラウザ起動
-everyapi settings set gateway_region cn               # 以降のコマンドで中国高速化ゲートウェイを使用
+everyapi auth login                                    # 本番。/cli/code で発行したワンタイムコードを入力
+everyapi settings set gateway_region cn               # 以降のコマンドで中国向け高速ゲートウェイを使う
 everyapi auth login --api-base http://localhost:8787   # ローカル開発 / セルフホスト
-everyapi auth login --no-browser                       # ブラウザを自動で開かない（QR をスキャン）
-everyapi auth login --no-qr                            # QR を描画しない（非 UTF-8 ターミナル / パイプ）
+echo "$CODE" | everyapi auth login                     # 非対話：コードを stdin から読む
+everyapi auth login --browser                          # ブラウザーで承認する（QR + 自動で開く）
+everyapi auth login --browser --no-browser             # ブラウザーフロー、自動で開かない（QR をスキャン）
+everyapi auth login --browser --no-qr                  # ブラウザーフロー、QR を表示しない（非 UTF-8 端末 / パイプ）
 ```
 
 QR のターミナル描画例（Unicode 半ブロック文字、約 18-20 行）：

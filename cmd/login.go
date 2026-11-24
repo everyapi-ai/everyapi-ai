@@ -23,21 +23,22 @@ import (
 	"github.com/everyapi-ai/everyapi-sdk/config"
 )
 
-// Login runs the device authorization flow: POST start → show user the QR code + code + URL → user scans on phone OR opens browser → poll until authorized → write credentials.
+// Login signs this machine in. By default it asks for a one-time CLI authorization code the user generates on the dashboard and redeems it — nothing is opened from the terminal, so a blocked browser launch or a popup blocker cannot strand the login. --browser keeps the device authorization flow: POST start → show user the QR code + code + URL → user scans on phone OR opens browser → poll until authorized → write credentials.
 //
 // The QR encodes the verification URL with `?code=` pre-filled, so a phone scan lands on the confirm page with the code already in the input — no retyping the 8-character string on a tiny keyboard. docs/cli/channel-marketplace.md §7-5 Layer 1 (device-to-device QR sign-in) realised here, on top of the existing device-auth backend that #133 shipped.
 //
 // Flags:
 //
-//	--api-base <url>  override configured/default gateway (dev / self-host) --no-browser      skip the auto-open; user copies the URL manually --no-qr           skip the terminal QR (for non-UTF-8 terminals / pipes) --format          human (default) or the desktop-only json-lines protocol
+//	--api-base <url>  override configured/default gateway (dev / self-host) --browser         approve in a browser (device flow) instead of entering a code --no-browser      with --browser: skip the auto-open; user copies the URL manually --no-qr           with --browser: skip the terminal QR (for non-UTF-8 terminals / pipes) --format          human (default) or the desktop-only json-lines protocol
 func Login(args []string) error {
 	fs := flag.NewFlagSet("login", flag.ContinueOnError)
 	if loginMachineRequested(args) {
 		fs.SetOutput(io.Discard)
 	}
 	apiBase := fs.String("api-base", "", "EveryAPI API base URL")
-	noBrowser := fs.Bool("no-browser", false, "skip opening the browser automatically")
-	noQR := fs.Bool("no-qr", false, "skip rendering the QR code (useful for non-UTF-8 terminals or when piping output)")
+	browserFlow := fs.Bool("browser", false, "approve in a browser instead of entering a CLI authorization code")
+	noBrowser := fs.Bool("no-browser", false, "with --browser: skip opening the browser automatically")
+	noQR := fs.Bool("no-qr", false, "with --browser: skip rendering the QR code (useful for non-UTF-8 terminals or when piping output)")
 	format := fs.String("format", "human", "output format (human or json-lines)")
 	alias := fs.String("alias", "", "name to store this account under (default: derived from the username)")
 	if err := fs.Parse(args); err != nil {
@@ -49,7 +50,7 @@ func Login(args []string) error {
 	if *format == "json-lines" {
 		var usedHumanFlag bool
 		fs.Visit(func(f *flag.Flag) {
-			if f.Name == "no-browser" || f.Name == "no-qr" || f.Name == "alias" {
+			if f.Name == "browser" || f.Name == "no-browser" || f.Name == "no-qr" || f.Name == "alias" {
 				usedHumanFlag = true
 			}
 		})
@@ -82,6 +83,10 @@ func Login(args []string) error {
 	// signalCtx (not withCtx): the device-auth poll below blocks for minutes. The "(Ctrl+C to cancel)" line we print must be true — cancel the in-flight poll on SIGINT instead of hard-killing.
 	ctx, stop := cliout.SignalCtx()
 	defer stop()
+
+	if !*browserFlow {
+		return loginWithAuthCode(ctx, resolvedAPIBase, *alias, client, readCLIAuthCode)
+	}
 
 	start, oauth2, err := startDeviceFlow(ctx, client)
 	if err != nil {
@@ -169,7 +174,12 @@ func Login(args []string) error {
 		}
 	}
 
-	creds, account, err := saveLegacyLoginCredentials(ctx, resolvedAPIBase, *alias, res)
+	return finishLegacyLogin(ctx, resolvedAPIBase, *alias, res)
+}
+
+// finishLegacyLogin persists a management credential obtained from either the browser device flow or a redeemed authorization code, then reports it and prefetches the relay key.
+func finishLegacyLogin(ctx context.Context, apiBase, alias string, res *api.DeviceAuthPollResult) error {
+	creds, account, err := saveLegacyLoginCredentials(ctx, apiBase, alias, res)
 	if err != nil {
 		return err
 	}

@@ -12,7 +12,11 @@ It checks credentials, gateway reachability, the sanitizer, and which supported 
 
 ## "not logged in — run 'everyapi auth login' first"
 
-No credentials file, or it is unreadable. `everyapi auth login`. If it appears inside an MCP client rather than a terminal: the MCP server cannot run the device flow itself, because a background process has no terminal to render the QR into. Log in once from a shell and the server picks the credentials up.
+No credentials file, or it is unreadable. `everyapi auth login`. If it appears inside an MCP client rather than a terminal: the MCP server cannot sign in itself, because a background process has no terminal to ask for the authorization code. Log in once from a shell and the server picks the credentials up.
+
+## "Code not found or expired" during `auth login`
+
+The authorization code was already used, is older than 10 minutes, or was replaced: generating a code on the dashboard invalidates the one before it, so only the newest code works. The gateway gives the same answer in every case on purpose. Generate a fresh code on the dashboard's CLI authorization code page and enter that one. If the CLI says the gateway does not support authorization codes at all, it is a self-hosted gateway older than the feature; use `everyapi auth login --browser`.
 
 ## "your session expired — run 'everyapi auth login' again"
 

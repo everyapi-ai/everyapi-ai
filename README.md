@@ -276,20 +276,22 @@ GitHub Copilot CLI and OpenHands get nothing: their documented surface is a BYOK
 
 The pages live under [`cmd/docs/topics/`](cmd/docs/topics/) as plain markdown, so they read correctly on GitHub too; `cmd/docs/render.go` renders that subset for the terminal (wrapped prose, verbatim code blocks, aligned tables, bold and inline code where the terminal supports them, backticks kept where it does not). Adding a page is dropping the `.md` in and adding its slug to `topicOrder` — a file that is embedded but unregistered, or registered but missing, fails a test rather than disappearing quietly.
 
-### `everyapi auth login` — Device Authorization Grant + QR sign-in
+### `everyapi auth login` — one-time authorization code
 
-Uses Device Authorization Grant (RFC 8628 style) + docs §7-5 Layer 1 "device-to-device QR sign-in":
+1. The CLI prints the dashboard page that issues codes (`https://app.everyapi.ai/cli/code`) and asks for the code
+2. Sign in to the dashboard there, press **Generate code** and copy it. A code lasts 10 minutes and works once; generating a new one invalidates the previous one
+3. Enter the code in the terminal. The CLI exchanges it for an access token and stores it at `~/.config/everyapi/credentials.json` (mode 0600)
 
-1. The CLI creates a session, **renders a terminal QR + prints a short code + URL**
-2. Scan the QR with your phone (or open the URL in a browser already signed into EveryAPI) — the URL inside the QR already carries `?code=USR-789`, the dashboard auto-fills the code, and the user only needs to click Approve
-3. The CLI receives the access token and stores it at `~/.config/everyapi/credentials.json` (mode 0600)
+Nothing is opened from the terminal, so popup blockers and browsers that refuse to launch cannot strand the sign-in. `--browser` keeps the earlier Device Authorization Grant (RFC 8628 style) flow: a terminal QR plus a short code and URL that you approve in a browser already signed in to EveryAPI.
 
 ```bash
-everyapi auth login                                    # production; renders QR + opens browser by default
+everyapi auth login                                    # production; prompts for a one-time code from /cli/code
 everyapi settings set gateway_region cn               # use the China-accelerated gateway for future commands
 everyapi auth login --api-base http://localhost:8787   # local dev / self-hosted
-everyapi auth login --no-browser                       # don't auto-open the browser (scan the QR)
-everyapi auth login --no-qr                            # don't render the QR (non-UTF-8 terminals / piping)
+echo "$CODE" | everyapi auth login                     # non-interactive: read the code from stdin
+everyapi auth login --browser                          # approve in a browser instead (QR + auto-open)
+everyapi auth login --browser --no-browser             # browser flow without auto-opening (scan the QR)
+everyapi auth login --browser --no-qr                  # browser flow without the QR (non-UTF-8 terminals / piping)
 everyapi auth login --alias work                       # store this account under a name you choose
 ```
 

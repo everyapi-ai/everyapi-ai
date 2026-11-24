@@ -222,20 +222,22 @@ Claude Code 와 Codex CLI 로 검증했습니다. Codex 는 connector 가 기본
 - Connector 는 복호화된 모델 내용을 봅니다. CA 서명 키는 기록되거나 업로드되지 않으며, 공개 CA 파일은 종료 시 삭제됩니다;
 - relay key 는 자식 프로세스 환경과 생성된 클라이언트 설정에 없지만, 기존 `~/.config/everyapi/credentials.json` 은 같은 OS 사용자로 실행되는 모든 프로세스가 읽을 수 있습니다. 투명 모드는 자격 증명 주입 격리이지 적대적 자식 프로세스에 대한 샌드박스가 아닙니다.
 
-### `everyapi auth login` —— Device Authorization Grant + QR 로그인
+### `everyapi auth login` —— 일회용 인증 코드
 
-Device Authorization Grant(RFC 8628 형태) + docs §7-5 Layer 1 "기기 간 QR 로그인" 을 사용합니다:
+1. CLI가 코드를 발급하는 대시보드 페이지(`https://app.everyapi.ai/cli/code`)를 출력하고 코드 입력을 요청합니다
+2. 그 페이지에서 대시보드에 로그인한 뒤 **코드 생성**을 눌러 복사합니다. 코드는 10분 동안 유효하고 한 번만 쓸 수 있으며, 새 코드를 생성하면 이전 코드는 무효화됩니다
+3. 터미널에 코드를 입력하면 CLI가 access token으로 교환해 `~/.config/everyapi/credentials.json`(mode 0600)에 저장합니다
 
-1. CLI 가 세션을 만들고 **터미널에 QR 을 렌더링 + 짧은 코드와 URL 출력**
-2. 휴대폰으로 QR 스캔(또는 EveryAPI 에 이미 로그인된 브라우저에서 URL 열기) —— QR 안의 URL 에 이미 `?code=USR-789` 가 실려 있어 대시보드가 코드를 자동 입력하므로, 사용자는 Approve 만 누르면 됩니다
-3. CLI 가 access token 을 받아 `~/.config/everyapi/credentials.json`(mode 0600)에 저장합니다
+터미널에서 브라우저를 열지 않으므로 팝업 차단이나 브라우저 실행 실패로 로그인이 막히지 않습니다. `--browser`는 기존 Device Authorization Grant(RFC 8628 형태) 흐름을 유지합니다. 터미널에 QR과 짧은 코드·URL을 표시하고, EveryAPI에 로그인된 브라우저에서 승인합니다.
 
 ```bash
-everyapi auth login                                    # 프로덕션. 기본으로 QR 렌더링 + 브라우저 열기
-everyapi settings set gateway_region cn               # 이후 명령에서 중국 가속 게이트웨이 사용
-everyapi auth login --api-base http://localhost:8787   # 로컬 개발 / 셀프호스트
-everyapi auth login --no-browser                       # 브라우저 자동 실행 안 함(QR 스캔)
-everyapi auth login --no-qr                            # QR 렌더링 안 함(비 UTF-8 터미널 / 파이핑)
+everyapi auth login                                    # 프로덕션; /cli/code에서 생성한 일회용 코드 입력
+everyapi settings set gateway_region cn               # 이후 명령에 중국 가속 게이트웨이 사용
+everyapi auth login --api-base http://localhost:8787   # 로컬 개발 / 셀프 호스팅
+echo "$CODE" | everyapi auth login                     # 비대화형: stdin에서 코드 읽기
+everyapi auth login --browser                          # 브라우저에서 승인 (QR + 자동 열기)
+everyapi auth login --browser --no-browser             # 브라우저 흐름, 자동으로 열지 않음 (QR 스캔)
+everyapi auth login --browser --no-qr                  # 브라우저 흐름, QR 렌더링 안 함 (비 UTF-8 터미널 / 파이프)
 ```
 
 터미널 QR 렌더링 예(Unicode 반블록 문자, 약 18-20 행 높이):

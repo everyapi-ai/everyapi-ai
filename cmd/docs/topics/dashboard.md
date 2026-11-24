@@ -30,6 +30,7 @@
 /sessions       Agent sessions
 /artifacts      HTML reports published with `artifacts share`
 /connect        EveryAPI Connect downloads and setup
+/cli/code       Generate a one-time code for `everyapi auth login`
 /device         Approve a CLI device-code sign-in
 /admin          Operator console (admin accounts only)
 ```
@@ -47,7 +48,9 @@ The CLI covers most of the account surface, but four flows are browser-only by d
 
 ## Approving a CLI sign-in
 
-`everyapi auth login` prints a code and a QR. The QR points at `/device` with the code already in the query string, so on a phone already signed in the flow is: scan, glance at the code, press Approve. That is the whole point of the device flow — no password is typed on the machine being authorised.
+`everyapi auth login` asks for a one-time code. Generate it at `/cli/code` and enter it in the terminal; it expires after 10 minutes and works once.
+
+`everyapi auth login --browser` prints a code and a QR instead. The QR points at `/device` with the code already in the query string, so on a phone already signed in the flow is: scan, glance at the code, press Approve. Either way, no password is typed on the machine being authorised.
 
 ## Sign-in methods
 
