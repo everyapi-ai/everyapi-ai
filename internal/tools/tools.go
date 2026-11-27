@@ -140,13 +140,24 @@ func prepareOpenCodeWithModels(apiBase, _ string, models []Model, bootModel stri
 		if name == "" {
 			name = id
 		}
-		providerID := "everyapi"
-		configuredModels := chatModels
-		if modelSupportsEndpoint(model.SupportedEndpointTypes, "openai-response") {
-			providerID = "everyapi-responses"
-			configuredModels = responseModels
+		modelConfig := openCodeModel{Name: name}
+		hasChat := modelSupportsEndpoint(model.SupportedEndpointTypes, "openai")
+		hasResponses := modelSupportsEndpoint(model.SupportedEndpointTypes, "openai-response")
+		if !hasChat && !hasResponses {
+			// Older gateways omitted endpoint metadata. OpenCode's compatible
+			// provider is the safe default for those catalogue entries.
+			hasChat = true
 		}
-		configuredModels[id] = openCodeModel{Name: name}
+		if hasChat {
+			chatModels[id] = modelConfig
+		}
+		if hasResponses {
+			responseModels[id] = modelConfig
+		}
+		providerID := "everyapi"
+		if !hasChat {
+			providerID = "everyapi-responses"
+		}
 		if firstConfigured == "" {
 			firstConfigured = providerID + "/" + id
 		}

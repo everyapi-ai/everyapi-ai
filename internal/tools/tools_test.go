@@ -179,7 +179,7 @@ func TestEnv_OpenCodeUsesOfficialCompatibleProviderWithoutPersistingTheKey(t *te
 	if responsesProvider.Options.APIKey != "{env:EVERYAPI_RELAY_KEY}" {
 		t.Errorf("responses apiKey reference = %q", responsesProvider.Options.APIKey)
 	}
-	if config.Model != "everyapi-responses/gpt-5.6-terra" {
+	if config.Model != "everyapi/gpt-5.6-terra" {
 		t.Errorf("model = %q", config.Model)
 	}
 	if got := provider.Models["gpt-5"].Name; got != "GPT 5" {
@@ -187,6 +187,9 @@ func TestEnv_OpenCodeUsesOfficialCompatibleProviderWithoutPersistingTheKey(t *te
 	}
 	if got := responsesProvider.Models["gpt-5.6-terra"].Name; got != "GPT 5.6 Terra" {
 		t.Errorf("responses model display name = %q", got)
+	}
+	if got := provider.Models["gpt-5.6-terra"].Name; got != "GPT 5.6 Terra" {
+		t.Errorf("chat model display name = %q", got)
 	}
 	gotProjectConfig, err := os.ReadFile(projectConfig)
 	if err != nil {
