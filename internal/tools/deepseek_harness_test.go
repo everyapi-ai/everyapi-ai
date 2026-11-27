@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestDeepSeekHarnessPreparationPreservesUserConfigAndWritesPrivateCredential(t *testing.T) {
@@ -283,5 +285,107 @@ func TestDeepSeekHarnessScrubLeavesAFileWithNoEveryAPIEntryByteForByte(t *testin
 	}
 	if string(remaining) != original {
 		t.Errorf("logout reformatted a file it had nothing to remove from:\ngot:  %q\nwant: %q", remaining, original)
+	}
+}
+
+func readDeepSeekHarnessCredentials(t *testing.T, path string) map[string]any {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(body, &document); err != nil {
+		t.Fatalf("credentials are not YAML: %v\n%s", err, body)
+	}
+	return document
+}
+
+func TestDeepSeekHarnessPreparationWritesTheVersionedLayoutToANewFile(t *testing.T) {
+	dshHome := filepath.Join(t.TempDir(), "dsh")
+	t.Setenv("DSH_HOME", dshHome)
+	if _, err := prepareDeepSeekHarnessWithModels("https://api.everyapi.ai", "sk-everyapi-test", []Model{
+		{ID: "chat-model", SupportedEndpointTypes: []string{"openai"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	document := readDeepSeekHarnessCredentials(t, filepath.Join(dshHome, ".credentials.yaml"))
+	if document["version"] != 1 {
+		t.Errorf("version = %#v, want 1:\n%#v", document["version"], document)
+	}
+	refs, _ := document["refs"].(map[string]any)
+	if refs["EVERYAPI_API_KEY"] != "sk-everyapi-test" {
+		t.Errorf("refs.EVERYAPI_API_KEY missing:\n%#v", document)
+	}
+	if _, ok := document["EVERYAPI_API_KEY"]; ok {
+		t.Errorf("Harness 0.2 rejects a top-level reference:\n%#v", document)
+	}
+}
+
+// Harness 0.2 refused to start on the file earlier builds produced: a versioned document with the key appended at the top level.
+func TestDeepSeekHarnessPreparationRepairsAVersionedFileWithATopLevelKey(t *testing.T) {
+	dshHome := filepath.Join(t.TempDir(), "dsh")
+	t.Setenv("DSH_HOME", dshHome)
+	if err := os.MkdirAll(dshHome, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	credentialsPath := filepath.Join(dshHome, ".credentials.yaml")
+	original := "version: 1\nrefs:\n  OTHER_KEY: keep\nrecords:\n  client-connection/browser-session:\n    kind: grant\n    payload:\n      version: 1\n      secret: grant-secret\nEVERYAPI_API_KEY: sk-everyapi-stale\n"
+	if err := os.WriteFile(credentialsPath, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := prepareDeepSeekHarnessWithModels("https://api.everyapi.ai", "sk-everyapi-fresh", []Model{
+		{ID: "chat-model", SupportedEndpointTypes: []string{"openai"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	document := readDeepSeekHarnessCredentials(t, credentialsPath)
+	for key := range document {
+		if key != "version" && key != "refs" && key != "records" {
+			t.Errorf("unknown top-level key %q survived:\n%#v", key, document)
+		}
+	}
+	refs, _ := document["refs"].(map[string]any)
+	if refs["EVERYAPI_API_KEY"] != "sk-everyapi-fresh" || refs["OTHER_KEY"] != "keep" {
+		t.Errorf("refs = %#v", refs)
+	}
+	records, _ := document["records"].(map[string]any)
+	if _, ok := records["client-connection/browser-session"]; !ok {
+		t.Errorf("the user's records were dropped:\n%#v", document)
+	}
+}
+
+func TestDeepSeekHarnessScrubHandlesTheVersionedLayout(t *testing.T) {
+	dshHome := filepath.Join(t.TempDir(), "dsh")
+	t.Setenv("DSH_HOME", dshHome)
+	if err := os.MkdirAll(dshHome, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	credentialsPath := filepath.Join(dshHome, ".credentials.yaml")
+
+	withRecords := "version: 1\nrefs:\n  EVERYAPI_API_KEY: sk-everyapi-billable\nrecords:\n  client-connection/browser-session:\n    kind: grant\n    payload:\n      version: 1\n      secret: grant-secret\n"
+	if err := os.WriteFile(credentialsPath, []byte(withRecords), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := ScrubDeepSeekHarnessCredential(); err != nil {
+		t.Fatal(err)
+	}
+	document := readDeepSeekHarnessCredentials(t, credentialsPath)
+	if _, ok := document["refs"]; ok {
+		t.Errorf("an emptied refs section should be dropped:\n%#v", document)
+	}
+	if _, ok := document["records"]; !ok || document["version"] != 1 {
+		t.Errorf("the user's records must survive with the version:\n%#v", document)
+	}
+
+	onlyOurs := "version: 1\nrefs:\n  EVERYAPI_API_KEY: sk-everyapi-billable\n"
+	if err := os.WriteFile(credentialsPath, []byte(onlyOurs), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := ScrubDeepSeekHarnessCredential(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(credentialsPath); !os.IsNotExist(err) {
+		t.Errorf("a file holding only the EveryAPI key should be removed")
 	}
 }

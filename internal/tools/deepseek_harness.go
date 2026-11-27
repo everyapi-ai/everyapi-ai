@@ -51,7 +51,9 @@ func prepareDeepSeekHarnessWithModels(
 	if err != nil {
 		return nil, err
 	}
-	setYAMLMapValue(credentials, deepSeekHarnessCredentialRef, scalarYAMLNode(token))
+	if err := setDeepSeekHarnessCredential(credentials, token); err != nil {
+		return nil, fmt.Errorf("DeepSeek Harness credentials %s: %w", credentialsPath, err)
+	}
 	if err := writeYAMLPrivate(credentialsPath, credentials); err != nil {
 		return nil, err
 	}
@@ -60,6 +62,42 @@ func prepareDeepSeekHarnessWithModels(
 		return nil, err
 	}
 	return map[string]string{}, nil
+}
+
+// setDeepSeekHarnessCredential stores the relay key where the installed Harness reads it.
+//
+// Harness 0.2 versioned its credentials file: references live under `refs:` beside `version: 1`, and any other top-level key fails the credentials plugin, which takes the whole server down before it binds its address. Earlier builds read the flat layout, where references sit at the top level, and 0.2 still migrates a flat file to the versioned one on load. So a versioned file gets the key under `refs`, a flat file stays flat, and a missing or empty file is created in the versioned layout the current release writes. A top-level key left in a versioned file by an earlier EveryAPI build is removed, which repairs a Harness that refused to start because of it.
+func setDeepSeekHarnessCredential(credentials *yaml.Node, token string) error {
+	if len(credentials.Content) == 0 {
+		setYAMLMapValue(credentials, "version", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: "1"})
+	}
+	if yamlMapValue(credentials, "version") == nil {
+		setYAMLMapValue(credentials, deepSeekHarnessCredentialRef, scalarYAMLNode(token))
+		return nil
+	}
+	refs, err := ensureYAMLMapPath(credentials, "refs")
+	if err != nil {
+		return err
+	}
+	setYAMLMapValue(refs, deepSeekHarnessCredentialRef, scalarYAMLNode(token))
+	deleteYAMLMapValue(credentials, deepSeekHarnessCredentialRef)
+	return nil
+}
+
+// deleteDeepSeekHarnessCredential removes the relay key from either layout and reports whether the file still holds anything of the user's.
+func deleteDeepSeekHarnessCredential(credentials *yaml.Node) (removed, empty bool) {
+	removed = deleteYAMLMapValue(credentials, deepSeekHarnessCredentialRef)
+	if refs := yamlMapValue(credentials, "refs"); refs != nil && refs.Kind == yaml.MappingNode {
+		if deleteYAMLMapValue(refs, deepSeekHarnessCredentialRef) {
+			removed = true
+			if len(refs.Content) == 0 {
+				deleteYAMLMapValue(credentials, "refs")
+			}
+		}
+	}
+	empty = len(credentials.Content) == 0 ||
+		(len(credentials.Content) == 2 && credentials.Content[0].Value == "version")
+	return removed, empty
 }
 
 func deepSeekHarnessHome() (string, error) {
@@ -205,10 +243,11 @@ func ScrubDeepSeekHarnessCredential() error {
 	if err != nil {
 		return err
 	}
-	if !deleteYAMLMapValue(credentials, deepSeekHarnessCredentialRef) {
+	removed, empty := deleteDeepSeekHarnessCredential(credentials)
+	if !removed {
 		return nil
 	}
-	if len(credentials.Content) == 0 {
+	if empty {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("remove DeepSeek Harness credentials %s: %w", path, err)
 		}
